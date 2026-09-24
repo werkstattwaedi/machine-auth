@@ -100,14 +100,18 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("8001 Zürich");
   });
 
-  // Issue #269 review: anonymous walk-ins (no billingAddress) render NO
-  // recipient block above the title — the person is identified by the
-  // Nutzungsgebühren table instead. zeroItemsInvoice is the explicit
-  // anonymous-walk-in fixture; the other registered-user fixtures now
-  // carry a billingAddress.
-  it("anonymous walk-in: name appears only in Nutzungsgebühren, no recipient block (#269)", async () => {
+  // Issue #658 (revisits the #269 review): anonymous walk-ins (no
+  // billingAddress) render a name-only recipient block above the title —
+  // the name appears there AND in the Nutzungsgebühren table, but no
+  // street/zip lines. zeroItemsInvoice is the explicit anonymous-walk-in
+  // fixture; the other registered-user fixtures carry a billingAddress.
+  it("anonymous walk-in: name-only recipient block, no address lines (#658)", async () => {
     const text = await pdfText(zeroItemsInvoice());
-    expect(text).to.include("Erika Nur-Eintritt");
+    const nameMatches = text.split("Erika Nur-Eintritt").length - 1;
+    expect(
+      nameMatches,
+      "Erika should appear in the recipient block and in Nutzungsgebühren",
+    ).to.equal(2);
     // No street block at the top — anonymous fixture has no billingAddress.
     expect(text).to.not.include("Industriestrasse");
   });
@@ -233,14 +237,14 @@ describe("buildInvoicePdf — content", () => {
     // renders the QR bill. The debtor field must NOT be set so the printed
     // QR bill leaves the "Zahlbar durch" box empty for handwriting.
     const text = await pdfText(zeroItemsInvoice());
-    // Erika appears in the Nutzungsgebühren table — exactly once. If we
-    // accidentally populated the debtor with the recipientName, she'd
-    // show up a second time.
+    // Erika appears in the recipient block (#658) and in the
+    // Nutzungsgebühren table — exactly twice. If we accidentally populated
+    // the debtor with the recipientName, she'd show up a third time.
     const nameMatches = text.split("Erika Nur-Eintritt").length - 1;
     expect(
       nameMatches,
-      "Erika should appear only in Nutzungsgebühren, not as QR debtor",
-    ).to.equal(1);
+      "Erika should appear in the recipient block and Nutzungsgebühren only, not as QR debtor",
+    ).to.equal(2);
   });
 
   it("paid invoice: no QR bill, shows payment confirmation", async () => {
