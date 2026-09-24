@@ -671,7 +671,7 @@ function SignupDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-h-[90dvh] overflow-y-auto rounded-[14px] p-6 sm:max-w-[420px] sm:px-[34px] sm:pb-[30px] sm:pt-8"
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[14px] p-6 sm:max-w-[420px] sm:px-[34px] sm:pb-[30px] sm:pt-8"
         data-testid="checkin-signup-dialog"
       >
         <DialogHeader className="text-left">
@@ -860,15 +860,31 @@ function SignupDialog({
             </p>
           )}
 
-          <Button
-            type="submit"
-            disabled={busy}
-            data-testid="checkin-signup-submit"
-            className="h-[46px] w-full bg-cog-teal text-[15px] font-semibold text-white hover:bg-cog-teal-dark"
+          {/* Sticky footer (issue #661): on a phone the form is taller than
+              the viewport (firma address, validation errors, on-screen
+              keyboard), and the dialog scrolls inside — but without a scroll
+              affordance the primary was clipped at the bottom edge. Sticking
+              it to the scroll container keeps it reachable in every case.
+              The negative margins bleed over the DialogContent padding so the
+              footer background covers content scrolling beneath it; the
+              matching negative `bottom` is needed because browsers stick to
+              the scroll container's content box, not its padding edge. */}
+          <div
+            data-testid="checkin-signup-footer"
+            className="sticky -bottom-6 -mx-6 -mb-6 border-t border-border bg-background px-6 pb-6 pt-3 sm:-bottom-[30px] sm:-mx-[34px] sm:-mb-[30px] sm:px-[34px] sm:pb-[30px]"
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            Konto erstellen
-          </Button>
+            <Button
+              type="submit"
+              disabled={busy}
+              data-testid="checkin-signup-submit"
+              className="h-[46px] w-full bg-cog-teal text-[15px] font-semibold text-white hover:bg-cog-teal-dark"
+            >
+              {busy && (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              )}
+              Konto erstellen
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

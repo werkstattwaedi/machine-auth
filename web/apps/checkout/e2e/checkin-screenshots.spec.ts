@@ -10,6 +10,10 @@ import {
 } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
+// No account exists for this address, so the identifier submit opens the
+// sign-up dialog (via "code"). Nothing ever signs it up.
+const SIGNUP_SCREENSHOT_EMAIL = "screenshot-signup@werkstattwaedi.ch"
+
 /** Navigate to checkout — the check-in step is shown directly, with the
  *  account section of the switcher as the anonymous default. */
 async function goToCheckin(page: Page) {
@@ -116,6 +120,24 @@ test.describe("Check-in step screenshots", () => {
 
     await settleLayout(page)
     await expect(page).toHaveScreenshot("checkin-code-dialog-resend.png")
+  })
+
+  // Issue #661: the sign-up dialog is taller than a phone viewport; the
+  // mobile baseline documents that the sticky "Konto erstellen" footer is
+  // visible without scrolling.
+  test("sign-up dialog", async ({ page }) => {
+    await clearCollections("loginCodes")
+    await goToCheckin(page)
+
+    await page.getByTestId("checkin-identifier").fill(SIGNUP_SCREENSHOT_EMAIL)
+    await page.getByTestId("checkin-identifier-submit").click()
+    await expect(page.getByTestId("checkin-signup-dialog")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByTestId("checkin-signup-submit")).toBeVisible()
+
+    await settleLayout(page)
+    await expect(page).toHaveScreenshot("checkin-signup-dialog.png")
   })
 
   test("empty guest form", async ({ page }) => {

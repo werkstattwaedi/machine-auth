@@ -9,6 +9,8 @@ const CHECKOUT_SIGNUP_EMAIL = "checkout-signup@werkstattwaedi.ch"
 // Distinct email — reusing SIGNUP_EMAIL here would trip the 60s per-email
 // code-request rate limit set by the first test.
 const FIRMA_SIGNUP_EMAIL = "firma-signup@werkstattwaedi.ch"
+// Layout-only test: opens the dialog but never submits.
+const DIALOG_LAYOUT_EMAIL = "dialog-layout-signup@werkstattwaedi.ch"
 
 // Only wipe the docs for the signup-specific emails — the seeded `e2e-test`
 // and `NFC` users are required by sibling spec files that run after signup.
@@ -185,5 +187,52 @@ test.describe("Self-registration (combined sign-in/sign-up)", () => {
     expect(userDoc.userType).toBe("firma")
     expect(userDoc.billingAddress?.company).toBe("Holzbau Müller AG")
     expect(userDoc.billingAddress?.city).toBe("Wädenswil")
+  })
+
+  // Issue #661: at phone height the sign-up form is taller than the dialog,
+  // which scrolls inside — but an untouched dialog rendered the primary
+  // button below its bottom edge with no scroll affordance. The submit is a
+  // sticky footer now; this pins that down at scrollTop 0, both for the
+  // default form and once the firma address fields force real overflow.
+  test("sign-up dialog keeps the primary button visible without scrolling", async ({
+    page,
+  }) => {
+    await page.goto("/")
+    await page.getByTestId("checkin-identifier").fill(DIALOG_LAYOUT_EMAIL)
+    await page.getByTestId("checkin-identifier-submit").click()
+
+    const dialog = page.getByTestId("checkin-signup-dialog")
+    const submit = page.getByTestId("checkin-signup-submit")
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await expect(submit).toBeVisible()
+    await page.evaluate(async () => {
+      await document.fonts.ready
+    })
+
+    const viewportHeight = page.viewportSize()!.height
+    const expectSubmitInsideDialog = async () => {
+      expect(await dialog.evaluate((el) => el.scrollTop)).toBe(0)
+      const dialogBox = (await dialog.boundingBox())!
+      const submitBox = (await submit.boundingBox())!
+      expect(submitBox.y).toBeGreaterThanOrEqual(dialogBox.y)
+      expect(submitBox.y + submitBox.height).toBeLessThanOrEqual(
+        dialogBox.y + dialogBox.height + 0.5,
+      )
+      expect(submitBox.y + submitBox.height).toBeLessThanOrEqual(
+        viewportHeight,
+      )
+    }
+
+    // Freshly opened, nothing touched: exactly what the user sees first.
+    await expectSubmitInsideDialog()
+
+    // firma adds the billing-address block, so the form overflows the dialog
+    // on every phone — the button must still sit inside the visible part.
+    // A click retry (dialog still animating) makes Playwright force-scroll
+    // the target, so put the dialog back to the top before measuring.
+    await page.getByTestId("signup-membertype-firma").click()
+    await expect(page.getByLabel("Strasse und Hausnummer")).toBeVisible()
+    await dialog.evaluate((el) => el.scrollTo({ top: 0 }))
+    await expectSubmitInsideDialog()
   })
 })
