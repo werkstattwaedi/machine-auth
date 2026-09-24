@@ -736,8 +736,9 @@ function PinnedValueField({
     // Fixed width + whitespace-normal so the error badge wraps here instead of
     // stretching the auto-width, nowrap Menge column. The "…12min, 1.5h"
     // example lives in the box's persistent Tipp hint, so this badge stays
-    // terse.
-    <span className="inline-flex w-32 flex-col items-end gap-0.5 whitespace-normal">
+    // terse. Below `sm` the wrapper matches the box (w-24) so a pinned row
+    // next to a removable machine row still fits a 375px card (issue #652).
+    <span className="inline-flex w-24 sm:w-32 flex-col items-end gap-0.5 whitespace-normal">
       <span
         className={`inline-flex h-8 w-24 items-center rounded-[3px] border bg-background px-2 ${
           error
