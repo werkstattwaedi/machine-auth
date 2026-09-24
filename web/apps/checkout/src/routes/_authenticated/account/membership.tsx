@@ -1235,7 +1235,8 @@ const MEMBER_TYPE_LABEL: Record<string, string> = {
   firma: "Firma",
 }
 
-function MemberRow({
+// Exported for the unit test only; not part of the route's public surface.
+export function MemberRow({
   userId,
   isOwner,
   onRemove,
@@ -1249,18 +1250,55 @@ function MemberRow({
   removing: boolean
 }) {
   const db = useDb()
-  // Family-roster join rule allows reading co-members' user docs.
-  const { data: user, loading } = useDocument(userRef(db, userId))
+  // Family-roster join rule allows reading co-members' user docs. The rule
+  // compares both docs' `activeMembership` pointers, which are written by a
+  // different commit than the `members[]` change that mounted this row —
+  // retry a denied listener a few times (1 s / 2 s / 4 s) rather than let
+  // the one-shot SDK error leave the row dead until reload (issue #654).
+  const { data: user, loading, error } = useDocument(userRef(db, userId), {
+    retry: { attempts: 3, delayMs: 1000 },
+  })
 
   // Until the co-member's user doc resolves, show a placeholder rather than
   // the raw document id (which `formatFullName` would otherwise fall back to).
-  if (loading || !user) {
+  if (loading) {
     return (
       <li className="grid grid-cols-[36px_1fr] items-center gap-3 border-b py-3 last:border-0">
         <Skeleton className="size-9 rounded-full" />
         <div className="space-y-1.5">
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-3 w-44" />
+        </div>
+      </li>
+    )
+  }
+
+  // Listener denied after all retries, or the doc is gone: a failed row must
+  // not look like it is still loading. Keep the remove action so the owner
+  // can still act on the entry.
+  if (error || !user) {
+    return (
+      <li
+        data-testid="member-row-unavailable"
+        className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b py-3 last:border-0"
+      >
+        <span className="inline-flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <User className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">Mitglied</div>
+          <div className="truncate text-xs text-muted-foreground">
+            Konnte nicht geladen werden
+          </div>
+        </div>
+        <div />
+        <div>
+          {onRemove && (
+            <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
+              <X />
+              {removeLabel}
+            </Button>
+          )}
         </div>
       </li>
     )
