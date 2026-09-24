@@ -26,7 +26,7 @@ function Harness({
   defaultUnit = "cm",
   initial = 0,
 }: {
-  onChange: (v: number, hasError: boolean) => void
+  onChange: (v: number, error: string | null) => void
   baseUnit?: BaseUnit
   defaultUnit?: string
   initial?: number
@@ -42,6 +42,7 @@ function Harness({
       baseUnit={baseUnit}
       defaultUnit={defaultUnit}
       ariaLabel="Länge"
+      errorId="form-errors"
     />
   )
 }
@@ -51,6 +52,22 @@ function renderField(props: Omit<Parameters<typeof Harness>[0], "onChange"> = {}
   render(<Harness onChange={onChange} {...props} />)
   const input = screen.getByLabelText("Länge") as HTMLInputElement
   return { input, onChange }
+}
+
+/** The field itself only turns red; the message is the parent form's job
+ *  (one full-width block under all fields), so no alert renders here. */
+function expectFieldError(input: HTMLInputElement) {
+  expect(input).toHaveAttribute("aria-invalid", "true")
+  expect(input).toHaveAttribute("aria-describedby", "form-errors")
+  expect(input.className).toContain("border-[#cc2a24]")
+  expect(screen.queryByRole("alert")).toBeNull()
+}
+
+function expectFieldOk(input: HTMLInputElement) {
+  expect(input).not.toHaveAttribute("aria-invalid")
+  expect(input).not.toHaveAttribute("aria-describedby")
+  expect(input.className).not.toContain("border-[#cc2a24]")
+  expect(screen.queryByRole("alert")).toBeNull()
 }
 
 afterEach(cleanup)
@@ -80,8 +97,8 @@ describe("UnitQuantityField — blur formatting", () => {
     fireEvent.blur(input)
     expect(input.value).toBe("120.5")
     expect(screen.getByText("cm")).toBeInTheDocument()
-    expect(onChange).toHaveBeenLastCalledWith(1.205, false)
-    expect(screen.queryByRole("alert")).toBeNull()
+    expect(onChange).toHaveBeenLastCalledWith(1.205, null)
+    expectFieldOk(input)
   })
 
   it("converts an explicit unit back into the entry unit: .5m → 50", () => {
@@ -90,7 +107,7 @@ describe("UnitQuantityField — blur formatting", () => {
     fireEvent.blur(input)
     expect(input.value).toBe("50")
     expect(screen.getByText("cm")).toBeInTheDocument()
-    expect(onChange).toHaveBeenLastCalledWith(0.5, false)
+    expect(onChange).toHaveBeenLastCalledWith(0.5, null)
   })
 
   it("does not switch to a bigger SI prefix: 1500 g stays 1500", () => {
@@ -98,7 +115,7 @@ describe("UnitQuantityField — blur formatting", () => {
     fireEvent.change(input, { target: { value: "1500" } })
     fireEvent.blur(input)
     expect(input.value).toBe("1500")
-    expect(onChange).toHaveBeenLastCalledWith(1.5, false)
+    expect(onChange).toHaveBeenLastCalledWith(1.5, null)
   })
 
   it("renders a time entry in minutes: 1.5h → 90", () => {
@@ -106,7 +123,7 @@ describe("UnitQuantityField — blur formatting", () => {
     fireEvent.change(input, { target: { value: "1.5h" } })
     fireEvent.blur(input)
     expect(input.value).toBe("90")
-    expect(onChange).toHaveBeenLastCalledWith(1.5, false)
+    expect(onChange).toHaveBeenLastCalledWith(1.5, null)
   })
 
   it("initialises the draft from a committed value in the entry unit", () => {
@@ -120,9 +137,9 @@ describe("UnitQuantityField — validation", () => {
     const { input, onChange } = renderField()
     fireEvent.change(input, { target: { value: "0" } })
     fireEvent.blur(input)
-    expect(screen.getByRole("alert")).toHaveTextContent(POSITIVE)
+    expectFieldError(input)
     expect(input).toHaveAttribute("aria-invalid", "true")
-    expect(onChange).toHaveBeenLastCalledWith(0, true)
+    expect(onChange).toHaveBeenLastCalledWith(0, POSITIVE)
   })
 
   it("flags a touched field that was cleared again", () => {
@@ -130,16 +147,16 @@ describe("UnitQuantityField — validation", () => {
     fireEvent.change(input, { target: { value: "5" } })
     fireEvent.change(input, { target: { value: "" } })
     fireEvent.blur(input)
-    expect(screen.getByRole("alert")).toHaveTextContent(POSITIVE)
-    expect(onChange).toHaveBeenLastCalledWith(0, true)
+    expectFieldError(input)
+    expect(onChange).toHaveBeenLastCalledWith(0, POSITIVE)
   })
 
   it("stays quiet when an untouched empty field blurs", () => {
     const { input, onChange } = renderField()
     fireEvent.focus(input)
     fireEvent.blur(input)
-    expect(screen.queryByRole("alert")).toBeNull()
-    expect(onChange).toHaveBeenLastCalledWith(0, false)
+    expectFieldOk(input)
+    expect(onChange).toHaveBeenLastCalledWith(0, null)
   })
 
   it("keeps the unknown-unit message for unparseable text", () => {
@@ -147,20 +164,20 @@ describe("UnitQuantityField — validation", () => {
     fireEvent.change(input, { target: { value: "5xyz" } })
     fireEvent.blur(input)
     expect(input.value).toBe("5xyz")
-    expect(screen.getByRole("alert")).toHaveTextContent("Einheit unbekannt")
-    expect(onChange).toHaveBeenLastCalledWith(0, true)
+    expectFieldError(input)
+    expect(onChange).toHaveBeenLastCalledWith(0, "Einheit unbekannt")
   })
 
   it("clears the error on the next keystroke and accepts a corrected value", () => {
     const { input, onChange } = renderField()
     fireEvent.change(input, { target: { value: "0" } })
     fireEvent.blur(input)
-    expect(screen.getByRole("alert")).toBeInTheDocument()
+    expectFieldError(input)
     fireEvent.change(input, { target: { value: "60" } })
-    expect(screen.queryByRole("alert")).toBeNull()
-    expect(onChange).toHaveBeenLastCalledWith(0.6, false)
+    expectFieldOk(input)
+    expect(onChange).toHaveBeenLastCalledWith(0.6, null)
     fireEvent.blur(input)
-    expect(onChange).toHaveBeenLastCalledWith(0.6, false)
+    expect(onChange).toHaveBeenLastCalledWith(0.6, null)
     expect(input).not.toHaveAttribute("aria-invalid")
   })
 

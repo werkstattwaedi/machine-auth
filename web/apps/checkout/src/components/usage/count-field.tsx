@@ -3,7 +3,6 @@
 
 import { useEffect, useRef, useState } from "react"
 import {
-  ErrorBadge,
   FIELD_INPUT_OK,
   FIELD_INPUT_ERR,
 } from "@/components/checkout/field-error"
@@ -20,21 +19,27 @@ const DIGITS_PATTERN = /^\d*$/
  *
  * Mirrors `UnitQuantityField`'s contract: the parent owns the numeric `value`,
  * this component owns the text draft and the error state. `onChange(value,
- * hasError)` fires live on every keystroke; `hasError` only turns true after a
- * blur that leaves a field the user has typed in at zero/empty, so an
- * autofocused empty field isn't red on open. Wrap in the caller's `FormField`
- * for the visible label.
+ * error)` fires live on every keystroke; `error` only becomes a message after
+ * a blur that leaves a field the user has typed in at zero/empty (null
+ * otherwise), so an autofocused empty field isn't red on open. Renders only
+ * the input (red border + `aria-invalid`); the parent form shows the message
+ * full-width under its fields and passes that block's id as `errorId` for
+ * `aria-describedby`. Wrap in the caller's `FormField` for the visible label.
  */
 export function CountField({
   value,
   onChange,
   ariaLabel,
   autoFocus,
+  errorId,
 }: {
   value: number
-  onChange: (value: number, hasError: boolean) => void
+  onChange: (value: number, error: string | null) => void
   ariaLabel: string
   autoFocus?: boolean
+  /** Id of the parent's error block, linked via `aria-describedby` while the
+   *  field is in error. */
+  errorId?: string
 }) {
   const [draft, setDraft] = useState(() => (value > 0 ? String(value) : ""))
   const [focused, setFocused] = useState(false)
@@ -43,9 +48,9 @@ export function CountField({
   // Last value this field reported upward, so the resync effect can tell an
   // external change from the echo of its own onChange.
   const reported = useRef(value)
-  const report = (v: number, hasError: boolean) => {
+  const report = (v: number, err: string | null) => {
     reported.current = v
-    onChange(v, hasError)
+    onChange(v, err)
   }
 
   // Re-sync when the committed value changes externally (the form resets to 0
@@ -60,36 +65,34 @@ export function CountField({
   }, [value, focused, error])
 
   return (
-    <>
-      <input
-        type="text"
-        inputMode="numeric"
-        autoFocus={autoFocus}
-        value={draft}
-        aria-label={ariaLabel}
-        aria-invalid={error ? true : undefined}
-        placeholder="0"
-        className={error ? FIELD_INPUT_ERR : FIELD_INPUT_OK}
-        onFocus={() => setFocused(true)}
-        onChange={(e) => {
-          const raw = e.target.value
-          if (!DIGITS_PATTERN.test(raw)) return
-          touched.current = true
-          setDraft(raw)
-          if (error) setError(null)
-          report(raw === "" ? 0 : Number(raw), false)
-        }}
-        onBlur={() => {
-          setFocused(false)
-          const n = draft === "" ? 0 : Number(draft)
-          const ruleError = touched.current ? quantityError(n, "count") : null
-          setError(ruleError)
-          report(n, ruleError !== null)
-          // Normalise leading zeros ("007" → "7") once the value is accepted.
-          if (!ruleError) setDraft(n > 0 ? String(n) : "")
-        }}
-      />
-      {error ? <ErrorBadge message={error} /> : null}
-    </>
+    <input
+      type="text"
+      inputMode="numeric"
+      autoFocus={autoFocus}
+      value={draft}
+      aria-label={ariaLabel}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error && errorId ? errorId : undefined}
+      placeholder="0"
+      className={error ? FIELD_INPUT_ERR : FIELD_INPUT_OK}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        const raw = e.target.value
+        if (!DIGITS_PATTERN.test(raw)) return
+        touched.current = true
+        setDraft(raw)
+        if (error) setError(null)
+        report(raw === "" ? 0 : Number(raw), null)
+      }}
+      onBlur={() => {
+        setFocused(false)
+        const n = draft === "" ? 0 : Number(draft)
+        const ruleError = touched.current ? quantityError(n, "count") : null
+        setError(ruleError)
+        report(n, ruleError)
+        // Normalise leading zeros ("007" → "7") once the value is accepted.
+        if (!ruleError) setDraft(n > 0 ? String(n) : "")
+      }}
+    />
   )
 }

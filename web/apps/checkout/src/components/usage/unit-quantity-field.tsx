@@ -8,7 +8,6 @@ import {
   type BaseUnit,
 } from "@modules/lib/units"
 import {
-  ErrorBadge,
   FIELD_INPUT_OK,
   FIELD_INPUT_ERR,
 } from "@/components/checkout/field-error"
@@ -34,16 +33,20 @@ const HAS_UNIT_TOKEN = /[a-zµ²]/i
  * itself never switches units under the user (issue #656).
  *
  * The parent owns the numeric `value` (in `baseUnit`); this component owns the
- * verbatim text draft and the error state. `onChange(value, hasError)` fires
- * live on every keystroke — `hasError` is only ever true after a blur that
+ * verbatim text draft and the error state. `onChange(value, error)` fires
+ * live on every keystroke — `error` is only ever a message after a blur that
  * couldn't be parsed ("Einheit unbekannt") or that left a field the user has
- * typed in at zero/empty ("Bitte eine Zahl grösser als 0 eingeben"), so the
- * parent can both price live and block "Hinzufügen" on an invalid field. An
- * untouched field stays quiet on blur so an autofocused empty field isn't red
- * on open.
+ * typed in at zero/empty ("Bitte eine Zahl grösser als 0 eingeben"), otherwise
+ * null, so the parent can price live, block "Hinzufügen" on an invalid field
+ * and show the message. An untouched field stays quiet on blur so an
+ * autofocused empty field isn't red on open.
  *
- * Renders the input plus (on error) the standard checkout `ErrorBadge`; wrap
- * it in the caller's `FormField` to attach a visible label.
+ * Renders only the input (red border + `aria-invalid` on error). The message
+ * itself is shown by the parent form in one full-width block under all its
+ * fields — a badge under a narrow grid column wrapped over several lines and
+ * pushed the neighbouring fields down. `errorId` names that block so the input
+ * can reference it via `aria-describedby`. Wrap in the caller's `FormField`
+ * for the visible label.
  */
 export function UnitQuantityField({
   value,
@@ -54,9 +57,10 @@ export function UnitQuantityField({
   placeholder = "0",
   autoFocus,
   errorMessage = "Einheit unbekannt",
+  errorId,
 }: {
   value: number
-  onChange: (value: number, hasError: boolean) => void
+  onChange: (value: number, error: string | null) => void
   baseUnit: BaseUnit
   /** Unit assumed for a bare number and shown as the in-field suffix, e.g.
    *  "cm", "g", "ml", "min". */
@@ -66,6 +70,9 @@ export function UnitQuantityField({
   autoFocus?: boolean
   /** Message for a non-empty draft whose unit token isn't recognised. */
   errorMessage?: string
+  /** Id of the parent's error block, linked via `aria-describedby` while the
+   *  field is in error. */
+  errorId?: string
 }) {
   const [draft, setDraft] = useState(() =>
     value > 0 ? formatInUnit(value, baseUnit, defaultUnit) : "",
@@ -76,9 +83,9 @@ export function UnitQuantityField({
   // Last value this field reported upward, so the resync effect can tell an
   // external change from the echo of its own onChange.
   const reported = useRef(value)
-  const report = (v: number, hasError: boolean) => {
+  const report = (v: number, err: string | null) => {
     reported.current = v
-    onChange(v, hasError)
+    onChange(v, err)
   }
 
   // Re-sync the draft when the committed value changes externally (e.g. the
@@ -96,62 +103,60 @@ export function UnitQuantityField({
   const showSuffix = !HAS_UNIT_TOKEN.test(draft)
 
   return (
-    <>
-      <div className="relative">
-        <input
-          type="text"
-          inputMode="text"
-          autoFocus={autoFocus}
-          value={draft}
-          aria-label={ariaLabel}
-          aria-invalid={error ? true : undefined}
-          placeholder={placeholder}
-          className={`${error ? FIELD_INPUT_ERR : FIELD_INPUT_OK} ${showSuffix ? "pr-10" : ""}`}
-          onFocus={() => setFocused(true)}
-          onChange={(e) => {
-            const raw = e.target.value
-            if (!UNIT_TYPING_PATTERN.test(raw)) return
-            touched.current = true
-            setDraft(raw)
-            if (error) setError(null)
-            const parsed = parseWithDefaultUnit(raw, baseUnit, defaultUnit)
-            // Keep the previous value while a unit token is mid-typed
-            // (parsed === null) so the live total doesn't flicker to 0.
-            report(parsed ?? value, false)
-          }}
-          onBlur={() => {
-            setFocused(false)
-            const parsed = parseWithDefaultUnit(draft, baseUnit, defaultUnit)
-            if (parsed === null) {
-              // Non-empty but unparseable: keep verbatim text, flag the error,
-              // and block the add.
-              setError(errorMessage)
-              report(value, true)
-              return
-            }
-            const ruleError = touched.current
-              ? quantityError(parsed, "measure")
-              : null
-            if (ruleError) {
-              setError(ruleError)
-              report(parsed, true)
-              return
-            }
-            setError(null)
-            report(parsed, false)
-            setDraft(parsed > 0 ? formatInUnit(parsed, baseUnit, defaultUnit) : "")
-          }}
-        />
-        {showSuffix ? (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
-          >
-            {defaultUnit}
-          </span>
-        ) : null}
-      </div>
-      {error ? <ErrorBadge message={error} /> : null}
-    </>
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="text"
+        autoFocus={autoFocus}
+        value={draft}
+        aria-label={ariaLabel}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error && errorId ? errorId : undefined}
+        placeholder={placeholder}
+        className={`${error ? FIELD_INPUT_ERR : FIELD_INPUT_OK} ${showSuffix ? "pr-10" : ""}`}
+        onFocus={() => setFocused(true)}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (!UNIT_TYPING_PATTERN.test(raw)) return
+          touched.current = true
+          setDraft(raw)
+          if (error) setError(null)
+          const parsed = parseWithDefaultUnit(raw, baseUnit, defaultUnit)
+          // Keep the previous value while a unit token is mid-typed
+          // (parsed === null) so the live total doesn't flicker to 0.
+          report(parsed ?? value, null)
+        }}
+        onBlur={() => {
+          setFocused(false)
+          const parsed = parseWithDefaultUnit(draft, baseUnit, defaultUnit)
+          if (parsed === null) {
+            // Non-empty but unparseable: keep verbatim text, flag the error,
+            // and block the add.
+            setError(errorMessage)
+            report(value, errorMessage)
+            return
+          }
+          const ruleError = touched.current
+            ? quantityError(parsed, "measure")
+            : null
+          if (ruleError) {
+            setError(ruleError)
+            report(parsed, ruleError)
+            return
+          }
+          setError(null)
+          report(parsed, null)
+          setDraft(parsed > 0 ? formatInUnit(parsed, baseUnit, defaultUnit) : "")
+        }}
+      />
+      {showSuffix ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
+        >
+          {defaultUnit}
+        </span>
+      ) : null}
+    </div>
   )
 }

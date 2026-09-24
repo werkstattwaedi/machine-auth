@@ -960,6 +960,43 @@ describe("MaterialPicker", () => {
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({ quantity: 3 })
   })
 
+  // Review on PR #681: per-field badges wrapped in the narrow grid columns and
+  // pushed neighbours down. Errors now share one full-width alert below the
+  // fields, label-prefixed only when more than one field is invalid.
+  it("lists several invalid area fields in one label-prefixed alert", async () => {
+    const user = userEvent.setup()
+    renderPicker({ callbacks: makeCallbacks() })
+    await user.click(screen.getByText("MDF Platte 3mm"))
+    const len = screen.getByLabelText("Länge")
+    const wid = screen.getByLabelText("Breite")
+    await user.type(len, "0")
+    await user.tab()
+    await user.type(wid, "0")
+    await user.tab()
+    const alerts = screen.getAllByRole("alert")
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].textContent).toContain(
+      "Länge: Bitte eine Zahl grösser als 0 eingeben",
+    )
+    expect(alerts[0].textContent).toContain(
+      "Breite: Bitte eine Zahl grösser als 0 eingeben",
+    )
+    expect(len.getAttribute("aria-describedby")).toBe(alerts[0].id)
+    expect(wid.getAttribute("aria-describedby")).toBe(alerts[0].id)
+
+    await user.clear(len)
+    await user.type(len, "100")
+    await user.tab()
+    const remaining = screen.getAllByRole("alert")
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].textContent).toBe(
+      "Bitte eine Zahl grösser als 0 eingeben",
+    )
+    expect(remaining[0].textContent).not.toContain("Breite:")
+    expect(len.hasAttribute("aria-invalid")).toBe(false)
+    expect(wid.getAttribute("aria-invalid")).toBe("true")
+  })
+
   it("cannot take a fractional count (1.5 Stk. types as 15, not 1.5)", async () => {
     const user = userEvent.setup()
     const callbacks = makeCallbacks()

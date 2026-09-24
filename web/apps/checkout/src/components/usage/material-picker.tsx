@@ -1,7 +1,13 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import React, { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import React, {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react"
 import {
   Sheet,
   SheetContent,
@@ -34,6 +40,7 @@ import {
 import { matchesCatalogQuery } from "@modules/lib/text-search"
 import { UnitQuantityField } from "@/components/usage/unit-quantity-field"
 import { CountField } from "@/components/usage/count-field"
+import { ErrorBadge } from "@/components/checkout/field-error"
 import type { CheckoutItemLocal } from "./inline-rows"
 import {
   readPickerScrollAnchor,
@@ -989,7 +996,8 @@ function SimpleForm({
   // `baseQty` holds the base-unit quantity: kg for weight, hours for time,
   // raw count otherwise (count is non-SI so base == displayed).
   const [baseQty, setBaseQty] = useState(0)
-  const [err, setErr] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const errorId = useId()
   const total = Math.round(baseQty * unitPrice * 100) / 100
   const formInputQty = isWeight
     ? Math.round(baseQty * 1000 * 100) / 100
@@ -997,6 +1005,7 @@ function SimpleForm({
       ? Math.round(baseQty * 60 * 100) / 100
       : baseQty
   const label = isWeight ? "Gewicht" : isTime ? "Zeit" : `Anzahl (${displayUnit})`
+  const fieldErrLabel = isWeight ? "Gewicht" : isTime ? "Zeit" : "Anzahl"
   return (
     <>
       <FormGrid>
@@ -1004,10 +1013,11 @@ function SimpleForm({
           {isDimensional ? (
             <UnitQuantityField
               value={baseQty}
-              onChange={(v, hasError) => {
+              onChange={(v, error) => {
                 setBaseQty(v)
-                setErr(hasError)
+                setErr(error)
               }}
+              errorId={errorId}
               baseUnit={isWeight ? "kg" : "h"}
               defaultUnit={isWeight ? "g" : "min"}
               ariaLabel={isWeight ? "Gewicht" : "Zeit"}
@@ -1017,18 +1027,23 @@ function SimpleForm({
             <CountField
               autoFocus
               value={baseQty}
-              onChange={(v, hasError) => {
+              onChange={(v, error) => {
                 setBaseQty(v)
-                setErr(hasError)
+                setErr(error)
               }}
+              errorId={errorId}
               ariaLabel="Anzahl"
             />
           )}
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[{ label: fieldErrLabel, message: err }]}
+      />
       <FormFooter
         total={total}
-        addDisabled={baseQty <= 0 || err}
+        addDisabled={baseQty <= 0 || err != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1038,7 +1053,7 @@ function SimpleForm({
             formInputs: [{ quantity: formInputQty, unit: displayUnit }],
           })
           setBaseQty(0)
-          setErr(false)
+          setErr(null)
         }}
       />
     </>
@@ -1058,8 +1073,9 @@ function AreaForm({
 }) {
   const [lengthM, setLengthM] = useState(0)
   const [widthM, setWidthM] = useState(0)
-  const [lenErr, setLenErr] = useState(false)
-  const [widErr, setWidErr] = useState(false)
+  const [lenErr, setLenErr] = useState<string | null>(null)
+  const [widErr, setWidErr] = useState<string | null>(null)
+  const errorId = useId()
   const m2 = lengthM * widthM
   const total = Math.round(m2 * unitPrice * 100) / 100
   const lengthCm = Math.round(lengthM * 100 * 100) / 100
@@ -1070,10 +1086,11 @@ function AreaForm({
         <FormField label="Länge">
           <UnitQuantityField
             value={lengthM}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setLengthM(v)
-              setLenErr(hasError)
+              setLenErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Länge"
@@ -1083,10 +1100,11 @@ function AreaForm({
         <FormField label="Breite">
           <UnitQuantityField
             value={widthM}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setWidthM(v)
-              setWidErr(hasError)
+              setWidErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Breite"
@@ -1098,9 +1116,16 @@ function AreaForm({
           </div>
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[
+          { label: "Länge", message: lenErr },
+          { label: "Breite", message: widErr },
+        ]}
+      />
       <FormFooter
         total={total}
-        addDisabled={m2 <= 0 || lenErr || widErr}
+        addDisabled={m2 <= 0 || lenErr != null || widErr != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1114,8 +1139,8 @@ function AreaForm({
           })
           setLengthM(0)
           setWidthM(0)
-          setLenErr(false)
-          setWidErr(false)
+          setLenErr(null)
+          setWidErr(null)
         }}
       />
     </>
@@ -1134,7 +1159,8 @@ function LengthForm({
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const [meters, setMeters] = useState(0)
-  const [lenErr, setLenErr] = useState(false)
+  const [lenErr, setLenErr] = useState<string | null>(null)
+  const errorId = useId()
   const total = Math.round(meters * unitPrice * 100) / 100
   const lengthCm = Math.round(meters * 100 * 100) / 100
   return (
@@ -1143,10 +1169,11 @@ function LengthForm({
         <FormField label="Länge">
           <UnitQuantityField
             value={meters}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setMeters(v)
-              setLenErr(hasError)
+              setLenErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Länge"
@@ -1159,9 +1186,13 @@ function LengthForm({
           </div>
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[{ label: "Länge", message: lenErr }]}
+      />
       <FormFooter
         total={total}
-        addDisabled={meters <= 0 || lenErr}
+        addDisabled={meters <= 0 || lenErr != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1171,7 +1202,7 @@ function LengthForm({
             formInputs: [{ quantity: lengthCm, unit: "cm" }],
           })
           setMeters(0)
-          setLenErr(false)
+          setLenErr(null)
         }}
       />
     </>
@@ -1192,9 +1223,10 @@ function SlaForm({
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const [resinL, setResinL] = useState(0)
-  const [resinErr, setResinErr] = useState(false)
+  const [resinErr, setResinErr] = useState<string | null>(null)
   const [layers, setLayers] = useState(0)
-  const [layersErr, setLayersErr] = useState(false)
+  const [layersErr, setLayersErr] = useState<string | null>(null)
+  const errorId = useId()
   const layerPrice =
     config.slaLayerPrice?.[discountLevel] ?? config.slaLayerPrice?.none ?? 0
   const total =
@@ -1206,10 +1238,11 @@ function SlaForm({
         <FormField label="Resin">
           <UnitQuantityField
             value={resinL}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setResinL(v)
-              setResinErr(hasError)
+              setResinErr(error)
             }}
+            errorId={errorId}
             baseUnit="l"
             defaultUnit="ml"
             ariaLabel="Resin"
@@ -1219,10 +1252,11 @@ function SlaForm({
         <FormField label="Layer">
           <CountField
             value={layers}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setLayers(v)
-              setLayersErr(hasError)
+              setLayersErr(error)
             }}
+            errorId={errorId}
             ariaLabel="Layer"
           />
         </FormField>
@@ -1232,9 +1266,16 @@ function SlaForm({
           </div>
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[
+          { label: "Resin", message: resinErr },
+          { label: "Layer", message: layersErr },
+        ]}
+      />
       <FormFooter
         total={total}
-        addDisabled={resinL <= 0 || layers <= 0 || resinErr || layersErr}
+        addDisabled={resinL <= 0 || layers <= 0 || resinErr != null || layersErr != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1247,9 +1288,9 @@ function SlaForm({
             ],
           })
           setResinL(0)
-          setResinErr(false)
+          setResinErr(null)
           setLayers(0)
-          setLayersErr(false)
+          setLayersErr(null)
         }}
       />
     </>
@@ -1499,7 +1540,8 @@ function AdHocCountWeightTimeForm({
   // `baseQty` holds the base-unit quantity: kg for weight, hours for time,
   // raw count otherwise.
   const [baseQty, setBaseQty] = useState(0)
-  const [err, setErr] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const errorId = useId()
   const [unitPrice, setUnitPrice] = useState(0)
   const total = Math.round(baseQty * unitPrice * 100) / 100
   const formInputQty = isWeight
@@ -1508,6 +1550,7 @@ function AdHocCountWeightTimeForm({
       ? Math.round(baseQty * 60 * 100) / 100
       : baseQty
   const label = isWeight ? "Gewicht" : isTime ? "Zeit" : `Anzahl (${displayUnit})`
+  const fieldErrLabel = isWeight ? "Gewicht" : isTime ? "Zeit" : "Anzahl"
   return (
     <>
       <FormGrid>
@@ -1515,10 +1558,11 @@ function AdHocCountWeightTimeForm({
           {isDimensional ? (
             <UnitQuantityField
               value={baseQty}
-              onChange={(v, hasError) => {
+              onChange={(v, error) => {
                 setBaseQty(v)
-                setErr(hasError)
+                setErr(error)
               }}
+              errorId={errorId}
               baseUnit={isWeight ? "kg" : "h"}
               defaultUnit={isWeight ? "g" : "min"}
               ariaLabel={isWeight ? "Gewicht" : "Zeit"}
@@ -1526,10 +1570,11 @@ function AdHocCountWeightTimeForm({
           ) : (
             <CountField
               value={baseQty}
-              onChange={(v, hasError) => {
+              onChange={(v, error) => {
                 setBaseQty(v)
-                setErr(hasError)
+                setErr(error)
               }}
+              errorId={errorId}
               ariaLabel="Anzahl"
             />
           )}
@@ -1547,9 +1592,13 @@ function AdHocCountWeightTimeForm({
           />
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[{ label: fieldErrLabel, message: err }]}
+      />
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0 || err}
+        addDisabled={!descriptionFilled || total <= 0 || err != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1560,7 +1609,7 @@ function AdHocCountWeightTimeForm({
             formInputs: [{ quantity: formInputQty, unit: displayUnit }],
           })
           setBaseQty(0)
-          setErr(false)
+          setErr(null)
           setUnitPrice(0)
         }}
       />
@@ -1581,8 +1630,9 @@ function AdHocAreaForm({
 }) {
   const [lengthM, setLengthM] = useState(0)
   const [widthM, setWidthM] = useState(0)
-  const [lenErr, setLenErr] = useState(false)
-  const [widErr, setWidErr] = useState(false)
+  const [lenErr, setLenErr] = useState<string | null>(null)
+  const [widErr, setWidErr] = useState<string | null>(null)
+  const errorId = useId()
   const [unitPrice, setUnitPrice] = useState(0)
   const m2 = lengthM * widthM
   const total = Math.round(m2 * unitPrice * 100) / 100
@@ -1594,10 +1644,11 @@ function AdHocAreaForm({
         <FormField label="Länge">
           <UnitQuantityField
             value={lengthM}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setLengthM(v)
-              setLenErr(hasError)
+              setLenErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Länge"
@@ -1606,10 +1657,11 @@ function AdHocAreaForm({
         <FormField label="Breite">
           <UnitQuantityField
             value={widthM}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setWidthM(v)
-              setWidErr(hasError)
+              setWidErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Breite"
@@ -1633,9 +1685,16 @@ function AdHocAreaForm({
           />
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[
+          { label: "Länge", message: lenErr },
+          { label: "Breite", message: widErr },
+        ]}
+      />
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0 || lenErr || widErr}
+        addDisabled={!descriptionFilled || total <= 0 || lenErr != null || widErr != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1650,8 +1709,8 @@ function AdHocAreaForm({
           })
           setLengthM(0)
           setWidthM(0)
-          setLenErr(false)
-          setWidErr(false)
+          setLenErr(null)
+          setWidErr(null)
           setUnitPrice(0)
         }}
       />
@@ -1671,7 +1730,8 @@ function AdHocLengthForm({
   onAdd: (item: CheckoutItemLocal) => void
 }) {
   const [meters, setMeters] = useState(0)
-  const [lenErr, setLenErr] = useState(false)
+  const [lenErr, setLenErr] = useState<string | null>(null)
+  const errorId = useId()
   const [unitPrice, setUnitPrice] = useState(0)
   const total = Math.round(meters * unitPrice * 100) / 100
   const lengthCm = Math.round(meters * 100 * 100) / 100
@@ -1681,10 +1741,11 @@ function AdHocLengthForm({
         <FormField label="Länge">
           <UnitQuantityField
             value={meters}
-            onChange={(v, hasError) => {
+            onChange={(v, error) => {
               setMeters(v)
-              setLenErr(hasError)
+              setLenErr(error)
             }}
+            errorId={errorId}
             baseUnit="m"
             defaultUnit="cm"
             ariaLabel="Länge"
@@ -1703,9 +1764,13 @@ function AdHocLengthForm({
           />
         </FormField>
       </FormGrid>
+      <FormErrors
+        id={errorId}
+        errors={[{ label: "Länge", message: lenErr }]}
+      />
       <FormFooter
         total={total}
-        addDisabled={!descriptionFilled || total <= 0 || lenErr}
+        addDisabled={!descriptionFilled || total <= 0 || lenErr != null}
         onAdd={() => {
           onAdd({
             ...baseItem,
@@ -1716,11 +1781,46 @@ function AdHocLengthForm({
             formInputs: [{ quantity: lengthCm, unit: "cm" }],
           })
           setMeters(0)
-          setLenErr(false)
+          setLenErr(null)
           setUnitPrice(0)
         }}
       />
     </>
+  )
+}
+
+/**
+ * One full-width error block under a form's input grid. A badge under each
+ * field wrapped over several lines in the narrow grid columns and, with the
+ * grid's `items-end`, pushed the neighbouring fields down a row. Down here
+ * the message gets the whole width; the invalid field keeps its red border.
+ * The field label is only prefixed when several fields are invalid — with a
+ * single error the red border already says which field is meant. One badge
+ * (one `role="alert"`) either way, whose `id` the inputs reference via
+ * `aria-describedby`.
+ */
+function FormErrors({
+  id,
+  errors,
+}: {
+  id: string
+  errors: ReadonlyArray<{ label: string; message: string | null }>
+}) {
+  const active = errors.filter(
+    (e): e is { label: string; message: string } => e.message != null,
+  )
+  if (active.length === 0) return null
+  if (active.length === 1) {
+    return <ErrorBadge id={id} message={active[0].message} />
+  }
+  return (
+    <ErrorBadge id={id}>
+      {active.map((e) => (
+        <span key={e.label} className="block">
+          {e.label}: {e.message}
+        </span>
+      ))}
+    </ErrorBadge>
   )
 }
 
