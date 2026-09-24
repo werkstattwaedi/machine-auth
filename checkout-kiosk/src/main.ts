@@ -124,6 +124,12 @@ function showWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   if (!mainWindow.isVisible()) mainWindow.show()
+  // Maximized whenever it is surfaced: the configured width/height are only a
+  // fallback, and at the 1280×900 default the payment page's QR code and the
+  // overlay close button fell below the fold on the kiosk screen (issue
+  // #458). This used to happen at startup, but maximize() also shows the
+  // window, which defeated starting minimized.
+  if (!mainWindow.isMaximized()) mainWindow.maximize()
   mainWindow.focus()
   // steal:true so we actually surface above the (transition-phase) browser
   // running the old checkout, instead of merely flashing the taskbar.
@@ -148,10 +154,10 @@ const FOREGROUND_REASSERT_MS = [0, 300, 900, 2000] as const
 // Raising the window is not enough when the terminal has gone to the
 // screensaver: it paints over the kiosk, so the tap looks ignored and users
 // reach for the mouse. Synthetic input cannot fix that — the screensaver runs
-// on its own desktop and never sees it — so wake-display.ts terminates the
-// screensaver process instead. Best effort by design: a failed attempt leaves
-// the user exactly where they were (jiggling the mouse), so it must never
-// break the tap itself.
+// on its own desktop and never sees it — so wake-display.ts asks the
+// screensaver to close itself (WM_CLOSE) instead. Best effort by design: a
+// failed attempt leaves the user exactly where they were (jiggling the
+// mouse), so it must never break the tap itself.
 const wakeDisplay = createDisplayWaker({
   platform: process.platform,
   now: () => Date.now(),
@@ -226,8 +232,8 @@ function createWindow(): void {
     height: config.windowOpts.height,
     frame: true,
     icon: appIcon(),
-    // Start hidden: during the transition phase the kiosk waits in the tray so
-    // it never covers the browser running the old checkout. A badge tap (or the
+    // Start hidden in the tray: during the transition phase the kiosk must
+    // never cover the browser running the old checkout. A badge tap (or the
     // tray) brings it forward for users who opt into the new flow.
     show: false,
     autoHideMenuBar: config.windowOpts.autoHideMenuBar,
@@ -263,11 +269,11 @@ function createWindow(): void {
     void endSessionAndHide()
   })
 
-  // Start maximized: the configured width/height are only a fallback for an
-  // un-maximized window. At the fixed 1280×900 default the payment page's
-  // QR code and the overlay close button fell below the fold on the kiosk's
-  // screen (issue #458).
-  mainWindow.maximize()
+  // Start hidden in the tray: leave the window exactly as `show: false`
+  // created it. Do NOT maximize (or minimize) here — Electron's maximize()
+  // also shows a hidden window, which is how the old start-maximized call
+  // made the kiosk come up visible and full-screen on every launch.
+  // showWindow() maximizes when the kiosk is actually surfaced.
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
