@@ -69,6 +69,14 @@ export type VerifyTagResponse =
   | VerifyTagUnregisteredResponse;
 
 /**
+ * A tap the server rejects because of what the client sent — malformed or
+ * forged SDM data, a replayed counter, a deactivated badge. Any kiosk (or a
+ * double-submitting one after a cold start) can produce these, so wrappers
+ * log them at warn: ERROR pages ops. Everything else stays an error.
+ */
+export class TagRejectedError extends Error {}
+
+/**
  * Result of decrypting + authenticating a tapped tag.
  */
 export interface VerifiedTag {
@@ -97,10 +105,12 @@ export function decryptAndVerifyTag(
 
   // Validate inputs
   if (!picc || typeof picc !== "string") {
-    throw new Error("Missing or invalid 'picc' parameter");
+    throw new TagRejectedError("Missing or invalid 'picc' parameter");
   }
-  if (!cmac || typeof cmac !== "string") {
-    throw new Error("Missing or invalid 'cmac' parameter");
+  // Shape-checked here so a malformed CMAC is rejected as client input; the
+  // verification catch below is then left with key/config faults only.
+  if (!cmac || typeof cmac !== "string" || !/^[0-9a-fA-F]{16}$/.test(cmac)) {
+    throw new TagRejectedError("Missing or invalid 'cmac' parameter");
   }
 
   // Decrypt PICC data to get UID and counter
@@ -108,8 +118,8 @@ export function decryptAndVerifyTag(
   try {
     piccData = decryptPICCData(picc, terminalKey);
   } catch (error: any) {
-    logger.error("Failed to decrypt PICC data", { error: error.message });
-    throw new Error(`PICC decryption failed: ${error.message}`);
+    logger.warn("Failed to decrypt PICC data", { error: error.message });
+    throw new TagRejectedError(`PICC decryption failed: ${error.message}`);
   }
 
   const uidHex = piccData.uid.toString("hex");
@@ -127,7 +137,7 @@ export function decryptAndVerifyTag(
 
   if (!isValid) {
     logger.warn("CMAC signature mismatch", { tokenId: uidHex });
-    throw new Error("Invalid CMAC signature");
+    throw new TagRejectedError("Invalid CMAC signature");
   }
 
   return { tokenId: uidHex, uid: uidHex, piccData };
@@ -188,7 +198,7 @@ export async function handleVerifyTagCheckout(
   // Check if token is deactivated
   if (tokenData.deactivated) {
     logger.warn("Token is deactivated", { tokenId });
-    throw new Error("Token is deactivated");
+    throw new TagRejectedError("Token is deactivated");
   }
 
   // Get user reference
@@ -217,7 +227,7 @@ export async function handleVerifyTagCheckout(
         incomingCounter,
         lastCounter,
       });
-      throw new Error("SDM replay detected: counter not advancing");
+      throw new TagRejectedError("SDM replay detected: counter not advancing");
     }
     tx.update(tokenRef, { lastSdmCounter: incomingCounter });
   });
@@ -269,7 +279,8 @@ export const verifyTagCheckoutHandler = async (
       }
     );
   } catch (error: any) {
-    logger.error("Tag verification failed", { error: error?.message });
+    const log = error instanceof TagRejectedError ? logger.warn : logger.error;
+    log("Tag verification failed", { error: error?.message });
     throw new HttpsError(
       "invalid-argument",
       error?.message || "Tag verification failed"

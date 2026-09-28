@@ -17,7 +17,10 @@ import {
   seedTestData,
   getFirestore,
 } from "../emulator-helper";
-import { handleVerifyTagCheckout } from "../../src/checkout/verify_tag";
+import {
+  handleVerifyTagCheckout,
+  TagRejectedError,
+} from "../../src/checkout/verify_tag";
 import type { VerifyTagRequest } from "../../src/checkout/verify_tag";
 import { generateValidPICCAndCMAC } from "../test-sdm-helper";
 
@@ -135,6 +138,7 @@ describe("SDM counter replay defense (Integration)", () => {
       expect.fail("Should have rejected replayed counter");
     } catch (error: any) {
       expect(error.message).to.include("replay");
+      expect(error).to.be.instanceOf(TagRejectedError);
     }
 
     // Persisted counter unchanged.
@@ -154,6 +158,7 @@ describe("SDM counter replay defense (Integration)", () => {
       expect.fail("Should have rejected lower counter");
     } catch (error: any) {
       expect(error.message).to.include("replay");
+      expect(error).to.be.instanceOf(TagRejectedError);
     }
 
     expect(await readPersistedCounter()).to.equal(10);
@@ -173,6 +178,7 @@ describe("SDM counter replay defense (Integration)", () => {
       expect.fail("Should have rejected equal counter");
     } catch (error: any) {
       expect(error.message).to.include("replay");
+      expect(error).to.be.instanceOf(TagRejectedError);
     }
 
     expect(await readPersistedCounter()).to.equal(10);
@@ -233,6 +239,7 @@ describe("SDM counter replay defense (Integration)", () => {
     // unrelated reasons.
     const rejectionReason = (rejected[0] as PromiseRejectedResult).reason;
     expect(rejectionReason.message).to.include("replay");
+    expect(rejectionReason).to.be.instanceOf(TagRejectedError);
 
     // And the surviving counter on disk is exactly the one the survivor wrote.
     expect(await readPersistedCounter()).to.equal(42);
