@@ -53,6 +53,16 @@ export interface PositionRow {
  * slot is rendered as a full-width grid row immediately beneath the
  * toggled row. Material call sites that don't need this stay unaffected
  * (no chevron column unless `onToggle` is supplied).
+ *
+ * Below `sm` (issue #652) each position stacks: the title takes the full
+ * row and Menge / Kosten / Preis sit right-aligned on the grid row below,
+ * so long names ("Stationäre Maschinen", "Kirschbaum 24 mm, gehobelt")
+ * stay readable on a phone instead of collapsing to "Sta…". The header
+ * stacks the same way — `firstColLabel` on its own line, the three column
+ * names right-aligned beneath it in the value columns — so the numeric
+ * headers still sit above the values they label. Every `sm:` variant
+ * restores the side-by-side classes, so the desktop rendering is
+ * unchanged.
  */
 export function PositionTable({
   firstColLabel,
@@ -70,6 +80,21 @@ export function PositionTable({
     ? "grid-cols-[20px_minmax(0,1fr)_auto_auto_auto]"
     : "grid-cols-[minmax(0,1fr)_auto_auto_auto]"
   const totalCols = hasGutter ? 5 : 4
+  // Mobile placement: the title spans every column after the gutter, and
+  // the three value cells get explicit column starts so they land on the
+  // next grid row regardless of the sparse auto-placement cursor. `sm:`
+  // hands placement back to auto-flow (today's single-line layout).
+  const titleSpan = "col-span-4 sm:col-auto"
+  const valueStart = hasGutter
+    ? ["col-start-3", "col-start-4", "col-start-5"]
+    : ["col-start-2", "col-start-3", "col-start-4"]
+  const valueCell =
+    "pt-0.5 pb-2 sm:py-2 text-sm tabular-nums text-right whitespace-nowrap sm:border-t border-dotted border-border sm:col-auto"
+  // The numeric headers share the value cells' column starts so that, on
+  // mobile, they land on the grid row under the label and line up with the
+  // values beneath them.
+  const numHeader =
+    "text-[11px] font-semibold uppercase text-muted-foreground text-right pb-1.5 sm:col-auto"
   return (
     <div
       role="table"
@@ -79,7 +104,7 @@ export function PositionTable({
         {hasGutter && <span aria-hidden className="pb-1.5" />}
         <span
           role="columnheader"
-          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pb-1.5"
+          className={`text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pb-1.5 ${titleSpan}`}
         >
           {firstColLabel}
         </span>
@@ -87,22 +112,13 @@ export function PositionTable({
             text-right, the trailing letter-spacing of tracking would push
             the visible text leftward inside the cell box, leaving the
             header text visually inset from the value columns below. */}
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase text-muted-foreground text-right pb-1.5"
-        >
+        <span role="columnheader" className={`${numHeader} ${valueStart[0]}`}>
           Menge
         </span>
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase text-muted-foreground text-right pb-1.5"
-        >
+        <span role="columnheader" className={`${numHeader} ${valueStart[1]}`}>
           Kosten
         </span>
-        <span
-          role="columnheader"
-          className="text-[11px] font-semibold uppercase text-muted-foreground text-right pb-1.5"
-        >
+        <span role="columnheader" className={`${numHeader} ${valueStart[2]}`}>
           Preis
         </span>
       </div>
@@ -143,9 +159,14 @@ export function PositionTable({
             )}
             <span
               role="cell"
-              className="py-2 text-sm border-t border-dotted border-border min-w-0"
+              className={`py-2 text-sm border-t border-dotted border-border min-w-0 ${titleSpan}`}
             >
-              <span className="text-foreground block truncate">{row.title}</span>
+              {/* `overflow-wrap: anywhere` (not `truncate`): a name must never
+                  ellipsise, and even a pathological single token can't widen
+                  the grid past the card (issue #652). */}
+              <span className="text-foreground block [overflow-wrap:anywhere]">
+                {row.title}
+              </span>
               {row.subtitle && (
                 <span className="block text-xs text-muted-foreground/80 font-light tabular-nums">
                   {row.subtitle}
@@ -154,19 +175,19 @@ export function PositionTable({
             </span>
             <span
               role="cell"
-              className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+              className={`${valueCell} text-muted-foreground ${valueStart[0]}`}
             >
               {row.menge}
             </span>
             <span
               role="cell"
-              className="py-2 text-sm text-muted-foreground tabular-nums text-right whitespace-nowrap border-t border-dotted border-border"
+              className={`${valueCell} text-muted-foreground ${valueStart[1]}`}
             >
               {row.kosten}
             </span>
             <span
               role="cell"
-              className="py-2 text-sm font-semibold tabular-nums text-right min-w-[60px] border-t border-dotted border-border"
+              className={`${valueCell} font-semibold min-w-[60px] ${valueStart[2]}`}
             >
               {row.preis}
             </span>
