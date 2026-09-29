@@ -159,9 +159,11 @@ firebase functions:secrets:set TERMINAL_KEY
 # Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
 # DIFFERENT value per project (staging vs prod). Destroying this secret is
 # the retroactive-anonymization switch for all BigQuery stats rows.
-# Both projects' salts are stored WITH a trailing newline and the functions
-# hash with it — keep it that way; changing the bytes re-keys every subject.
-firebase functions:secrets:set STATS_SUBJECT_SALT
+# `tr -d '\n'` matters (same trap as KIOSK_BEARER_KEY): the stored bytes ARE
+# the salt. The current salts in both projects predate this and DO end in a
+# newline — leave them: changing the bytes re-keys every subject. Only a
+# deliberate rotation (which re-keys anyway) should drop it.
+openssl rand -hex 32 | tr -d '\n' | firebase functions:secrets:set STATS_SUBJECT_SALT --data-file=-
 ```
 
 Non-secret params with built-in defaults need no action unless you want to

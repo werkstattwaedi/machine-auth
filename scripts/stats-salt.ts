@@ -12,6 +12,10 @@
  * export: the same member shows up as two subjects. That is how the
  * staging backfill of 2026-07-19 went wrong. Scripts therefore fetch the
  * salt themselves, never through the shell.
+ *
+ * Once the salts are rotated without a newline (docs/deployment-checklist.md
+ * §1), the shell would no longer corrupt them — fetching byte-exact stays
+ * the right thing regardless.
  */
 
 import { execFileSync } from "child_process";
