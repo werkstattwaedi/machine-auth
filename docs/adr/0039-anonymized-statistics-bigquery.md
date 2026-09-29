@@ -23,7 +23,8 @@ no BigQuery emulator. `closedAt` is written exactly once (no reopen path).
 **BigQuery dataset `stats` (europe-west6) is the statistics store**, fed by
 a daily watermark-batched export (`dailyStatsExport`, 05:00 Zurich — before
 the 06:00 bill run). Tables: `visits`, `visit_items`, `machine_usage`,
-`bills` (paid only), `membership_snapshots` (active memberships × month).
+`bills` (paid only), `membership_snapshots` (active memberships × month),
+`catalog_snapshots` + `catalog_variant_snapshots` (catalog × week, see below).
 
 **Append-only + dedup views.** Every table carries `doc_id` +
 `exported_at`; a `*_v` view per table keeps the latest row per `doc_id`
@@ -71,6 +72,30 @@ approximation). Backfill (`scripts/backfill-stats.ts`) loops the
 production export core from epoch watermarks until drained; the
 verification gate (counts, sums, spot checks) must be recorded before any
 ADR-0038 deletion runs.
+
+**Catalog snapshots** *(amendment, 2026-09-29)*. `visit_items` carries
+only `catalog_id` / `variant_id`; to query line items by name, category or
+price, the export also dumps the whole `catalog` collection **weekly** into
+`catalog_snapshots` (one row per item) and `catalog_variant_snapshots`
+(one row per variant, `price_default` / `price_member`). The snapshot date
+(the Zurich Sunday on or before the run) is part of every `doc_id`, so each
+week is kept — price and category history is queryable, not just the
+current state. The Sunday run takes it; a failed Sunday is caught up by the
+next run under the same date. `catalog_latest_v` /
+`catalog_variants_latest_v` give the latest known row per item/variant —
+deliberately not "rows of the newest snapshot", so items later deleted from
+Firestore still join. The catalog holds no subject data, so these tables
+carry no `subject_key` and are outside erasure. Weekly granularity means a
+price changed and reverted within a week is invisible, and a caught-up
+snapshot records the catalog as of the catch-up run under the missed
+Sunday's date; the as-billed price is always on the `visit_items` row
+anyway. `visit_items` gained `variant_id` / `pricing_model` at the same
+time; rows exported earlier get them from the one-off
+`scripts/backfill-visit-item-variants.ts`, which re-emits only
+`visit_items` rows — *not* a visits watermark reset, which would recompute
+`is_member` for all past visits with today's memberships. Checkouts lost in
+the 2026-09 cleanup incident have no source doc left and keep empty
+variant columns.
 
 ## Consequences
 

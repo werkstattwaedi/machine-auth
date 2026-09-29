@@ -17,6 +17,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { formatInTimeZone } from "date-fns-tz";
 import { getWorkshopTimezone } from "../util/workshop_timezone";
 import type {
+  CatalogEntity,
   CheckoutEntity,
   CheckoutItemEntity,
   MembershipEntity,
@@ -103,6 +104,8 @@ export function buildVisitItemRows(
     workshop: data.workshop ?? null,
     item_type: data.type ?? "material",
     catalog_id: data.catalogId?.id ?? null,
+    variant_id: data.variantId ?? null,
+    pricing_model: data.pricingModel ?? null,
     quantity: data.quantity ?? null,
     unit_price: data.unitPrice ?? null,
     total_price: data.totalPrice ?? null,
@@ -179,5 +182,48 @@ export function buildMembershipSnapshotRow(
     member_count: membership.members?.length ?? 0,
     owner_subject_key: ownerSubjectKey,
     valid_until: membership.validUntil ? localDate(membership.validUntil) : null,
+  };
+}
+
+/**
+ * One weekly catalog snapshot: the item row plus one row per variant.
+ * `snapshotDate` is the Zurich Sunday (yyyy-MM-dd) the snapshot belongs to;
+ * it is part of every doc_id so each week's rows are kept, not deduped away.
+ */
+export function buildCatalogSnapshotRows(
+  catalogId: string,
+  item: CatalogEntity,
+  snapshotDate: string,
+  ctx: RowContext
+): { item: StatsRow; variants: StatsRow[] } {
+  return {
+    item: {
+      doc_id: `${catalogId}/${snapshotDate}`,
+      exported_at: ctx.exportedAt,
+      snapshot_date: snapshotDate,
+      catalog_id: catalogId,
+      code: item.code ?? null,
+      name: item.name ?? null,
+      label_name: item.labelName ?? null,
+      label_mass: item.labelMass ?? null,
+      description: item.description ?? null,
+      workshops: item.workshops ?? [],
+      category: item.category ?? [],
+      item_type: item.type ?? "material",
+      active: item.active ?? null,
+      user_can_add: item.userCanAdd ?? null,
+    },
+    variants: (item.variants ?? []).map((variant, index) => ({
+      doc_id: `${catalogId}/${variant.id}/${snapshotDate}`,
+      exported_at: ctx.exportedAt,
+      snapshot_date: snapshotDate,
+      catalog_id: catalogId,
+      variant_id: variant.id,
+      variant_index: index,
+      label: variant.label ?? null,
+      pricing_model: variant.pricingModel ?? null,
+      price_default: variant.unitPrice?.default ?? null,
+      price_member: variant.unitPrice?.member ?? null,
+    })),
   };
 }

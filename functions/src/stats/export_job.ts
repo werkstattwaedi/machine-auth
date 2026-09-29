@@ -4,11 +4,12 @@
 /**
  * Daily watermark-batched export of stats rows to BigQuery (ADR-0039).
  *
- * Four streams, each with its own `export_state/{stream}` watermark doc:
+ * Five streams, each with its own `export_state/{stream}` watermark doc:
  *  - visits + visit_items  ← closed checkouts (by closedAt)
  *  - machine_usage         ← usage_machine (by endTime)
  *  - bills                 ← paid bills (by paidAt)
  *  - membership_snapshots  ← active memberships, once per Zurich month
+ *  - catalog_snapshots     ← the whole catalog, once per Zurich week (Sunday)
  *
  * Per batch: pure row builders → sink.insertRows → only on success advance
  * the watermark. A crash between insert and advance re-exports the batch;
@@ -38,6 +39,7 @@ import { getWorkshopTimezone } from "../util/workshop_timezone";
 import { statsSubjectSalt, subjectKey } from "../privacy/subject_key";
 import {
   buildBillRow,
+  buildCatalogSnapshotRows,
   buildMachineUsageRow,
   buildMembershipSnapshotRow,
   buildVisitItemRows,
@@ -47,6 +49,7 @@ import {
 import { makeBigQuerySink, type StatsSink } from "./sink";
 import { firestoreStateStore, type StreamStateStore } from "./watermark";
 import type {
+  CatalogEntity,
   CheckoutEntity,
   CheckoutItemEntity,
   MembershipEntity,
@@ -322,6 +325,58 @@ async function exportMembershipSnapshots(
 }
 
 /**
+ * Zurich date (`yyyy-MM-dd`) of the most recent Sunday on or before `now`.
+ * The catalog snapshot is keyed by it: the Sunday run takes the snapshot,
+ * and if that run fails, the next day's run catches up under the same date
+ * instead of skipping the week.
+ */
+export function catalogSnapshotDate(now: Date): string {
+  const tz = getWorkshopTimezone();
+  const localDay = formatInTimeZone(now, tz, "yyyy-MM-dd");
+  // ISO weekday: 1 = Monday … 7 = Sunday.
+  const isoWeekday = Number(formatInTimeZone(now, tz, "i"));
+  const d = new Date(`${localDay}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (isoWeekday % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+async function exportCatalogSnapshots(
+  deps: StatsExportDeps,
+  store: StreamStateStore,
+  now: Date,
+  ctx: RowContext
+): Promise<StreamResult> {
+  const snapshotDate = catalogSnapshotDate(now);
+  const state = await store.get("catalog_snapshots");
+  // lastDocId doubles as the last-snapshotted Sunday for this stream.
+  if (state.lastDocId === snapshotDate) {
+    return { exported: 0, drained: true };
+  }
+  const snap = await deps.db.collection("catalog").get();
+  const itemRows = [];
+  const variantRows = [];
+  for (const doc of snap.docs) {
+    const rows = buildCatalogSnapshotRows(
+      doc.id,
+      doc.data() as CatalogEntity,
+      snapshotDate,
+      ctx
+    );
+    itemRows.push(rows.item);
+    variantRows.push(...rows.variants);
+  }
+  await deps.sink.insertRows("catalog_snapshots", itemRows);
+  await deps.sink.insertRows("catalog_variant_snapshots", variantRows);
+  await store.advance("catalog_snapshots", {
+    watermark: Timestamp.fromDate(
+      fromZonedTime(`${snapshotDate}T00:00:00`, getWorkshopTimezone())
+    ),
+    lastDocId: snapshotDate,
+  });
+  return { exported: itemRows.length, drained: true };
+}
+
+/**
  * One export round: up to `batchSize` docs per stream. Loop until every
  * stream reports `drained` (the wrapper and the backfill script both do).
  */
@@ -349,6 +404,7 @@ export async function runStatsExport(
     ctx
   );
   summary["pending_flush"] = await flushPendingCheckouts(deps, ctx, memberCache, now);
+  summary["catalog_snapshots"] = await exportCatalogSnapshots(deps, store, now, ctx);
   return summary;
 }
 

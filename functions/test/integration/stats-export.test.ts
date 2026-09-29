@@ -16,10 +16,12 @@ import {
   teardownEmulator,
 } from "../emulator-helper";
 import {
+  catalogSnapshotDate,
   runStatsExport,
   type StatsExportDeps,
 } from "../../src/stats/export_job";
 import { InMemorySink } from "../../src/stats/sink";
+import { reemitVisitItems } from "../../src/stats/reemit_visit_items";
 import { memoryStateStore } from "../../src/stats/watermark";
 import { subjectKey } from "../../src/privacy/subject_key";
 
@@ -285,6 +287,84 @@ describe("stats export (integration)", function () {
     expect(ids).to.deep.equal(["m-u1/2026-07", "m-u1/2026-08"]);
   });
 
+  describe("catalog snapshots", () => {
+    async function seedCatalogItem(id: string, price: number): Promise<void> {
+      await db.collection("catalog").doc(id).set({
+        code: "1042",
+        name: "Sperrholz",
+        workshops: ["holz"],
+        category: ["Holz"],
+        active: true,
+        userCanAdd: true,
+        variants: [
+          { id: "default", pricingModel: "area", unitPrice: { default: price } },
+        ],
+      });
+    }
+
+    it("snapshots the catalog once per week and keeps each week's prices", async () => {
+      await seedCatalogItem("cat-1", 20);
+      const sink = new InMemorySink();
+      // NOW is Sunday 2026-07-19, 05:00 Zurich.
+      const first = await runStatsExport(NOW, deps(sink));
+      expect(first.catalog_snapshots.exported).to.equal(1);
+      await runStatsExport(new Date("2026-07-22T03:00:00.000Z"), deps(sink));
+      expect(sink.tableRows("catalog_snapshots")).to.have.length(1);
+
+      await seedCatalogItem("cat-1", 22);
+      await runStatsExport(new Date("2026-07-26T03:00:00.000Z"), deps(sink));
+      const variants = sink.tableRows("catalog_variant_snapshots");
+      expect(variants.map((r) => [r.snapshot_date, r.price_default])).to.deep.equal([
+        ["2026-07-19", 20],
+        ["2026-07-26", 22],
+      ]);
+    });
+
+    it("catches up a missed Sunday on the next run under that Sunday's date", async () => {
+      await seedCatalogItem("cat-1", 20);
+      const sink = new InMemorySink();
+      await runStatsExport(new Date("2026-07-20T03:00:00.000Z"), deps(sink));
+      expect(sink.tableRows("catalog_snapshots").map((r) => r.doc_id)).to.deep.equal([
+        "cat-1/2026-07-19",
+      ]);
+    });
+  });
+
+  describe("reemitVisitItems", () => {
+    it("re-emits only exported checkouts' items, without touching visits or the watermark", async () => {
+      await seedClosedCheckout("co-old", {
+        closedAt: ts("2026-07-18T15:30:00Z"),
+        items: 1,
+      });
+      await runStatsExport(NOW, deps(new InMemorySink()));
+      const watermarkBefore = (await db.doc("export_state/visits").get()).data();
+      // Past the watermark: the daily export owns it.
+      await seedClosedCheckout("co-new", {
+        closedAt: ts("2026-07-19T01:00:00Z"),
+        items: 1,
+      });
+      await db.doc("checkouts/co-old/items/item-0").update({
+        variantId: "default",
+        pricingModel: "count",
+      });
+
+      const sink = new InMemorySink();
+      const summary = await reemitVisitItems(NOW, { db, sink, salt: SALT });
+
+      expect(summary).to.deep.equal({ checkouts: 1, items: 1, skippedUnexported: 1 });
+      expect(sink.tableRows("visit_items")).to.have.length(1);
+      expect(sink.tableRows("visit_items")[0]).to.include({
+        doc_id: "co-old/item-0",
+        variant_id: "default",
+        pricing_model: "count",
+      });
+      expect(sink.tableRows("visits")).to.have.length(0);
+      expect((await db.doc("export_state/visits").get()).data()).to.deep.equal(
+        watermarkBefore
+      );
+    });
+  });
+
   describe("correction flush (ADR-0042)", () => {
     function lastRow(sink: InMemorySink, table: string, docId: string) {
       const rows = sink.tableRows(table).filter((r) => r.doc_id === docId);
@@ -363,4 +443,17 @@ describe("stats export (integration)", function () {
     });
   });
 
+});
+
+describe("catalogSnapshotDate", () => {
+  it("is the Zurich Sunday on or before the run", () => {
+    // Sunday 05:00 Zurich → itself.
+    expect(catalogSnapshotDate(new Date("2026-07-19T03:00:00Z"))).to.equal("2026-07-19");
+    // Saturday 23:30 Zurich → the previous Sunday.
+    expect(catalogSnapshotDate(new Date("2026-07-25T21:30:00Z"))).to.equal("2026-07-19");
+    // Saturday 22:30 UTC is already Sunday 00:30 in Zurich.
+    expect(catalogSnapshotDate(new Date("2026-07-25T22:30:00Z"))).to.equal("2026-07-26");
+    // Across a month boundary in winter time (CET).
+    expect(catalogSnapshotDate(new Date("2026-12-02T04:00:00Z"))).to.equal("2026-11-29");
+  });
 });

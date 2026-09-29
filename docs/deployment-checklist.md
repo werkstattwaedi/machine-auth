@@ -159,7 +159,11 @@ firebase functions:secrets:set TERMINAL_KEY
 # Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
 # DIFFERENT value per project (staging vs prod). Destroying this secret is
 # the retroactive-anonymization switch for all BigQuery stats rows.
-firebase functions:secrets:set STATS_SUBJECT_SALT
+# `tr -d '\n'` matters (same trap as KIOSK_BEARER_KEY): the stored bytes ARE
+# the salt. The current salts in both projects predate this and DO end in a
+# newline — leave them: changing the bytes re-keys every subject. Only a
+# deliberate rotation (which re-keys anyway) should drop it.
+openssl rand -hex 32 | tr -d '\n' | firebase functions:secrets:set STATS_SUBJECT_SALT --data-file=-
 ```
 
 Non-secret params with built-in defaults need no action unless you want to
@@ -484,8 +488,10 @@ gcloud storage buckets update gs://<project-id>-invoice-archive \
 **9c. Backfill + verification gate** (BEFORE first use of erase/trim):
 
 ```bash
-STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
-  --secret=STATS_SUBJECT_SALT --project=<project-id>)" \
+# The script fetches STATS_SUBJECT_SALT itself (byte-exact). Never pass it
+# via STATS_SUBJECT_SALT="$(gcloud …)": the shell strips the stored
+# trailing newline and every row gets a different subject_key than the
+# daily export's (scripts/stats-salt.ts).
 FIREBASE_PROJECT_ID=<project-id> \
   npx tsx scripts/backfill-stats.ts --prod
 
@@ -494,6 +500,21 @@ FIREBASE_PROJECT_ID=<project-id> \
 #  - SUM(summary.totalPrice) vs SELECT SUM(total_price) FROM stats.visits_v
 #  - 5 random checkouts field-by-field
 ```
+
+**9c′. One-off: catalog snapshots + visit_items variants** (ADR-0039
+amendment 2026-09-29). Order: `setup-bigquery.ts` (adds the catalog
+tables/views and the `visit_items.variant_id` / `pricing_model` columns) →
+deploy functions → re-emit the old `visit_items` rows. The first daily
+export after the deploy takes the first catalog snapshot by itself.
+
+```bash
+FIREBASE_PROJECT_ID=<project-id> \
+  npx tsx scripts/backfill-visit-item-variants.ts --prod --dry-run
+FIREBASE_PROJECT_ID=<project-id> \
+  npx tsx scripts/backfill-visit-item-variants.ts --prod
+```
+
+Do NOT reset `export_state/visits` for this — see the ADR amendment.
 
 **9d. Ops calendar:** January = yearly retention trim
 (`privacy-cli.ts trim --dry-run --prod` → review counts → live run). See
