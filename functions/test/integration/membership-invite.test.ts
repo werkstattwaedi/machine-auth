@@ -15,6 +15,8 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import { handleInviteFamilyMember } from "../../src/membership/invite";
+import { acceptFamilyInviteHandler } from "../../src/membership/accept_invite";
+import type { CallableRequest } from "firebase-functions/v2/https";
 import type {
   MembershipEntity,
   UserEntity,
@@ -268,6 +270,142 @@ describe("Family invite (Integration)", () => {
       .get();
     expect(inviteDoc.data()?.debugLink).to.contain(
       `/account/invite/${membershipId}/${inviteId}`,
+    );
+  });
+});
+
+/**
+ * Existing-account accept (`acceptFamilyInvite`). The handler runs in-process
+ * here, so the `onMembershipWritten` trigger never fires — whatever these
+ * tests observe on the user doc was written by the accept transaction itself.
+ */
+describe("acceptFamilyInvite (Integration)", () => {
+  before(async function () {
+    this.timeout(10000);
+    await setupEmulator();
+  });
+
+  after(async () => {
+    await teardownEmulator();
+  });
+
+  beforeEach(async () => {
+    await clearFirestore();
+  });
+
+  async function seedInvitee(uid: string, email: string): Promise<DocumentReference> {
+    const db = getFirestore();
+    const ref = db.collection("users").doc(uid);
+    const doc: UserEntity = {
+      created: Timestamp.now(),
+      email,
+      firstName: "Bob",
+      lastName: "Beispiel",
+      permissions: [],
+      roles: [],
+      termsAcceptedAt: Timestamp.now(),
+      userType: "erwachsen",
+      activeMembership: null,
+    };
+    await ref.set(doc);
+    return ref;
+  }
+
+  function inviteeCall(
+    uid: string,
+    email: string,
+    data: { membershipId: string; inviteId: string },
+  ): CallableRequest<typeof data> {
+    return {
+      data,
+      auth: { uid, token: { email, admin: false } },
+    } as unknown as CallableRequest<typeof data>;
+  }
+
+  // Issue #654: the `users/{uid}` read rule compares both docs'
+  // `activeMembership`. Leaving the pointer to the trigger opened a window
+  // in which the roster listeners of the joiner AND the owner were denied
+  // and stayed dead. The pointer must land in the accept commit itself.
+  it("stamps the joiner's activeMembership in the same commit as members[]", async () => {
+    const { membershipId, membershipRef } = await seedFamilyMembership({
+      uid: "owner-acc-1",
+      email: "owner@example.com",
+    });
+    const bobRef = await seedInvitee("bob-1", "bob@example.com");
+    const { inviteId } = await handleInviteFamilyMember(
+      { membershipId, email: "bob@example.com" },
+      ownerCaller("owner-acc-1"),
+    );
+
+    const result = await acceptFamilyInviteHandler(
+      inviteeCall("bob-1", "bob@example.com", { membershipId, inviteId }),
+    );
+    expect(result).to.deep.equal({ ok: true });
+
+    // Directly after the handler resolves — no trigger has run.
+    const bob = (await bobRef.get()).data() as UserEntity;
+    expect(bob.activeMembership, "activeMembership set by the accept transaction").to.not.equal(null);
+    expect(bob.activeMembership!.path).to.equal(membershipRef.path);
+
+    const membership = (await membershipRef.get()).data() as MembershipEntity;
+    expect(membership.members.map((m) => m.id)).to.include("bob-1");
+
+    const invite = (
+      await membershipRef.collection("invites").doc(inviteId).get()
+    ).data()!;
+    expect(invite.status).to.equal("accepted");
+    expect(invite.resolvedUserId.id).to.equal("bob-1");
+    expect(invite.ttlAt).to.equal(undefined);
+  });
+
+  it("is idempotent for a user who is already a member", async () => {
+    const { membershipId, membershipRef } = await seedFamilyMembership({
+      uid: "owner-acc-2",
+      email: "owner@example.com",
+    });
+    const bobRef = await seedInvitee("bob-2", "bob@example.com");
+    const { inviteId } = await handleInviteFamilyMember(
+      { membershipId, email: "bob@example.com" },
+      ownerCaller("owner-acc-2"),
+    );
+    // Already in the roster (e.g. added by an admin meanwhile), pointer set.
+    await membershipRef.update({ members: [
+      getFirestore().collection("users").doc("owner-acc-2"),
+      bobRef,
+    ] });
+    await bobRef.update({ activeMembership: membershipRef });
+
+    await acceptFamilyInviteHandler(
+      inviteeCall("bob-2", "bob@example.com", { membershipId, inviteId }),
+    );
+
+    const membership = (await membershipRef.get()).data() as MembershipEntity;
+    expect(membership.members.filter((m) => m.id === "bob-2")).to.have.length(1);
+    const invite = (
+      await membershipRef.collection("invites").doc(inviteId).get()
+    ).data()!;
+    expect(invite.status).to.equal("accepted");
+    const bob = (await bobRef.get()).data() as UserEntity;
+    expect(bob.activeMembership!.path).to.equal(membershipRef.path);
+  });
+
+  it("rejects an invite addressed to a different email", async () => {
+    const { membershipId } = await seedFamilyMembership({
+      uid: "owner-acc-3",
+      email: "owner@example.com",
+    });
+    await seedInvitee("carol-3", "carol@example.com");
+    const { inviteId } = await handleInviteFamilyMember(
+      { membershipId, email: "bob@example.com" },
+      ownerCaller("owner-acc-3"),
+    );
+
+    await expectHttpsError(
+      () =>
+        acceptFamilyInviteHandler(
+          inviteeCall("carol-3", "carol@example.com", { membershipId, inviteId }),
+        ),
+      "permission-denied",
     );
   });
 });

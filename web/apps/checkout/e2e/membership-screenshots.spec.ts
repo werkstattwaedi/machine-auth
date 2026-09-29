@@ -154,6 +154,13 @@ test.describe("Membership page screenshots", () => {
     await expect(page.getByText("Aktiv", { exact: true })).toBeVisible({
       timeout: 10_000,
     })
+    // Issue #654: the co-members' rows must resolve right after joining, not
+    // stay skeletons until a reload. The owner seeded by seedFamilyInvite is
+    // the other member here; a dead listener would render the fallback row.
+    await expect(page.getByText("Owner Family")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByTestId("member-row-unavailable")).toHaveCount(0)
   })
 
   test("expired — warn note + Erneuern", async ({ page }) => {

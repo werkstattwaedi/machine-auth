@@ -8,8 +8,16 @@
  * invite creation and accept, the user might have gained another membership.
  *
  * On success: appends invitee to `members[]`, marks invite `accepted`, and
- * lets the `onMembershipWritten` trigger denormalize `activeMembership` on
- * the user doc.
+ * stamps `activeMembership` on the invitee's user doc — all in one commit.
+ *
+ * The pointer is written here rather than left to the `onMembershipWritten`
+ * trigger because the `users/{uid}` read rule (`shareActiveMembership`)
+ * compares the two docs' `activeMembership` fields. The web roster mounts a
+ * listener per co-member as soon as `members[]` commits; if the pointer
+ * lands seconds later via the trigger, those listeners are denied on both
+ * sides (joiner reading the owner, owner reading the joiner) and stay dead
+ * until reload (issue #654). The trigger remains the safety net and is a
+ * no-op once the pointer already matches.
  */
 
 import * as logger from "firebase-functions/logger";
@@ -112,6 +120,10 @@ export const acceptFamilyInviteHandler = async (request: CallableRequest<AcceptF
       members: FieldValue.arrayUnion(callerRef),
       modifiedAt: FieldValue.serverTimestamp(),
     });
+    // Same commit as the `members[]` change — see the file comment. The user
+    // doc is guaranteed to exist: assertNoOtherActiveMembership threw above
+    // otherwise, and it also verified the pointer is null or already ours.
+    tx.update(callerRef, { activeMembership: memRef });
     tx.update(inviteRef, {
       status: "accepted",
       resolvedAt: Timestamp.now(),
