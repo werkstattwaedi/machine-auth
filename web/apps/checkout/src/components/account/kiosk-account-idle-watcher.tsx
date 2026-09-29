@@ -3,10 +3,10 @@
 
 /**
  * Member-area idle watcher for the kiosk (ADR-0041). The wizard's
- * KioskInactivityWatcher lives inside the wizard and only arms with
- * preservable checkout state; an OTP-elevated session browsing
- * `/account/*` has profile data, bills and membership actions exposed, so
- * it gets its own, shorter idle window: 2 min → "Bist du noch da?" → 30 s →
+ * KioskInactivityWatcher lives inside the wizard (5 min, any identified
+ * session); an OTP-elevated session browsing `/account/*` has profile data,
+ * bills and membership actions exposed, so it gets its own, shorter idle
+ * window: 2 min → "Bist du noch da?" → 30 s →
  * the same strong wipe as the chrome's "Neuer Checkout" (signOut + bridge
  * partition wipe + hard reload to a fresh /checkin?kiosk).
  *

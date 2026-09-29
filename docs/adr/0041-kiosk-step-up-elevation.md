@@ -1,6 +1,6 @@
 # ADR-0041: Kiosk step-up — OTP-elevated `actsAs` sessions reach the member area
 
-**Status:** Accepted (amends [ADR-0022](0022-kiosk-badge-session-model.md) §5 route gating and [ADR-0031](0031-embedded-checkin-signin-and-sms-codes.md))
+**Status:** Accepted (amends [ADR-0022](0022-kiosk-badge-session-model.md) §5 route gating and [ADR-0031](0031-embedded-checkin-signin-and-sms-codes.md); amended 2026-09-30, issue #689: the wizard idle watcher arms for every identified kiosk session, a badge tap over one always wipes + reloads, and badge taps in the member area are ignored)
 
 **Date:** 2026-09-13
 
@@ -167,8 +167,16 @@ and family invites to what the next person could touch. Bounds:
    wizard and only arms with preservable state. A root-level kiosk watcher
    covers `/account/*` whenever the session is elevated, with a shorter idle
    (2 min → "Bist du noch da?" → 30 s → `startOver`).
+   *(Amended 2026-09-30, issue #689: `KioskInactivityWatcher` now arms for
+   every identified kiosk session, not only with preservable state — an
+   idle badge or sign-in screen left standing let the next visitor's tap
+   switch principal inside the live page. Only the anonymous, pristine
+   sign-in screen stays unwatched (#378).)*
 3. **Existing wipes** stay: payment completion, "Neuer Checkout", badge
-   switch, app start.
+   switch, app start. *(Amended 2026-09-30, issue #689: a badge tap over
+   any identified session is a wipe + hard reload, never an in-place
+   switch; a tap in the member area is ignored — its idle watcher and TTL
+   end the session.)*
 4. **No takeover path.** E-mail is pinned by the rule, phone linking is
    impossible under a synthetic uid, admin claims are absent. The worst case
    inside the window is a nuisance purchase on the victim's open checkout

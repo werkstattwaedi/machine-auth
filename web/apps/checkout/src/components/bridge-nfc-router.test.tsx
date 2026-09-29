@@ -7,6 +7,7 @@
  *   - identified session with nothing to keep (wizard guard or a signed-in
  *     principal outside the wizard): a registered badge wipes + reloads
  *     without a dialog, never switches principal in place (#689)
+ *   - member area (/account/*): taps are ignored
  *   - preservable session (open checkout / dirty form): tap probes the tag
  *     (no SDM counter consumed) and opens the right dialog instead of
  *     navigating — switch/discard for a registered badge, the purchase
@@ -28,8 +29,10 @@ import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 import type { NfcTagEvent } from "@modules/lib/use-bridge"
 
 const mockNavigate = vi.fn()
+const mockLocation = { pathname: "/checkin" }
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockNavigate,
+  useLocation: () => mockLocation,
 }))
 
 const mockToastError = vi.fn()
@@ -132,6 +135,7 @@ afterEach(() => {
   quoteEffectVouchers.length = 0
   tagCallback = null
   mockAuth.currentUser = null
+  mockLocation.pathname = "/checkin"
 })
 
 const TAG_URL = "https://id.example.ch/?picc=PICC1&cmac=CMAC1"
@@ -180,7 +184,8 @@ describe("BridgeNfcRouter", () => {
   })
 
   it("signed-in principal outside the wizard: wipe + reload, no dialog", async () => {
-    // No wizard mounted (e.g. /account) — the guard reports pristine.
+    // No wizard mounted (e.g. /login) — the guard reports pristine.
+    mockLocation.pathname = "/login"
     mockAuth.currentUser = { isAnonymous: false }
     render(<BridgeNfcRouter />)
     tap(TAG_URL)
@@ -236,6 +241,20 @@ describe("BridgeNfcRouter", () => {
     await vi.waitFor(() => expect(mockResetSession).toHaveBeenCalledOnce())
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("ignores taps in the member area", async () => {
+    mockLocation.pathname = "/account/profile"
+    mockAuth.currentUser = { isAnonymous: false }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    tap() // not even an unreadable-tag toast
+    await act(async () => {})
+    expect(mockProbeTag).not.toHaveBeenCalled()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockToastError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId("badge-purchase-stub")).toBeNull()
   })
 
   it("asks for confirmation instead of navigating when a session is active", async () => {

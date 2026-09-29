@@ -1,8 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
+import { useEffect, useRef, useState } from "react"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
   useBridge,
@@ -95,13 +95,14 @@ export async function confirmTagSwitch(deps: {
 
 /**
  * Kiosk-mode bridge listener. When an NFC tag is read by the Electron
- * hardware bridge, parse `picc`/`cmac` from the tag's NDEF URL and
- * client-side-navigate to `/checkin` with those params.
+ * hardware bridge, parse `picc`/`cmac` from the tag's NDEF URL and route
+ * the visitor to `/checkin` with those params — in place for an anonymous
+ * session, via wipe + hard reload for an identified one (see below).
  *
  * Issue #314 (option 2 in plan §F): the Electron renderer used to do
  * `webview.src = …` which forced a full page reload on every tap. The
- * client-side `navigate(...)` here preserves React state and is
- * router-aware, matching how the rest of the app handles navigation.
+ * client-side `navigate(...)` keeps that cheap path for the anonymous
+ * first tap, where there is no previous principal to leak.
  *
  * Issue #420: navigate straight to the wizard's canonical tag entry
  * (`/checkin`), NOT the `/` dispatcher. Going via `/` verifies the tag
@@ -128,12 +129,24 @@ export async function confirmTagSwitch(deps: {
  * wipe + reload: switching principal inside a live page left listeners
  * bound to the previous member, and their family roster and (missing) open
  * visit leaked into the next session (issue #689).
+ *
+ * Taps in the member area (`/account/*`) are ignored: it is reached only
+ * through an elevated sign-in, the badge flows (switch, purchase) belong to
+ * the wizard, and a tap must not silently wipe what the member is editing.
+ * The member area's own idle watcher still ends the session.
  */
 export function BridgeNfcRouter() {
   const bridge = useBridge()
   const functions = useFunctions()
   const auth = useFirebaseAuth()
   const navigate = useNavigate()
+  // Read at tap time without re-registering the NFC listener on every
+  // navigation.
+  const { pathname } = useLocation()
+  const pathnameRef = useRef(pathname)
+  useEffect(() => {
+    pathnameRef.current = pathname
+  }, [pathname])
   const [pendingTag, setPendingTag] = useState<PendingTag | null>(null)
   const [badgeOffer, setBadgeOffer] = useState<BadgePurchaseOffer | null>(null)
   const [signInFirstOpen, setSignInFirstOpen] = useState(false)
@@ -221,6 +234,7 @@ export function BridgeNfcRouter() {
     }
 
     return bridge.onNfcTag(({ url }) => {
+      if (pathnameRef.current.startsWith("/account")) return
       if (!url) {
         toast.error(UNREADABLE_TAG_MESSAGE)
         return
@@ -235,17 +249,18 @@ export function BridgeNfcRouter() {
           toast.error(UNREADABLE_TAG_MESSAGE)
           return
         }
-        // A session worth protecting, or one tied to a person — probe first
-        // (registered → confirm switch/discard, or a plain wipe + reload
-        // when there is nothing to keep; unregistered → purchase offer or
-        // sign-in-first notice). A later tap while a dialog is up replaces the pending
-        // state (the newest badge wins). Capture whether that session was
-        // already identified so the switch dialog can be honest about
-        // whether the open visit survives (identified handoff) or is lost
-        // for good (anonymous upgrade — issue #468).
+        // A session worth protecting, or one tied to a person — probe
+        // first (registered → confirm switch/discard, or a plain wipe +
+        // reload when there is nothing to keep; unregistered → purchase
+        // offer or sign-in-first notice). A later tap while a dialog is up
+        // replaces the pending state (the newest badge wins). Capture
+        // whether that session was already identified so the switch dialog
+        // can be honest about whether the open visit survives (identified
+        // handoff) or is lost for good (anonymous upgrade — issue #468).
         const wizardSession = getKioskSessionState()
-        // Outside the wizard (e.g. the member area) no guard is registered;
-        // the signed-in principal itself still marks the session identified.
+        // Outside the wizard (e.g. /login, /checkout/$id) no guard is
+        // registered; the signed-in principal itself still marks the
+        // session identified.
         const signedIn =
           auth.currentUser != null && !auth.currentUser.isAnonymous
         const session = {
