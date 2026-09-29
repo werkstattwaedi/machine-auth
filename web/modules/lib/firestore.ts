@@ -174,10 +174,11 @@ function pathOf(refOrQuery: unknown): string {
  * constraint (`queryEqual` needs a built Query, which the unit-test fakes
  * don't provide), so this walks the constraint objects: SDK refs and
  * timestamps serialise through their own `toJSON`, refs without one (test
- * fakes) collapse to their path, the Firestore instance is skipped. A value the walk can't tell apart only costs a missed
- * re-subscription — never a loop, since equal inputs give equal keys.
+ * fakes) collapse to their path, the Firestore instance is skipped. A
+ * value the walk can't tell apart only costs a missed re-subscription —
+ * never a loop, since equal inputs give equal keys. Exported for tests.
  */
-function constraintsKey(constraints: readonly QueryConstraint[]): string {
+export function constraintsKey(constraints: readonly QueryConstraint[]): string {
   if (constraints.length === 0) return ""
   const seen = new WeakSet<object>()
   try {
@@ -192,10 +193,16 @@ function constraintsKey(constraints: readonly QueryConstraint[]): string {
       seen.add(value)
       return value
     })
-  } catch {
+  } catch (err) {
+    // Unserialisable value (e.g. a BigInt): fall back to path-only keying.
+    // eslint-disable-next-line no-console
+    console.warn("[firestore] constraintsKey failed; keying on path only", err)
     return ""
   }
 }
+
+// Shared empty result, so a cleared or superseded list keeps one identity.
+const EMPTY_ROWS: never[] = []
 
 /**
  * Subscribe to a collection or query. Pass `null` to skip the subscription
@@ -244,12 +251,14 @@ export function useCollection<T = DocumentData>(
       retryKeyRef.current = key
       retriesRef.current = 0
       // Rows of the previous query must not outlive it (a retry of the
-      // same key keeps them — it is still the same question).
-      setData([])
+      // same key keeps them — it is still the same question). Without
+      // this, a new key whose first listen is denied would report the old
+      // key's rows as its own.
+      setData(EMPTY_ROWS)
       setError(null)
     }
     if (!refOrQuery) {
-      setData([])
+      setData(EMPTY_ROWS)
       setLoading(false)
       setReportedKey("")
       return
@@ -292,9 +301,10 @@ export function useCollection<T = DocumentData>(
             )
             return
           }
-          // A dead listener's last rows are no answer for the current
-          // principal — e.g. re-authed under a new kiosk token and denied.
-          setData([])
+          // Same key: keep the last rows. A transient denial mid-visit must
+          // not read as "the open checkout is gone" (which bounces the
+          // wizard and drops the tap guard); a changed key already cleared
+          // them above.
           setError(err)
           setLoading(false)
           setReportedKey(key)
@@ -312,12 +322,16 @@ export function useCollection<T = DocumentData>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, db, functions, retryNonce])
 
-  // Report loading while the held snapshot belongs to a different key than
-  // the one currently requested (a re-subscription is pending). Closes the
-  // one-render window where a freshly-supplied ref reads as "loaded with
-  // empty data" before its effect runs. See issue #387.
+  // While the held snapshot belongs to a different key than the one now
+  // requested (a re-subscription is pending), report loading (issue #387)
+  // and no rows: the previous query's rows must not be readable even for
+  // the one render before the effect clears them (issue #689).
   const stale = key !== reportedKey
-  return { data, loading: loading || stale, error }
+  return {
+    data: stale ? (EMPTY_ROWS as (T & { id: string })[]) : data,
+    loading: loading || stale,
+    error: stale ? null : error,
+  }
 }
 
 /**
