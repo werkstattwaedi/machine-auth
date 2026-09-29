@@ -159,6 +159,8 @@ firebase functions:secrets:set TERMINAL_KEY
 # Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
 # DIFFERENT value per project (staging vs prod). Destroying this secret is
 # the retroactive-anonymization switch for all BigQuery stats rows.
+# Both projects' salts are stored WITH a trailing newline and the functions
+# hash with it — keep it that way; changing the bytes re-keys every subject.
 firebase functions:secrets:set STATS_SUBJECT_SALT
 ```
 
@@ -484,8 +486,10 @@ gcloud storage buckets update gs://<project-id>-invoice-archive \
 **9c. Backfill + verification gate** (BEFORE first use of erase/trim):
 
 ```bash
-STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
-  --secret=STATS_SUBJECT_SALT --project=<project-id>)" \
+# The script fetches STATS_SUBJECT_SALT itself (byte-exact). Never pass it
+# via STATS_SUBJECT_SALT="$(gcloud …)": the shell strips the stored
+# trailing newline and every row gets a different subject_key than the
+# daily export's (scripts/stats-salt.ts).
 FIREBASE_PROJECT_ID=<project-id> \
   npx tsx scripts/backfill-stats.ts --prod
 
@@ -504,8 +508,6 @@ export after the deploy takes the first catalog snapshot by itself.
 ```bash
 FIREBASE_PROJECT_ID=<project-id> \
   npx tsx scripts/backfill-visit-item-variants.ts --prod --dry-run
-STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
-  --secret=STATS_SUBJECT_SALT --project=<project-id>)" \
 FIREBASE_PROJECT_ID=<project-id> \
   npx tsx scripts/backfill-visit-item-variants.ts --prod
 ```

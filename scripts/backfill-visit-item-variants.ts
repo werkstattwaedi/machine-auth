@@ -11,21 +11,20 @@
  * re-run: the `visit_items_v` dedup view keeps the latest row per doc_id.
  * Never touches `export_state/*`.
  *
- * The live run needs the per-project subject salt (rows must keep the same
- * subject_key):
- *   STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
- *     --secret=STATS_SUBJECT_SALT --project=<project>)"
+ * The live run fetches the per-project subject salt from Secret Manager
+ * itself, byte-exact, so rows keep the daily export's subject_key (see
+ * `stats-salt.ts`).
  *
  * Usage:
  *   FIREBASE_PROJECT_ID=oww-maco npx tsx scripts/backfill-visit-item-variants.ts --prod --dry-run
- *   FIREBASE_PROJECT_ID=oww-maco STATS_SUBJECT_SALT=... \
- *     npx tsx scripts/backfill-visit-item-variants.ts --prod
+ *   FIREBASE_PROJECT_ID=oww-maco npx tsx scripts/backfill-visit-item-variants.ts --prod
  */
 
 import { config as loadEnv } from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { resolveStatsSalt } from "./stats-salt";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -53,13 +52,11 @@ async function main() {
     );
   }
 
-  const salt = process.env.STATS_SUBJECT_SALT ?? (DRY_RUN ? "dry-run-salt" : "");
-  if (!salt) {
-    throw new Error(
-      "STATS_SUBJECT_SALT not set (required for a live run; " +
-        "fetch it via `gcloud secrets versions access`)."
-    );
-  }
+  const salt = resolveStatsSalt({
+    projectId,
+    emulator: !!emulatorHost,
+    dryRun: DRY_RUN,
+  });
 
   console.log(
     `Project: ${projectId}, Target: ${emulatorHost ?? "PRODUCTION"}, Dry-run: ${DRY_RUN}`

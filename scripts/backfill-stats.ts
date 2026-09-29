@@ -18,9 +18,8 @@
  * would hole the BigQuery history and let trim/erasure delete unflushed
  * docs (ADR-0038 guard).
  *
- * The live run needs the per-project subject salt:
- *   STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
- *     --secret=STATS_SUBJECT_SALT --project=<project>)"
+ * The live run fetches the per-project subject salt from Secret Manager
+ * itself (byte-exact, see `stats-salt.ts`) — needs `gcloud` access.
  *
  * Usage:
  *   # Emulator smoke run (counting sink)
@@ -28,14 +27,14 @@
  *     npx tsx scripts/backfill-stats.ts --dry-run
  *
  *   # Production
- *   FIREBASE_PROJECT_ID=oww-maco STATS_SUBJECT_SALT=... \
- *     npx tsx scripts/backfill-stats.ts --prod
+ *   FIREBASE_PROJECT_ID=oww-maco npx tsx scripts/backfill-stats.ts --prod
  */
 
 import { config as loadEnv } from "dotenv";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { resolveStatsSalt } from "./stats-salt";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -65,13 +64,11 @@ async function main() {
     );
   }
 
-  const salt = process.env.STATS_SUBJECT_SALT ?? (DRY_RUN ? "dry-run-salt" : "");
-  if (!salt) {
-    throw new Error(
-      "STATS_SUBJECT_SALT not set (required for a live backfill; " +
-        "fetch it via `gcloud secrets versions access`)."
-    );
-  }
+  const salt = resolveStatsSalt({
+    projectId,
+    emulator: !!emulatorHost,
+    dryRun: DRY_RUN,
+  });
 
   console.log(
     `Project: ${projectId}, Target: ${emulatorHost ?? "PRODUCTION"}, Dry-run: ${DRY_RUN}`
