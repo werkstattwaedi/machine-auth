@@ -288,6 +288,43 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-materials-added.png")
   })
 
+  // Issue #656: a zero / empty quantity used to leave Hinzufügen silently
+  // disabled. The field now says why on blur, and the entry unit stays
+  // visible as an in-field suffix while typing.
+  test("material picker — zero quantity shows inline error", async ({ page }) => {
+    await goToWorkshops(page)
+    await page.getByRole("button", { name: "Holz", exact: true }).click()
+    const holzSection = page.getByTestId("workshop-block-holz")
+
+    // Pin the background scroll before opening the picker (see "SLA row").
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await holzSection
+      .getByRole("button", { name: "Material hinzufügen" })
+      .click()
+    await expect(page.getByText("E2E Testmaterial")).toBeVisible()
+    await page.getByText("E2E Testmaterial").click()
+
+    const lengthInput = page
+      .locator('label:has-text("Länge")')
+      .locator("..")
+      .locator("input")
+    await lengthInput.fill("0")
+    // Blur by Tabbing to Breite — clicking outside hits the picker overlay.
+    await page.keyboard.press("Tab")
+    await expect(page.getByRole("alert")).toHaveText(
+      "Bitte eine Zahl grösser als 0 eingeben",
+    )
+    await expect(
+      page.getByRole("button", { name: "Hinzufügen", exact: true }),
+    ).toBeDisabled()
+
+    // Let issue #401's scroll-restore rAF window settle, then re-pin.
+    await page.waitForTimeout(700)
+    await page.evaluate(() => window.scrollTo(0, 0))
+
+    await expect(page).toHaveScreenshot("checkout-picker-quantity-error.png")
+  })
+
   test("summary — entry fees only", async ({ page }) => {
     await goToSummary(page)
 
