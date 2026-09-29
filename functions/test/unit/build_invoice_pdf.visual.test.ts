@@ -207,11 +207,11 @@ describe("buildInvoicePdf — visual regression", function () {
     await compareAllPages("registered-user-address", registeredUserInvoice());
   });
 
-  // Issue #269 review: anonymous walk-in (no billingAddress) — the
-  // recipient block is empty above the title, the name appears only in
-  // the Nutzungsgebühren table, and the Swiss QR bill leaves the
-  // "Zahlbar durch" debtor box empty for handwriting.
-  it("anonymous walk-in (no recipient block, no QR debtor)", async () => {
+  // Issue #658 (revisits the #269 review): anonymous walk-in (no
+  // billingAddress) — the recipient block is the check-in name alone
+  // above the title, and the Swiss QR bill leaves the "Zahlbar durch"
+  // debtor box empty for handwriting.
+  it("anonymous walk-in (name-only recipient block, no QR debtor)", async () => {
     await compareAllPages("anonymous-walkin", zeroItemsInvoice());
   });
 

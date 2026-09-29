@@ -116,6 +116,9 @@ interface SeedBillOptions {
   checkoutIds?: string[];
   kind?: "invoice" | "beleg";
   source?: "checkout" | "membership-renewal";
+  // Account holder; the close path copies `checkout.userId` here. Omitted
+  // → the shared "u-bill-proc" owner.
+  userId?: string;
 }
 
 interface SeedCheckoutOptions {
@@ -185,7 +188,7 @@ async function seedBill(
   const checkoutRefs = checkoutIds.map((id) =>
     db.collection("checkouts").doc(id),
   );
-  const userRef = db.doc("users/u-bill-proc");
+  const userRef = db.doc(`users/${opts.userId ?? "u-bill-proc"}`);
 
   const bill: BillEntity = {
     userId: userRef,
@@ -442,7 +445,9 @@ describe("bill processing triggers (Integration)", () => {
         ],
         summary: { totalPrice: 40, entryFees: 15, machineCost: 25, materialCost: 0, tip: 0 },
       });
-      await seedBill(billId);
+      // The close path copies checkout.userId onto the bill; the recipient
+      // resolves from that account holder (#658), not from persons[].userRef.
+      await seedBill(billId, { userId });
 
       const ok = await tryGeneratePdf(billId);
       expect(ok).to.be.true;
@@ -467,13 +472,71 @@ describe("bill processing triggers (Integration)", () => {
       ).to.be.greaterThan(1);
     });
 
-    // Issue #269: when the registered user lacks a billingAddress (or there
-    // is no userRef at all — anonymous walk-in), the address block falls
-    // back to the name-only rendering.
-    it("anonymous person without userRef: address block shows only the name (#269)", async function () {
+    // Issue #658: the close path stores the *wire* persons, which never
+    // carry a `userRef` — the shape every real checkout has. The recipient
+    // must therefore resolve from the account holder (`checkout.userId`,
+    // copied to `bill.userId`), not from `persons[].userRef`.
+    it("member address renders from checkout.userId when persons carry no userRef (#658)", async function () {
+      this.timeout(15000);
+      const db = getFirestore();
+
+      const userId = "u-member-658";
+      await db.collection("users").doc(userId).set({
+        created: Timestamp.now(),
+        firstName: "Mira",
+        lastName: "Mitglied",
+        email: "mira@example.com",
+        permissions: [],
+        roles: [],
+        userType: "erwachsen",
+        billingAddress: {
+          company: "",
+          street: "Seestrasse 12",
+          zip: "8820",
+          city: "Wädenswil",
+        },
+      });
+
+      const billId = "bill-658-member-no-userref";
+      await seedCheckout("co-default", {
+        userId,
+        // Post-close production shape: name/email/userType only.
+        persons: [
+          { name: "Mira Mitglied", email: "mira@example.com", userType: "erwachsen" },
+        ],
+        summary: { totalPrice: 40, entryFees: 15, machineCost: 25, materialCost: 0, tip: 0 },
+      });
+      await seedBill(billId, { userId });
+
+      const ok = await tryGeneratePdf(billId);
+      expect(ok).to.be.true;
+
+      const file = fakeBucket.__files.get(`invoices/${billId}.pdf`)!;
+      const [buffer] = file.save.firstCall.args as [Buffer];
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
+      const { text } = await pdfParse(buffer);
+
+      expect(text).to.include("Mira Mitglied");
+      expect(text).to.include("8820 Wädenswil");
+      // Street in the recipient block AND the QR "Zahlbar durch" debtor —
+      // the Swiss QR-bill prints the debtor twice (Empfangsschein + Zahlteil).
+      const streetMatches = text.split("Seestrasse 12").length - 1;
+      expect(
+        streetMatches,
+        "Seestrasse 12 must appear in the recipient block and both QR debtor sections",
+      ).to.equal(3);
+    });
+
+    // Issues #269/#658: an anonymous walk-in (eager-anon checkout with
+    // `userId: null`, no userRef, no address) gets a name-only recipient
+    // block — the name appears above the title AND in the Nutzungsgebühren
+    // table, but no address lines and no QR debtor.
+    it("anonymous person without userRef or holder: name-only recipient block (#269, #658)", async function () {
       this.timeout(15000);
       const billId = "bill-269-anon";
       await seedCheckout("co-default", {
+        userId: null,
         persons: [
           { name: "Anon User", email: "anon@example.com", userType: "erwachsen" },
         ],
@@ -490,8 +553,13 @@ describe("bill processing triggers (Integration)", () => {
       const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
       const { text } = await pdfParse(buffer);
 
-      // Name renders, but no address lines should appear.
-      expect(text).to.include("Anon User");
+      // Recipient block + Nutzungsgebühren row; a third hit would mean the
+      // QR debtor was populated without an address.
+      const nameMatches = text.split("Anon User").length - 1;
+      expect(
+        nameMatches,
+        "Anon User should appear in the recipient block and Nutzungsgebühren only",
+      ).to.equal(2);
       expect(text).to.not.include("Bahnhofstrasse");
     });
 

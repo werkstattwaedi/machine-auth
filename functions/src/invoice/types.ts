@@ -118,7 +118,10 @@ export interface InvoiceData {
    * convention). When `company` is empty the company line is skipped — for a
    * registered (logged-in) non-firma user we render their `recipientName`
    * plus street/zip/city. For a firma checkout `company` carries the
-   * company name and identifies the recipient.
+   * company name and identifies the recipient. `null` when no address is
+   * known (guest, or member without a stored address): the block then
+   * consists of `recipientName` alone and the QR-bill debtor stays empty
+   * (issue #658). Resolved by `resolve_recipient.ts`.
    */
   billingAddress: {
     company: string;
