@@ -167,6 +167,10 @@ export interface CatalogReferencesEntity {
 export interface CatalogEntity {
   code: string;
   name: string;
+  /** Curated pricelist label fields (`Etikett Name` / `Etikett Mass`);
+   *  absent on items not sourced from the pricelist import. */
+  labelName?: string;
+  labelMass?: string;
   workshops: string[];
   /**
    * Root-to-leaf category path. Free-form values, not pre-registered;

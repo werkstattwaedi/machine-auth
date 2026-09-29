@@ -11,6 +11,7 @@ import { expect } from "chai";
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
 import {
   buildBillRow,
+  buildCatalogSnapshotRows,
   buildMachineUsageRow,
   buildMembershipSnapshotRow,
   buildVisitItemRows,
@@ -20,6 +21,7 @@ import {
   type RowContext,
 } from "./row_builders";
 import type {
+  CatalogEntity,
   CheckoutEntity,
   CheckoutItemEntity,
   MembershipEntity,
@@ -199,13 +201,19 @@ describe("stats row builders", () => {
         workshop: "holz",
         item_type: "material",
         catalog_id: "cat-7",
+        variant_id: "default",
+        pricing_model: null,
         quantity: 2,
         unit_price: 5,
         total_price: 10,
         origin: "manual",
         cancelled_at: null,
       });
-      expect(rows[1]).to.include({ item_type: "machine", catalog_id: null });
+      expect(rows[1]).to.include({
+        item_type: "machine",
+        catalog_id: null,
+        variant_id: null,
+      });
       // The badge tokenId (tag UID) must never reach BigQuery.
       expect(JSON.stringify(rows)).to.not.match(/tokenId/);
     });
@@ -301,6 +309,84 @@ describe("stats row builders", () => {
         owner_subject_key: "owner-key",
         valid_until: "2027-02-01",
       });
+    });
+  });
+
+  describe("buildCatalogSnapshotRows", () => {
+    const item: CatalogEntity = {
+      code: "1042",
+      name: "Sperrholz Birke 4 mm",
+      labelName: "Sperrholz Birke",
+      labelMass: "4 mm",
+      workshops: ["makerspace"],
+      category: ["Holz", "Platten"],
+      active: true,
+      userCanAdd: true,
+      variants: [
+        { id: "default", pricingModel: "area", unitPrice: { default: 20, member: 16 } },
+        { id: "a3", label: "Zuschnitt A3", pricingModel: "count", unitPrice: { default: 2.5 } },
+      ],
+    };
+
+    it("keys every row by snapshot date so weekly history is kept", () => {
+      const { item: row, variants } = buildCatalogSnapshotRows(
+        "cat-7",
+        item,
+        "2026-07-19",
+        ctx
+      );
+      expect(row).to.deep.equal({
+        doc_id: "cat-7/2026-07-19",
+        exported_at: ctx.exportedAt,
+        snapshot_date: "2026-07-19",
+        catalog_id: "cat-7",
+        code: "1042",
+        name: "Sperrholz Birke 4 mm",
+        label_name: "Sperrholz Birke",
+        label_mass: "4 mm",
+        description: null,
+        workshops: ["makerspace"],
+        category: ["Holz", "Platten"],
+        item_type: "material",
+        active: true,
+        user_can_add: true,
+      });
+      expect(variants).to.deep.equal([
+        {
+          doc_id: "cat-7/default/2026-07-19",
+          exported_at: ctx.exportedAt,
+          snapshot_date: "2026-07-19",
+          catalog_id: "cat-7",
+          variant_id: "default",
+          variant_index: 0,
+          label: null,
+          pricing_model: "area",
+          price_default: 20,
+          price_member: 16,
+        },
+        {
+          doc_id: "cat-7/a3/2026-07-19",
+          exported_at: ctx.exportedAt,
+          snapshot_date: "2026-07-19",
+          catalog_id: "cat-7",
+          variant_id: "a3",
+          variant_index: 1,
+          label: "Zuschnitt A3",
+          pricing_model: "count",
+          price_default: 2.5,
+          price_member: null,
+        },
+      ]);
+    });
+
+    it("keeps machine typing", () => {
+      const { item: row } = buildCatalogSnapshotRows(
+        "laser",
+        { ...item, type: "machine" },
+        "2026-07-19",
+        ctx
+      );
+      expect(row.item_type).to.equal("machine");
     });
   });
 });

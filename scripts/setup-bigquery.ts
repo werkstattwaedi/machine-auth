@@ -5,8 +5,8 @@
 /**
  * Idempotent BigQuery provisioning for the stats export (ADR-0039).
  *
- * Creates the dataset (europe-west6), the append-only tables, and the
- * `*_v` dedup views from the single source of truth in
+ * Creates the dataset (europe-west6), the append-only tables, the
+ * `*_v` dedup views, and the extra views (e.g. `catalog_latest_v`) from the single source of truth in
  * `functions/src/stats/schema.ts`. Safe to re-run: existing datasets are
  * left untouched, existing tables get any NULLABLE column the schema has
  * gained appended (never dropped or retyped), and view queries are updated
@@ -52,7 +52,7 @@ async function main() {
   const datasetId = flagValue("dataset") ?? "stats";
 
   const { BigQuery } = await import("@google-cloud/bigquery");
-  const { STATS_TABLES, dedupViewQuery, viewName } = await import(
+  const { STATS_TABLES, STATS_EXTRA_VIEWS, dedupViewQuery, viewName } = await import(
     "../functions/src/stats/schema"
   );
 
@@ -115,6 +115,26 @@ async function main() {
         view: { query, useLegacySql: false },
       });
       console.log(`Created view ${viewName(def.name)}.`);
+    }
+  }
+
+  // After the table loop: these views select from the dedup views above.
+  for (const def of STATS_EXTRA_VIEWS) {
+    const view = dataset.table(def.name);
+    const query = def.query(datasetId);
+    const [viewExists] = await view.exists();
+    if (viewExists) {
+      await view.setMetadata({
+        description: def.description,
+        view: { query, useLegacySql: false },
+      });
+      console.log(`Updated view ${def.name}.`);
+    } else {
+      await dataset.createTable(def.name, {
+        description: def.description,
+        view: { query, useLegacySql: false },
+      });
+      console.log(`Created view ${def.name}.`);
     }
   }
 

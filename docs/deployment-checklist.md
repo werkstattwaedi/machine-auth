@@ -495,6 +495,23 @@ FIREBASE_PROJECT_ID=<project-id> \
 #  - 5 random checkouts field-by-field
 ```
 
+**9c′. One-off: catalog snapshots + visit_items variants** (ADR-0039
+amendment 2026-09-29). Order: `setup-bigquery.ts` (adds the catalog
+tables/views and the `visit_items.variant_id` / `pricing_model` columns) →
+deploy functions → re-emit the old `visit_items` rows. The first daily
+export after the deploy takes the first catalog snapshot by itself.
+
+```bash
+FIREBASE_PROJECT_ID=<project-id> \
+  npx tsx scripts/backfill-visit-item-variants.ts --prod --dry-run
+STATS_SUBJECT_SALT="$(gcloud secrets versions access latest \
+  --secret=STATS_SUBJECT_SALT --project=<project-id>)" \
+FIREBASE_PROJECT_ID=<project-id> \
+  npx tsx scripts/backfill-visit-item-variants.ts --prod
+```
+
+Do NOT reset `export_state/visits` for this — see the ADR amendment.
+
 **9d. Ops calendar:** January = yearly retention trim
 (`privacy-cli.ts trim --dry-run --prod` → review counts → live run). See
 [`data-protection.md`](data-protection.md#ops-calendar).

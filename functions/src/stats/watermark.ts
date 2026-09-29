@@ -4,7 +4,7 @@
 /**
  * Per-stream export watermarks, stored in the server-only `export_state`
  * collection (one doc per stream: visits, machine_usage, bills,
- * membership_snapshots).
+ * membership_snapshots, catalog_snapshots).
  *
  * The watermark is advanced ONLY after a successful sink insert; a crash
  * between insert and advance re-exports the batch and the `*_v` dedup views

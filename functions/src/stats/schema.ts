@@ -14,7 +14,7 @@
  * and crash-duplicates harmless (no MERGE, no streaming-buffer DML).
  * Analysts query only the views.
  *
- * Privacy invariants:
+ * Privacy invariants (subject tables; the catalog snapshots hold no subject data):
  * - No names, emails, addresses, tag UIDs, referenceNumbers, or storagePaths.
  * - `subject_key` is the HMAC pseudonym from `privacy/subject_key.ts`.
  * - Event timestamps are truncated to the hour (re-identification hardening);
@@ -81,6 +81,8 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "workshop", type: "STRING" },
       { name: "item_type", type: "STRING", description: "material | machine (absent source field ⇒ material)" },
       { name: "catalog_id", type: "STRING", description: "catalog doc id; NULL for free-form items" },
+      { name: "variant_id", type: "STRING", description: "catalog variant id; joins catalog_variant_snapshots. NULL for free-form items" },
+      { name: "pricing_model", type: "STRING", description: "Pricing model the line was billed under" },
       { name: "quantity", type: "NUMERIC" },
       { name: "unit_price", type: "NUMERIC" },
       { name: "total_price", type: "NUMERIC" },
@@ -136,6 +138,82 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "owner_subject_key", type: "STRING" },
       { name: "valid_until", type: "DATE" },
     ],
+  },
+  // Catalog snapshots carry no subject data (no subject_key): they are the
+  // dimension tables that visit_items.catalog_id / variant_id join against.
+  // Taken weekly and keyed by snapshot date, so the full history (renames,
+  // re-categorisations, price changes) stays queryable.
+  {
+    name: "catalog_snapshots",
+    description: "One row per catalog item per weekly snapshot (Sunday, Zurich).",
+    partitionField: "snapshot_date",
+    clusterFields: ["catalog_id"],
+    fields: [
+      ...BOOKKEEPING,
+      { name: "snapshot_date", type: "DATE", mode: "REQUIRED", description: "Zurich-local Sunday the snapshot belongs to" },
+      { name: "catalog_id", type: "STRING", mode: "REQUIRED", description: "catalog doc id" },
+      { name: "code", type: "STRING", description: "Stable 4-digit item code (never reused)" },
+      { name: "name", type: "STRING" },
+      { name: "label_name", type: "STRING" },
+      { name: "label_mass", type: "STRING" },
+      { name: "description", type: "STRING" },
+      { name: "workshops", type: "STRING", mode: "REPEATED" },
+      { name: "category", type: "STRING", mode: "REPEATED", description: "Root-to-leaf category path" },
+      { name: "item_type", type: "STRING", description: "material | machine (absent source field ⇒ material)" },
+      { name: "active", type: "BOOL" },
+      { name: "user_can_add", type: "BOOL" },
+    ],
+  },
+  {
+    name: "catalog_variant_snapshots",
+    description: "One row per catalog variant per weekly snapshot (Sunday, Zurich).",
+    partitionField: "snapshot_date",
+    clusterFields: ["catalog_id", "variant_id"],
+    fields: [
+      ...BOOKKEEPING,
+      { name: "snapshot_date", type: "DATE", mode: "REQUIRED", description: "Zurich-local Sunday the snapshot belongs to" },
+      { name: "catalog_id", type: "STRING", mode: "REQUIRED" },
+      { name: "variant_id", type: "STRING", mode: "REQUIRED" },
+      { name: "variant_index", type: "INT64", description: "Position in variants[]; 0 is the canonical base" },
+      { name: "label", type: "STRING" },
+      { name: "pricing_model", type: "STRING" },
+      { name: "price_default", type: "NUMERIC", description: "Un-discounted unit price" },
+      { name: "price_member", type: "NUMERIC", description: "Member override; NULL when the default applies" },
+    ],
+  },
+];
+
+/** A view beyond the per-table dedup views, provisioned by setup-bigquery. */
+export interface StatsViewDef {
+  name: string;
+  description: string;
+  query: (datasetId: string) => string;
+}
+
+/**
+ * "Current catalog" views: the latest known row per item / variant across
+ * all snapshots. Deliberately not "rows of the newest snapshot" — an item
+ * deleted from Firestore drops out of new snapshots, but past visit_items
+ * still reference it and must keep joining.
+ */
+export const STATS_EXTRA_VIEWS: StatsViewDef[] = [
+  {
+    name: "catalog_latest_v",
+    description: "Latest known snapshot row per catalog item.",
+    query: (datasetId) =>
+      `SELECT * EXCEPT (row_rank) FROM (\n` +
+      `  SELECT *, ROW_NUMBER() OVER (PARTITION BY catalog_id ORDER BY snapshot_date DESC) AS row_rank\n` +
+      `  FROM \`${datasetId}.${viewName("catalog_snapshots")}\`\n` +
+      `) WHERE row_rank = 1`,
+  },
+  {
+    name: "catalog_variants_latest_v",
+    description: "Latest known snapshot row per catalog variant.",
+    query: (datasetId) =>
+      `SELECT * EXCEPT (row_rank) FROM (\n` +
+      `  SELECT *, ROW_NUMBER() OVER (PARTITION BY catalog_id, variant_id ORDER BY snapshot_date DESC) AS row_rank\n` +
+      `  FROM \`${datasetId}.${viewName("catalog_variant_snapshots")}\`\n` +
+      `) WHERE row_rank = 1`,
   },
 ];
 
