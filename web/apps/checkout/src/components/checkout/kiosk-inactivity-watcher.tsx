@@ -81,19 +81,24 @@ export function KioskInactivityWatcher() {
     pendingCheckout,
     items,
     persons,
+    isAnonymous,
   } = useWizardContext()
-  // Only arm the idle watcher when there is session state worth protecting.
-  // A fresh /checkin?kiosk with an empty form and no checkout should not pop
-  // the "Bist du noch da?" dialog (issue #378).
+  // Arm whenever the terminal is tied to a person or holds state worth
+  // protecting. Only the anonymous, pristine sign-in screen stays unwatched
+  // — nothing to lose there, and the dialog would pop for nobody (#378). An
+  // identified session without a visit must still time out: left standing,
+  // the next visitor's badge tap lands on the previous member's screen
+  // (issue #689).
   const shouldWatch =
     kiosk &&
-    hasPreservableState({
-      openCheckout,
-      checkoutId,
-      pendingCheckout,
-      items,
-      persons,
-    })
+    (!isAnonymous ||
+      hasPreservableState({
+        openCheckout,
+        checkoutId,
+        pendingCheckout,
+        items,
+        persons,
+      }))
   const [open, setOpen] = useIdleDialog(shouldWatch, IDLE_MS)
 
   if (!shouldWatch) return null

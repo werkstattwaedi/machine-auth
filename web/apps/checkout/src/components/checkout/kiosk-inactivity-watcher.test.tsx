@@ -9,8 +9,9 @@
  * — the same strong wipe as the Electron chrome's "Neuer Checkout" (signOut +
  * bridge partition wipe + hard reload). "Besuch fortsetzen" aborts.
  * Activity events reset the idle countdown while
- * the dialog is closed. A fresh /checkin?kiosk with an empty form and no
- * checkout must NOT arm the watcher.
+ * the dialog is closed. A fresh, anonymous /checkin?kiosk with an empty form
+ * and no checkout must NOT arm the watcher; an identified session always
+ * arms (issue #689).
  */
 
 import {
@@ -76,6 +77,7 @@ function baseContext(overrides: Record<string, unknown> = {}) {
     pendingCheckout: false,
     items: [],
     persons: [emptyPerson()],
+    isAnonymous: true,
     ...overrides,
   }
 }
@@ -122,18 +124,28 @@ describe("KioskInactivityWatcher", () => {
     expect(startOver).not.toHaveBeenCalled()
   })
 
-  it("does not arm for a single pristine pre-filled identity person", () => {
+  // Issue #689: a badge-identified screen with nothing started used to stay
+  // up forever, and the next visitor's tap switched principal in place.
+  it("arms for an identified session with nothing started", () => {
     const startOver = vi.fn()
     mockUseWizardContext.mockReturnValue(
-      baseContext({ startOver, persons: [preFilledPerson()] }),
+      baseContext({
+        startOver,
+        isAnonymous: false,
+        persons: [preFilledPerson()],
+      }),
     )
     render(<KioskInactivityWatcher />)
 
     act(() => {
-      vi.advanceTimersByTime(10 * 60 * 1000)
+      vi.advanceTimersByTime(5 * 60 * 1000)
     })
-    expect(screen.queryByText(/Bist du noch da/)).toBeNull()
-    expect(startOver).not.toHaveBeenCalled()
+    expect(screen.getByText(/Bist du noch da/)).toBeTruthy()
+
+    act(() => {
+      vi.advanceTimersByTime(30 * 1000)
+    })
+    expect(startOver).toHaveBeenCalledOnce()
   })
 
   it("does not fire before the 5-minute idle threshold (open checkout)", () => {

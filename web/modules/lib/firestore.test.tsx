@@ -154,6 +154,7 @@ describe("useCollection", () => {
   beforeEach(() => {
     fakeDb = new FakeFirestore()
     errorPaths.clear()
+    subscribeCounts.clear()
     sessionStorage.clear()
     mockHttpsCallable.mockClear()
     mockLogClientErrorCallable.mockClear()
@@ -223,6 +224,77 @@ describe("useCollection", () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.data).toHaveLength(1)
     expect(result.current.data[0]).toMatchObject({ name: "Max" })
+  })
+
+  // Issue #689: the kiosk's `where userId == A` listeners kept A's rows after
+  // an in-place switch to B because only the collection path keyed the
+  // subscription.
+  it("re-subscribes when a constraint value changes", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max", role: "admin" })
+    fakeDb.setDoc(fakeDb.doc("users", "u2"), { name: "Anna", role: "member" })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ role }: { role: string }) =>
+        useCollection(colRef("users"), where("role", "==", role)),
+      { wrapper: createWrapper(), initialProps: { role: "admin" } },
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.data.map((d) => d.id)).toEqual(["u1"])
+
+    rerender({ role: "member" })
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["u2"]),
+    )
+    expect(subscribeCounts.get("users")).toBe(2)
+  })
+
+  it("keys a document-ref filter value by its path", async () => {
+    fakeDb.setDoc(fakeDb.doc("checkouts", "c1"), {
+      userId: fakeDb.doc("users", "a"),
+    })
+    fakeDb.setDoc(fakeDb.doc("checkouts", "c2"), {
+      userId: fakeDb.doc("users", "b"),
+    })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ user }: { user: string }) =>
+        useCollection(
+          colRef("checkouts"),
+          where("userId", "==", docRef("users", user)),
+        ),
+      { wrapper: createWrapper(), initialProps: { user: "a" } },
+    )
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["c1"]),
+    )
+
+    rerender({ user: "b" })
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["c2"]),
+    )
+  })
+
+  it("drops the previous rows when the new subscription is denied", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max", role: "admin" })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ role }: { role: string }) =>
+        useCollection(colRef("users"), where("role", "==", role)),
+      { wrapper: createWrapper(), initialProps: { role: "admin" } },
+    )
+    await waitFor(() => expect(result.current.data).toHaveLength(1))
+
+    errorPaths.set(
+      "users",
+      Object.assign(new Error("denied"), { code: "permission-denied" }),
+    )
+    rerender({ role: "member" })
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.data).toEqual([])
+    expect(result.current.loading).toBe(false)
   })
 
   // Regression for issue #387: when a caller swaps a `null` ref for a real

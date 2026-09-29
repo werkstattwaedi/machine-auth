@@ -9,7 +9,7 @@ import {
   resolveBridgeBearer,
   type ResetSessionOptions,
 } from "@modules/lib/use-bridge"
-import { useFunctions } from "@modules/lib/firebase-context"
+import { useFirebaseAuth, useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 import {
   AlertDialog,
@@ -122,10 +122,17 @@ export async function confirmTagSwitch(deps: {
  * session; confirming wipes the bridge partition and hard-reloads into
  * /checkin with the new tag's params, so nothing of the previous user
  * leaks into the new session.
+ *
+ * Only an anonymous session is ever switched in place. A tap over an
+ * identified one with nothing to keep skips the dialog but still takes the
+ * wipe + reload: switching principal inside a live page left listeners
+ * bound to the previous member, and their family roster and (missing) open
+ * visit leaked into the next session (issue #689).
  */
 export function BridgeNfcRouter() {
   const bridge = useBridge()
   const functions = useFunctions()
+  const auth = useFirebaseAuth()
   const navigate = useNavigate()
   const [pendingTag, setPendingTag] = useState<PendingTag | null>(null)
   const [badgeOffer, setBadgeOffer] = useState<BadgePurchaseOffer | null>(null)
@@ -190,6 +197,16 @@ export function BridgeNfcRouter() {
           }
           return
         }
+        // Registered badge over an identified session with nothing to keep:
+        // no question to ask, but never switch principal in place.
+        if (!session.preservable) {
+          await confirmTagSwitch({
+            tag: { picc, cmac },
+            resetSession: bridge.resetSession,
+            reload: (target) => window.location.replace(target),
+          })
+          return
+        }
         // Registered badge — the existing switch/discard confirmation.
         setPendingTag({
           picc,
@@ -218,15 +235,24 @@ export function BridgeNfcRouter() {
           toast.error(UNREADABLE_TAG_MESSAGE)
           return
         }
-        // A session worth protecting is still in progress — probe first
-        // (registered → confirm switch/discard; unregistered → purchase
-        // offer). A later tap while a dialog is up replaces the pending
+        // A session worth protecting, or one tied to a person — probe first
+        // (registered → confirm switch/discard, or a plain wipe + reload
+        // when there is nothing to keep; unregistered → purchase offer or
+        // sign-in-first notice). A later tap while a dialog is up replaces the pending
         // state (the newest badge wins). Capture whether that session was
         // already identified so the switch dialog can be honest about
         // whether the open visit survives (identified handoff) or is lost
         // for good (anonymous upgrade — issue #468).
-        const session = getKioskSessionState()
-        if (session.preservable) {
+        const wizardSession = getKioskSessionState()
+        // Outside the wizard (e.g. the member area) no guard is registered;
+        // the signed-in principal itself still marks the session identified.
+        const signedIn =
+          auth.currentUser != null && !auth.currentUser.isAnonymous
+        const session = {
+          ...wizardSession,
+          identified: wizardSession.identified || signedIn,
+        }
+        if (session.preservable || session.identified) {
           void probeMidSessionTap(picc, cmac, session)
           return
         }
@@ -245,7 +271,15 @@ export function BridgeNfcRouter() {
         toast.error(UNREADABLE_TAG_MESSAGE)
       }
     })
-  }, [bridge.available, bridge.features, bridge.onNfcTag, navigate, functions])
+  }, [
+    bridge.available,
+    bridge.features,
+    bridge.onNfcTag,
+    bridge.resetSession,
+    navigate,
+    functions,
+    auth,
+  ])
 
   const dialogs = (
     <>

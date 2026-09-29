@@ -3,7 +3,10 @@
 
 /**
  * BridgeNfcRouter — kiosk tap routing + session protection:
- *   - pristine session: tap navigates straight to /checkin with the params
+ *   - pristine anonymous session: tap navigates straight to /checkin
+ *   - identified session with nothing to keep (wizard guard or a signed-in
+ *     principal outside the wizard): a registered badge wipes + reloads
+ *     without a dialog, never switches principal in place (#689)
  *   - preservable session (open checkout / dirty form): tap probes the tag
  *     (no SDM counter consumed) and opens the right dialog instead of
  *     navigating — switch/discard for a registered badge, the purchase
@@ -55,8 +58,13 @@ vi.mock("@modules/lib/use-bridge", () => ({
   resolveBridgeBearer: vi.fn().mockResolvedValue("kiosk-bearer"),
 }))
 
+// The live Auth principal, read at tap time; anonymous/absent by default.
+const mockAuth: { currentUser: { isAnonymous: boolean } | null } = {
+  currentUser: null,
+}
 vi.mock("@modules/lib/firebase-context", () => ({
   useFunctions: () => ({}),
+  useFirebaseAuth: () => mockAuth,
 }))
 
 // probeTag callable — registered by default; individual tests flip it.
@@ -123,6 +131,7 @@ afterEach(() => {
   mockProbeTag.mockReset()
   quoteEffectVouchers.length = 0
   tagCallback = null
+  mockAuth.currentUser = null
 })
 
 const TAG_URL = "https://id.example.ch/?picc=PICC1&cmac=CMAC1"
@@ -143,6 +152,54 @@ describe("BridgeNfcRouter", () => {
       replace: true,
     })
     expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("navigates in place over a pristine anonymous Auth session", () => {
+    mockAuth.currentUser = { isAnonymous: true }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(mockNavigate).toHaveBeenCalledOnce()
+    expect(mockProbeTag).not.toHaveBeenCalled()
+  })
+
+  // Issue #689: an idle identified screen was switched in place, leaving the
+  // wizard's listeners bound to the previous member.
+  it("identified session with nothing to keep: wipe + reload, no dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Max Muster",
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("signed-in principal outside the wizard: wipe + reload, no dialog", async () => {
+    // No wizard mounted (e.g. /account) — the guard reports pristine.
+    mockAuth.currentUser = { isAnonymous: false }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("unregistered badge over an identified session with nothing to keep: purchase offer", async () => {
+    mockSessionState.mockReturnValue({ ...PRISTINE, identified: true })
+    mockProbeTag.mockResolvedValue({
+      data: { tokenId: "t9", registered: false, badgeVoucher: "v1" },
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(await screen.findByTestId("badge-purchase-stub")).toBeTruthy()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it("asks for confirmation instead of navigating when a session is active", async () => {

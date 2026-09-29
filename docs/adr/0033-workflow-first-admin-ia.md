@@ -50,7 +50,9 @@ Ledger lists subscribe broad (`orderBy … desc, limit ≤300`) and filter
 client-side; person/machine-scoped views use equality-only queries
 (zig-zag merge — indexless) with client-side sorting. Components that vary
 query constraints at runtime are keyed by the filter value because
-`useCollection` only re-subscribes on collection-path changes.
+`useCollection` only re-subscribes on collection-path changes. (Since
+#689 it also re-subscribes when a constraint value changes; the keys are
+now redundant but harmless.)
 
 ### New data surface
 
