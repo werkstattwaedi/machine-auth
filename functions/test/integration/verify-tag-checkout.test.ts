@@ -6,7 +6,10 @@ import {
   teardownEmulator,
   seedTestData,
 } from "../emulator-helper";
-import { handleVerifyTagCheckout } from "../../src/checkout/verify_tag";
+import {
+  handleVerifyTagCheckout,
+  TagRejectedError,
+} from "../../src/checkout/verify_tag";
 import {
   VerifyTagRequest,
   VerifyTagResponse,
@@ -289,6 +292,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         expect.fail("Should have thrown error for invalid CMAC");
       } catch (error: any) {
         expect(error.message).to.include("CMAC");
+        expect(error).to.be.instanceOf(TagRejectedError);
       }
     });
 
@@ -319,7 +323,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
         await handleVerifyTagCheckout(request, mockConfig);
         expect.fail("Should have thrown error for wrong CMAC length");
       } catch (error: any) {
-        expect(error.message).to.exist;
+        expect(error).to.be.instanceOf(TagRejectedError);
       }
     });
   });

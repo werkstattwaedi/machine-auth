@@ -25,7 +25,11 @@ import {
   diversificationMasterKey,
   diversificationSystemName,
 } from "../config/tag-secrets";
-import { decryptAndVerifyTag, type VerifyTagRequest } from "./verify_tag";
+import {
+  decryptAndVerifyTag,
+  TagRejectedError,
+  type VerifyTagRequest,
+} from "./verify_tag";
 import { assertKioskBearer } from "./kiosk_session";
 import { mintBadgeVoucher } from "../badge/voucher";
 
@@ -55,7 +59,8 @@ export const probeTagHandler = async (
       }
     );
   } catch (error: any) {
-    logger.error("probeTag verification failed", { error: error?.message });
+    const log = error instanceof TagRejectedError ? logger.warn : logger.error;
+    log("probeTag verification failed", { error: error?.message });
     throw new HttpsError(
       "invalid-argument",
       error?.message || "Tag verification failed"
