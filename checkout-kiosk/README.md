@@ -164,6 +164,20 @@ both sides).
 4. The loaded **web app** (inside the webview) handles tag navigation —
    it parses `picc`/`cmac` from the NDEF URL and routes accordingly.
 
+### Single instance
+
+Only one kiosk runs per installation (issue #688). The kiosk starts hidden
+in the tray, so launching it a second time is an easy mistake — and two
+instances both own the reader and race each other on every badge tap. A
+second launch therefore exits immediately, before it touches the session
+partition, the tray or the reader, and the already-running kiosk brings its
+window to the foreground instead (`src/single-instance.ts`).
+
+The lock is scoped to Electron's `userData` directory. Staging and prod
+installers share `appId` + `productName`, so they are one installation and
+exclude each other; an unpackaged `npm run start:kiosk` uses a separate
+`userData` and can still be started next to an installed build.
+
 ## File Layout
 
 ```

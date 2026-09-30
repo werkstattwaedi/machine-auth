@@ -22,6 +22,7 @@ import {
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import { performSessionReset } from "./reset-session"
+import { claimSingleInstance } from "./single-instance"
 import {
   createDisplayWaker,
   SCREENSAVER_DISMISSED_EXIT,
@@ -437,15 +438,41 @@ ipcMain.handle(
     performSessionReset({ clearSession, hideWindow }, opts)
 )
 
-app.whenReady().then(async () => {
-  // Always start from a clean session — any leftover IndexedDB / cookies /
-  // Firebase Auth state from a previous run is wiped before the renderer
-  // attaches its webview.
-  await clearSession()
-  createTray()
-  createWindow()
-  startNfc({ onTag: dispatchNfc })
+// One kiosk per installation (issue #688). Two instances both hold the reader
+// and both forward every tap, racing each other on the SDM read counter. The
+// lock is scoped to `userData`, i.e. to the installed app — staging and prod
+// installers share appId + productName and so are the same installation, while
+// an unpackaged `npm run start:kiosk` has its own `userData` and stays
+// launchable next to an installed build.
+//
+// A refused launch surfaces the running window through the same showWindow()
+// a badge tap uses. The foreground briefly belongs to the process that was
+// just launched, not to us, so focus() alone may be refused by Windows — the
+// always-on-top pin in showWindow() does not depend on the foreground right.
+const isPrimaryInstance = claimSingleInstance({
+  requestLock: () => app.requestSingleInstanceLock(),
+  onSecondInstance: (listener) => {
+    app.on("second-instance", listener)
+  },
+  quit: () => app.quit(),
+  showWindow,
 })
+
+// Nothing below may run in a refused second instance: clearSession() would wipe
+// the partition out from under the running kiosk's visitor.
+if (isPrimaryInstance) {
+  app.whenReady().then(async () => {
+    // Always start from a clean session — any leftover IndexedDB / cookies /
+    // Firebase Auth state from a previous run is wiped before the renderer
+    // attaches its webview.
+    await clearSession()
+    createTray()
+    createWindow()
+    startNfc({ onTag: dispatchNfc })
+  })
+} else {
+  console.log("Another kiosk instance is already running — exiting.")
+}
 
 // Any quit path (tray "Beenden", OS shutdown) flips the flag so the window's
 // close handler tears down instead of hiding.
