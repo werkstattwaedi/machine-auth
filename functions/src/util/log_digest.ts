@@ -16,6 +16,13 @@
  * Daily rather than weekly on purpose: the categories are new and we want
  * to see a bad pattern within a day, not six days late. Widening the
  * cadence later is a one-line schedule change.
+ *
+ * The credential-less GET sweep that follows every functions deploy is
+ * folded into one footer line (`isProbeEntry` and the burst thresholds in
+ * `@oww/shared`), so it cannot bury the day's real findings. The ERROR
+ * alert policy in the GCP console ignores the same sweep through its own
+ * clause (`NOT textPayload:"Invalid request, unable to process."`); that
+ * policy is configured there, not here.
  */
 
 import * as logger from "firebase-functions/logger";
@@ -23,6 +30,7 @@ import { defineString } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import {
   summarizeLogEntries,
+  type ExcludedLogEntries,
   type LogSummary,
   type RawLogEntry,
 } from "@oww/shared";
@@ -51,6 +59,25 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/**
+ * The one line that stands in for the folded post-deploy probe entries.
+ * Times are UTC like every other timestamp in the mail; the date is added
+ * only when the bursts straddle midnight, where bare clock times would
+ * read backwards.
+ */
+function renderExcluded(excluded: ExcludedLogEntries): string {
+  const sameDay = excluded.from.slice(0, 10) === excluded.to.slice(0, 10);
+  const clock = (iso: string) =>
+    sameDay ? iso.slice(11, 16) : `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+  const span = `${clock(excluded.from)}–${clock(excluded.to)} UTC`;
+  const where =
+    excluded.bursts > 1 ? `${excluded.bursts} Bursts, ${span}` : span;
+  return (
+    `${excluded.count} Einträge aus unauthentisierten Probes der ` +
+    `Function-URLs (${where}), nicht aufgeführt.`
+  );
+}
+
 export interface DigestMail {
   subject: string;
   text: string;
@@ -67,6 +94,9 @@ export function renderDigest(
   opts: { projectId: string; since: Date; until: Date },
 ): DigestMail {
   const { projectId, since, until } = opts;
+  const excludedNote = summary.excluded
+    ? renderExcluded(summary.excluded)
+    : undefined;
   const window = `${since.toISOString()} → ${until.toISOString()}`;
   const subject =
     `[${projectId}] ${summary.total} Warnungen/Fehler ` +
@@ -75,7 +105,10 @@ export function renderDigest(
   const lines: string[] = [
     `Projekt: ${projectId}`,
     `Zeitraum: ${window}`,
-    `Einträge: ${summary.total} in ${summary.groups.length} Gruppen`,
+    `Einträge: ${summary.total} in ${summary.groups.length} Gruppen` +
+      (summary.excluded
+        ? ` (+${summary.excluded.count} Probe-Einträge ausgeblendet)`
+        : ""),
   ];
   if (summary.truncated) {
     lines.push(
@@ -96,6 +129,7 @@ export function renderDigest(
     for (const sample of group.samples) lines.push(`  - ${sample}`);
     lines.push("");
   }
+  if (excludedNote) lines.push(excludedNote);
 
   const rows = summary.groups
     .map(
@@ -129,9 +163,81 @@ export function renderDigest(
     `<th align="left">Meldung</th><th>Services</th>` +
     `<th align="left">Zuletzt</th></tr>` +
     rows +
-    `</table></div>`;
+    `</table>` +
+    (excludedNote ? `<p>${escapeHtml(excludedNote)}</p>` : "") +
+    `</div>`;
 
   return { subject, text: lines.join("\n"), html };
+}
+
+/**
+ * Map one Cloud Logging entry onto the SDK-free shape the shared grouping
+ * works on. Exported so the mapping is testable without the Logging SDK.
+ *
+ * `httpRequest` lives in the entry's metadata, not its payload: a request
+ * log row for a rejected call has no payload at all, and the request is
+ * the only thing that says what it was.
+ */
+export function toRawLogEntry(entry: {
+  metadata?: unknown;
+  data?: unknown;
+}): RawLogEntry {
+  const metadata = (entry.metadata ?? {}) as {
+    severity?: string;
+    timestamp?: string | Date;
+    resource?: { labels?: { service_name?: string } };
+    httpRequest?: {
+      requestMethod?: string | null;
+      status?: number | string | null;
+      requestUrl?: string | null;
+    } | null;
+  };
+  const data = entry.data;
+
+  let message: string;
+  let detail: Record<string, unknown> | undefined;
+  if (typeof data === "string") {
+    message = data;
+  } else if (data && typeof data === "object") {
+    const payload = data as Record<string, unknown>;
+    const { message: payloadMessage, ...rest } = payload;
+    if (typeof payloadMessage === "string") {
+      message = payloadMessage;
+    } else {
+      // An empty payload is no message — not the two characters "{}".
+      message =
+        Object.keys(payload).length > 0 ? JSON.stringify(payload) : "";
+    }
+    if (Object.keys(rest).length > 0) detail = rest;
+  } else {
+    message = String(data ?? "");
+  }
+
+  const request = metadata.httpRequest;
+  const status = Number(request?.status);
+  const timestamp = metadata.timestamp;
+  return {
+    severity: metadata.severity ?? "DEFAULT",
+    service: metadata.resource?.labels?.service_name ?? "unknown",
+    timestamp:
+      timestamp instanceof Date
+        ? timestamp.toISOString()
+        : String(timestamp ?? ""),
+    message,
+    detail,
+    ...(request
+      ? {
+          httpRequest: {
+            method: request.requestMethod ?? undefined,
+            status:
+              request.status != null && Number.isFinite(status)
+                ? status
+                : undefined,
+            url: request.requestUrl ?? undefined,
+          },
+        }
+      : {}),
+  };
 }
 
 /**
@@ -155,42 +261,7 @@ async function fetchLogEntries(
     autoPaginate: false,
   });
 
-  const entries: RawLogEntry[] = found.map((entry) => {
-    const metadata = entry.metadata as {
-      severity?: string;
-      timestamp?: string | Date;
-      resource?: { labels?: { service_name?: string } };
-    };
-    const data = entry.data as unknown;
-
-    let message: string;
-    let detail: Record<string, unknown> | undefined;
-    if (typeof data === "string") {
-      message = data;
-    } else if (data && typeof data === "object") {
-      const payload = data as Record<string, unknown>;
-      const { message: payloadMessage, ...rest } = payload;
-      message =
-        typeof payloadMessage === "string"
-          ? payloadMessage
-          : JSON.stringify(payload);
-      if (Object.keys(rest).length > 0) detail = rest;
-    } else {
-      message = String(data ?? "");
-    }
-
-    const timestamp = metadata.timestamp;
-    return {
-      severity: metadata.severity ?? "DEFAULT",
-      service: metadata.resource?.labels?.service_name ?? "unknown",
-      timestamp:
-        timestamp instanceof Date
-          ? timestamp.toISOString()
-          : String(timestamp ?? ""),
-      message,
-      detail,
-    };
-  });
+  const entries = found.map(toRawLogEntry);
 
   return { entries, truncated: entries.length >= DIGEST_MAX_ENTRIES };
 }
@@ -221,8 +292,11 @@ export async function runLogDigest(
   const summary = summarizeLogEntries(entries, truncated);
 
   if (summary.total === 0) {
+    // Also the outcome of a day with nothing but the deploy probe: the
+    // footer line alone is not worth a mail.
     logger.info("logDigest: nothing to report", {
       since: since.toISOString(),
+      excluded: summary.excluded?.count ?? 0,
     });
     return summary;
   }
@@ -243,6 +317,7 @@ export async function runLogDigest(
     total: summary.total,
     groups: summary.groups.length,
     truncated: summary.truncated,
+    excluded: summary.excluded?.count ?? 0,
   });
   return summary;
 }
