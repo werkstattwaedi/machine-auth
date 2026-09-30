@@ -144,10 +144,31 @@ test.describe("NFC tag checkout", () => {
   }) => {
     const { picc, cmac, picc2, cmac2 } = readE2eData()
     const db = getAdminFirestore()
-    // A's seeded activeMembership pointer; a co-member sharing it makes the
-    // roster readable for A's tag session (shareActiveMembershipActingAs).
-    const membershipRef = db.doc("memberships/e2e-nfc-membership")
+    // A is a throwaway family parent behind the first tag, NOT the seeded
+    // NFC user. `onMembershipWritten` runs in the Functions emulator and
+    // nulls `users.activeMembership` of every member once their membership
+    // is deleted — asynchronously, up to seconds after this test's cleanup.
+    // Hanging the family on the seeded user stripped its membership for the
+    // rest of the run, and the #414 assertion above then failed on every
+    // later tap (issue #691). With throwaway members the trigger only ever
+    // finds docs that agree with it already, or are gone.
+    const tokenRef = db.doc(`tokens/${NFC_TAG_UID}`)
+    const membershipRef = db.doc("memberships/e2e-switch-family")
+    const parentRef = db.doc("users/e2e-switch-family-parent")
     const kidRef = db.doc("users/e2e-switch-family-kid")
+    await parentRef.set({
+      firstName: "Fami",
+      lastName: "Eltern",
+      email: "switch-parent@test.com",
+      userType: "erwachsen",
+      roles: [],
+      permissions: [],
+      // Sharing this pointer with the kid is what makes the roster readable
+      // for A's tag session (shareActiveMembershipActingAs).
+      activeMembership: membershipRef,
+      termsAcceptedAt: FieldValue.serverTimestamp(),
+      created: FieldValue.serverTimestamp(),
+    })
     await kidRef.set({
       firstName: "Fami",
       lastName: "Kind",
@@ -159,8 +180,9 @@ test.describe("NFC tag checkout", () => {
     await membershipRef.set({
       type: "family",
       status: "active",
-      members: [db.doc(`users/${NFC_USER_ID}`), kidRef],
+      members: [parentRef, kidRef],
     })
+    await tokenRef.update({ userId: parentRef })
 
     try {
       await page.addInitScript(() => {
@@ -192,7 +214,7 @@ test.describe("NFC tag checkout", () => {
       })
 
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
-      await expect(page.getByText("nfc@test.com")).toBeVisible({
+      await expect(page.getByText("switch-parent@test.com")).toBeVisible({
         timeout: 15_000,
       })
       await expect(page.getByRole("button", { name: "Fami Kind" })).toBeVisible()
@@ -209,7 +231,7 @@ test.describe("NFC tag checkout", () => {
       await expect(page.getByText("badge2@test.com")).toBeVisible({
         timeout: 15_000,
       })
-      await expect(page.getByText("nfc@test.com")).not.toBeVisible()
+      await expect(page.getByText("switch-parent@test.com")).not.toBeVisible()
       await expect(
         page.getByRole("button", { name: "Fami Kind" }),
       ).not.toBeVisible()
@@ -218,7 +240,12 @@ test.describe("NFC tag checkout", () => {
         await page.evaluate(() => sessionStorage.getItem("fakeBridgeResets")),
       ).toBe("1")
     } finally {
-      await Promise.all([membershipRef.delete(), kidRef.delete()])
+      await Promise.all([
+        tokenRef.update({ userId: db.doc(`users/${NFC_USER_ID}`) }),
+        membershipRef.delete(),
+        parentRef.delete(),
+        kidRef.delete(),
+      ])
     }
   })
 
