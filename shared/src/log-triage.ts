@@ -215,6 +215,8 @@ export function isProbeEntry(entry: RawLogEntry): boolean {
   const key = groupingKeyForMessage(entry.message)
   const request = entry.httpRequest
   if (request && request.method !== "GET") return false
+  // A server fault is never folded away, whatever message it carries.
+  if (request?.status !== undefined && request.status >= 500) return false
 
   if (isRequestOnly(entry, key)) {
     const status = request?.status

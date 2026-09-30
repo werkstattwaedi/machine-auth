@@ -267,6 +267,17 @@ describe("isProbeEntry", () => {
     })
   }
 
+  it("never folds a 5xx, even with a probe message", () => {
+    expect(
+      isProbeEntry(
+        entry({
+          message: NOT_AUTHENTICATED,
+          httpRequest: { method: "GET", status: 503 },
+        })
+      )
+    ).toBe(false)
+  })
+
   it("a request-only 4xx is a probe on GET only", () => {
     const requestOnly = (method: string, status: number) =>
       entry({ message: "", httpRequest: { method, status, url: "/" } })
