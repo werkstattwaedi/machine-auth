@@ -1,6 +1,6 @@
 # ADR-0033: Workflow-first admin information architecture
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-30, issue #689: `useCollection` now re-subscribes on constraint changes too)
 
 **Date:** 2026-07-05
 
@@ -51,6 +51,9 @@ client-side; person/machine-scoped views use equality-only queries
 (zig-zag merge — indexless) with client-side sorting. Components that vary
 query constraints at runtime are keyed by the filter value because
 `useCollection` only re-subscribes on collection-path changes.
+*(Amended 2026-09-30, issue #689: `useCollection` keys its subscription
+on the path and the constraint values, so these component keys are no
+longer required; existing ones are harmless.)*
 
 ### New data surface
 

@@ -134,6 +134,94 @@ test.describe("NFC tag checkout", () => {
     ).toBeEnabled()
   })
 
+  // Issue #689: a badge tap over an idle, identified kiosk screen switched
+  // principal inside the live page. The wizard's listeners stayed bound to
+  // the first member, so the second one saw the first one's family roster.
+  // Unlike the #420 test above this drives the tap through a fake Electron
+  // bridge — the in-place path `page.goto` never takes.
+  test("bridge tap over an identified session reloads — no roster leak (#689)", async ({
+    page,
+  }) => {
+    const { picc, cmac, picc2, cmac2 } = readE2eData()
+    const db = getAdminFirestore()
+    // A's seeded activeMembership pointer; a co-member sharing it makes the
+    // roster readable for A's tag session (shareActiveMembershipActingAs).
+    const membershipRef = db.doc("memberships/e2e-nfc-membership")
+    const kidRef = db.doc("users/e2e-switch-family-kid")
+    await kidRef.set({
+      firstName: "Fami",
+      lastName: "Kind",
+      userType: "kind",
+      roles: [],
+      permissions: [],
+      activeMembership: membershipRef,
+    })
+    await membershipRef.set({
+      type: "family",
+      status: "active",
+      members: [db.doc(`users/${NFC_USER_ID}`), kidRef],
+    })
+
+    try {
+      await page.addInitScript(() => {
+        const listeners: ((e: { physicalUid: string; url?: string }) => void)[] =
+          []
+        const w = window as unknown as Record<string, unknown>
+        w.__fakeNfcTap = (url: string) =>
+          listeners.forEach((cb) => cb({ physicalUid: "fake", url }))
+        w.bridge = {
+          mode: "kiosk",
+          features: ["nfc"],
+          bearer: async () => null,
+          // The real bridge wipes the Electron partition; counting the call
+          // (across the reload) is what this test needs.
+          resetSession: async () => {
+            const n = Number(sessionStorage.getItem("fakeBridgeResets") ?? 0)
+            sessionStorage.setItem("fakeBridgeResets", String(n + 1))
+          },
+          getUrl: async () => location.href,
+          onUrlChange: () => () => {},
+          onNfcTag: (cb: (e: { physicalUid: string; url?: string }) => void) => {
+            listeners.push(cb)
+            return () => {
+              const i = listeners.indexOf(cb)
+              if (i >= 0) listeners.splice(i, 1)
+            }
+          },
+        }
+      })
+
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByText("nfc@test.com")).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(page.getByRole("button", { name: "Fami Kind" })).toBeVisible()
+
+      // B taps without A having started anything — nothing to preserve, so
+      // no dialog, but the page must be wiped and reloaded.
+      await page.evaluate(
+        (url) =>
+          (window as unknown as { __fakeNfcTap: (u: string) => void })
+            .__fakeNfcTap(url),
+        `https://id.example.ch/?picc=${picc2}&cmac=${cmac2}`,
+      )
+
+      await expect(page.getByText("badge2@test.com")).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(page.getByText("nfc@test.com")).not.toBeVisible()
+      await expect(
+        page.getByRole("button", { name: "Fami Kind" }),
+      ).not.toBeVisible()
+      await expect(page.getByRole("alertdialog")).not.toBeVisible()
+      expect(
+        await page.evaluate(() => sessionStorage.getItem("fakeBridgeResets")),
+      ).toBe("1")
+    } finally {
+      await Promise.all([membershipRef.delete(), kidRef.delete()])
+    }
+  })
+
   test("kiosk mode — shows NFC hint inline in the account section", async ({ page }) => {
     await page.goto("/?kiosk")
 

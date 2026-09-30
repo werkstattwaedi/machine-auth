@@ -3,7 +3,11 @@
 
 /**
  * BridgeNfcRouter — kiosk tap routing + session protection:
- *   - pristine session: tap navigates straight to /checkin with the params
+ *   - pristine anonymous session: tap navigates straight to /checkin
+ *   - identified session with nothing to keep (wizard guard or a signed-in
+ *     principal outside the wizard): a registered badge wipes + reloads
+ *     without a dialog, never switches principal in place (#689)
+ *   - member area (/account/*): taps are ignored
  *   - preservable session (open checkout / dirty form): tap probes the tag
  *     (no SDM counter consumed) and opens the right dialog instead of
  *     navigating — switch/discard for a registered badge, the purchase
@@ -25,8 +29,10 @@ import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 import type { NfcTagEvent } from "@modules/lib/use-bridge"
 
 const mockNavigate = vi.fn()
+const mockLocation = { pathname: "/checkin" }
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockNavigate,
+  useLocation: () => mockLocation,
 }))
 
 const mockToastError = vi.fn()
@@ -55,8 +61,13 @@ vi.mock("@modules/lib/use-bridge", () => ({
   resolveBridgeBearer: vi.fn().mockResolvedValue("kiosk-bearer"),
 }))
 
+// The live Auth principal, read at tap time; anonymous/absent by default.
+const mockAuth: { currentUser: { isAnonymous: boolean } | null } = {
+  currentUser: null,
+}
 vi.mock("@modules/lib/firebase-context", () => ({
   useFunctions: () => ({}),
+  useFirebaseAuth: () => mockAuth,
 }))
 
 // probeTag callable — registered by default; individual tests flip it.
@@ -123,6 +134,8 @@ afterEach(() => {
   mockProbeTag.mockReset()
   quoteEffectVouchers.length = 0
   tagCallback = null
+  mockAuth.currentUser = null
+  mockLocation.pathname = "/checkin"
 })
 
 const TAG_URL = "https://id.example.ch/?picc=PICC1&cmac=CMAC1"
@@ -143,6 +156,105 @@ describe("BridgeNfcRouter", () => {
       replace: true,
     })
     expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("navigates in place over a pristine anonymous Auth session", () => {
+    mockAuth.currentUser = { isAnonymous: true }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(mockNavigate).toHaveBeenCalledOnce()
+    expect(mockProbeTag).not.toHaveBeenCalled()
+  })
+
+  // Issue #689: an idle identified screen was switched in place, leaving the
+  // wizard's listeners bound to the previous member.
+  it("identified session with nothing to keep: wipe + reload, no dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Max Muster",
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("signed-in principal outside the wizard: wipe + reload, no dialog", async () => {
+    // No wizard mounted (e.g. /login) — the guard reports pristine.
+    mockLocation.pathname = "/login"
+    mockAuth.currentUser = { isAnonymous: false }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("unregistered badge over an identified session with nothing to keep: purchase offer", async () => {
+    mockSessionState.mockReturnValue({ ...PRISTINE, identified: true })
+    mockProbeTag.mockResolvedValue({
+      data: { tokenId: "t9", registered: false, badgeVoucher: "v1" },
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(await screen.findByTestId("badge-purchase-stub")).toBeTruthy()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // probeTag answers registered:false without a voucher for a badge that
+  // can't be sold (e.g. deactivated) — nothing to offer, and the principal
+  // must still not switch in place.
+  it("unregistered badge without a voucher over an identified session: wipe + reload", async () => {
+    mockSessionState.mockReturnValue({ ...PRISTINE, identified: true })
+    mockProbeTag.mockResolvedValue({
+      data: { tokenId: "t9", registered: false },
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(screen.queryByTestId("badge-purchase-stub")).toBeNull()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // The router can't tell the holder's own badge from another one before
+  // the (counter-consuming) verify, so a member re-tapping their own badge
+  // gets the same clean reload — harmless, the reload re-identifies them.
+  it("member re-tapping their own badge with nothing started: reload, no dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Max Muster",
+    })
+    mockProbeTag.mockResolvedValue({
+      data: { tokenId: "own-badge", registered: true },
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() => expect(mockResetSession).toHaveBeenCalledOnce())
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("ignores taps in the member area", async () => {
+    mockLocation.pathname = "/account/profile"
+    mockAuth.currentUser = { isAnonymous: false }
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    tap() // not even an unreadable-tag toast
+    await act(async () => {})
+    expect(mockProbeTag).not.toHaveBeenCalled()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockToastError).not.toHaveBeenCalled()
+    expect(screen.queryByTestId("badge-purchase-stub")).toBeNull()
   })
 
   it("asks for confirmation instead of navigating when a session is active", async () => {

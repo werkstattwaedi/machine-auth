@@ -27,6 +27,11 @@ function shouldFail(path: string): boolean {
   return true
 }
 
+// Error callback of the most recent live collection listener per path, so a
+// test can kill an already-open listener (the SDK's terminal error after a
+// successful first snapshot).
+const liveErrorCallbacks = new Map<string, (err: Error) => void>()
+
 // Every collection/query listener opened through the mocked onSnapshot, so
 // tests can assert how many subscriptions a hook fans out to.
 const openedQueries: { path: string; constraints: unknown[] }[] = []
@@ -99,6 +104,7 @@ vi.mock("firebase/firestore", async () => {
         }
         const constraints = (refOrQuery as { constraints?: unknown[] }).constraints ?? []
         openedQueries.push({ path, constraints })
+        if (onError) liveErrorCallbacks.set(path, onError)
         return fakeDb.onSnapshotCollection(
           fakeDb.collection(path),
           constraints as Parameters<FakeFirestore["onSnapshotCollection"]>[1],
@@ -154,6 +160,7 @@ describe("useCollection", () => {
   beforeEach(() => {
     fakeDb = new FakeFirestore()
     errorPaths.clear()
+    subscribeCounts.clear()
     sessionStorage.clear()
     mockHttpsCallable.mockClear()
     mockLogClientErrorCallable.mockClear()
@@ -223,6 +230,127 @@ describe("useCollection", () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.data).toHaveLength(1)
     expect(result.current.data[0]).toMatchObject({ name: "Max" })
+  })
+
+  // Issue #689: the kiosk's `where userId == A` listeners kept A's rows after
+  // an in-place switch to B because only the collection path keyed the
+  // subscription.
+  it("re-subscribes when a constraint value changes", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max", role: "admin" })
+    fakeDb.setDoc(fakeDb.doc("users", "u2"), { name: "Anna", role: "member" })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ role }: { role: string }) =>
+        useCollection(colRef("users"), where("role", "==", role)),
+      { wrapper: createWrapper(), initialProps: { role: "admin" } },
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.data.map((d) => d.id)).toEqual(["u1"])
+
+    rerender({ role: "member" })
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["u2"]),
+    )
+    expect(subscribeCounts.get("users")).toBe(2)
+  })
+
+  it("keys a document-ref filter value by its path", async () => {
+    fakeDb.setDoc(fakeDb.doc("checkouts", "c1"), {
+      userId: fakeDb.doc("users", "a"),
+    })
+    fakeDb.setDoc(fakeDb.doc("checkouts", "c2"), {
+      userId: fakeDb.doc("users", "b"),
+    })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ user }: { user: string }) =>
+        useCollection(
+          colRef("checkouts"),
+          where("userId", "==", docRef("users", user)),
+        ),
+      { wrapper: createWrapper(), initialProps: { user: "a" } },
+    )
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["c1"]),
+    )
+
+    rerender({ user: "b" })
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["c2"]),
+    )
+  })
+
+  it("drops the previous rows when the new subscription is denied", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max", role: "admin" })
+
+    const { where } = await import("firebase/firestore")
+    const { result, rerender } = renderHook(
+      ({ role }: { role: string }) =>
+        useCollection(colRef("users"), where("role", "==", role)),
+      { wrapper: createWrapper(), initialProps: { role: "admin" } },
+    )
+    await waitFor(() => expect(result.current.data).toHaveLength(1))
+
+    errorPaths.set(
+      "users",
+      Object.assign(new Error("denied"), { code: "permission-denied" }),
+    )
+    rerender({ role: "member" })
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.data).toEqual([])
+    expect(result.current.loading).toBe(false)
+  })
+
+  // A transient denial of the SAME query mid-visit must not read as "the
+  // open checkout is gone": the wizard would bounce to /checkin and the tap
+  // guard would stop protecting the visit.
+  it("keeps the last rows when a live listener dies without a key change", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max" })
+    const { result } = renderHook(() => useCollection(colRef("users")), {
+      wrapper: createWrapper(),
+    })
+    await waitFor(() => expect(result.current.data).toHaveLength(1))
+
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    act(() => {
+      liveErrorCallbacks.get("users")!(
+        Object.assign(new Error("denied"), { code: "permission-denied" }),
+      )
+    })
+    consoleSpy.mockRestore()
+
+    expect(result.current.error).not.toBeNull()
+    expect(result.current.loading).toBe(false)
+    expect(result.current.data).toHaveLength(1)
+  })
+
+  // Issue #689: the previous query's rows must not be readable on ANY
+  // render after the key changed — not even the one before the effect runs.
+  it("never exposes the previous key's rows after a key change", async () => {
+    fakeDb.setDoc(fakeDb.doc("users", "u1"), { name: "Max", role: "admin" })
+    fakeDb.setDoc(fakeDb.doc("users", "u2"), { name: "Anna", role: "member" })
+
+    const { where } = await import("firebase/firestore")
+    const renders: { role: string; ids: string[] }[] = []
+    const { result, rerender } = renderHook(
+      ({ role }: { role: string }) => {
+        const r = useCollection(colRef("users"), where("role", "==", role))
+        renders.push({ role, ids: r.data.map((d) => d.id) })
+        return r
+      },
+      { wrapper: createWrapper(), initialProps: { role: "admin" } },
+    )
+    await waitFor(() => expect(result.current.data).toHaveLength(1))
+
+    rerender({ role: "member" })
+    await waitFor(() =>
+      expect(result.current.data.map((d) => d.id)).toEqual(["u2"]),
+    )
+    const afterSwitch = renders.filter((r) => r.role === "member")
+    expect(afterSwitch.length).toBeGreaterThan(0)
+    for (const r of afterSwitch) expect(r.ids).not.toContain("u1")
   })
 
   // Regression for issue #387: when a caller swaps a `null` ref for a real
@@ -687,6 +815,40 @@ describe("listener retry", () => {
     expect(result.current.error).not.toBeNull()
     await tick(60_000)
     expect(subscribeCounts.get("users/owner")).toBe(1)
+  })
+
+  // The #654 retry budget is per key: a key change (e.g. a principal switch)
+  // gets a fresh budget even after the previous key exhausted its own.
+  it("useCollection restarts the retry budget on a key change", async () => {
+    const { where } = await import("firebase/firestore")
+    fakeDb.setDoc(fakeDb.doc("bills", "b1"), { owner: "b" })
+    errorPaths.set("bills", denied())
+
+    const { result, rerender } = renderHook(
+      ({ owner }: { owner: string }) =>
+        useCollection(colRef("bills"), where("owner", "==", owner), {
+          retry: { attempts: 1, delayMs: 500 },
+        }),
+      { wrapper: createWrapper(), initialProps: { owner: "a" } },
+    )
+
+    // Key "a": first listen + one retry, both denied → terminal.
+    await tick(LISTENER_DELAY)
+    await retryAfter(500)
+    expect(subscribeCounts.get("bills")).toBe(2)
+    expect(result.current.error).not.toBeNull()
+
+    // Key "b": denied once more, then admitted — only possible with a
+    // fresh budget.
+    errorBudget.set("bills", 1)
+    rerender({ owner: "b" })
+    expect(result.current.error).toBeNull()
+    await tick(LISTENER_DELAY)
+    expect(result.current.loading).toBe(true)
+    await retryAfter(500)
+    expect(subscribeCounts.get("bills")).toBe(4)
+    expect(result.current.error).toBeNull()
+    expect(result.current.data.map((d) => d.id)).toEqual(["b1"])
   })
 
   it("useCollection accepts a trailing retry option and recovers", async () => {

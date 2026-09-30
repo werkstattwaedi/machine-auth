@@ -6,7 +6,8 @@
  * `useCollection` accept typed `DocumentReference<T>` / `CollectionReference<T>`
  * / `Query<T>` from `firestore-helpers.ts` — never raw string paths.
  *
- * Refs are matched by their `path` (string-stable); pass `null` to unsubscribe.
+ * Refs are matched by their `path` (string-stable), queries additionally by
+ * their constraints; pass `null` to unsubscribe.
  *
  * `useDocumentsByIds` loads an explicit id list (e.g. a price list's items)
  * in chunks of 30, the operand cap of a `documentId() in [...]` query.
@@ -167,6 +168,43 @@ function pathOf(refOrQuery: unknown): string {
 }
 
 /**
+ * Deterministic key for a list of query constraints, so a listener follows
+ * a changed filter value (e.g. `where("userId", "==", ref)` once the kiosk
+ * principal switches). The SDK exposes no public serialisation of a
+ * constraint (`queryEqual` needs a built Query, which the unit-test fakes
+ * don't provide), so this walks the constraint objects: SDK refs and
+ * timestamps serialise through their own `toJSON`, refs without one (test
+ * fakes) collapse to their path, the Firestore instance is skipped. A
+ * value the walk can't tell apart only costs a missed re-subscription —
+ * never a loop, since equal inputs give equal keys. Exported for tests.
+ */
+export function constraintsKey(constraints: readonly QueryConstraint[]): string {
+  if (constraints.length === 0) return ""
+  const seen = new WeakSet<object>()
+  try {
+    return JSON.stringify(constraints, (key, value: unknown) => {
+      if (key === "firestore" || key === "_firestore") return undefined
+      if (typeof value !== "object" || value === null) return value
+      const v = value as { type?: unknown; path?: unknown }
+      if (v.type === "document" && typeof v.path === "string") {
+        return `ref:${v.path}`
+      }
+      if (seen.has(value)) return "[cycle]"
+      seen.add(value)
+      return value
+    })
+  } catch (err) {
+    // Unserialisable value (e.g. a BigInt): fall back to path-only keying.
+    // eslint-disable-next-line no-console
+    console.warn("[firestore] constraintsKey failed; keying on path only", err)
+    return ""
+  }
+}
+
+// Shared empty result, so a cleared or superseded list keeps one identity.
+const EMPTY_ROWS: never[] = []
+
+/**
  * Subscribe to a collection or query. Pass `null` to skip the subscription
  * (e.g. when waiting for an id to become available). When extra constraints
  * are provided, the ref is wrapped in `query(ref, ...constraints)` for you.
@@ -186,36 +224,43 @@ export function useCollection<T = DocumentData>(
   const [data, setData] = useState<(T & { id: string })[]>([])
   const [loading, setLoading] = useState(!!refOrQuery)
   const [error, setError] = useState<Error | null>(null)
-  // Retries made for the current path, and a nonce whose bump re-runs the
-  // subscription effect. The counter is per path so a swapped ref starts
+  // Retries made for the current key, and a nonce whose bump re-runs the
+  // subscription effect. The counter is per key so a swapped ref starts
   // its own budget.
   const retriesRef = useRef(0)
-  const retryPathRef = useRef("")
+  const retryKeyRef = useRef("")
   const [retryNonce, setRetryNonce] = useState(0)
-  // The path the currently-held `data`/`error` were last reported for.
-  // Distinct from the requested `path` below: when a caller swaps the ref
+  // The key the currently-held `data`/`error` were last reported for.
+  // Distinct from the requested `key` below: when a caller swaps the ref
   // (e.g. null → a real query once an id resolves) the requested path
   // changes immediately, but the re-subscription effect — and the
   // `setLoading(true)` inside it — only runs on the *next* tick. Reading
   // `loading` in that one-render window would otherwise see the stale
   // `false` from the previous subscription. See issue #387.
-  const [reportedPath, setReportedPath] = useState("")
+  const [reportedKey, setReportedKey] = useState("")
 
-  // Re-subscribe when the ref's path changes; constraints are assumed
-  // stable per call site (each component always passes the same set of
-  // where/orderBy clauses), so we don't include them in deps. This is the
-  // same convention the previous string-path hook used.
+  // Re-subscribe when the path OR a constraint value changes. Keying on the
+  // path alone kept a `where userId == A` listener alive after the kiosk
+  // switched principal to B in place: re-authed as B it was denied, and the
+  // held rows of A leaked into B's session (issue #689).
   const path = refOrQuery ? pathOf(refOrQuery) : ""
+  const key = refOrQuery ? `${path}\n${constraintsKey(constraints)}` : ""
 
   useEffect(() => {
-    if (retryPathRef.current !== path) {
-      retryPathRef.current = path
+    if (retryKeyRef.current !== key) {
+      retryKeyRef.current = key
       retriesRef.current = 0
+      // Rows of the previous query must not outlive it (a retry of the
+      // same key keeps them — it is still the same question). Without
+      // this, a new key whose first listen is denied would report the old
+      // key's rows as its own.
+      setData(EMPTY_ROWS)
+      setError(null)
     }
     if (!refOrQuery) {
-      setData([])
+      setData(EMPTY_ROWS)
       setLoading(false)
-      setReportedPath("")
+      setReportedKey("")
       return
     }
 
@@ -239,7 +284,7 @@ export function useCollection<T = DocumentData>(
           )
           setLoading(false)
           setError(null)
-          setReportedPath(path)
+          setReportedKey(key)
         },
         (err) => {
           reportQueryError(functions, path, err as FirestoreQueryError)
@@ -256,9 +301,13 @@ export function useCollection<T = DocumentData>(
             )
             return
           }
+          // Same key: keep the last rows. A transient denial mid-visit must
+          // not read as "the open checkout is gone" (which bounces the
+          // wizard and drops the tap guard); a changed key already cleared
+          // them above.
           setError(err)
           setLoading(false)
-          setReportedPath(path)
+          setReportedKey(key)
         },
       )
     }, LISTENER_DELAY_MS)
@@ -268,17 +317,21 @@ export function useCollection<T = DocumentData>(
       clearTimeout(retryTimer)
       unsub?.()
     }
-    // Re-subscribe only when path, db or functions change (or a retry is
-    // due). See comment above on constraints/options stability per call site.
+    // `key` covers the path and the constraint values, so `refOrQuery` and
+    // `constraints` are stable while it is; `retry` is fixed per call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, db, functions, retryNonce])
+  }, [key, db, functions, retryNonce])
 
-  // Report loading while the held snapshot belongs to a different path than
-  // the one currently requested (a re-subscription is pending). Closes the
-  // one-render window where a freshly-supplied ref reads as "loaded with
-  // empty data" before its effect runs. See issue #387.
-  const stale = path !== reportedPath
-  return { data, loading: loading || stale, error }
+  // While the held snapshot belongs to a different key than the one now
+  // requested (a re-subscription is pending), report loading (issue #387)
+  // and no rows: the previous query's rows must not be readable even for
+  // the one render before the effect clears them (issue #689).
+  const stale = key !== reportedKey
+  return {
+    data: stale ? (EMPTY_ROWS as (T & { id: string })[]) : data,
+    loading: loading || stale,
+    error: stale ? null : error,
+  }
 }
 
 /**
