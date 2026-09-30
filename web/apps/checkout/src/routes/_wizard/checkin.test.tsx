@@ -16,8 +16,12 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
 import type { CheckoutPerson } from "@/components/checkout/use-checkout-state"
+
+const mockNavigate = vi.fn()
+// The wizard layout's search params; `next` is the cold-scan target (#664).
+let mockSearch: { next?: string } = {}
 
 // ── Capture the route component (mirrors visit.test.tsx) ─────────────────
 let CapturedComponent: (() => React.JSX.Element) | null = null
@@ -26,9 +30,8 @@ vi.mock("@tanstack/react-router", () => ({
     CapturedComponent = opts.component
     return opts
   },
-  useNavigate: () => vi.fn(),
-  // No rescan hint in these scenarios.
-  useSearch: () => ({}),
+  useNavigate: () => mockNavigate,
+  useSearch: () => mockSearch,
 }))
 
 // The confirmation dialog pulls in nothing we exercise here; stub it out so
@@ -69,14 +72,16 @@ const anonPerson: CheckoutPerson = {
 interface CtxOverrides {
   isAnonymous: boolean
   kiosk: boolean
+  openCheckout?: { id: string } | null
 }
 
-function buildCtx({ isAnonymous, kiosk }: CtxOverrides) {
+function buildCtx({ isAnonymous, kiosk, openCheckout = null }: CtxOverrides) {
   return {
     persons: [anonPerson],
     personsDispatch: vi.fn(),
     isAnonymous,
     kiosk,
+    openCheckout,
     isAccountLoggedIn: false,
     identifiedUserDoc: null,
     isMember: false,
@@ -88,9 +93,11 @@ function buildCtx({ isAnonymous, kiosk }: CtxOverrides) {
 }
 
 function renderCheckin(overrides: CtxOverrides) {
-  mockUseWizardContext.mockReturnValue(buildCtx(overrides))
+  const ctx = buildCtx(overrides)
+  mockUseWizardContext.mockReturnValue(ctx)
   const Comp = CapturedComponent!
-  return render(<Comp />)
+  render(<Comp />)
+  return ctx
 }
 
 // createFileRoute runs at module-eval time and captures CheckinRoute.
@@ -101,6 +108,8 @@ beforeAll(async () => {
 afterEach(() => {
   cleanup()
   mockUseWizardContext.mockReset()
+  mockNavigate.mockReset()
+  mockSearch = {}
 })
 
 describe("CheckinRoute — kiosk 'Besuch starten' gating (issue #467)", () => {
@@ -125,5 +134,126 @@ describe("CheckinRoute — kiosk 'Besuch starten' gating (issue #467)", () => {
     renderCheckin({ isAnonymous: true, kiosk: false })
     expect(screen.queryByRole("button", { name: /Besuch starten/ })).toBeNull()
     expect(screen.getByRole("button", { name: /^Weiter$/ })).toBeTruthy()
+  })
+})
+
+const TARGET_LABEL = "Besuch starten und Material hinzufügen"
+const BANNER = /danach geht es direkt weiter zum gescannten Material/
+
+describe("CheckinRoute — cold QR scan target in `next` (issue #664)", () => {
+  it("names the target on the primary button and resumes it after check-in", async () => {
+    mockSearch = { next: "/visit/add/list/abc" }
+    const ctx = renderCheckin({ isAnonymous: true, kiosk: false })
+
+    expect(screen.getByText(BANNER)).toBeTruthy()
+    // One primary action — the generic "Weiter" is replaced, not joined.
+    expect(screen.queryByRole("button", { name: /^Weiter$/ })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: TARGET_LABEL }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledOnce())
+    // The checkout exists before the picker opens.
+    expect(ctx.persistPersons).toHaveBeenCalledOnce()
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/visit/add/list/$listId",
+      params: { listId: "abc" },
+      search: {},
+      replace: false,
+    })
+  })
+
+  it.each([
+    [
+      "/visit/add/item/3210",
+      { to: "/visit/add/item/$code", params: { code: "3210" } },
+    ],
+    [
+      "/visit/add/item/3210/a3",
+      {
+        to: "/visit/add/item/$code/$variantId",
+        params: { code: "3210", variantId: "a3" },
+      },
+    ],
+    [
+      "/visit/add/workshop/holz",
+      {
+        to: "/visit/add/workshop/$workshopId",
+        params: { workshopId: "holz" },
+      },
+    ],
+  ])("resumes %s", async (next, target) => {
+    mockSearch = { next }
+    renderCheckin({ isAnonymous: true, kiosk: false })
+    fireEvent.click(screen.getByRole("button", { name: TARGET_LABEL }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledOnce())
+    expect(mockNavigate).toHaveBeenCalledWith({
+      ...target,
+      search: {},
+      replace: false,
+    })
+  })
+
+  it.each([
+    ["a path outside the add routes", "/account/profile"],
+    ["a protocol-relative URL", "//evil.example/visit/add/list/x"],
+    ["the target-less add index", "/visit/add"],
+  ])("ignores %s: no banner, plain 'Weiter' to /visit", async (_label, next) => {
+    mockSearch = { next }
+    renderCheckin({ isAnonymous: true, kiosk: false })
+
+    expect(screen.queryByText(BANNER)).toBeNull()
+    expect(screen.queryByRole("button", { name: TARGET_LABEL })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: /^Weiter$/ }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledOnce())
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/visit", search: {} })
+  })
+
+  it("stays on /checkin when creating the checkout fails", async () => {
+    mockSearch = { next: "/visit/add/list/abc" }
+    const ctx = buildCtx({ isAnonymous: true, kiosk: false })
+    ctx.persistPersons = vi.fn().mockRejectedValue(new Error("offline"))
+    mockUseWizardContext.mockReturnValue(ctx)
+    const Comp = CapturedComponent!
+    render(<Comp />)
+
+    const button = screen.getByRole("button", { name: TARGET_LABEL })
+    fireEvent.click(button)
+    await waitFor(() => expect(ctx.persistPersons).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect((button as HTMLButtonElement).disabled).toBe(false),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("kiosk: the target action is the primary, keeps the kiosk flag; 'Besuch starten' stays available", async () => {
+    mockSearch = { next: "/visit/add/list/abc" }
+    renderCheckin({ isAnonymous: false, kiosk: true })
+
+    // The plain check-in is still offered, but the scanned target replaces
+    // the generic "Material erfassen".
+    expect(screen.getByRole("button", { name: /^Besuch starten$/ })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Material erfassen/ })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: TARGET_LABEL }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledOnce())
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/visit/add/list/$listId",
+      params: { listId: "abc" },
+      search: { kiosk: "" },
+      replace: false,
+    })
+  })
+
+  it("with a visit already running the label drops 'Besuch starten'", () => {
+    mockSearch = { next: "/visit/add/list/abc" }
+    renderCheckin({
+      isAnonymous: true,
+      kiosk: false,
+      openCheckout: { id: "co1" },
+    })
+    expect(
+      screen.getByRole("button", { name: /^Material hinzufügen$/ }),
+    ).toBeTruthy()
+    expect(screen.queryByRole("button", { name: TARGET_LABEL })).toBeNull()
   })
 })

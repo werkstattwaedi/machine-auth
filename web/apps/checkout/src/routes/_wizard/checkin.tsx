@@ -8,6 +8,8 @@ import { StepCheckin } from "@/components/checkout/step-checkin"
 import { KioskAccountActions } from "@/components/checkout/kiosk-account-actions"
 import { VisitStartedDialog } from "@/components/checkout/visit-started-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { useScanNavigation } from "@/components/qr-scanner/use-scan-navigation"
+import { parseCheckoutQr } from "@/lib/parse-checkout-qr"
 
 export const Route = createFileRoute("/_wizard/checkin")({
   component: CheckinRoute,
@@ -17,19 +19,24 @@ function CheckinRoute() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
   const search = useSearch({ from: "/_wizard" })
-  const rescan = search.rescan === "1"
+  // Issue #664: a QR scanned without an open visit lands here with its
+  // `/visit/add/...` path in `next`. The param is untrusted — only the
+  // shapes the QR allow-list parser accepts count, anything else is ignored
+  // and the check-in behaves as if it were absent.
+  const nextIntent = search.next ? parseCheckoutQr(search.next) : null
+  const navigateToIntent = useScanNavigation()
   // Kiosk "Besuch starten": the checkout doc is written, the confirmation
   // dialog shows and then resets the terminal for the next person.
   const [visitStarted, setVisitStarted] = useState(false)
 
   return (
     <>
-      {rescan && (
+      {nextIntent && (
         <div className="mb-6 flex items-start gap-3 rounded-md border border-cog-teal/40 bg-cog-teal/5 px-4 py-3">
           <QrCode className="h-5 w-5 mt-0.5 shrink-0 text-cog-teal-dark" aria-hidden />
           <p className="text-sm text-foreground">
-            Bitte zuerst einchecken — danach den QR-Code nochmals scannen,
-            um das Material hinzuzufügen.
+            Bitte zuerst einchecken — danach geht es direkt weiter zum
+            gescannten Material.
           </p>
         </div>
       )}
@@ -48,6 +55,15 @@ function CheckinRoute() {
       // Issue #465: a checkout already running flips the kiosk footer primary
       // from "Besuch starten" to "Material erfassen".
       hasOpenCheckout={!!ctx.openCheckout}
+      // Issue #664: with a scanned target waiting, the footer action says
+      // where it leads instead of the generic "Weiter" / "Material erfassen".
+      advanceLabel={
+        nextIntent
+          ? ctx.openCheckout
+            ? "Material hinzufügen"
+            : "Besuch starten und Material hinzufügen"
+          : undefined
+      }
       familyCandidates={ctx.familyCandidates}
       // Kiosk: badge-tap progress/errors render inside the NFC affordance
       // box on this page (TagAuthOverlay stays home for browser tag taps).
@@ -71,10 +87,17 @@ function CheckinRoute() {
           // no-checkout gate on /visit.
           return
         }
-        navigate({
-          to: "/visit",
-          search: ctx.kiosk ? { kiosk: "" } : {},
-        })
+        const wizardSearch = ctx.kiosk ? { kiosk: "" } : {}
+        if (nextIntent) {
+          // Same hand-off as "Weiter" → /visit: the checkout create has
+          // resolved, so the wizard's items listener may open on the picker.
+          navigateToIntent(nextIntent, {
+            search: wizardSearch,
+            replace: false,
+          })
+          return
+        }
+        navigate({ to: "/visit", search: wizardSearch })
       }}
       // Kiosk primary action: check in (create the checkout) WITHOUT
       // navigating to /visit — the visitor is done at the terminal. The
