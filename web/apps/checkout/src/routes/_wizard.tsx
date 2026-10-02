@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
@@ -17,6 +17,8 @@ import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner
 import { StartOverButton } from "@/components/checkout/start-over-button"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
+import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
+import { parseCheckoutQr } from "@/lib/parse-checkout-qr"
 import {
   getKioskTokenUser,
   subscribeKioskSession,
@@ -32,9 +34,11 @@ const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
-  /** Set by `/visit/add/*` redirects when a QR is scanned cold (no
-   * open checkout). /checkin shows a "re-scan after check-in" banner. */
-  rescan: z.optional(z.string()),
+  /** The `/visit/add/...` path of a QR scanned cold (no open checkout),
+   * set by the layout's redirect to /checkin (issue #664). /checkin
+   * returns there once the visit exists. Untrusted: consumers re-validate
+   * it with `parseCheckoutQr` and navigate by typed params only. */
+  next: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_wizard")({
@@ -181,6 +185,11 @@ function WizardLayout() {
  * checkout — strips the chrome and shows the NoCheckoutGate dialog
  * against a blank page. The progress indicator is intentionally hidden
  * for that case: there's no step to be "on" yet.
+ *
+ * A cold QR deep link (`/visit/add/<list|item|workshop>/…`) is the
+ * exception to the dialog: its target is worth keeping, so the visitor is
+ * sent straight to /checkin with it (issue #664) and sees a spinner, not
+ * the dialog, until the redirect lands.
  */
 function WizardChrome({
   headerName,
@@ -216,6 +225,12 @@ function WizardChrome({
   const showGate =
     gateableRoute && !openCheckout && !pendingCheckout && !justSubmittedPayment
 
+  // The QR allow-list parser doubles as the classifier: only the four
+  // target-carrying add routes yield an intent. /visit, /checkout, /payment
+  // and the target-less /visit/add index keep the dialog.
+  const addIntent = useMemo(() => parseCheckoutQr(pathname), [pathname])
+  const coldDeepLink = useBounceIfNoCheckout(addIntent)
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">
       <header className="w-full bg-background border-b border-border">
@@ -239,7 +254,9 @@ function WizardChrome({
           <StartOverButton />
         </div>
       </header>
-      {showGate ? (
+      {coldDeepLink ? (
+        <PageLoading />
+      ) : showGate ? (
         // Intentionally blank below the header — only the modal dialog
         // is meaningful when there's no checkout to act on.
         <NoCheckoutGate />
