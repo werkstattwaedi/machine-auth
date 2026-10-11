@@ -12,6 +12,7 @@
 import { expect } from "chai";
 import { Timestamp } from "firebase-admin/firestore";
 import { buildPaymentData } from "./get_payment_qr_data";
+import { paymentMethodConfig } from "../payments/config";
 import type { BillEntity } from "./types";
 
 // defineString params resolve from process.env at .value() time.
@@ -87,6 +88,19 @@ describe("buildPaymentData PayLink URL", () => {
     expect(url.searchParams.get("reference.creditor")).to.equal(data.reference);
     expect(url.searchParams.get("supporter.first_name.value")).to.equal("Mike");
     expect(url.searchParams.get("supporter.last_name.value")).to.equal("Schneider");
+  });
+
+  it("degrades a misconfigured method list to the QR bill instead of throwing", () => {
+    const prev = process.env.PAYMENT_METHODS_KIOSK;
+    process.env.PAYMENT_METHODS_KIOSK = "rechnung,bitcoin";
+    try {
+      expect(paymentMethodConfig().kiosk).to.deep.equal(["rechnung"]);
+      // buildPaymentData still works (web list is the default → raisenow on).
+      expect(buildPaymentData(testBill(), null, "b1", null).qrBillPayload).to.be.a("string");
+    } finally {
+      if (prev === undefined) delete process.env.PAYMENT_METHODS_KIOSK;
+      else process.env.PAYMENT_METHODS_KIOSK = prev;
+    }
   });
 
   it("omits the PayLink when raisenow is disabled for every client type", () => {

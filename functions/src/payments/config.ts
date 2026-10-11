@@ -1,6 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import * as logger from "firebase-functions/logger";
 import { defineString } from "firebase-functions/params";
 import {
   parsePaymentMethodList,
@@ -20,10 +21,25 @@ import {
 const paymentMethodsKiosk = defineString("PAYMENT_METHODS_KIOSK", { default: "" });
 const paymentMethodsWeb = defineString("PAYMENT_METHODS_WEB", { default: "" });
 
+/**
+ * `generate-env` rejects unknown ids, so this only guards a hand-edited env
+ * file. Degrade like the web app does (payment-config.ts): the QR bill needs
+ * nothing beyond the bill, whereas throwing would fail
+ * closeCheckoutAndGetPayment for every method.
+ */
+function parseOrQrBillOnly(name: string, csv: string): PaymentMethod[] {
+  try {
+    return parsePaymentMethodList(csv);
+  } catch (err) {
+    logger.error(`${name}: ${String(err)} — offering only the QR bill`);
+    return ["rechnung"];
+  }
+}
+
 export function paymentMethodConfig(): PaymentMethodConfig {
   return {
-    kiosk: parsePaymentMethodList(paymentMethodsKiosk.value()),
-    web: parsePaymentMethodList(paymentMethodsWeb.value()),
+    kiosk: parseOrQrBillOnly("PAYMENT_METHODS_KIOSK", paymentMethodsKiosk.value()),
+    web: parseOrQrBillOnly("PAYMENT_METHODS_WEB", paymentMethodsWeb.value()),
   };
 }
 

@@ -234,7 +234,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_PAYMENT_METHODS_KIOSK` / `VITE_PAYMENT_METHODS_WEB` | Payment methods offered per client type, comma-separated ids in tab order (`web.paymentMethodsKiosk` / `web.paymentMethodsWeb`, ADR-0044). The functions get the same keys as `PAYMENT_METHODS_*`. Empty = `rechnung,monthly,raisenow`; unknown ids fail `generate-env` | `rechnung,monthly` |
 
 
-Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`.
+Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`. The one exception is the per-client method list above, which both sides need: the web apps get it as `VITE_PAYMENT_METHODS_*`, the functions as `PAYMENT_METHODS_*`.
 
 **Important:** The production API key should be **restricted** in Google Cloud Console:
 - Application restrictions: HTTP referrers (set to your domain)
