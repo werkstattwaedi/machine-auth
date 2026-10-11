@@ -164,7 +164,7 @@ function BillDetailPage() {
           <Field label="Bezahlt">
             {bill.paidAt
               ? `${formatDateTime(bill.paidAt)}${
-                  bill.paidVia ? ` · ${PAID_VIA_LABELS[bill.paidVia]}` : ""
+                  bill.paidVia ? ` · ${PAID_VIA_LABELS[bill.paidVia] ?? bill.paidVia}` : ""
                 }`
               : "–"}
           </Field>

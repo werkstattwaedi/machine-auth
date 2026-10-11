@@ -316,9 +316,11 @@ confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run 
 
 Payment method ids now name the integration, not the brand (`shared/src/payment-methods.ts`):
 the RaiseNow TWINT paylink is `raisenow`, because the Wallee terminal will take TWINT too.
-Every reader normalizes the legacy `twint`, and the rules plus `acknowledgeBill` still accept it
-from tabs running an old bundle, so the order is not critical. Deploy functions, rules and
-hosting as usual, then rewrite the stored ids:
+Every reader normalizes the legacy `twint`, and the rules, `acknowledgeBill` and `adminMarkBillsPaid`
+still accept it from tabs running an old bundle. The reverse does not hold: a new bundle sends
+`raisenow`, which the *old* rules and callables reject — so deploy **functions + rules first,
+hosting last** (the kiosk loads the hosted checkout, so it follows hosting). Then rewrite the
+stored ids:
 
 ```bash
 # Dry-run first: prints counts only (also reports bills with the retired paidVia "cash").
