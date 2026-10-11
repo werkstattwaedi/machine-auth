@@ -36,7 +36,7 @@ interface SeedOpts {
   kind?: "invoice" | "beleg";
   aggregatedIntoBillRef?: DocumentReference | null;
   checkoutStatus?: "open" | "closed";
-  paymentMethod?: "rechnung" | "twint" | "monthly" | null;
+  paymentMethod?: "rechnung" | "raisenow" | "monthly" | null;
 }
 
 async function seed(opts: SeedOpts): Promise<void> {

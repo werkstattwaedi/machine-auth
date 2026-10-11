@@ -245,7 +245,7 @@ describe("Usage page", () => {
       storagePath: "invoices/bill1.pdf",
       created: new Date("2025-06-15"),
       paidAt: new Date("2025-06-20"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     })
 
     renderUsagePage()

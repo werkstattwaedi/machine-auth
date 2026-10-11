@@ -97,7 +97,7 @@ describe("privacy trim (integration)", function () {
       storagePath: "invoices/b-old.pdf",
       created: ts("2022-06-01T12:00:00Z"),
       paidAt: ts("2022-06-02T12:00:00Z"),
-      paidVia: "cash",
+      paidVia: "ebanking",
     });
     await getBucket().file("invoices/b-old.pdf").save(Buffer.from("%PDF-old"));
     await db.doc("bills/b-unpaid-old").set({
@@ -118,7 +118,7 @@ describe("privacy trim (integration)", function () {
       storagePath: null,
       created: ts("2022-04-01T12:00:00Z"),
       paidAt: ts("2022-04-02T12:00:00Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     });
     await db.doc("memberships/m-pending").set({
       type: "single",
@@ -138,7 +138,7 @@ describe("privacy trim (integration)", function () {
       storagePath: null,
       created: ts("2026-06-01T12:00:00Z"),
       paidAt: ts("2026-06-02T12:00:00Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     });
     // Usage, authentications, logs — one old, one new each.
     await db.doc("usage_machine/us-old").set({

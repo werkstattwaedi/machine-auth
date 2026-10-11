@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
-import { CheckoutPersonEntity, CheckoutItemEntity, PaymentMethod, UsageType } from "../types/firestore_entities";
+import { isPaidDuringCheckout } from "@oww/shared";
+import {
+  CheckoutPersonEntity,
+  CheckoutItemEntity,
+  PaymentMethod,
+  StoredPaidVia,
+  UsageType,
+} from "../types/firestore_entities";
 
 export type BillKind = "invoice" | "beleg";
 
@@ -21,7 +28,8 @@ export interface BillEntity {
   storagePath: string | null;
   created: Timestamp;
   paidAt: Timestamp | null;
-  paidVia: "twint" | "ebanking" | "cash" | "free" | null;
+  // May hold the legacy values "twint" / "cash" — read through normalizePaidVia.
+  paidVia: StoredPaidVia | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
   // Set once by trySendEmail when no recipient resolves (no account-holder
@@ -135,17 +143,18 @@ export interface InvoiceData {
   grandTotal: number;
   currency: string;
   paidAt?: Date | null;
-  paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
+  paidVia?: StoredPaidVia | null;
   /**
    * Customer's chosen payment method from Step 4 (Bezahlen). Null at
    * bill-create time (PDF generated before the user picks). Set after
    * `acknowledgeBill` lands and the PDF is regenerated. Gates the QR
-   * payment slip: only rendered for `rechnung` or null — TWINT /
-   * Sammelrechnung get a method-specific notice instead, so users
-   * don't think they need to pay via QR after already settling via
-   * TWINT or having it routed to their monthly bill.
+   * payment slip: only rendered for `rechnung` or null — methods paid
+   * during the checkout and the Sammelrechnung get a method-specific
+   * notice instead, so users don't think they need to pay via QR after
+   * already settling or having it routed to their monthly bill.
+   * Always the normalized id (never the legacy "twint").
    */
-  paymentMethod?: "rechnung" | "twint" | "monthly" | null;
+  paymentMethod?: PaymentMethod | null;
   /**
    * Discriminator for the rendered document. "invoice" → "Rechnung
    * RE-XXXXXX" with QR slip; "beleg" → "Beleg BL-XXXXXX" without QR
@@ -241,7 +250,8 @@ export function formatBillReference(
 /**
  * Human filename prefix for a bill PDF (download + email attachment).
  * Mirrors the PDF title logic in build_invoice_pdf: a Beleg is "Beleg",
- * a TWINT-settled invoice renders as a receipt ("Quittung" — issue #426),
+ * an invoice paid during the checkout renders as a receipt ("Quittung" —
+ * issue #426),
  * everything else — including the aggregated Sammelrechnung, whose
  * checkout still records paymentMethod "monthly" — is a payable
  * "Rechnung". Keeping the filename in sync with the title inside the PDF
@@ -249,10 +259,10 @@ export function formatBillReference(
  */
 export function billDocumentPrefix(
   kind: BillKind | undefined,
-  paymentMethod: PaymentMethod | null | undefined,
+  paymentMethod: string | null | undefined,
 ): "Beleg" | "Quittung" | "Rechnung" {
   if ((kind ?? "invoice") === "beleg") return "Beleg";
-  if (paymentMethod === "twint") return "Quittung";
+  if (isPaidDuringCheckout(paymentMethod)) return "Quittung";
   return "Rechnung";
 }
 

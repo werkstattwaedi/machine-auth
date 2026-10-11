@@ -162,7 +162,7 @@ test.describe("Rechnungen workspace", () => {
     expect(snap.data()?.paidAt?.toDate().toISOString()).toContain("2026-07-02")
   })
 
-  test("statement import books a RaiseNow TWINT export as twint", async ({
+  test("statement import books a RaiseNow TWINT export as raisenow", async ({
     page,
   }) => {
     await signInWithEmailCode(page, ADMIN_EMAIL)
@@ -191,7 +191,7 @@ test.describe("Rechnungen workspace", () => {
 
     const db = getAdminFirestore()
     const snap = await db.collection("bills").doc(BILL_OVERDUE_ID).get()
-    expect(snap.data()?.paidVia).toBe("twint")
+    expect(snap.data()?.paidVia).toBe("raisenow")
     expect(snap.data()?.paidAt?.toDate().toISOString()).toContain("2026-07-03")
   })
 })

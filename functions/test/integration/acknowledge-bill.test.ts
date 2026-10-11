@@ -30,7 +30,7 @@ import {
 import type { BillEntity } from "../../src/invoice/types";
 import type {
   CheckoutEntity,
-  PaymentMethod,
+  StoredPaymentMethod,
 } from "../../src/types/firestore_entities";
 
 interface SeedBillOpts {
@@ -39,7 +39,7 @@ interface SeedBillOpts {
   checkoutId: string;
   amount?: number;
   paidVia?: BillEntity["paidVia"];
-  paymentMethod?: PaymentMethod | null;
+  paymentMethod?: StoredPaymentMethod | null;
   createdMsAgo?: number;
 }
 
@@ -181,7 +181,7 @@ describe("acknowledgeBill callable (Integration)", () => {
     const firstAck = (await readBill("b1")).paymentMethodConfirmationTime;
     // Tiny delay so a second write would be observably newer.
     await new Promise((r) => setTimeout(r, 25));
-    await call("alice", { billId: "b1", paymentMethod: "twint" });
+    await call("alice", { billId: "b1", paymentMethod: "raisenow" });
 
     const bill = await readBill("b1");
     expect(bill.paymentMethodConfirmationTime?.toMillis()).to.equal(
@@ -233,6 +233,24 @@ describe("acknowledgeBill callable (Integration)", () => {
 
     const bill = await readBill("b1");
     expect(bill.paymentMethodConfirmationSource).to.equal("user");
+  });
+
+  // A kiosk/browser tab still running the pre-rename bundle sends "twint".
+  // It must keep working until the alias is removed, and must store the
+  // current id so the migration never has to revisit the doc.
+  it("accepts the legacy 'twint' id and stores it as 'raisenow'", async () => {
+    await seedBillAndCheckout({
+      billId: "b1",
+      ownerUid: "alice",
+      checkoutId: "co1",
+    });
+
+    await call("alice", { billId: "b1", paymentMethod: "twint" });
+
+    const bill = await readBill("b1");
+    expect(bill.paymentMethodConfirmationSource).to.equal("user");
+    const checkout = await readCheckout("co1");
+    expect(checkout.paymentMethod).to.equal("raisenow");
   });
 
   it("rejects an invalid paymentMethod", async () => {
@@ -404,17 +422,17 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
 
   it("does NOT overwrite an existing checkout.paymentMethod (user already picked)", async () => {
     await seedBillAndCheckout({
-      billId: "b-twint-pick",
+      billId: "b-raisenow-pick",
       ownerUid: "alice",
-      checkoutId: "co-twint-pick",
+      checkoutId: "co-raisenow-pick",
       createdMsAgo: 90 * 60 * 1000,
-      paymentMethod: "twint",
+      paymentMethod: "raisenow",
     });
 
     await runAutoAcknowledgeBills(new Date());
 
-    const checkout = await readCheckout("co-twint-pick");
-    expect(checkout.paymentMethod).to.equal("twint");
+    const checkout = await readCheckout("co-raisenow-pick");
+    expect(checkout.paymentMethod).to.equal("raisenow");
   });
 
   // Sammelrechnung path (issue #245): a member who picked the monthly

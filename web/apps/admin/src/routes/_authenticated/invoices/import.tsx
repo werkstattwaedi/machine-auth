@@ -119,8 +119,8 @@ function StatementImportPage() {
   const handleBook = async () => {
     if (!result || !parsed || result.matched.length === 0) return
     // The upload's channel decides the booked payment method: bank
-    // exports book as e-banking, RaiseNow exports as TWINT.
-    const paidVia = parsed.kind === "twint" ? "twint" : "ebanking"
+    // exports book as e-banking, RaiseNow (TWINT) exports as raisenow.
+    const paidVia = parsed.kind === "raisenow" ? "raisenow" : "ebanking"
     let res: MarkBillsPaidResult
     try {
       // bookBillsPaid chunks past the server's per-call cap — a statement
@@ -178,7 +178,7 @@ function StatementImportPage() {
           <span className="text-sm text-muted-foreground">
             {fileName ?? "Keine Datei gewählt"}
             {parsed &&
-              ` · ${parsed.kind === "twint" ? "TWINT" : "Bank (camt.053)"}` +
+              ` · ${parsed.kind === "raisenow" ? "RaiseNow TWINT" : "Bank (camt.053)"}` +
                 ` · ${parsed.entries.length} Zahlungen erkannt` +
                 (parsed.toDateMs
                   ? ` · bis ${formatDate(Timestamp.fromMillis(parsed.toDateMs))}`

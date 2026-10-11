@@ -32,8 +32,7 @@ export type { MarkBillsPaidResult }
 
 const PAID_VIA_LABELS: Record<AdminPaidVia, string> = {
   ebanking: "E-Banking / QR-Rechnung",
-  twint: "TWINT",
-  cash: "Bar",
+  raisenow: "TWINT (RaiseNow)",
 }
 
 export function MarkPaidDialog({

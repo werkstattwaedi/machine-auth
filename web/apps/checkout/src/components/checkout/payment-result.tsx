@@ -5,7 +5,7 @@
  * Step 4 (Bezahlen) — payment-method picker as a G4 vertical-tab layout.
  *
  * The user picks one of three methods (rechnung / monthly [members only] /
- * twint — UI labels are German). The click writes the
+ * raisenow, the TWINT paylink — UI labels are German). The click writes the
  * customer-stated acknowledgement to the checkout doc and unmounts.
  *
  * No back button — once the checkout is closed the user cannot rewind.
@@ -23,7 +23,7 @@ import { rpcCallable } from "@modules/lib/rpc"
 import { CheckCircle2, Download, FileText, Loader2 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { cn } from "@modules/lib/utils"
-import type { PaymentMethod } from "./use-checkout-state"
+import type { PaymentMethod } from "@oww/shared"
 
 export interface PaymentData {
   /** Doc id of the underlying bill — drives the PDF download action. */
@@ -88,7 +88,7 @@ interface PaymentResultProps {
 const COMMIT_LABELS: Record<PaymentMethod, string> = {
   rechnung: "Ich zahle die QR-Rechnung & Werkstatt verlassen",
   monthly: "Auf Sammelrechnung setzen & Werkstatt verlassen",
-  twint: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
+  raisenow: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
 }
 
 export function PaymentResult({
@@ -218,7 +218,7 @@ export function PaymentResult({
         .mutate(async () => {
           const res = await callable({
             billId: billIdForConfirm,
-            paymentMethod: "twint",
+            paymentMethod: "raisenow",
           })
           return res.data
         })
@@ -310,7 +310,7 @@ export function PaymentResult({
   }
 
   // Only the TWINT tab is gated — rechnung / monthly commit immediately.
-  const twintGated = tab === "twint" && !twintPayStarted
+  const twintGated = tab === "raisenow" && !twintPayStarted
 
   const handleCommit = async () => {
     // paymentData is non-null here (the !paymentData early return above
@@ -392,7 +392,7 @@ export function PaymentResult({
           />
         )}
         <MethodTab
-          id="twint"
+          id="raisenow"
           active={tab}
           onSelect={setTab}
           icon={
@@ -418,7 +418,7 @@ export function PaymentResult({
             <RechnungPanel paymentData={paymentData} totalPrice={totalPrice} />
           )}
           {tab === "monthly" && <MonthlyPanel totalPrice={totalPrice} />}
-          {tab === "twint" && (
+          {tab === "raisenow" && (
             <TwintPanel
               paymentData={paymentData}
               totalPrice={totalPrice}
@@ -486,7 +486,7 @@ function MethodTab({ id, active, onSelect, icon, label }: MethodTabProps) {
           // TWINT styleguide mandates its logo on a dark surface — keep it
           // as a brand chip. Our own methods (rechnung, monthly) sit on a
           // neutral gray so the row doesn't read as three ad slots.
-          id === "twint"
+          id === "raisenow"
             ? "bg-[#262626] text-white"
             : "bg-muted text-foreground/80",
           on && "ring-2 ring-cog-teal shadow-sm scale-110",

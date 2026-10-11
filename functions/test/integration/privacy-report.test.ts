@@ -125,7 +125,7 @@ describe("privacy report (integration)", function () {
       storagePath: "invoices/b1.pdf",
       created: ts("2026-07-01T12:01:00Z"),
       paidAt: ts("2026-07-01T13:00:00Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     });
     await db.doc("usage_machine/us1").set({
       userId: u1,

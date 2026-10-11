@@ -853,7 +853,7 @@ describe("cross-user: cancelled checkouts + bills (ADR-0042)", () => {
     await seedClosedCheckout("co1", "alice", cancelledExtra)
     await assertFails(
       updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "twint",
+        paymentMethod: "raisenow",
       }),
     )
   })
@@ -925,11 +925,22 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     )
   })
 
+  // Pre-rename bundles (an open kiosk tab) still write the old id until the
+  // alias is dropped after the prod migration.
+  it("still accepts the legacy paymentMethod 'twint' on a closed checkout", async () => {
+    await seedClosedCheckout("co1", "alice")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethod: "twint",
+      }),
+    )
+  })
+
   it("allows a second paymentMethod write (not write-once — user can switch tabs)", async () => {
     await seedClosedCheckout("co1", "alice", { paymentMethod: "rechnung" })
     await assertSucceeds(
       updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "twint",
+        paymentMethod: "raisenow",
       }),
     )
   })
@@ -980,7 +991,7 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
   it("denies an anonymous-auth session from writing paymentMethod=monthly on a null-userId checkout", async () => {
     await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
     // No user doc to consult for membership — the anon branch intentionally
-    // restricts the value list to ['rechnung', 'twint']. (firebaseUid
+    // restricts the value list to ['rechnung', 'raisenow']. (firebaseUid
     // matches the caller so this exercises the value restriction, not P0-2.)
     await assertFails(
       updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
@@ -1008,7 +1019,7 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
     await assertSucceeds(
       updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
-        paymentMethod: "twint",
+        paymentMethod: "raisenow",
       }),
     )
   })
@@ -1020,7 +1031,7 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
       "firestore.rules:checkouts.update (firebaseUid == request.auth.uid)",
       () =>
         updateDoc(doc(anonAuthDb("anon-other"), "checkouts", "co-anon"), {
-          paymentMethod: "twint",
+          paymentMethod: "raisenow",
         }),
     )
   })

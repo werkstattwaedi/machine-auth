@@ -35,7 +35,7 @@ async function seedBill(
     storagePath: null,
     created: Timestamp.now(),
     paidAt: opts.paidAt ?? null,
-    paidVia: opts.paidAt ? "twint" : null,
+    paidVia: opts.paidAt ? "raisenow" : null,
     ...(opts.kind ? { kind: opts.kind } : {}),
   };
   await db.collection("bills").doc(billId).set(bill);
@@ -63,7 +63,7 @@ describe("adminMarkBillsPaid (integration)", function () {
 
   it("requires the admin claim", async () => {
     const request = {
-      data: { bills: [{ billId: "b1", paidVia: "cash" }] },
+      data: { bills: [{ billId: "b1", paidVia: "ebanking" }] },
       auth: { uid: "user1", token: {} },
     } as unknown as CallableRequest<unknown>;
     try {
@@ -94,10 +94,10 @@ describe("adminMarkBillsPaid (integration)", function () {
     const result = await adminMarkBillsPaidHandler(
       adminRequest({
         bills: [
-          { billId: "paid1", paidVia: "cash" },
-          { billId: "beleg1", paidVia: "cash" },
-          { billId: "missing", paidVia: "cash" },
-          { billId: "open1", paidVia: "cash" },
+          { billId: "paid1", paidVia: "ebanking" },
+          { billId: "beleg1", paidVia: "ebanking" },
+          { billId: "missing", paidVia: "ebanking" },
+          { billId: "open1", paidVia: "ebanking" },
         ],
       }),
     );
@@ -107,6 +107,6 @@ describe("adminMarkBillsPaid (integration)", function () {
 
     // The already-paid bill keeps its original channel.
     const paidSnap = await getFirestore().doc("bills/paid1").get();
-    expect((paidSnap.data() as BillEntity).paidVia).to.equal("twint");
+    expect((paidSnap.data() as BillEntity).paidVia).to.equal("raisenow");
   });
 });

@@ -10,6 +10,7 @@ export * from "./printer"
 export * from "./kiosk-navigation"
 export * from "./catalog-import"
 export * from "./billing"
+export * from "./payment-methods"
 export * from "./checkout-summary"
 
 export * from "./rejection"

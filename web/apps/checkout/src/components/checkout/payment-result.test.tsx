@@ -327,7 +327,7 @@ describe("PaymentResult", () => {
       expect(handleReset).not.toHaveBeenCalled()
     })
 
-    it("enables the commit button after the pay-link is clicked, and then commits as twint", async () => {
+    it("enables the commit button after the pay-link is clicked, and then commits as raisenow", async () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
@@ -350,7 +350,7 @@ describe("PaymentResult", () => {
       expect(mockAcknowledgeBill).toHaveBeenCalledOnce()
       expect(mockAcknowledgeBill).toHaveBeenCalledWith({
         billId: "bill-1",
-        paymentMethod: "twint",
+        paymentMethod: "raisenow",
       })
       expect(handleReset).toHaveBeenCalledOnce()
     })

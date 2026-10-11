@@ -27,8 +27,6 @@ export interface CheckoutPerson {
   billingCity?: string
 }
 
-export type PaymentMethod = "rechnung" | "monthly" | "twint"
-
 export type PersonsAction =
   | { type: "ADD_PERSON" }
   | {

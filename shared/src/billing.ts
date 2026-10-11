@@ -10,7 +10,7 @@ import type { UsageType } from "./pricing"
  */
 
 /** Payment channels an admin may book manually. ("free" is server-only.) */
-export const ADMIN_PAID_VIA = ["twint", "ebanking", "cash"] as const
+export const ADMIN_PAID_VIA = ["raisenow", "ebanking"] as const
 export type AdminPaidVia = (typeof ADMIN_PAID_VIA)[number]
 
 /** Server-side cap per call; clients chunk larger batches. */

@@ -23,12 +23,17 @@ import type {
   DiscountLevel,
   ItemType,
   PricingModel,
+  StoredPaidVia,
+  StoredPaymentMethod,
 } from "@oww/shared"
 export type {
   CatalogVariant,
   DiscountLevel,
   ItemType,
+  PaymentMethod,
   PricingModel,
+  StoredPaidVia,
+  StoredPaymentMethod,
   VariantPrice,
 } from "@oww/shared"
 
@@ -277,15 +282,6 @@ export type CheckoutUsageType =
   | "hangenmoos"
   | "volunteering"
 
-/**
- * Customer's last-selected payment method on the Bezahlen step. Written
- * fire-and-forget on every tab click so the workshop has a record of what
- * the user intended even when they leave without committing. The commit-
- * time ack itself lives on the bill (paymentMethodConfirmationTime /
- * paymentMethodConfirmationSource).
- */
-export type PaymentMethod = "rechnung" | "monthly" | "twint"
-
 export interface CheckoutDoc extends AuditFields {
   userId: DocumentReference<UserDoc> | null
   // "cancelled" (ADR-0042): an admin voided this closed visit; the doc stays
@@ -316,7 +312,15 @@ export interface CheckoutDoc extends AuditFields {
   closedAt?: Timestamp
   notes?: string | null
   summary?: CheckoutSummaryDoc
-  paymentMethod?: PaymentMethod | null
+  /**
+   * Customer's last-selected payment method on the Bezahlen step. Written
+   * fire-and-forget on every tab click so the workshop has a record of what
+   * the user intended even when they leave without committing. The commit-
+   * time ack itself lives on the bill (paymentMethodConfirmationTime /
+   * paymentMethodConfirmationSource). May hold the pre-rename "twint" —
+   * read it through normalizePaymentMethod.
+   */
+  paymentMethod?: StoredPaymentMethod | null
   /**
    * Server-only: one Timestamp per stale-open-checkout reminder email sent
    * (#531). Written exclusively by the `staleCheckoutReminders` cron; client
@@ -365,7 +369,7 @@ export interface BillDoc extends AuditFields {
   storagePath: string | null
   created: Timestamp
   paidAt?: Timestamp | null
-  paidVia?: "twint" | "ebanking" | "cash" | "free" | null
+  paidVia?: StoredPaidVia | null
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null

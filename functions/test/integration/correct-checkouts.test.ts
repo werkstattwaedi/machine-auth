@@ -79,7 +79,7 @@ interface CheckoutSeed {
   billId: string;
   status?: "open" | "closed" | "cancelled";
   items?: Array<Partial<CheckoutItemEntity> & { totalPrice: number }>;
-  paymentMethod?: "rechnung" | "monthly" | "twint" | null;
+  paymentMethod?: "rechnung" | "monthly" | "raisenow" | null;
   created?: Timestamp;
   firebaseUid?: string | null;
 }

@@ -14,7 +14,7 @@ import {
   checkoutWithTipInvoice,
   longInvoice,
   paidInvoice,
-  twintMethodInvoice,
+  raisenowMethodInvoice,
   monthlyMethodInvoice,
   belegPerVisit,
   freeZeroAmountInvoice,
@@ -171,7 +171,7 @@ describe("buildInvoicePdf — visual regression", function () {
   // shows a "Zahlweise: TWINT" notice and omits the QR payment slip
   // so users don't think they need to pay again.
   it("TWINT-method invoice (no QR slip)", async () => {
-    await compareAllPages("twint-method", twintMethodInvoice());
+    await compareAllPages("twint-method", raisenowMethodInvoice());
   });
 
   // Issue #251: Sammelrechnung-method invoice. PDF shows a "Zahlweise:

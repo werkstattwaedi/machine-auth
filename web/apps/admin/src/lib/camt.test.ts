@@ -76,7 +76,7 @@ const RAISENOW_CSV = [
 describe("parseRaiseNowCsv", () => {
   it("extracts succeeded payments with reference, name and created date", () => {
     const { kind, entries, toDateMs } = parseRaiseNowCsv(RAISENOW_CSV)
-    expect(kind).toBe("twint")
+    expect(kind).toBe("raisenow")
     // The pending row is dropped; the reference-less one stays for
     // manual matching.
     expect(entries).toHaveLength(2)
@@ -116,7 +116,7 @@ describe("parseRaiseNowCsv", () => {
 describe("parseStatementFile", () => {
   it("dispatches XML to camt and CSV to the RaiseNow parser", () => {
     expect(parseStatementFile(CAMT).kind).toBe("camt")
-    expect(parseStatementFile(RAISENOW_CSV).kind).toBe("twint")
+    expect(parseStatementFile(RAISENOW_CSV).kind).toBe("raisenow")
   })
 })
 

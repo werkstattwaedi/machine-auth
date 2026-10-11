@@ -49,6 +49,7 @@ import type {
   CheckoutItemEntity,
   PaymentMethod,
 } from "../types/firestore_entities";
+import { PAYMENT_METHOD_INFO, normalizePaymentMethod } from "@oww/shared";
 
 // --- Params ---
 
@@ -297,10 +298,12 @@ async function assembleInvoiceData(
   // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
   // notice — fall through to the rechnung path.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
+  const rawPaymentMethod = normalizePaymentMethod(primaryCheckoutData?.paymentMethod);
   const kind = bill.kind ?? "invoice";
   const paymentMethod =
-    kind === "invoice" && rawPaymentMethod === "monthly"
+    kind === "invoice" &&
+    rawPaymentMethod &&
+    PAYMENT_METHOD_INFO[rawPaymentMethod].isAggregated
       ? "rechnung"
       : rawPaymentMethod;
 
@@ -439,7 +442,7 @@ interface TemplateChoice {
 }
 
 function pickTemplate(
-  method: PaymentMethod | null | undefined,
+  method: PaymentMethod | null,
   bill: BillEntity,
 ): TemplateChoice {
   const kind = bill.kind ?? "invoice";
@@ -486,7 +489,7 @@ function pickTemplate(
   // its own "ready to pay" copy, distinct from the Beleg "queued" notice
   // above (they must not share a template — see issue #502). Falls back
   // to the generic QR-bill template when unset.
-  if (kind === "invoice" && method === "monthly") {
+  if (kind === "invoice" && method && PAYMENT_METHOD_INFO[method].isAggregated) {
     const id = resendSammelrechnungInvoiceTemplateId.value();
     return {
       id: id || resendQrBillTemplateId.value(),
@@ -496,9 +499,10 @@ function pickTemplate(
     };
   }
 
-  // Remaining paths are TWINT, rechnung, and the null pre-ack default.
+  // Remaining paths are the RaiseNow (TWINT) receipt, rechnung, and the
+  // null pre-ack default.
   switch (method) {
-    case "twint":
+    case "raisenow":
       return {
         id: resendTwintTemplateId.value(),
         paramName: "RESEND_TWINT_TEMPLATE_ID",
@@ -601,9 +605,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   }
 
   // Template selection always reads the checkout's last paymentMethod.
-  // Auto-ack on a user who tapped TWINT but didn't commit still uses the
-  // TWINT-was-selected template (safe because it doesn't claim payment).
-  const template = pickTemplate(checkout.paymentMethod ?? null, bill);
+  // Auto-ack on a user who tapped the RaiseNow (TWINT) tab but didn't commit
+  // still uses the TWINT-was-selected template (safe because it doesn't
+  // claim payment).
+  const template = pickTemplate(normalizePaymentMethod(checkout.paymentMethod), bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -645,12 +650,12 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
             bill,
-            checkout.paymentMethod ?? null,
+            normalizePaymentMethod(checkout.paymentMethod),
             supersededReference,
           ),
           CORRECTED_DOCUMENTS: correctedDocuments,
@@ -698,7 +703,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, normalizePaymentMethod(checkout.paymentMethod))}-${invoiceNumber}.pdf`,
         },
         ...extraAttachments,
       ],
@@ -740,7 +745,8 @@ function documentKindLabel(
  * What the customer has to do about money after a correction (ADR-0042).
  * Composed here because Resend templates have no conditionals and the
  * answer depends on the document: a payable Rechnung / Sammelrechnung ships
- * a new QR slip, a TWINT Quittung was already paid, a Beleg rides on the
+ * a new QR slip, a Quittung was already paid during the checkout, a Beleg
+ * rides on the
  * next Sammelrechnung, a zero-amount re-issue needs nothing.
  */
 function correctionPaymentNote(
@@ -752,8 +758,8 @@ function correctionPaymentNote(
   if ((bill.kind ?? "invoice") === "beleg") {
     return "Der Betrag wird über deine nächste Sammelrechnung abgerechnet.";
   }
-  if (paymentMethod === "twint") {
-    return "Du hast per TWINT bereits bezahlt — eine allfällige Differenz zum ursprünglichen Betrag klären wir direkt mit dir.";
+  if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
+    return `Du hast per ${PAYMENT_METHOD_INFO[paymentMethod].label} bereits bezahlt — eine allfällige Differenz zum ursprünglichen Betrag klären wir direkt mit dir.`;
   }
   return (
     "Der neue QR-Einzahlungsschein liegt der PDF bei. Bitte nur noch diesen verwenden — " +
@@ -769,8 +775,8 @@ function cancellationPaymentNote(
   if ((bill.kind ?? "invoice") === "beleg") {
     return "Der Betrag wird nicht auf deine Sammelrechnung übernommen.";
   }
-  if (paymentMethod === "twint") {
-    return "Du hast per TWINT bereits bezahlt — wir erstatten dir den Betrag.";
+  if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
+    return `Du hast per ${PAYMENT_METHOD_INFO[paymentMethod].label} bereits bezahlt — wir erstatten dir den Betrag.`;
   }
   return (
     "Ein früher zugestellter QR-Einzahlungsschein zu dieser Nummer ist ungültig — bitte nicht mehr " +
@@ -879,9 +885,9 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
             "dd. MMMM yyyy, HH:mm",
           ),
           INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
           REASON: bill.cancellationReason ?? "",
-          PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
+          PAYMENT_NOTE: cancellationPaymentNote(bill, normalizePaymentMethod(checkout.paymentMethod)),
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
           KASSE_EMAIL: kasseEmail.value(),
@@ -988,9 +994,10 @@ export const onBillUpdate = onDocumentUpdated(
     // Regenerate the PDF so it reflects the user's chosen method
     // (#251). At create-time the PDF is built before the user picks a
     // method, which means rechnung gets the QR slip by default. For
-    // TWINT / Sammelrechnung we don't want the QR slip in the PDF
-    // (the user already paid via TWINT or it's going on the next
-    // Sammelrechnung — they shouldn't see "pay this" again).
+    // methods paid during the checkout (TWINT via RaiseNow) and the
+    // Sammelrechnung we don't want the QR slip in the PDF (the user
+    // already paid or it's going on the next Sammelrechnung — they
+    // shouldn't see "pay this" again).
     // tryGeneratePdf with `force: true` overwrites the existing PDF.
     try {
       await tryGeneratePdf(billId, { force: true });

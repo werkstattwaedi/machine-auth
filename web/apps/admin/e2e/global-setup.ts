@@ -387,7 +387,7 @@ async function seedWorkflowData() {
       amount: 60,
       created: ts("2026-05-02T10:00:00Z"),
       paidAt: ts("2026-05-10T10:00:00Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     })
 
   // ── Catalog + price list. Eiche is modified AFTER the list's

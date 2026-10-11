@@ -9,7 +9,7 @@ describe("parseMarkBillsPaidRequest", () => {
     const parsed = parseMarkBillsPaidRequest({
       bills: [
         { billId: "b1", paidVia: "ebanking", paidAtMs: 1750000000000 },
-        { billId: "b2", paidVia: "cash" },
+        { billId: "b2", paidVia: "ebanking" },
       ],
     });
     expect(parsed).to.have.length(2);
@@ -30,20 +30,27 @@ describe("parseMarkBillsPaidRequest", () => {
     expect(() =>
       parseMarkBillsPaidRequest({ bills: [{ billId: "b1", paidVia: "free" }] })
     ).to.throw(/paidVia/);
+    // Pre-rename / retired channels: the admin app books RaiseNow as
+    // "raisenow", and the workshop takes no cash.
+    for (const paidVia of ["twint", "cash"]) {
+      expect(() =>
+        parseMarkBillsPaidRequest({ bills: [{ billId: "b1", paidVia }] })
+      ).to.throw(/paidVia/);
+    }
   });
 
   it("rejects missing bill ids and non-numeric paidAtMs", () => {
     expect(() =>
-      parseMarkBillsPaidRequest({ bills: [{ paidVia: "cash" }] })
+      parseMarkBillsPaidRequest({ bills: [{ paidVia: "ebanking" }] })
     ).to.throw(/billId/);
     expect(() =>
       parseMarkBillsPaidRequest({
-        bills: [{ billId: "b1", paidVia: "cash", paidAtMs: "gestern" }],
+        bills: [{ billId: "b1", paidVia: "ebanking", paidAtMs: "gestern" }],
       })
     ).to.throw(/paidAtMs/);
     expect(() =>
       parseMarkBillsPaidRequest({
-        bills: [{ billId: "b1", paidVia: "cash", paidAtMs: NaN }],
+        bills: [{ billId: "b1", paidVia: "ebanking", paidAtMs: NaN }],
       })
     ).to.throw(/paidAtMs/);
   });
@@ -54,7 +61,7 @@ describe("parseMarkBillsPaidRequest", () => {
     for (const paidAtMs of [0, 1_750_000_000, Date.UTC(2101, 0, 1)]) {
       expect(() =>
         parseMarkBillsPaidRequest({
-          bills: [{ billId: "b1", paidVia: "cash", paidAtMs }],
+          bills: [{ billId: "b1", paidVia: "ebanking", paidAtMs }],
         })
       ).to.throw(/paidAtMs/);
     }

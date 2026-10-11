@@ -34,10 +34,12 @@ import {
   getFirestore,
   type DocumentReference,
 } from "firebase-admin/firestore";
+import { PAYMENT_METHOD_INFO, normalizePaymentMethod } from "@oww/shared";
 import type { BillEntity } from "./types";
 import type {
   CheckoutEntity,
   PaymentMethod,
+  StoredPaymentMethod,
 } from "../types/firestore_entities";
 
 const autoAckMinAgeHours = defineString("AUTO_ACK_MIN_AGE_HOURS", {
@@ -47,15 +49,10 @@ const autoAckMinAgeHours = defineString("AUTO_ACK_MIN_AGE_HOURS", {
 /** Cap how many docs the cron touches per run so a runaway backlog can't OOM. */
 const BATCH_LIMIT = 500;
 
-const VALID_PAYMENT_METHODS: ReadonlySet<PaymentMethod> = new Set([
-  "rechnung",
-  "monthly",
-  "twint",
-]);
-
 interface AcknowledgeBillRequest {
   billId: string;
-  paymentMethod: PaymentMethod;
+  /** Legacy "twint" from a not-yet-reloaded client is accepted and stored as "raisenow". */
+  paymentMethod: StoredPaymentMethod;
 }
 
 /**
@@ -91,13 +88,16 @@ export const acknowledgeBillHandler = async (
     throw new HttpsError("unauthenticated", "Authentication required");
   }
 
-  const { billId, paymentMethod } = request.data ?? ({} as AcknowledgeBillRequest);
+  const { billId, paymentMethod: rawPaymentMethod } =
+    request.data ?? ({} as AcknowledgeBillRequest);
   if (!billId || typeof billId !== "string") {
     throw new HttpsError("invalid-argument", "billId is required");
   }
-  if (!VALID_PAYMENT_METHODS.has(paymentMethod)) {
+  const paymentMethod = normalizePaymentMethod(rawPaymentMethod);
+  if (!paymentMethod) {
     throw new HttpsError("invalid-argument", "invalid paymentMethod");
   }
+  const isAggregated = PAYMENT_METHOD_INFO[paymentMethod].isAggregated;
 
   const db = getFirestore();
   const billRef = db.doc(`bills/${billId}`);
@@ -167,7 +167,7 @@ export const acknowledgeBillHandler = async (
     }
 
     const now = Timestamp.now();
-    if (paymentMethod === "monthly") {
+    if (isAggregated) {
       // Sammelrechnung path (issue #245): the per-visit bill becomes a
       // "Beleg" — a non-payable record of what was used this visit. The
       // monthlyBillRun cron aggregates Belege into a real Sammelrechnung
@@ -202,7 +202,7 @@ export const acknowledgeBillHandler = async (
     billId,
     paymentMethod,
     callerUid,
-    flipped: paymentMethod === "monthly" ? "beleg" : "ack",
+    flipped: isAggregated ? "beleg" : "ack",
   });
 
   return { ok: true };
@@ -276,7 +276,7 @@ export async function runAutoAcknowledgeBills(
         const coSnap = await tx.get(linkedCheckoutRef);
         if (coSnap.exists) {
           const co = coSnap.data() as CheckoutEntity;
-          checkoutPaymentMethod = co.paymentMethod ?? null;
+          checkoutPaymentMethod = normalizePaymentMethod(co.paymentMethod);
         }
       }
 
@@ -285,7 +285,10 @@ export async function runAutoAcknowledgeBills(
       // user-ack-for-monthly transition — flip to Beleg instead of
       // emailing a per-visit invoice. The monthlyBillRun cron sweeps
       // up these Belege on the 1st.
-      if (checkoutPaymentMethod === "monthly") {
+      if (
+        checkoutPaymentMethod &&
+        PAYMENT_METHOD_INFO[checkoutPaymentMethod].isAggregated
+      ) {
         tx.update(doc.ref, { kind: "beleg" });
         return "beleg";
       }
