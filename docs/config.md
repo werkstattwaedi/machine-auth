@@ -231,6 +231,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
 | `VITE_SMS_LOGIN_ENABLED` | SMS login codes rollout flag (ADR-0031); requires the phone provider enabled on the Firebase project | `true` |
 | `VITE_ENV_LABEL` | Prefix for the browser tab title (`web.envLabel`; the kiosk window/tray title reads the same key). Empty in production | `[staging]` |
+| `VITE_PAYMENT_METHODS_KIOSK` / `VITE_PAYMENT_METHODS_WEB` | Payment methods offered per client type, comma-separated ids in tab order (`web.paymentMethodsKiosk` / `web.paymentMethodsWeb`, ADR-0044). The functions get the same keys as `PAYMENT_METHODS_*`. Empty = `rechnung,monthly,raisenow`; unknown ids fail `generate-env` | `rechnung,monthly` |
 
 
 Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only — see `PAYMENT_*` and `RAISENOW_PAYLINK_SOLUTION_ID` vars in `functions/.env.*`.

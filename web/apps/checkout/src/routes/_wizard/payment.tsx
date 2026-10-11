@@ -45,7 +45,7 @@ function PaymentRoute() {
           totalPrice={ctx.totalPrice}
           initialPaymentData={ctx.paymentData}
           isMember={ctx.isMember}
-          kiosk={ctx.kiosk}
+          clientType={ctx.kiosk ? "kiosk" : "web"}
           onReset={() => setCompleted(true)}
         />
       )}

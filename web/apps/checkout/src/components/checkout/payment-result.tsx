@@ -4,56 +4,40 @@
 /**
  * Step 4 (Bezahlen) — payment-method picker as a G4 vertical-tab layout.
  *
- * The user picks one of three methods (rechnung / monthly [members only] /
- * raisenow, the TWINT paylink — UI labels are German). The click writes the
- * customer-stated acknowledgement to the checkout doc and unmounts.
+ * The tabs are the methods enabled for this client type (kiosk / web,
+ * operations config) that the customer is eligible for — today rechnung,
+ * monthly [members only] and raisenow (TWINT paylink). Method-specific UI
+ * lives in `payment-methods.tsx`. The commit click writes the
+ * customer-stated acknowledgement to the bill and unmounts.
  *
  * No back button — once the checkout is closed the user cannot rewind.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useBridge } from "@modules/lib/use-bridge"
-import { formatCHF } from "@modules/lib/format"
+import { useEffect, useState } from "react"
 import { useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { rpcCallable } from "@modules/lib/rpc"
-import { CheckCircle2, Download, FileText, Loader2 } from "lucide-react"
-import { QRCodeSVG } from "qrcode.react"
+import { CheckCircle2, Download, Loader2 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
-import type { PaymentMethod } from "@oww/shared"
+import {
+  enabledPaymentMethods,
+  type ClientType,
+  type PaymentMethod,
+  type PaymentMethodConfig,
+} from "@oww/shared"
+import { paymentMethodConfig } from "@/lib/payment-config"
+import {
+  PAYMENT_METHOD_UI,
+  paymentMethodLabel,
+  useRaisenowKioskConfirm,
+  type PaymentData,
+} from "./payment-methods"
 
-export interface PaymentData {
-  /** Doc id of the underlying bill — drives the PDF download action. */
-  billId: string
-  /** Doc id of the checkout — used to record the customer's payment-method
-   *  acknowledgement once they pick a method and click the commit button. */
-  checkoutId: string | null
-  qrBillPayload: string
-  paylinkUrl: string
-  creditor: {
-    iban: string
-    name: string
-    street: string
-    location: string
-  }
-  reference: string
-  payerName: string
-  payerEmail: string
-  amount: string
-  currency: string
-}
-
-// Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec).
-export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
-  '<rect width="100" height="100" fill="white"/>' +
-  '<rect x="3" y="3" width="94" height="94" fill="black"/>' +
-  '<polygon points="20,40 20,60 40,60 40,80 60,80 60,60 80,60 80,40 60,40 60,20 40,20 40,40" fill="white"/>' +
-  '</svg>',
-)}`
+export type { PaymentData } from "./payment-methods"
+export { SWISS_CROSS_SVG } from "./payment-methods"
 
 interface PaymentResultProps {
   /** Closed checkout doc id. Always set on the new flow (the callable
@@ -78,17 +62,14 @@ interface PaymentResultProps {
    *  affordance over an already-permitted choice. */
   isMember: boolean
   /**
-   * Kiosk mode (shared machine). When true the "Rechnung als PDF" download
-   * is hidden — we don't want invoices downloaded to the shared kiosk's
-   * local disk (issue #418). The customer still gets the invoice by email.
+   * Where the checkout runs. Picks the configured method list, and on the
+   * shared kiosk machine hides the "Rechnung als PDF" download — we don't
+   * want invoices downloaded to the kiosk's local disk (issue #418). The
+   * customer still gets the invoice by email.
    */
-  kiosk?: boolean
-}
-
-const COMMIT_LABELS: Record<PaymentMethod, string> = {
-  rechnung: "Ich zahle die QR-Rechnung & Werkstatt verlassen",
-  monthly: "Auf Sammelrechnung setzen & Werkstatt verlassen",
-  raisenow: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
+  clientType: ClientType
+  /** Overrides the build-time method config (tests). */
+  methodConfig?: PaymentMethodConfig
 }
 
 export function PaymentResult({
@@ -97,7 +78,8 @@ export function PaymentResult({
   onReset,
   initialPaymentData,
   isMember,
-  kiosk = false,
+  clientType,
+  methodConfig = paymentMethodConfig,
 }: PaymentResultProps) {
   const db = useDb()
   const functions = useFunctions()
@@ -122,25 +104,22 @@ export function PaymentResult({
     initialPaymentData ?? null,
   )
   const [qrError, setQrError] = useState(false)
-  const [tab, setTab] = useState<PaymentMethod>("rechnung")
 
-  // Issue #537: the TWINT pay-link and the commit button sit close together,
-  // and committing unmounts the picker — a user who hits "Ich habe via TWINT
-  // bezahlt" first is dropped on the completion screen with no way back to the
-  // paylink, so the payment can never be started. Gate the commit button on
-  // the paylink having been opened at least once.
-  //
-  // This gates on *intent*, not completion: we cannot observe whether the
-  // RaiseNow payment actually succeeded. The paylink opens on pay.raisenow.io,
-  // a foreign origin, so the same-origin policy forbids reading that tab's URL
-  // (the kiosk manages it only because Electron's main process sits outside the
-  // web sandbox — see shared/src/kiosk-navigation.ts + checkout-kiosk/src/main.ts),
-  // and RaiseNow's free plan offers no webhook (ADR-0020). Stopping the
-  // *accidental* first click is what this issue asks for.
-  //
-  // Sticky once set: it survives tab switches so a user who already paid and
-  // is browsing the other methods isn't re-gated on return.
-  const [twintPayStarted, setTwintPayStarted] = useState(false)
+  // The QR bill is the fallback of last resort: it needs nothing beyond the
+  // bill itself, so even an empty configured list leaves a way to pay.
+  const configured = enabledPaymentMethods(methodConfig, clientType, { isMember })
+  const methods = (configured.length > 0 ? configured : ["rechnung" as const]).filter(
+    (m) => !paymentData || (PAYMENT_METHOD_UI[m].isAvailable?.(paymentData) ?? true),
+  )
+  const [selectedTab, setTab] = useState<PaymentMethod>(methods[0] ?? "rechnung")
+  // Guard against a selection that dropped out (e.g. no paylink in the
+  // payment data that arrived through the fallback path).
+  const tab = methods.includes(selectedTab) ? selectedTab : (methods[0] ?? "rechnung")
+
+  // Commit gates released by their panel (#537). Sticky: they survive tab
+  // switches so a user who already paid and is browsing the other methods
+  // isn't re-gated on return.
+  const [unlocked, setUnlocked] = useState<ReadonlySet<PaymentMethod>>(new Set())
 
   // Issue #237: a CHF 0 visit ("Interne Nutzung") has nothing payable —
   // skip the QR/PayLink dance entirely and render a "nichts zu bezahlen"
@@ -196,50 +175,28 @@ export function PaymentResult({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedCheckoutId, tab])
 
-  // Kiosk TWINT auto-confirm (#416): when the customer completes the TWINT
-  // payment in the kiosk overlay, the Electron bridge fires
-  // onPaymentConfirmed. We then stamp the same paymentMethodConfirmationTime
-  // the manual "Ich habe via TWINT bezahlt" button would — marking the bill
-  // paid immediately — and advance the wizard. No-op in a normal browser
-  // (the bridge is absent so onPaymentConfirmed is a no-op subscribe).
-  const bridge = useBridge()
   const billIdForConfirm = paymentData?.billId ?? null
-  // Stash the latest commit logic in a ref so the subscribe effect stays
-  // keyed on the bridge + billId only and doesn't re-subscribe per render.
-  const confirmRef = useRef<((paymentUuid: string) => void) | null>(null)
-  const handlePaymentConfirmed = useCallback(
-    (paymentUuid: string) => {
-      if (!billIdForConfirm) return
-      const callable = rpcCallable<
-        { billId: string; paymentMethod: PaymentMethod },
-        { ok: true }
-      >(functions, "billingCall", "acknowledgeBill")
-      ackMutation
-        .mutate(async () => {
-          const res = await callable({
-            billId: billIdForConfirm,
-            paymentMethod: "raisenow",
-          })
-          return res.data
+  useRaisenowKioskConfirm(methods.includes("raisenow"), (paymentUuid) => {
+    if (!billIdForConfirm) return
+    const callable = rpcCallable<
+      { billId: string; paymentMethod: PaymentMethod },
+      { ok: true }
+    >(functions, "billingCall", "acknowledgeBill")
+    ackMutation
+      .mutate(async () => {
+        const res = await callable({
+          billId: billIdForConfirm,
+          paymentMethod: "raisenow",
         })
-        .then(() => onReset())
-        .catch(() => {
-          // Hook already toasted + telemetered. The overlay confirmation page
-          // stays visible; the user can still use the manual commit button.
-          console.error("TWINT auto-confirm failed", paymentUuid)
-        })
-    },
-    // ackMutation / functions / onReset are stable for the component's life.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [billIdForConfirm],
-  )
-  confirmRef.current = handlePaymentConfirmed
-  useEffect(() => {
-    if (!bridge.available) return
-    return bridge.onPaymentConfirmed((paymentUuid) => {
-      confirmRef.current?.(paymentUuid)
-    })
-  }, [bridge.available, bridge.onPaymentConfirmed])
+        return res.data
+      })
+      .then(() => onReset())
+      .catch(() => {
+        // Hook already toasted + telemetered. The overlay confirmation page
+        // stays visible; the user can still use the manual commit button.
+        console.error("RaiseNow auto-confirm failed", paymentUuid)
+      })
+  })
 
   if (isFree) {
     return (
@@ -309,8 +266,8 @@ export function PaymentResult({
     }
   }
 
-  // Only the TWINT tab is gated — rechnung / monthly commit immediately.
-  const twintGated = tab === "raisenow" && !twintPayStarted
+  const active = PAYMENT_METHOD_UI[tab]
+  const commitGated = !!active.commitGateHint && !unlocked.has(tab)
 
   const handleCommit = async () => {
     // paymentData is non-null here (the !paymentData early return above
@@ -356,7 +313,7 @@ export function PaymentResult({
         </div>
         {/* Hidden on the kiosk (issue #418): the shared machine must not
             download invoice PDFs to its local disk. */}
-        {!kiosk && (
+        {clientType !== "kiosk" && (
           <button
             type="button"
             onClick={handleDownloadPdf}
@@ -375,35 +332,17 @@ export function PaymentResult({
 
       {/* Vertical tabs — teal left rail on the active option */}
       <div role="tablist" aria-label="Zahlungsmethode" className="flex flex-col gap-1.5">
-        <MethodTab
-          id="rechnung"
-          active={tab}
-          onSelect={setTab}
-          icon={<FileText className="h-5 w-5" strokeWidth={1.6} />}
-          label="QR-Rechnung"
-        />
-        {isMember && (
+        {methods.map((m) => (
           <MethodTab
-            id="monthly"
+            key={m}
+            id={m}
             active={tab}
             onSelect={setTab}
-            icon={<CalendarMark />}
-            label="Sammelrechnung"
+            icon={PAYMENT_METHOD_UI[m].icon}
+            darkIconChip={PAYMENT_METHOD_UI[m].darkIconChip ?? false}
+            label={paymentMethodLabel(m)}
           />
-        )}
-        <MethodTab
-          id="raisenow"
-          active={tab}
-          onSelect={setTab}
-          icon={
-            <img
-              src="https://assets.raisenow.io/twint-logo-dark.svg"
-              alt=""
-              className="h-5 w-auto"
-            />
-          }
-          label="TWINT"
-        />
+        ))}
       </div>
 
       {/* Method-specific instruction panel.
@@ -414,36 +353,33 @@ export function PaymentResult({
           change so tw-animate-css fades the new content in. */}
       <div className="rounded-md border border-border bg-white p-5 sm:p-7 overflow-hidden transition-[height] duration-200 ease-out">
         <div key={tab} className="animate-in fade-in duration-150">
-          {tab === "rechnung" && (
-            <RechnungPanel paymentData={paymentData} totalPrice={totalPrice} />
-          )}
-          {tab === "monthly" && <MonthlyPanel totalPrice={totalPrice} />}
-          {tab === "raisenow" && (
-            <TwintPanel
-              paymentData={paymentData}
-              totalPrice={totalPrice}
-              onPayStart={() => setTwintPayStarted(true)}
-            />
-          )}
+          <active.Panel
+            paymentData={paymentData}
+            totalPrice={totalPrice}
+            onCommitUnlocked={() =>
+              setUnlocked((prev) => new Set(prev).add(tab))
+            }
+          />
         </div>
       </div>
 
       {/* Single commit button — no back. Acknowledgement is recorded on click.
-          On the TWINT tab it stays gated until the paylink is opened (#537). */}
+          Methods with a commit gate (TWINT: the paylink must be opened first,
+          #537) keep it disabled until their panel releases it. */}
       <div className="flex flex-col items-end gap-2 pt-2">
         <button
           type="button"
           onClick={handleCommit}
-          disabled={ackMutation.loading || twintGated}
-          aria-describedby={twintGated ? "twint-commit-hint" : undefined}
+          disabled={ackMutation.loading || commitGated}
+          aria-describedby={commitGated ? "commit-gate-hint" : undefined}
           className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {ackMutation.loading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {COMMIT_LABELS[tab]}
+          {active.commitLabel}
         </button>
-        {twintGated && (
-          <p id="twint-commit-hint" className="text-xs text-muted-foreground">
-            Starte zuerst die TWINT-Zahlung.
+        {commitGated && (
+          <p id="commit-gate-hint" className="text-xs text-muted-foreground">
+            {active.commitGateHint}
           </p>
         )}
       </div>
@@ -460,10 +396,11 @@ interface MethodTabProps {
   active: PaymentMethod
   onSelect: (m: PaymentMethod) => void
   icon: React.ReactNode
+  darkIconChip: boolean
   label: string
 }
 
-function MethodTab({ id, active, onSelect, icon, label }: MethodTabProps) {
+function MethodTab({ id, active, onSelect, icon, darkIconChip, label }: MethodTabProps) {
   const on = id === active
   return (
     <button
@@ -486,7 +423,7 @@ function MethodTab({ id, active, onSelect, icon, label }: MethodTabProps) {
           // TWINT styleguide mandates its logo on a dark surface — keep it
           // as a brand chip. Our own methods (rechnung, monthly) sit on a
           // neutral gray so the row doesn't read as three ad slots.
-          id === "raisenow"
+          darkIconChip
             ? "bg-[#262626] text-white"
             : "bg-muted text-foreground/80",
           on && "ring-2 ring-cog-teal shadow-sm scale-110",
@@ -505,153 +442,3 @@ function MethodTab({ id, active, onSelect, icon, label }: MethodTabProps) {
     </button>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Method panels
-// ---------------------------------------------------------------------------
-
-function RechnungPanel({
-  paymentData,
-  totalPrice,
-}: {
-  paymentData: PaymentData
-  totalPrice: number
-}) {
-  return (
-    <div className="space-y-5">
-      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-        Bezahle via die QR-Rechnung über{" "}
-        <strong className="text-foreground">{formatCHF(totalPrice)}</strong>,
-        welche wir dir
-        {paymentData.payerEmail && (
-          <>
-            {" "}
-            an{" "}
-            <strong className="text-foreground">
-              {paymentData.payerEmail}
-            </strong>
-          </>
-        )}{" "}
-        geschickt haben. Oder scanne den QR-Code gleich jetzt mit deiner
-        E-Banking App.
-      </p>
-
-      <div className="flex flex-col sm:flex-row gap-6">
-        <div
-          data-testid="payment-qr"
-          className="shrink-0 rounded-md border border-border p-3 bg-white self-start"
-        >
-          <QRCodeSVG
-            value={paymentData.qrBillPayload}
-            size={180}
-            level="M"
-            imageSettings={{
-              src: SWISS_CROSS_SVG,
-              height: 34,
-              width: 34,
-              excavate: true,
-            }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-4 text-sm min-w-0">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Konto / Zahlbar an
-            </p>
-            <p className="font-mono">{paymentData.creditor.iban}</p>
-            <p>{paymentData.creditor.name}</p>
-            {paymentData.creditor.street && (
-              <p className="text-muted-foreground">
-                {paymentData.creditor.street}
-              </p>
-            )}
-            <p className="text-muted-foreground">
-              {paymentData.creditor.location}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Referenz
-            </p>
-            <p className="font-mono">{paymentData.reference}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MonthlyPanel({ totalPrice }: { totalPrice: number }) {
-  return (
-    <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-      Die <strong>{formatCHF(totalPrice)}</strong> werden deiner
-      Sammelrechnung hinzugefügt. Du erhältst am{" "}
-      <strong>1. des nächsten Monats</strong> eine QR-Rechnung über alle
-      offenen Posten.
-    </p>
-  )
-}
-
-function TwintPanel({
-  paymentData,
-  totalPrice,
-  onPayStart,
-}: {
-  paymentData: PaymentData
-  totalPrice: number
-  /** Fired when the paylink is opened — ungates the commit button (#537). */
-  onPayStart: () => void
-}) {
-  return (
-    <div className="space-y-5">
-      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-        Bezahle <strong>{formatCHF(totalPrice)}</strong> sofort vom Handy —
-        TWINT öffnet sich automatisch, bestätige die Zahlung in der App.
-      </p>
-
-      <a
-        href={paymentData.paylinkUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onPayStart}
-        className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
-      >
-        <img
-          src="https://assets.raisenow.io/twint-logo-dark.svg"
-          alt=""
-          className="h-[36px] w-[32px] mr-[20px] shrink-0"
-        />
-        <span className="text-[17px] font-medium text-white whitespace-nowrap">
-          Mit TWINT bezahlen
-        </span>
-      </a>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Method marks (icons)
-// ---------------------------------------------------------------------------
-
-function CalendarMark() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-      <path d="M9 16l2 2 4-4" />
-    </svg>
-  )
-}
-
