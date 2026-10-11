@@ -23,8 +23,65 @@ has reliability issues with READ BINARY on NTAG424 DNA tags.
 sudo apt install libpcsclite-dev pcscd
 ```
 
-### macOS / Windows
+### macOS
 PC/SC is included with the OS (no extra packages needed).
+
+### Windows (build host)
+PC/SC is included with the OS, but `nfc-pcsc` pulls in the native
+`@pokusew/pcsclite`, which needs a C++ toolchain. On a fresh machine, from
+an **admin** PowerShell:
+
+1. **Node 22** — install the official x64 MSI from
+   <https://nodejs.org/dist/> (pick the latest `v22.x`). Don't use
+   `winget install OpenJS.NodeJS.LTS`: it resolves to a newer major.
+2. **Python 3.12** (for node-gyp):
+   ```powershell
+   winget install Python.Python.3.12 --scope machine
+   ```
+3. **VS 2022 Build Tools** with the Desktop C++ workload:
+   ```powershell
+   winget install Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+   ```
+4. **Developer Mode** (Settings → System → For developers). electron-builder
+   extracts its `winCodeSign` cache with symlinks, which fails without it.
+   If a run already failed halfway, delete
+   `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign` before retrying.
+5. For `:staging` / `:prod` builds: `gcloud` (authenticated) and the
+   `machine-auth-operations` repo checked out next to this one — see
+   [Production builds](#production-builds---prod).
+
+Bare `python` on Windows may hit the Microsoft Store stub, so point npm at
+the real interpreter in the shell you install from:
+
+```powershell
+$env:npm_config_python = "C:\Program Files\Python312\python.exe"
+npm install                                   # at the repo root (workspaces)
+cd checkout-kiosk
+Test-Path node_modules\electron\dist\version  # must be True
+```
+
+If that last check is `False`, npm skipped electron's own postinstall
+(seen with older bundled npm versions) and nothing can launch or package
+Electron. Fetch the binary manually, then rebuild the native module:
+
+```powershell
+node node_modules/electron/install.js
+npx electron-rebuild -f
+```
+
+Windows gotchas:
+
+* **"Access is denied" / `ERR_ELECTRON_BUILDER_CANNOT_EXECUTE` while
+  packaging** — a running kiosk (it hides in the tray) locks
+  `release/kiosk/win-unpacked/`. Quit it via the tray's **Beenden**, or
+  `Get-Process -Name "OWW Self Checkout" | Stop-Process -Force`.
+* **`Module '@oww/shared' has no exported member …`** — the kiosk compiles
+  against `shared/dist`. After pulling changes to `shared/`, run
+  `npm run build:shared` at the repo root.
+* **Stale operations repo** — `git pull` `../machine-auth-operations`
+  before a `:staging` / `:prod` build. A stale checkout still builds
+  without error but bakes wrong values; check the
+  `inject-build-config: profile=… url=… label=…` line in the build log.
 
 ## Setup
 
