@@ -6,6 +6,7 @@
 #include <atomic>
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "device_config/device_config.h"
 #include "gateway/gateway_client.h"
 #include "gateway/gateway_service.pb.h"
@@ -14,7 +15,6 @@
 #include "maco_firmware/modules/machine_control/machine_sensor.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/time_provider.h"
 #include "pw_async2/value_future.h"
@@ -65,7 +65,8 @@ class GatewayMachineSensor : public MachineSensor,
 
   std::atomic<bool> session_active_{false};
   bool have_lease_ = false;
-  pw::InlineString<40> lease_id_;
+  // nanopb `lease_id` fields are char[40] incl. the terminator.
+  pw::InlineString<39> lease_id_;
 
   using LeaseCall =
       pw::rpc::NanopbUnaryReceiver<maco_gateway_SensingLeaseResponse>;
@@ -74,7 +75,7 @@ class GatewayMachineSensor : public MachineSensor,
   LeaseCall lease_call_;
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace maco::machine_control

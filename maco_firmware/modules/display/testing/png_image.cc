@@ -3,6 +3,8 @@
 
 #include "maco_firmware/modules/display/testing/png_image.h"
 
+#include <algorithm>
+
 #include "lodepng.h"
 
 namespace maco::display::testing {

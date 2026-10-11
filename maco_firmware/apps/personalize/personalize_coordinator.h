@@ -5,6 +5,7 @@
 
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/apps/personalize/personalization_keys.h"
 #include "maco_firmware/apps/personalize/screens/personalize_screen.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
@@ -15,7 +16,6 @@
 #include "maco_pb/personalization_service.pb.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/value_future.h"
 #include "pw_random/random.h"
@@ -91,7 +91,7 @@ class PersonalizeCoordinator {
   pw::random::RandomGenerator& rng_;
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 
   /// Tag arrival consumed by the awaiting-keys race; picked up by the main
   /// loop on its next iteration. Only touched from the coroutine.

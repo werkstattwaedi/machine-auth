@@ -10,6 +10,7 @@
 /// throughout the firmware. They decouple the API from protobuf format
 /// and provide validation at construction time.
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 

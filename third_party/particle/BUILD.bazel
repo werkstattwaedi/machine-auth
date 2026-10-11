@@ -281,6 +281,9 @@ cc_library(
         "-iquote",
         "external/particle_bazel+/third_party/device-os/dynalib/inc",
     ],
+    # Device OS is C11 code; GCC 15 defaults to C23, where `bool` is a
+    # keyword and the Realtek SDK's `typedef ... bool` no longer compiles.
+    conlyopts = ["-std=gnu11"],
     includes = DEVICE_OS_INCLUDES,
     defines = DEVICE_OS_DEFINES,
     deps = [":device_os_headers"],

@@ -207,8 +207,8 @@ See [ADR-0014](../docs/adr/0014-cpp20-coroutines-for-async.md) for architectural
 Use coroutines for sequential async operations. They provide readable code flow without manual state tracking:
 
 ```cpp
+#include "async_util/status_coro_task.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 
 class MyReader {
  public:
@@ -241,14 +241,14 @@ class MyReader {
   }
 
   pw::async2::CoroContext coro_cx_;  // ~512 bytes from allocator
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 ```
 
 **Key components:**
 - `CoroContext` - Allocator wrapper for coroutine frames (~512 bytes needed)
 - `Coro<T>` - Coroutine return type (T = return value type)
-- `CoroOrElseTask` - Wraps coroutine with error handler for dispatcher
+- `maco::async_util::StatusCoroTask` - Runs a `Coro<pw::Status>` on the dispatcher and reports a non-OK exit (incl. frame-allocation failure as `ResourceExhausted`). Ours, not Pigweed's: upstream deleted `CoroOrElseTask`, and its successors (`FallibleCoroTask`/`FutureTask`) drop the coroutine's status
 - `co_await` - Suspend until sub-coroutine completes
 - `co_return` - Return value from coroutine
 
@@ -290,17 +290,12 @@ dispatcher.Post(my_task);
 | `ValueFuture<T>` / `ValueProvider<T>` | One-shot results (RPC responses) | `firebase_client.h` |
 | `ListableFutureWithWaker<Self, T>` | Custom typed futures | `pn532_detect_tag_future.h` |
 | `SingleFutureProvider<F>` | Enforce one operation at a time | `pn532_nfc_reader.h` |
-| `RaceWithDeadline(...)` / `ValueOrTimeout` | Bound an RPC await with a timeout | `modules/async_util/value_or_timeout.h` |
+| `pw::async2::Timeout(...)` | Bound an RPC await with a timeout | `firebase_client.cc` |
 
-**Gotcha — do not use pw_async2's `future_timeout.h`.** Its `Timeout()` /
-`TimeoutOr()` helpers look like the natural way to add a deadline to a future,
-but the header contains a `static_assert(false)` in an unused
-`TimeoutOr(ValueFuture<void>, ...)` overload that the arm-none-eabi GCC
-toolchain evaluates at parse time — so merely `#include`-ing it fails the P2
-build. Use `maco::async_util::RaceWithDeadline(future, time_provider, delay)`
-instead (returns `pw::Result<T>`, `DeadlineExceeded` on timeout). Every gateway
-RPC await is wrapped this way so a mid-request link drop can't hang the
-coroutine and wedge the terminal (see `firebase_client.cc`).
+**Every gateway RPC await is bounded** with
+`pw::async2::Timeout(future, time_provider, delay)` (`pw_async2/future_timeout.h`;
+returns `pw::Result<T>`, `DeadlineExceeded` on timeout) so a mid-request link
+drop can't hang the coroutine and wedge the terminal (see `firebase_client.cc`).
 
 #### ValueFuture Pattern (for RPC/callbacks)
 

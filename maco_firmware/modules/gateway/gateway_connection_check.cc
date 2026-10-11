@@ -5,7 +5,7 @@
 
 #include "gateway/gateway_connection_check.h"
 
-#include "async_util/value_or_timeout.h"
+#include "pw_async2/future_timeout.h"
 #include "pw_log/log.h"
 
 namespace maco::gateway {
@@ -58,7 +58,7 @@ pw::async2::Coro<pw::Status> GatewayConnectionCheck::Ping(
       },
       [this](pw::Status st) { ping_provider_.Resolve(st); });
 
-  auto timed = co_await maco::async_util::RaceWithDeadline(
+  auto timed = co_await pw::async2::Timeout(
       std::move(future), time_provider_, kPingDeadline);
   if (!timed.ok()) {
     PW_LOG_WARN("Gateway ping timed out; cancelling in-flight call");

@@ -9,19 +9,19 @@
 
 // Pigweed headers first - before Particle headers that define pin macros
 // (D2, D3, etc.) which conflict with Pigweed template parameter names.
+#include "async_util/status_coro_task.h"
 #include "pb_watchdog/watchdog.h"
 #include "pw_allocator/allocator.h"
 #include "pw_assert/check.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_channel/stream_channel.h"
 #include "pw_kvs/crc16_checksum.h"
 #include "pw_kvs/key_value_store.h"
 #include "pw_log/log.h"
 #include "pw_multibuf/simple_allocator.h"
-#include "pw_system/io.h"
 #include "pw_string/string.h"
+#include "pw_system/io.h"
 #include "pw_system/system.h"
 #include "pw_thread/detached_thread.h"
 #include "pw_thread/sleep.h"
@@ -459,7 +459,7 @@ class DispatcherHeartbeat {
   }
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace

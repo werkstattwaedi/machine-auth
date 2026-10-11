@@ -3,6 +3,8 @@
 
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 
+#include <algorithm>
+
 #include "pb_crypto/pb_crypto.h"
 #include "pw_assert/check.h"
 

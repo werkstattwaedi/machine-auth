@@ -13,6 +13,7 @@
 #   --//third_party/lvgl:lv_conf=//path/to:your_lv_conf
 # Or configure in platform flags / .bazelrc
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_python//python:defs.bzl", "py_binary")
@@ -41,6 +42,16 @@ cc_library(
 
 # --- LVGL C library --------------------------------------------------------
 
+# The ubsan flag is global; P2 targets built in the same invocation use GCC,
+# which has no -fsanitize=function.
+selects.config_setting_group(
+    name = "host_ubsan",
+    match_all = [
+        "@pigweed//pw_toolchain/host_clang:ubsan_enabled",
+        "@platforms//os:linux",
+    ],
+)
+
 cc_library(
     name = "lvgl",
     srcs = glob(["lvgl/src/**/*.c"]),
@@ -54,7 +65,13 @@ cc_library(
     copts = [
         # Suppress warnings in upstream third-party code
         "-w",
-    ],
+    ] + select({
+        # LVGL invokes its draw-mask callbacks through a generic `void*`
+        # signature (lv_draw_sw_mask.c). Benign on every ABI we target, but
+        # clang's UBSan flags it under -fsanitize=function for C.
+        ":host_ubsan": ["-fno-sanitize=function"],
+        "//conditions:default": [],
+    }),
     includes = [
         "lvgl",
         "lvgl/src",

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
@@ -13,7 +14,6 @@
 #include "maco_firmware/modules/led_animator/led_animator.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
@@ -131,7 +131,7 @@ class TerminalEffects : public app_state::SessionObserver,
   std::atomic<SessionCommand> pending_session_cmd_{SessionCommand::kNone};
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace maco::terminal_effects

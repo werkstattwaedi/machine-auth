@@ -68,7 +68,7 @@ cc_library(
         "//maco_firmware/modules/gateway:p2_gateway_client",
         "@particle_bazel//pb_integration_tests/firmware:test_system_p2",
         "@pigweed//pw_async2:coro",
-        "@pigweed//pw_async2:coro_or_else_task",
+        "//maco_firmware/modules/async_util:status_coro_task",
         "@pigweed//pw_log",
         "@pigweed//pw_rpc/nanopb:server_api",
         "@pigweed//pw_system:async",

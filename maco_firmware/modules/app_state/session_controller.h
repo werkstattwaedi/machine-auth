@@ -6,12 +6,12 @@
 #include <atomic>
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/app_state/tag_verifier.h"
 #include "maco_firmware/modules/app_state/ui/snapshot.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
@@ -91,7 +91,7 @@ class SessionController {
   pw::chrono::SystemClock::time_point last_active_at_{};
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace maco::app_state

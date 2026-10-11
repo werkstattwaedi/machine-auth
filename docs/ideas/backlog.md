@@ -14,6 +14,32 @@ Each idea should have:
 
 ## Active Ideas
 
+### Firmware on GCC 15 (drop the GCC 12.2 pin)
+**Status:** 💡 Idea
+
+**Context:** The Pigweed bump of Oct 2026 moved the arm-none-eabi toolchain
+from GCC 12.2 to 15.2. Firmware built with GCC 15 compiles and fits the
+memory budget, but the P2 panics with a SecureFault (SOS + 15 flashes) shortly
+after the display comes up. The identical tree with GCC 12.2 boots and runs,
+so `MODULE.bazel` pins 12.2 via `override_repo`. Each future Pigweed bump
+makes that pin more of an outlier (upstream only tests 15.x, and the old CIPD
+package path could disappear).
+
+**Notes:**
+- Prime suspect: ABI/runtime mismatch between our user part and the prebuilt
+  Device OS system part (built with Particle's older GCC) — newlib/libstdc++
+  conventions shared across the dynalib boundary, or newlib stubs.
+- The same bump flipped Pigweed's `-ffreestanding` default to off; under GCC
+  12.2 that is verified fine on hardware. Restoring it under GCC 15 doesn't
+  compile (`newlib_stubs.cpp` vs. the stricter libstdc++).
+- First step: capture the fault PC/LR. Device OS's fault handler has them in
+  `PanicData` but we only persist the reset reason — a panic hook that logs
+  PC/LR (or a debugger) would map the crash to a symbol.
+- GCC 15 fixes already in tree (harmless on 12.2): Device OS user-part glue
+  built with `-std=gnu11`; nanopb-sized `InlineString`s.
+
+---
+
 ### Session Broadcasting (Firmware)
 **Status:** 💡 Idea
 

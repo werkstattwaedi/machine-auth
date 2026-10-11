@@ -120,7 +120,7 @@ export PATH="$HOME/go/bin:$PATH"
 # Symlink so both names resolve to bazelisk:
 ln -sf "$HOME/go/bin/bazelisk" "$HOME/go/bin/bazel"
 
-bazelisk version    # downloads/caches Bazel on first run (Bazel 8.6.0 as of writing)
+bazelisk version    # downloads/caches Bazel on first run (Bazel 8.8.1 as of writing)
 ```
 
 Alternative (simpler, no Go): `npm install -g @bazel/bazelisk` — also creates

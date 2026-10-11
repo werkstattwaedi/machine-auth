@@ -7,6 +7,7 @@
 #include <optional>
 #include <string_view>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/modules/app_state/auth_cache.h"
 #include "maco_firmware/modules/app_state/system_state.h"
 #include "maco_firmware/modules/app_state/tag_verifier_observer.h"
@@ -17,7 +18,6 @@
 #include "maco_firmware/types.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_random/random.h"
 #include "pw_sync/lock_annotations.h"
@@ -118,7 +118,7 @@ class TagVerifier {
 
   AuthCache auth_cache_;
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 
   mutable pw::sync::Mutex snapshot_mutex_;
   TagVerificationSnapshot snapshot_ PW_GUARDED_BY(snapshot_mutex_);
