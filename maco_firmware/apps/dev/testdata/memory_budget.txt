@@ -1,8 +1,8 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
- SRAM:   115,908 /   122,000 bytes ( 95%)  ███████████████████░
-PSRAM:   606,564 /   640,000 bytes ( 95%)  ██████████████████░░
-Flash:   626,688 /   680,000 bytes ( 92%)  ██████████████████░░
+ SRAM:   118,744 /   122,000 bytes ( 97%)  ███████████████████░
+PSRAM:   642,560 /   660,000 bytes ( 97%)  ███████████████████░
+Flash:   663,552 /   680,000 bytes ( 98%)  ███████████████████░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
@@ -11,23 +11,23 @@ SRAM breakdown (symbols > 512 bytes):
     8,224   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::dispatcher_thread
     4,128   .data    (unknown)                        pw::system::AsyncCore::InitTask(pw::async2::Context&)::log_thread
     4,096   .bss     (unknown)                        pw::system::(anonymous namespace)::log_buffer
-    4,048   .bss     (unknown)                        pw::system::(anonymous namespace)::packet_io_
+    4,056   .bss     (unknown)                        pw::system::(anonymous namespace)::packet_io_
     4,036   .bss     (unknown)                        pb::cloud::ParticleLedgerBackend::Instance()::instance
     2,688   .bss     (unknown)                        maco::system::GetLedAnimator()::animator
+    2,128   .bss     (unknown)                        maco::apps::(anonymous namespace)::AppInit()::tag_verifier
     2,080   .data    (unknown)                        pw::system::AsyncCore::InitTask(pw::async2::Context&)::transfer_thread
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::rpc_thread
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::work_queue_thread
-    1,912   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
-    1,504   .bss     (unknown)                        (anonymous namespace)::AppInit()::tag_verifier
+    1,936   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
+    1,920   .bss     (unknown)                        maco::apps::(anonymous namespace)::AppInit()::terminal_ui
+    1,700   .bss     (unknown)                        maco::system::GetDeviceConfig()::config
     1,180   .bss     (unknown)                        pw::system::(anonymous namespace)::system_thread_snapshot_service
-    1,088   .bss     (unknown)                        (anonymous namespace)::AppInit()::terminal_ui
-    1,060   .bss     (unknown)                        maco::system::GetDeviceConfig()::config
-      760   .bss     (unknown)                        (anonymous namespace)::AppInit()::session_fsm
+      848   .bss     (unknown)                        maco::apps::(anonymous namespace)::AppInit()::session_fsm
+      728   .bss     (unknown)                        maco::system::GetNfcReader()::reader
       708   .bss     (unknown)                        maco::(anonymous namespace)::GetSnapshot()::snapshot
-      696   .bss     (unknown)                        maco::system::GetNfcReader()::reader
       652   .bss     (unknown)                        maco::system::GetSessionKvs()::kvs
       512   .bss     (unknown)                        pw::system::(anonymous namespace)::encode_buffer
-      512   .bss     (unknown)                        pw::rpc::internal::encoding_buffer
+      512   .bss     (unknown)                        pw::rpc::internal::StaticEncodingBuffer::buffer_
   ─────
-  115,908   total (.data=19,024, .bss=96,884)
+  118,744   total (.data=19,052, .bss=99,692)
 ============================================================

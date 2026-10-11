@@ -1,8 +1,8 @@
 PARTICLE P2 MEMORY BUDGET
 ============================================================
- SRAM:   101,188 /   107,000 bytes ( 95%)  ██████████████████░░
-PSRAM:   371,056 /   382,000 bytes ( 97%)  ███████████████████░
-Flash:   397,312 /   400,000 bytes ( 99%)  ███████████████████░
+ SRAM:   101,260 /   107,000 bytes ( 95%)  ██████████████████░░
+PSRAM:   379,492 /   382,000 bytes ( 99%)  ███████████████████░
+Flash:   401,408 /   412,000 bytes ( 97%)  ███████████████████░
 
 SRAM breakdown (symbols > 512 bytes):
      SIZE   SECTION  SOURCE                           SYMBOL
@@ -11,15 +11,15 @@ SRAM breakdown (symbols > 512 bytes):
     8,224   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::dispatcher_thread
     4,128   .data    (unknown)                        pw::system::AsyncCore::InitTask(pw::async2::Context&)::log_thread
     4,096   .bss     (unknown)                        pw::system::(anonymous namespace)::log_buffer
-    4,048   .bss     (unknown)                        pw::system::(anonymous namespace)::packet_io_
+    4,056   .bss     (unknown)                        pw::system::(anonymous namespace)::packet_io_
     2,080   .data    (unknown)                        pw::system::AsyncCore::InitTask(pw::async2::Context&)::transfer_thread
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::rpc_thread
     2,080   .data    (unknown)                        pw::system::AsyncCore::Init(pw::channel::Channel<(pw::channel::DataType)0, (pw::channel::Property)2, (pw::channel::Property)4>&)::work_queue_thread
-    1,912   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
+    1,936   .bss     (unknown)                        pw::system::(anonymous namespace)::transfer_thread
     1,180   .bss     (unknown)                        pw::system::(anonymous namespace)::system_thread_snapshot_service
       708   .bss     (unknown)                        maco::(anonymous namespace)::GetSnapshot()::snapshot
       512   .bss     (unknown)                        pw::system::(anonymous namespace)::encode_buffer
-      512   .bss     (unknown)                        pw::rpc::internal::encoding_buffer
+      512   .bss     (unknown)                        pw::rpc::internal::StaticEncodingBuffer::buffer_
   ─────
-  101,188   total (.data=18,800, .bss=82,388)
+  101,260   total (.data=18,800, .bss=82,460)
 ============================================================

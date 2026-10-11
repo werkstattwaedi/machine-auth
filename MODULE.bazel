@@ -56,6 +56,26 @@ git_override(
     commit = "8e2d22c29c2956d28a9f077203d74197d1722fd0",
 )
 
+# Pin arm-none-eabi GCC to 12.2. Pigweed moved to GCC 15.2, but firmware
+# built with it SecureFaults (panic code 15) on the P2 right after the display
+# comes up; the same Pigweed with GCC 12.2 runs fine. Likely an ABI/runtime
+# mismatch with the prebuilt Device OS system part (built with Particle's older
+# GCC). Pigweed doesn't let downstream set the toolchain version, but supports
+# override_repo(). The 12.2 package lives under the pre-move CIPD path. See
+# docs/ideas/backlog.md before dropping this pin.
+cipd_repository = use_repo_rule(
+    "@pigweed//pw_env_setup/bazel/cipd_setup:cipd_rules.bzl",
+    "cipd_repository",
+)
+cipd_repository(
+    name = "arm_gcc_12",
+    build_file = "@pigweed//pw_toolchain/build_external:arm_none_eabi_gcc.BUILD",
+    path = "fuchsia/third_party/armgcc/${os}-${arch}",
+    tag = "version:2@12.2.MPACBTI-Rel1.1",
+)
+pw_cxx_toolchain = use_extension("@pigweed//pw_toolchain/cc:pw_cxx_toolchain.bzl", "pw_cxx_toolchain")
+override_repo(pw_cxx_toolchain, gcc_arm_none_eabi_toolchain = "arm_gcc_12")
+
 # System SDL2 library (for host simulator)
 # Requires: apt install libsdl2-dev
 new_local_repository = use_repo_rule(

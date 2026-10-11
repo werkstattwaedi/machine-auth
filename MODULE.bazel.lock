@@ -722,7 +722,7 @@
     "@@pigweed+//pw_toolchain/cc:pw_cxx_toolchain.bzl%pw_cxx_toolchain": {
       "general": {
         "bzlTransitiveDigest": "8ANRjMkuiXHMgW6VBkHehB4PcxmW7HeHkU6VIG1r0d0=",
-        "usagesDigest": "Xj5WOH3PY1pfa5sAg3cSUwGDXrbbX2ZUzawRCULd6Zk=",
+        "usagesDigest": "SoeeSrhKcgoSJpHXcnyMNeEFK4JtL/XkJZS/TMWNnko=",
         "recordedInputs": [
           "REPO_MAPPING:pigweed+,bazel_tools bazel_tools"
         ],
