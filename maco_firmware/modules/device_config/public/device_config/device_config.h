@@ -45,7 +45,8 @@ struct GatewaySensingConfig {
 
   // Sensing spec (forwarded to the gateway).
   SensingKind kind = SensingKind::kUnspecified;
-  pw::InlineString<64> host;
+  // nanopb `host` fields are char[64] incl. the terminator.
+  pw::InlineString<63> host;
   uint16_t port = kDefaultXToolPort;
   uint32_t poll_interval_sec = kDefaultPollIntervalSec;
 };

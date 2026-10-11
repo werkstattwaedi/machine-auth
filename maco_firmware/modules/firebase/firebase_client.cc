@@ -14,9 +14,9 @@
 #include "firebase_rpc/auth.pb.h"
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
-#include "async_util/value_or_timeout.h"
 #include "pb_decode.h"
 #include "pb_encode.h"
+#include "pw_async2/future_timeout.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
@@ -360,7 +360,7 @@ pw::async2::Coro<pw::Result<CheckinResult>> FirebaseClient::TerminalCheckin(
       });
 
   auto timed =
-      co_await maco::async_util::RaceWithDeadline(
+      co_await pw::async2::Timeout(
           std::move(future), pw::async2::GetSystemTimeProvider(),
           kGatewayRpcDeadline);
   if (!timed.ok()) {
@@ -435,7 +435,7 @@ FirebaseClient::AuthenticateTag(pw::async2::CoroContext cx,
       });
 
   auto timed =
-      co_await maco::async_util::RaceWithDeadline(
+      co_await pw::async2::Timeout(
           std::move(future), pw::async2::GetSystemTimeProvider(),
           kGatewayRpcDeadline);
   if (!timed.ok()) {
@@ -509,7 +509,7 @@ pw::async2::Coro<pw::Result<CompleteAuthResult>> FirebaseClient::CompleteTagAuth
       });
 
   auto timed =
-      co_await maco::async_util::RaceWithDeadline(
+      co_await pw::async2::Timeout(
           std::move(future), pw::async2::GetSystemTimeProvider(),
           kGatewayRpcDeadline);
   if (!timed.ok()) {
@@ -565,7 +565,7 @@ pw::async2::Coro<pw::Status> FirebaseClient::UploadUsage(
       });
 
   auto timed =
-      co_await maco::async_util::RaceWithDeadline(
+      co_await pw::async2::Timeout(
           std::move(future), pw::async2::GetSystemTimeProvider(),
           kGatewayRpcDeadline);
   if (!timed.ok()) {

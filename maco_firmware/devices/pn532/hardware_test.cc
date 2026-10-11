@@ -24,7 +24,7 @@
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_task.h"
+#include "pw_async2/future_task.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_log/log.h"
 #include "pw_unit_test/framework.h"
@@ -102,7 +102,7 @@ TestablePn532Reader& GetDriver() {
 template <typename T>
 T RunCoro(pw::async2::Coro<T> coro) {
   pw::async2::BasicDispatcher dispatcher;
-  pw::async2::CoroTask<T> task(std::move(coro));
+  pw::async2::FutureTask<pw::async2::Coro<T>> task(std::move(coro));
 
   dispatcher.Post(task);
 

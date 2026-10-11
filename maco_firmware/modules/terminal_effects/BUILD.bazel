@@ -20,7 +20,7 @@ cc_library(
         "//maco_firmware/modules/led_animator:nfc_effects",
         "@pigweed//pw_allocator:pw_allocator",
         "@pigweed//pw_async2:coro",
-        "@pigweed//pw_async2:coro_or_else_task",
+        "//maco_firmware/modules/async_util:status_coro_task",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_async2:time_provider",
         "@pigweed//pw_chrono:system_clock",

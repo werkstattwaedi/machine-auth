@@ -21,8 +21,8 @@
 #include "pb_uart/async_uart.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_task.h"
 #include "pw_async2/dispatcher_for_test.h"
+#include "pw_async2/future_task.h"
 #include "pw_log/log.h"
 #include "pw_thread/sleep.h"
 #include "pw_unit_test/framework.h"
@@ -171,7 +171,7 @@ class Ntag424HardwareTest : public ::testing::Test {
   pw::async2::Poll<T> PollUntilReady(pw::async2::Coro<T>& coro,
                                      int max_iterations = 200) {
     auto& dispatcher = GetHardware().dispatcher;
-    pw::async2::CoroTask<T> task(std::move(coro));
+    pw::async2::FutureTask<pw::async2::Coro<T>> task(std::move(coro));
     dispatcher.Post(task);
     for (int i = 0; i < max_iterations; ++i) {
       dispatcher.RunUntilStalled();

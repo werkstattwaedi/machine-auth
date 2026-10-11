@@ -45,18 +45,15 @@ local_path_override(
     path = "third_party/particle",
 )
 
-# Pigweed - fetched by Bazel with a local patch on top.
-# The submodule under third_party/pigweed is kept for IDE/source browsing
-# only; Bazel uses the version checked out below.
-# Drop `patches` once upstream lands the equivalent fix; see the patch file
-# header for context.
+# Pigweed - fetched by Bazel at the commit below. git_override (rather than
+# local_path_override on the submodule) leaves room for `patches` when an
+# upstream fix is pending. The submodule under third_party/pigweed is kept for
+# IDE/source browsing only; keep it at the same commit.
 bazel_dep(name = "pigweed")
 git_override(
     module_name = "pigweed",
     remote = "https://pigweed.googlesource.com/pigweed/pigweed",
-    commit = "964e9074e400c27cceff0f5587f981adcd861d04",
-    patches = ["//third_party/pigweed_patches:fallible_coro_task_default.patch"],
-    patch_strip = 1,
+    commit = "8e2d22c29c2956d28a9f077203d74197d1722fd0",
 )
 
 # System SDL2 library (for host simulator)

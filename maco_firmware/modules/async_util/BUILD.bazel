@@ -8,32 +8,28 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
 
-# Header-only: races a value future against a timeout, resolving to a
-# pw::Result<T> (DeadlineExceeded on timeout). Replaces pw_async2's
-# future_timeout.h, which does not compile under arm-none-eabi GCC.
+# Header-only: runs a Coro<pw::Status> as a task and reports a non-OK exit.
+# Replaces pw_async2's removed CoroOrElseTask.
 cc_library(
-    name = "value_or_timeout",
-    hdrs = ["public/async_util/value_or_timeout.h"],
+    name = "status_coro_task",
+    hdrs = ["public/async_util/status_coro_task.h"],
     includes = ["public"],
     deps = [
+        "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:poll",
         "@pigweed//pw_async2:pw_async2",
-        "@pigweed//pw_result",
+        "@pigweed//pw_function",
         "@pigweed//pw_status",
     ],
 )
 
 pw_cc_test(
-    name = "value_or_timeout_test",
-    srcs = ["value_or_timeout_test.cc"],
+    name = "status_coro_task_test",
+    srcs = ["status_coro_task_test.cc"],
     deps = [
-        ":value_or_timeout",
+        ":status_coro_task",
+        "@pigweed//pw_allocator:testing",
         "@pigweed//pw_async2:basic_dispatcher",
         "@pigweed//pw_async2:coro",
-        "@pigweed//pw_async2:coro_or_else_task",
-        "@pigweed//pw_async2:simulated_time_provider",
-        "@pigweed//pw_async2:value_future",
-        "@pigweed//pw_allocator:testing",
-        "@pigweed//pw_chrono:system_clock",
     ],
 )

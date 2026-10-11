@@ -9,15 +9,16 @@
 #include <memory>
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/devices/pn532/pn532_command.h"
 #include "maco_firmware/devices/pn532/tag_info.h"
 #include "maco_firmware/modules/nfc_reader/nfc_event.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/nfc_reader/transceive_request.h"
 #include "maco_firmware/modules/nfc_tag/nfc_tag.h"
+#include "pb_uart/async_uart.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/value_future.h"
 #include "pw_bytes/span.h"
@@ -25,7 +26,6 @@
 #include "pw_digital_io/digital_io.h"
 #include "pw_result/result.h"
 #include "pw_status/status.h"
-#include "pb_uart/async_uart.h"
 
 namespace maco::nfc {
 
@@ -177,7 +177,7 @@ class Pn532NfcReader : public NfcReader {
 
   // Coroutine infrastructure
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> reader_task_;
+  std::optional<maco::async_util::StatusCoroTask> reader_task_;
   pw::async2::Dispatcher* dispatcher_ = nullptr;
   bool started_ = false;  // Guard against multiple Start() calls
 

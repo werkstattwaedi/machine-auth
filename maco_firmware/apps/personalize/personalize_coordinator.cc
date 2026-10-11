@@ -23,10 +23,9 @@ namespace {
 /// leaving the field aborts the wait — otherwise the coordinator would sit
 /// in "awaiting keys" forever and ignore every subsequent tap.
 ///
-/// Modeled on async_util::ValueOrTimeout (see its header for why pw_async2's
-/// own combinator headers are avoided). The losing future is dropped
-/// unresolved, which is safe for ValueFuture: its destructor unlists itself
-/// from the provider, and a later Resolve with no waiter is a no-op.
+/// The losing future is dropped unresolved, which is safe for ValueFuture: its
+/// destructor unlists itself from the provider, and a later Resolve with no
+/// waiter is a no-op.
 class [[nodiscard]] KeysOrNfcEvent {
  public:
   struct Outcome {

@@ -10,6 +10,7 @@
 #include <optional>
 #include <variant>
 
+#include "async_util/status_coro_task.h"
 #include "firebase/firebase_client.h"
 #include "firebase_rpc/auth.pb.h"
 #include "gateway/gateway_service.pb.h"
@@ -17,7 +18,6 @@
 #include "pb_encode.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
 #include "pw_rpc/nanopb/client_testing.h"
 #include "pw_unit_test/framework.h"
@@ -156,7 +156,7 @@ class CloudKeyProviderTest : public ::testing::Test {
     rpc_ctx_.server().SendServerError<GatewayService::Forward>(status);
   }
 
-  bool RunUntilComplete(pw::async2::CoroOrElseTask& task,
+  bool RunUntilComplete(maco::async_util::StatusCoroTask& task,
                         int max_iterations = 100) {
     int iterations = 0;
     while (task.IsRegistered() && iterations++ < max_iterations) {
@@ -189,7 +189,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_Success) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -233,7 +233,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_InvalidInputSize) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -259,7 +259,7 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_RpcFailure) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -303,7 +303,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Success) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -368,7 +368,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Rejected) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -418,7 +418,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_NoAuthId) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -454,7 +454,7 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_InvalidInputSize) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -494,7 +494,7 @@ TEST_F(CloudKeyProviderTest, CancelAuthentication_ClearsState) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -545,7 +545,7 @@ TEST_F(CloudKeyProviderTest, AuthId_AvailableAfterSuccess) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -596,7 +596,7 @@ TEST_F(CloudKeyProviderTest, AuthId_ClearedOnRejection) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);

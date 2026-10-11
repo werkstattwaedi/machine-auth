@@ -6,12 +6,12 @@
 #include <atomic>
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/modules/app_state/session_controller.h"
 #include "maco_firmware/modules/app_state/session_fsm.h"
 #include "maco_firmware/modules/machine_control/machine_toggle.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
@@ -99,7 +99,7 @@ class MachineController : public app_state::SessionObserver,
       PW_GUARDED_BY(accumulator_mutex_);
 
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace maco::machine_control

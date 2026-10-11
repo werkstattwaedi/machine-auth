@@ -14,17 +14,17 @@
 #include <cstring>
 
 #include "delay_hal.h"
-#include "usart_hal.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
+#include "pw_async2/future_task.h"
 #include "pw_async2/system_time_provider.h"
 #include "pw_bytes/array.h"
 #include "pw_bytes/span.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 #include "pw_unit_test/framework.h"
+#include "usart_hal.h"
 
 using namespace std::chrono_literals;
 
@@ -155,13 +155,7 @@ TEST_F(AsyncUartLoopbackTest, AsyncReadWithCoroutine) {
   pw::async2::CoroContext coro_cx(test_allocator);
   auto coro = test_coro(coro_cx);
 
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status status) {
-        if (!status.ok()) {
-          PW_LOG_ERROR("Coroutine failed with status %d",
-                       static_cast<int>(status.code()));
-        }
-      });
+  pw::async2::FutureTask task(std::move(coro));
 
   dispatcher_.Post(task);
 
@@ -175,6 +169,7 @@ TEST_F(AsyncUartLoopbackTest, AsyncReadWithCoroutine) {
   }
 
   ASSERT_LT(iterations, kMaxIterations) << "Test timed out";
+  EXPECT_EQ(task.value(), pw::OkStatus()) << "Coroutine failed";
   ASSERT_TRUE(test_passed) << "Coroutine test failed";
 
   PW_LOG_INFO("Async read with coroutine: PASSED");
@@ -219,13 +214,7 @@ TEST_F(AsyncUartLoopbackTest, MultipleSequentialReads) {
   pw::async2::CoroContext coro_cx(test_allocator);
   auto coro = test_coro(coro_cx);
 
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status status) {
-        if (!status.ok()) {
-          PW_LOG_ERROR("Sequential test failed: %d",
-                       static_cast<int>(status.code()));
-        }
-      });
+  pw::async2::FutureTask task(std::move(coro));
 
   dispatcher_.Post(task);
 
@@ -238,6 +227,7 @@ TEST_F(AsyncUartLoopbackTest, MultipleSequentialReads) {
   }
 
   ASSERT_LT(iterations, kMaxIterations) << "Test timed out";
+  EXPECT_EQ(task.value(), pw::OkStatus()) << "Sequential test failed";
   ASSERT_EQ(successful_reads, 3) << "Not all reads succeeded";
 
   PW_LOG_INFO("Multiple sequential reads: PASSED");
@@ -370,19 +360,9 @@ TEST_F(AsyncUartLoopbackTest, InterleavedReadsAndWrites) {
   auto reader = reader_coro(reader_cx);
   auto writer = writer_coro(writer_cx);
 
-  pw::async2::CoroOrElseTask reader_task(
-      std::move(reader), [](pw::Status status) {
-        if (!status.ok()) {
-          PW_LOG_ERROR("[Reader] Failed: %d", static_cast<int>(status.code()));
-        }
-      });
+  pw::async2::FutureTask reader_task(std::move(reader));
 
-  pw::async2::CoroOrElseTask writer_task(
-      std::move(writer), [](pw::Status status) {
-        if (!status.ok()) {
-          PW_LOG_ERROR("[Writer] Failed: %d", static_cast<int>(status.code()));
-        }
-      });
+  pw::async2::FutureTask writer_task(std::move(writer));
 
   // Post both tasks - reader first so it starts waiting
   dispatcher_.Post(reader_task);
@@ -399,6 +379,8 @@ TEST_F(AsyncUartLoopbackTest, InterleavedReadsAndWrites) {
   }
 
   ASSERT_LT(iterations, kMaxIterations) << "Test timed out";
+  EXPECT_EQ(reader_task.value(), pw::OkStatus()) << "[Reader] Failed";
+  EXPECT_EQ(writer_task.value(), pw::OkStatus()) << "[Writer] Failed";
   ASSERT_TRUE(reader_done) << "Reader did not complete";
   ASSERT_TRUE(writer_done) << "Writer did not complete";
   ASSERT_EQ(event_count, 7u) << "Not all events recorded";
@@ -476,12 +458,7 @@ TEST_F(AsyncUartLoopbackTest, ReadTimeout) {
   pw::async2::CoroContext coro_cx(test_allocator);
   auto coro = test_coro(coro_cx);
 
-  pw::async2::CoroOrElseTask task(
-      std::move(coro), [](pw::Status status) {
-        if (!status.ok()) {
-          PW_LOG_ERROR("Timeout test failed: %d", static_cast<int>(status.code()));
-        }
-      });
+  pw::async2::FutureTask task(std::move(coro));
 
   dispatcher_.Post(task);
 
@@ -495,6 +472,7 @@ TEST_F(AsyncUartLoopbackTest, ReadTimeout) {
   }
 
   ASSERT_LT(iterations, kMaxIterations) << "Test did not complete in time";
+  EXPECT_EQ(task.value(), pw::OkStatus()) << "Timeout test failed";
   ASSERT_TRUE(got_timeout) << "Did not get expected timeout";
 
   // Verify timeout happened around the expected time (100ms +/- 50ms margin)

@@ -7,7 +7,7 @@
 
 #include <cstdio>
 
-#include "async_util/value_or_timeout.h"
+#include "pw_async2/future_timeout.h"
 #include "pw_log/log.h"
 
 namespace maco::machine_control {
@@ -115,7 +115,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Acquire(
       },
       [this](pw::Status st) { lease_provider_.Resolve(st); });
 
-  auto timed = co_await maco::async_util::RaceWithDeadline(
+  auto timed = co_await pw::async2::Timeout(
       std::move(future), time_provider_, kRpcDeadline);
   if (!timed.ok()) {
     PW_LOG_WARN("Gateway sensing RPC timed out; cancelling in-flight call");
@@ -148,7 +148,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Renew(
       },
       [this](pw::Status st) { lease_provider_.Resolve(st); });
 
-  auto timed = co_await maco::async_util::RaceWithDeadline(
+  auto timed = co_await pw::async2::Timeout(
       std::move(future), time_provider_, kRpcDeadline);
   if (!timed.ok()) {
     PW_LOG_WARN("Gateway sensing RPC timed out; cancelling in-flight call");

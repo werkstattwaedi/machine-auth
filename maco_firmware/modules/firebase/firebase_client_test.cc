@@ -12,13 +12,13 @@
 #include <string_view>
 #include <variant>
 
+#include "async_util/status_coro_task.h"
 #include "firebase_rpc/auth.pb.h"
 #include "gateway/gateway_service.pb.h"
 #include "gateway/gateway_service.rpc.pb.h"
 #include "pb_encode.h"
 #include "pw_allocator/testing.h"
 #include "pw_async2/basic_dispatcher.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
 #include "pw_rpc/nanopb/client_testing.h"
 #include "pw_unit_test/framework.h"
@@ -30,7 +30,7 @@ namespace {
 using GatewayService = maco::gateway::pw_rpc::nanopb::GatewayService;
 
 // Test allocator with sufficient space for coroutine frames. The RPC methods
-// race their response future against a deadline timer (RaceWithDeadline),
+// race their response future against a deadline timer (pw::async2::Timeout),
 // which stores the timer future inline in the coroutine frame — so the frames
 // are larger than a bare co_await would need.
 constexpr size_t kAllocatorSize = 8192;
@@ -191,7 +191,7 @@ class FirebaseClientTest : public ::testing::Test {
   }
 
   // Run the dispatcher until the task completes or max iterations
-  bool RunUntilComplete(pw::async2::CoroOrElseTask& task,
+  bool RunUntilComplete(maco::async_util::StatusCoroTask& task,
                         int max_iterations = 100) {
     int iterations = 0;
     while (task.IsRegistered() && iterations++ < max_iterations) {
@@ -229,7 +229,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Authorized) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -275,7 +275,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_Rejected) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -323,7 +323,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ForwardError) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -356,7 +356,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_RpcError) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -393,7 +393,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_EmptyMachineIdRejected) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -434,7 +434,7 @@ TEST_F(FirebaseClientTest, AuthenticateTag_Success) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -489,7 +489,7 @@ TEST_F(FirebaseClientTest, CompleteTagAuth_Success) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -543,7 +543,7 @@ TEST_F(FirebaseClientTest, TerminalCheckin_SendsRequest) {
   };
 
   auto coro = test_coro(coro_cx);
-  pw::async2::CoroOrElseTask task(std::move(coro),
+  maco::async_util::StatusCoroTask task(std::move(coro),
                                   [](pw::Status) { /* Error handler */ });
 
   dispatcher_.Post(task);
@@ -602,11 +602,11 @@ TEST_F(FirebaseClientTest, TerminalCheckin_ConcurrentCallReturnsUnavailable) {
   };
 
   auto coro1 = test_coro1(coro_cx1);
-  pw::async2::CoroOrElseTask task1(std::move(coro1),
+  maco::async_util::StatusCoroTask task1(std::move(coro1),
                                    [](pw::Status) { /* Error handler */ });
 
   auto coro2 = test_coro2(coro_cx2);
-  pw::async2::CoroOrElseTask task2(std::move(coro2),
+  maco::async_util::StatusCoroTask task2(std::move(coro2),
                                    [](pw::Status) { /* Error handler */ });
 
   // Start first call

@@ -5,11 +5,11 @@
 
 #include <optional>
 
+#include "async_util/status_coro_task.h"
 #include "maco_firmware/modules/machine_control/machine_sensor.h"
 #include "maco_firmware/modules/machine_control/machine_toggle.h"
 #include "pw_allocator/allocator.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
 
@@ -35,7 +35,7 @@ class DefaultMachineSensor : public MachineSensor {
   const MachineToggle& toggle_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 }  // namespace maco::machine_control

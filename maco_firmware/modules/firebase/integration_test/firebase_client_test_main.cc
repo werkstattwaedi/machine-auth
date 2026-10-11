@@ -18,12 +18,12 @@
 #include <optional>
 #include <variant>
 
+#include "async_util/status_coro_task.h"
 #include "firebase/firebase_client.h"
 #include "maco_firmware/modules/gateway/derive_ascon_key.h"
 #include "maco_firmware/modules/gateway/p2_gateway_client.h"
 #include "maco_firmware/types.h"
 #include "pw_async2/coro.h"
-#include "pw_async2/coro_or_else_task.h"
 #include "pw_bytes/array.h"
 #include "pw_log/log.h"
 #include "pw_rpc/nanopb/server_reader_writer.h"
@@ -253,7 +253,7 @@ class TestControlServiceImpl
 
   // Coroutine context and task - must outlive the async operation
   pw::async2::CoroContext coro_cx_;
-  std::optional<pw::async2::CoroOrElseTask> task_;
+  std::optional<maco::async_util::StatusCoroTask> task_;
 };
 
 // Global service instance (must outlive the RPC server)

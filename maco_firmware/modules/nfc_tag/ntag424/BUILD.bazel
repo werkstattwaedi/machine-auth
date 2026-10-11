@@ -146,7 +146,7 @@ pw_cc_test(
         "//proto/gateway:gateway_service_nanopb_rpc",
         "@pigweed//pw_allocator:testing",
         "@pigweed//pw_async2:basic_dispatcher",
-        "@pigweed//pw_async2:coro_or_else_task",
+        "//maco_firmware/modules/async_util:status_coro_task",
         "@pigweed//pw_bytes",
         "@pigweed//pw_rpc/nanopb:client_testing",
     ],
