@@ -94,7 +94,7 @@ async function main(): Promise<void> {
 
   // Best effort: the installer exists even if the record fails.
   try {
-    recordDeploy({
+    await recordDeploy({
       kind: "deploy",
       env,
       component: "kiosk",

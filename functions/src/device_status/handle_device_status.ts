@@ -89,8 +89,14 @@ export function fromStatusDoc(data: DocumentData | undefined): StoredStatus | un
   };
 }
 
-function toStatusDoc(doc: StoredStatus): DocumentData {
+/**
+ * `kind` and `deviceId` repeat the path so the admin page, which reads all
+ * of them as the "status" collection group, can tell them apart.
+ */
+function toStatusDoc(doc: StoredStatus, kind: DeviceKind, id: string): DocumentData {
   return {
+    kind,
+    deviceId: id,
     version: doc.version,
     online: doc.online,
     bootedAt: ts(doc.bootedAt),
@@ -191,7 +197,7 @@ export async function applyGatewayReport(
     const plan = planStatusUpdate(stored, next, now, heardAt);
     logEvents("maco", id, plan, context);
     if (plan.write) {
-      batch.set(refs[i], { ...toStatusDoc(plan.doc), gatewayId: report.gatewayId });
+      batch.set(refs[i], { ...toStatusDoc(plan.doc, "maco", id), gatewayId: report.gatewayId });
       writes++;
     }
   });
@@ -215,7 +221,10 @@ export async function applyGatewayReport(
   );
   logEvents("gateways", report.gatewayId, gatewayPlan, {});
   if (gatewayPlan.write) {
-    batch.set(gatewayRef, { ...toStatusDoc(gatewayPlan.doc), terminals: online });
+    batch.set(gatewayRef, {
+      ...toStatusDoc(gatewayPlan.doc, "gateways", report.gatewayId),
+      terminals: online,
+    });
     writes++;
   } else if (!sameSet(knownOnline, online)) {
     // Only the online list changed: write just that, so a reboot the plan
@@ -294,7 +303,7 @@ export async function reportKioskStatusHandler(
     now
   );
   logEvents("kiosks", id, plan, {});
-  if (plan.write) await ref.set(toStatusDoc(plan.doc));
+  if (plan.write) await ref.set(toStatusDoc(plan.doc, "kiosks", id));
   logger.info("kiosk_status", { event: "kiosk_status", kioskId: id, version: parsedVersion });
   return { ok: true };
 }

@@ -14,7 +14,10 @@ import {
   deployTagName,
   formatTime,
   parseLog,
+  isBehind,
   renderState,
+  type RunningDevice,
+  runningDrift,
   serializeEntry,
 } from "./deploy-log.ts";
 
@@ -100,4 +103,40 @@ test("drift lines render only when facts are known", () => {
   const md = renderState(entries, { mainAheadOfProd: 7, stagingAheadOfProd: 3 });
   assert.match(md, /Staging is \*\*3\*\* commit/);
   assert.match(md, /`main` is \*\*7\*\* commit/);
+});
+
+// Phase 3: what runs, next to what was deployed.
+const running: RunningDevice[] = [
+  { env: "prod", kind: "gateways", deviceId: "workshop", version: "2026.10.3", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+  { env: "prod", kind: "maco", deviceId: "0a10aced202194944a042f04", name: "Laser", version: "2026.10.2", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+  { env: "prod", kind: "maco", deviceId: "0a10aced202194944a042f05", version: null, online: false, since: "2026-10-12T06:00:00.000Z", lastSeen: "2026-10-12T05:59:00.000Z" },
+];
+
+test("a device is behind only when its release is older", () => {
+  assert.equal(isBehind("2026.10.2", "2026.10.3"), true);
+  assert.equal(isBehind("2026.10.2-dev.4+gabc", "2026.10.3"), true);
+  assert.equal(isBehind("2026.10.3-dev.1+gabc", "2026.10.3"), false);
+  assert.equal(isBehind("2026.9.30", "2026.10.1"), true);
+  assert.equal(isBehind("2026.10.10", "2026.10.9"), false);
+  assert.equal(isBehind(null, "2026.10.3"), null);
+  assert.equal(isBehind("dev", "2026.10.3"), null);
+});
+
+test("drift names devices behind the latest release and offline devices", () => {
+  const warnings = runningDrift(running, "2026.10.3");
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /Laser.*2026\.10\.2.*2026\.10\.3/);
+  assert.match(warnings[1], /0a10aced202194944a042f05 is offline since 2026-10-12 08:00/);
+});
+
+test("STATE.md shows the live devices, and says when the live view is missing", () => {
+  const md = renderState(entries, { latestRelease: "2026.10.3", running }, new Date("2026-10-12T09:00:00Z"));
+  assert.match(md, /## Running \(live\)/);
+  assert.match(md, /\| prod \| terminal Laser \(0a10aced202194944a042f04\) \| 2026\.10\.2 ⚠️ behind \| online \|/);
+  assert.match(md, /⚠️ offline since 2026-10-12 08:00/);
+  assert.match(md, /## Drift[\s\S]*⚠️ prod: terminal Laser/);
+
+  const offline = renderState(entries, { runningProblems: ["oww-maco: no credentials"] });
+  assert.match(offline, /Live view incomplete: oww-maco: no credentials/);
+  assert.doesNotMatch(renderState(entries, {}), /Running \(live\)/);
 });

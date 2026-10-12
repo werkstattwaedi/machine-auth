@@ -48,6 +48,13 @@ gateway reports, create the two alert policies from the operations repo's
 `docs/monitoring.md` ("Gateway heartbeat missing", "Terminal offline");
 created earlier, the first one fires at once.
 
+After every deploy, the record step reads what the devices report (the
+`status` documents of both projects) into STATE.md's "Running (live)"
+section and warns about devices on an older release or offline. It needs
+Application Default Credentials (`gcloud auth application-default login`);
+without them STATE.md just says the live view was unavailable. The same
+view, live, is the admin app's **Versionen** page.
+
 Every successful `deploy.sh` run, gateway deploy, kiosk installer build and
 `./pw prod-flash` records itself: a `deploy/<env>/<component>/<timestamp>`
 git tag plus an entry in the operations repo's `deploys/log.jsonl`, from

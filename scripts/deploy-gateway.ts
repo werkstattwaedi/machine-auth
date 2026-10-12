@@ -520,7 +520,7 @@ async function main() {
     deploy(payloadPath, envPath, saPath, values.host!, values["remote-dir"]!);
     // ADR-0045. Best effort: the gateway is deployed even if this fails.
     try {
-      recordDeploy({
+      await recordDeploy({
         kind: "deploy",
         // No --env means the base config, i.e. production (ADR-0034).
         env: (values.env ?? "prod") as DeployEnv,

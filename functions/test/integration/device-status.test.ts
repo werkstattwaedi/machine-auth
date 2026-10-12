@@ -62,7 +62,14 @@ describe("device status reports (Integration)", () => {
     expect(writes).to.equal(2);
 
     const t = (await statusRef(db, "maco", A).get()).data()!;
-    expect(t).to.include({ version: "2026.10.3", online: true, resetReason: "power_cycle", gatewayId: "workshop" });
+    expect(t).to.include({
+      kind: "maco",
+      deviceId: A,
+      version: "2026.10.3",
+      online: true,
+      resetReason: "power_cycle",
+      gatewayId: "workshop",
+    });
     expect(t.bootedAt.toMillis()).to.equal(T0 - 5_000 - 60 * MIN);
     expect(t.lastSeen.toMillis()).to.equal(T0 - 5_000); // its last ping
 

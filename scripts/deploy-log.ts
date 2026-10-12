@@ -56,6 +56,63 @@ export interface DeployEntry {
 const REPO_URL = "https://github.com/werkstattwaedi/machine-auth";
 
 /**
+ * What a device reports as running right now (ADR-0045 phase 3), read from
+ * the projects' `status` documents by device-status-read.ts.
+ */
+export interface RunningDevice {
+  env: DeployEnv;
+  kind: "maco" | "gateways" | "kiosks";
+  deviceId: string;
+  /** Terminal name from `maco/{id}`. */
+  name?: string;
+  version: string | null;
+  online: boolean;
+  /** ISO timestamps. */
+  since: string | null;
+  lastSeen: string | null;
+}
+
+const KIND_LABEL: Record<RunningDevice["kind"], string> = {
+  gateways: "gateway",
+  maco: "terminal",
+  kiosks: "kiosk",
+};
+
+function releaseTuple(version: string | null | undefined): number[] | null {
+  const m = version?.match(/^(\d{4})\.(\d{1,2})\.(\d+)(-|\+|$)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** True when `version` is based on an older release than `latest`; null if unknown. */
+export function isBehind(version: string | null, latest: string): boolean | null {
+  const v = releaseTuple(version);
+  const l = releaseTuple(latest);
+  if (!v || !l) return null;
+  for (let i = 0; i < 3; i++) if (v[i] !== l[i]) return v[i] < l[i];
+  return false;
+}
+
+function deviceLabel(d: RunningDevice): string {
+  return `${KIND_LABEL[d.kind]} ${d.name ? `${d.name} (${d.deviceId})` : d.deviceId}`;
+}
+
+/**
+ * Warnings worth a look — never a reason to block a deploy: devices on an
+ * older release than the latest one, and devices that are offline.
+ */
+export function runningDrift(devices: RunningDevice[], latest: string | undefined): string[] {
+  const warnings: string[] = [];
+  for (const d of devices) {
+    if (!d.online) {
+      warnings.push(`${d.env}: ${deviceLabel(d)} is offline${d.since ? ` since ${formatTime(d.since)}` : ""}`);
+    } else if (latest && isBehind(d.version, latest)) {
+      warnings.push(`${d.env}: ${deviceLabel(d)} runs ${d.version}, the latest release is ${latest}`);
+    }
+  }
+  return warnings;
+}
+
+/**
  * Lenient on purpose: one truncated line or leftover merge marker must not
  * stop every later deploy from being recorded. Bad lines go to `onBad`.
  */
@@ -182,6 +239,12 @@ export interface RepoFacts {
   mainAheadOfProd?: number;
   /** Commits in the latest staging firebase deploy not yet in prod. */
   stagingAheadOfProd?: number;
+  /** Newest `vYYYY.M.N` release, without the "v". */
+  latestRelease?: string;
+  /** What the devices report as running; undefined when not read. */
+  running?: RunningDevice[];
+  /** Why the live view is missing or incomplete. */
+  runningProblems?: string[];
 }
 
 export function renderState(
@@ -230,10 +293,47 @@ export function renderState(
       `- \`main\` is **${facts.mainAheadOfProd}** commit(s) ahead of prod (firebase).`
     );
   }
+  if (facts.running) {
+    for (const w of runningDrift(facts.running, facts.latestRelease)) drift.push(`- ⚠️ ${cell(w)}`);
+  }
   if (drift.length > 0) {
     lines.push("## Drift");
     lines.push("");
     lines.push(...drift);
+    lines.push("");
+  }
+
+  if (facts.running !== undefined || facts.runningProblems?.length) {
+    lines.push("## Running (live)");
+    lines.push("");
+    lines.push(
+      "_What the devices report (their `status` documents), as of the render time" +
+        (facts.latestRelease ? `; latest release ${facts.latestRelease}` : "") +
+        "._"
+    );
+    lines.push("");
+    const running = [...(facts.running ?? [])].sort(
+      (a, b) =>
+        ENVS.indexOf(a.env) - ENVS.indexOf(b.env) ||
+        Object.keys(KIND_LABEL).indexOf(a.kind) - Object.keys(KIND_LABEL).indexOf(b.kind) ||
+        (a.name ?? a.deviceId).localeCompare(b.name ?? b.deviceId)
+    );
+    if (running.length > 0) {
+      lines.push("| Env | Device | Version | Status | Last heard |");
+      lines.push("|---|---|---|---|---|");
+      for (const d of running) {
+        const behind = facts.latestRelease ? isBehind(d.version, facts.latestRelease) : null;
+        const version = d.version ? `${d.version}${behind ? " ⚠️ behind" : ""}` : "unknown";
+        const status = d.online ? "online" : `⚠️ offline${d.since ? ` since ${formatTime(d.since)}` : ""}`;
+        lines.push(
+          `| ${d.env} | ${cell(deviceLabel(d))} | ${cell(version)} | ${status} | ` +
+            `${d.lastSeen ? formatTime(d.lastSeen) : "–"} |`
+        );
+      }
+    } else if (facts.running) {
+      lines.push("No device has reported yet.");
+    }
+    for (const p of facts.runningProblems ?? []) lines.push(``, `Live view incomplete: ${cell(p)}`);
     lines.push("");
   }
 

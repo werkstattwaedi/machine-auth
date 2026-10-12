@@ -15,6 +15,7 @@ import {
   History,
   Package,
   Receipt,
+  Server,
   Users,
 } from "lucide-react"
 
@@ -34,6 +35,8 @@ const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/visits", label: "Besuche", icon: ClipboardList },
   { to: "/usages", label: "Nutzungen", icon: History },
   { to: "/audit", label: "Audit-Log", icon: FileText },
+  // What runs where right now (ADR-0045 phase 3).
+  { to: "/versions", label: "Versionen", icon: Server },
 ]
 
 function AdminAuthenticatedLayout() {

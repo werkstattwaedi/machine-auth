@@ -1,6 +1,6 @@
 # ADR-0045: Deploy record and release versions
 
-**Status:** Accepted (phases 1 and 2 implemented; 3 planned)
+**Status:** Accepted (implemented)
 
 **Date:** 2026-10-12
 
@@ -230,12 +230,21 @@ hours, so it gets no absence alert.
 
 ### Phase 3 — where it shows, and drift
 
-- **Admin "Versionen" page** (per project): every status document with its
-  version, online state, last seen and "behind the latest release" flag,
-  next to that project's functions and web versions.
-- **Drift:** `deploy-record.ts render` and `deploy.sh` read the status
-  documents and add "running" next to "deployed" in `STATE.md`. They warn,
-  never block, when a device lags the latest release.
+- **Admin "Versionen" page** (`/versions`, per project): the cloud — the
+  functions (from the dispatcher `ping`), the admin app (its own build) and
+  the checkout app (its `/version.json`, served with a CORS header for this
+  page) — and every status document (the `status` collection group; each
+  doc repeats its `kind` and `deviceId` for that) with version, online
+  state, last heard and last reboot. "Behind" means based on an older
+  release than the newest one anything in the project runs; versions are
+  read with `@oww/shared` `release-version.ts`.
+- **Drift:** every deploy record and `deploy-record.ts render` read the
+  status documents of both projects (`scripts/device-status-read.ts`,
+  Application Default Credentials) and add a "Running (live)" table to
+  `STATE.md`, next to what was deployed; devices behind the latest release
+  tag or offline go into its Drift section and are printed as warnings at
+  the end of the deploy — never a reason to fail it. Without credentials
+  STATE.md says the live view was unavailable.
 
 Rollout order: build provenance (2a + 2b), status reports and alerting
 (2c), the Versionen page, drift.

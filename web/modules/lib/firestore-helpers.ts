@@ -15,10 +15,12 @@
 
 import {
   collection,
+  collectionGroup,
   doc,
   type CollectionReference,
   type DocumentReference,
   type Firestore,
+  type Query,
 } from "firebase/firestore"
 
 import type {
@@ -29,6 +31,7 @@ import type {
   CheckoutDoc,
   CheckoutItemDoc,
   ConfigDoc,
+  DeviceStatusDoc,
   MachineDoc,
   MachineReportDoc,
   MacoDoc,
@@ -128,6 +131,13 @@ export function macoRef(
   id: string,
 ): DocumentReference<MacoDoc> {
   return doc(db, "maco", id) as DocumentReference<MacoDoc>
+}
+
+// ── device status ────────────────────────────────────────────────────────
+
+/** Every device's status doc (maco/gateways/kiosks), admin-only. */
+export function deviceStatusGroup(db: Firestore): Query<DeviceStatusDoc> {
+  return collectionGroup(db, "status") as Query<DeviceStatusDoc>
 }
 
 // ── catalog ──────────────────────────────────────────────────────────────
