@@ -16,8 +16,11 @@ fi
 # The selector logic itself is fast and emulator-free; always verify it.
 npm run test:scripts || exit 1
 
-echo "$suites" | grep -q '^web$' && { npm run test:precommit:web || exit 1; }
-echo "$suites" | grep -q '^functions$' && { npm run test:precommit:functions || exit 1; }
+# Builds (type-check) and unit tests only. The emulator-backed integration
+# tests and e2e run in CI (`npm run test:precommit` + the e2e matrix), and
+# locally on demand via `npm run test:precommit`.
+echo "$suites" | grep -q '^web$' && { npm run test:hook:web || exit 1; }
+echo "$suites" | grep -q '^functions$' && { npm run test:hook:functions || exit 1; }
 
 # Explicit success: without this, a web-only commit (suites="web") leaves the
 # final `grep '^functions$'` as the last command — it exits 1 (no match) and

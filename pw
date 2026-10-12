@@ -324,8 +324,17 @@ case "$1" in
   prod-flash)
     # Flash the optimized production firmware (ADR-0040). --config=prod builds
     # -c opt; prod boots without the 10s serial wait and arms the watchdog.
+    # Latest main in both repos, or DEPLOY_ALLOW_OFF_MAIN=1 (ADR-0045).
+    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-preflight.ts" --component firmware || exit 1
+    # Device id for the deploy record — read before flashing,
+    # while the device is not rebooting.
+    DEVICE_ID=$(npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-record.ts" usb-device 2>/dev/null)
     echo "🔌 Flashing PRODUCTION firmware (optimized)..."
-    exec bazelisk run --config=prod //maco_firmware/apps/prod:flash
+    bazelisk run --config=prod //maco_firmware/apps/prod:flash || exit $?
+    # Record which commit this device now runs; best effort.
+    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-record.ts" deploy --env prod --component firmware \
+      ${DEVICE_ID:+--target "$DEVICE_ID"} \
+      || echo "⚠️  Flash succeeded but was not recorded (scripts/deploy-record.ts)"
     ;;
   prod-console)
     # Connect console to a prod-flashed device. Builds the prod ELF with

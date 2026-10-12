@@ -22,18 +22,17 @@ import type {
   CatalogVariant,
   DiscountLevel,
   ItemType,
+  PaidVia,
+  PaymentMethod,
   PricingModel,
-  StoredPaidVia,
-  StoredPaymentMethod,
 } from "@oww/shared"
 export type {
   CatalogVariant,
   DiscountLevel,
   ItemType,
+  PaidVia,
   PaymentMethod,
   PricingModel,
-  StoredPaidVia,
-  StoredPaymentMethod,
   VariantPrice,
 } from "@oww/shared"
 
@@ -317,10 +316,9 @@ export interface CheckoutDoc extends AuditFields {
    * fire-and-forget on every tab click so the workshop has a record of what
    * the user intended even when they leave without committing. The commit-
    * time ack itself lives on the bill (paymentMethodConfirmationTime /
-   * paymentMethodConfirmationSource). May hold the pre-rename "twint" —
-   * read it through normalizePaymentMethod.
+   * paymentMethodConfirmationSource).
    */
-  paymentMethod?: StoredPaymentMethod | null
+  paymentMethod?: PaymentMethod | null
   /**
    * Server-only: one Timestamp per stale-open-checkout reminder email sent
    * (#531). Written exclusively by the `staleCheckoutReminders` cron; client
@@ -369,7 +367,7 @@ export interface BillDoc extends AuditFields {
   storagePath: string | null
   created: Timestamp
   paidAt?: Timestamp | null
-  paidVia?: StoredPaidVia | null
+  paidVia?: PaidVia | null
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null

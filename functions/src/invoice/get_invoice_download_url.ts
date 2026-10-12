@@ -7,7 +7,6 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor } from "../util/storage_download";
 import { billDocumentPrefix, formatBillReference, type BillEntity } from "./types";
-import { normalizePaymentMethod } from "@oww/shared";
 import type { CheckoutEntity, PaymentMethod } from "../types/firestore_entities";
 
 /**
@@ -81,9 +80,9 @@ export const getInvoiceDownloadUrlHandler = async (
   if (firstCheckoutRef) {
     try {
       const checkoutSnap = await firstCheckoutRef.get();
-      paymentMethod = normalizePaymentMethod(
-        (checkoutSnap.data() as CheckoutEntity | undefined)?.paymentMethod,
-      );
+      paymentMethod =
+        (checkoutSnap.data() as CheckoutEntity | undefined)?.paymentMethod ??
+        null;
     } catch {
       paymentMethod = null;
     }

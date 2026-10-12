@@ -8,56 +8,27 @@ import {
   enabledPaymentMethods,
   isPaidDuringCheckout,
   isPaymentMethodEnabledAnywhere,
+  isPaymentMethod,
   parsePaymentMethodList,
-  normalizePaidVia,
-  normalizePaymentMethod,
 } from "./payment-methods"
 
-describe("normalizePaymentMethod", () => {
-  it("passes current ids through", () => {
-    for (const m of PAYMENT_METHODS) expect(normalizePaymentMethod(m)).toBe(m)
-  })
-
-  it("maps the pre-rename twint id to raisenow", () => {
-    expect(normalizePaymentMethod("twint")).toBe("raisenow")
-  })
-
-  it("returns null for anything else", () => {
-    expect(normalizePaymentMethod(null)).toBeNull()
-    expect(normalizePaymentMethod(undefined)).toBeNull()
-    expect(normalizePaymentMethod("")).toBeNull()
-    expect(normalizePaymentMethod("cash")).toBeNull()
-    expect(normalizePaymentMethod(42)).toBeNull()
-    // Object prototype keys must not resolve through the alias table.
-    expect(normalizePaymentMethod("toString")).toBeNull()
+describe("isPaymentMethod", () => {
+  it("accepts the current ids only", () => {
+    for (const m of PAYMENT_METHODS) expect(isPaymentMethod(m)).toBe(true)
+    // The pre-rename id is gone for good (ADR-0044); "cash" never was a method.
+    expect(isPaymentMethod("twint")).toBe(false)
+    expect(isPaymentMethod("cash")).toBe(false)
+    expect(isPaymentMethod(null)).toBe(false)
+    expect(isPaymentMethod("toString")).toBe(false)
   })
 })
 
 describe("isPaidDuringCheckout", () => {
-  it("is true for raisenow, including the legacy id", () => {
+  it("is true for raisenow only", () => {
     expect(isPaidDuringCheckout("raisenow")).toBe(true)
-    expect(isPaidDuringCheckout("twint")).toBe(true)
-  })
-
-  it("is false for invoiced methods and unknown values", () => {
     expect(isPaidDuringCheckout("rechnung")).toBe(false)
     expect(isPaidDuringCheckout("monthly")).toBe(false)
     expect(isPaidDuringCheckout(null)).toBe(false)
-  })
-})
-
-describe("normalizePaidVia", () => {
-  it("maps legacy twint to raisenow and keeps current values", () => {
-    expect(normalizePaidVia("twint")).toBe("raisenow")
-    expect(normalizePaidVia("raisenow")).toBe("raisenow")
-    expect(normalizePaidVia("ebanking")).toBe("ebanking")
-    expect(normalizePaidVia("free")).toBe("free")
-  })
-
-  it("returns null for cash and unknown values", () => {
-    expect(normalizePaidVia("cash")).toBeNull()
-    expect(normalizePaidVia(null)).toBeNull()
-    expect(normalizePaidVia("constructor")).toBeNull()
   })
 })
 
@@ -124,9 +95,8 @@ describe("billDocument", () => {
     expect(billDocument("invoice", "monthly")).toBe("sammelrechnung")
   })
 
-  it("issues a receipt for methods paid during the checkout, incl. legacy ids", () => {
+  it("issues a receipt for methods paid during the checkout", () => {
     expect(billDocument("invoice", "raisenow")).toBe("receipt")
-    expect(billDocument(undefined, "twint")).toBe("receipt")
   })
 
   it("falls back to the payable invoice", () => {

@@ -213,9 +213,8 @@
       // / paymentMethodConfirmationSource on /bills/{id}). Distinct from
       // /bills/{id}.paidVia, which is a server-stamped confirmation written
       // when the cash actually arrives. Ids name the integration, not the
-      // brand (shared/src/payment-methods.ts): "raisenow" is the TWINT
-      // paylink. Docs closed before the rename may still hold "twint" until
-      // scripts/migrate-payment-method-ids.ts has run; readers normalize.
+      // brand (shared/src/payment-methods.ts, ADR-0044): "raisenow" is the
+      // TWINT paylink.
       "paymentMethod": "rechnung | monthly | raisenow | null",
 
       // --- Stale-open-checkout reminder log (#531) ---
@@ -343,7 +342,6 @@
       "storagePath": "string | null",       // "invoices/{billId}.pdf"
       "created": "timestamp",
       "paidAt": "timestamp | null",
-      // Legacy: "twint" (= raisenow, until migrated) and "cash" (retired).
       "paidVia": "raisenow | ebanking | free | null",
       "pdfGeneratedAt": "timestamp | null", // optimistic lock for PDF generation
       "emailSentAt": "timestamp | null",    // optimistic lock for email sending

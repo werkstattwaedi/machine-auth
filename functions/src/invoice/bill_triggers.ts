@@ -53,7 +53,6 @@ import {
   PAYMENT_METHOD_INFO,
   billDocument,
   billMail,
-  normalizePaymentMethod,
   type MailName,
 } from "@oww/shared";
 
@@ -254,7 +253,7 @@ async function assembleInvoiceData(
   // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
   // notice — fall through to the rechnung path.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const rawPaymentMethod = normalizePaymentMethod(primaryCheckoutData?.paymentMethod);
+  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
   const kind = bill.kind ?? "invoice";
   const paymentMethod =
     kind === "invoice" &&
@@ -505,7 +504,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
-  const mail = pickBillMail(normalizePaymentMethod(checkout.paymentMethod), bill);
+  const mail = pickBillMail(checkout.paymentMethod ?? null, bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -539,12 +538,12 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
             bill,
-            normalizePaymentMethod(checkout.paymentMethod),
+            checkout.paymentMethod ?? null,
             supersededReference,
           ),
           // Resend templates have no conditionals: one pre-composed line the
@@ -597,7 +596,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, normalizePaymentMethod(checkout.paymentMethod))}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
         },
         ...extraAttachments,
       ],
@@ -770,9 +769,9 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
       template: templateRef("bill-cancellation", {}, {
         RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
         INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-        DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+        DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
         REASON: bill.cancellationReason ?? "",
-        PAYMENT_NOTE: cancellationPaymentNote(bill, normalizePaymentMethod(checkout.paymentMethod)),
+        PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
         AMOUNT: bill.amount.toFixed(2),
         CURRENCY: bill.currency,
         KASSE_EMAIL: kasseEmail.value(),

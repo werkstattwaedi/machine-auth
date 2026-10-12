@@ -14,8 +14,11 @@
  * and only reports bills with the retired paidVia "cash" (no current
  * equivalent; they keep their legacy label).
  *
- * Every reader normalizes the legacy id, so the order against the deploy
- * does not matter and the script is idempotent — a re-run finds nothing.
+ * Ran on staging and prod on 2026-10-12. Run it once more right after the
+ * deploy that dropped the write alias (rules / acknowledgeBill /
+ * adminMarkBillsPaid) — it catches any "twint" a stale tab wrote in between
+ * — then delete this script: the code no longer reads the legacy id.
+ * Idempotent — a re-run that finds nothing writes nothing.
  * BigQuery is deliberately not touched: already-exported `stats` rows keep
  * paid_via "twint" (documented in functions/src/stats/schema.ts).
  * `modifiedAt` / `statsFlushedAt` stay untouched so this does not count as

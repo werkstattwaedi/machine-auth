@@ -34,7 +34,6 @@ import {
   MAX_CANCELLATION_REASON_LENGTH,
   MAX_CORRECTIONS_PER_CALL,
   USAGE_TYPE_DISCOUNTS,
-  normalizePaymentMethod,
   type CorrectCheckoutEntry,
   type CorrectCheckoutItemInput,
   type CorrectCheckoutPersonInput,
@@ -470,8 +469,7 @@ export const correctCheckoutsHandler = async (
           billRef: newBillRef,
           notes: null,
           summary: r.summary,
-          // Normalized so a replacement never re-introduces the legacy "twint".
-          paymentMethod: normalizePaymentMethod(l.checkout.paymentMethod),
+          paymentMethod: l.checkout.paymentMethod ?? null,
           supersedesCheckoutRef: l.checkoutRef,
           supersededByCheckoutRef: null,
           cancelledAt: null,
