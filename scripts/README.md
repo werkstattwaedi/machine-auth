@@ -9,6 +9,7 @@ CLI tools for device provisioning and configuration. User/token management has m
 | `setup-device.ts` | Provision a Particle P2 device (product, Wi-Fi) | USB-connected device |
 | `sync-device-config.ts` | Sync machine config from Firebase → Particle ledger | Firebase + Particle creds |
 | `seed-emulator.ts` | Populate Firebase emulator with test data | Running emulators |
+| `deploy-record.ts` | Record a deploy / ops event: git tag + operations repo `deploys/log.jsonl` + `STATE.md` (ADR-0045) | Operations repo sibling |
 
 ## Setup
 
