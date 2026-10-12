@@ -70,11 +70,13 @@ What each one is for:
 
 ---
 
-## 2. Node.js 22 via nvm
+## 2. Node.js 24 via nvm
 
-The repo pins `v22.14.0` in `.nvmrc`, and `functions/package.json` requires
-Node 22 in `engines`. Use `nvm` so you can keep multiple versions side by
-side.
+The repo pins Node 24 in `.nvmrc` (the Firebase JS SDK 13 requires
+`>=24.12`). The deployed Cloud Functions runtime is pinned separately by
+`"runtime"` in `firebase.json` (still `nodejs22`); `functions/package.json`
+`engines` only states the minimum. Use `nvm` so you
+can keep multiple versions side by side.
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
@@ -83,9 +85,9 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-nvm install 22
-nvm alias default 22
-node -v       # -> v22.x
+nvm install 24
+nvm alias default 24
+node -v       # -> v24.x
 ```
 
 **WSL gotcha:** if anything (a systemd service, a sudo invocation) needs
@@ -130,7 +132,7 @@ both `bazel` and `bazelisk` shims.
 
 ## 4. Global npm tooling
 
-After Node 22 is active:
+After Node 24 is active:
 
 ```bash
 npm install -g firebase-tools
@@ -450,7 +452,7 @@ sudo apt install -y jq           # required by .claude/scripts/workqueue-gh-toke
 
 ## What this leaves you with
 
-- `node -v` → v22.x
+- `node -v` → v24.x
 - `bazelisk version` → Bazel from MODULE.bazel
 - `firebase --version`, `particle --version`, `gh --version` → all available
 - `~/werkstattwaedi/machine-auth` and `…-operations` cloned and synced
