@@ -47,7 +47,12 @@ export function parseMarkBillsPaidRequest(data: unknown): MarkBillPaidInput[] {
     if (!b || typeof b.billId !== "string" || !b.billId) {
       throw new HttpsError("invalid-argument", "billId is required");
     }
-    if (!ADMIN_PAID_VIA.includes(b.paidVia)) {
+    // An admin tab still running the pre-rename bundle books RaiseNow as
+    // "twint" — accept and store it as "raisenow" until the alias is
+    // dropped together with the one in acknowledgeBill (ADR-0044).
+    const paidVia =
+      (b.paidVia as string) === "twint" ? "raisenow" : b.paidVia;
+    if (!ADMIN_PAID_VIA.includes(paidVia)) {
       throw new HttpsError(
         "invalid-argument",
         `paidVia must be one of ${ADMIN_PAID_VIA.join(", ")}`
@@ -67,7 +72,7 @@ export function parseMarkBillsPaidRequest(data: unknown): MarkBillPaidInput[] {
         );
       }
     }
-    return { billId: b.billId, paidVia: b.paidVia, paidAtMs: b.paidAtMs };
+    return { billId: b.billId, paidVia, paidAtMs: b.paidAtMs };
   });
 }
 

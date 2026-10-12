@@ -6,6 +6,7 @@ import type {
   PricingModel,
   UsageType,
   VariantPrice,
+  StoredPaymentMethod,
 } from "@oww/shared";
 export {
   priceForTier,
@@ -14,6 +15,9 @@ export {
   type PricingModel,
   type UsageType,
   type VariantPrice,
+  type PaymentMethod,
+  type StoredPaymentMethod,
+  type StoredPaidVia,
 } from "@oww/shared";
 
 /**
@@ -280,8 +284,9 @@ export interface CheckoutEntity {
   // Customer's last selected payment-method tab on Step 4 (Bezahlen).
   // Written fire-and-forget on every tab click. Distinct from the bill's
   // paymentMethodConfirmationTime/Source, which mark the commit-time ack
-  // and gate the invoice email + membership activation.
-  paymentMethod?: PaymentMethod | null;
+  // and gate the invoice email + membership activation. May hold the
+  // pre-rename "twint" — read it through normalizePaymentMethod.
+  paymentMethod?: StoredPaymentMethod | null;
 
   // Server-only: one Timestamp appended per stale-open-checkout reminder
   // sent (#531). The cron derives the next due reminder purely from this
@@ -304,8 +309,6 @@ export interface CheckoutEntity {
   statsFlushedAt?: Timestamp | null;
 }
 
-
-export type PaymentMethod = "rechnung" | "monthly" | "twint";
 
 export type ItemOrigin = "nfc" | "manual" | "qr";
 

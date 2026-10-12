@@ -256,7 +256,7 @@ describe("stats row builders", () => {
       storagePath: "invoices/b-1.pdf",
       created: ts("2026-06-01T08:00:00Z"),
       paidAt: ts("2026-06-03T18:22:10Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     } as unknown as BillEntity;
 
     it("maps a paid bill and excludes the re-link vectors", () => {
@@ -268,12 +268,19 @@ describe("stats row builders", () => {
         paid_at: "2026-06-03T18:22:10.000Z",
         subject_key: "k",
         amount: 42.5,
-        paid_via: "twint",
+        paid_via: "raisenow",
         kind: "invoice",
         source: "checkout",
       });
       expect(Object.keys(row)).to.not.include("referenceNumber");
       expect(JSON.stringify(row)).to.not.include("invoices/");
+    });
+
+    it("exports a not-yet-migrated 'twint' as raisenow and keeps retired values raw", () => {
+      const legacy = { ...bill, paidVia: "twint" } as unknown as BillEntity;
+      expect(buildBillRow("b-3", legacy, "k", ctx).paid_via).to.equal("raisenow");
+      const cash = { ...bill, paidVia: "cash" } as unknown as BillEntity;
+      expect(buildBillRow("b-4", cash, "k", ctx).paid_via).to.equal("cash");
     });
 
     it("refuses unpaid bills", () => {

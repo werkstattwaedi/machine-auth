@@ -312,6 +312,29 @@ number and legacy QR payload; the bank import resolves those slips through a ×1
 Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a test checkout to
 confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
 
+### Payment-method rename `twint` → `raisenow` — once per project, AFTER functions + rules + hosting
+
+Payment method ids now name the integration, not the brand (`shared/src/payment-methods.ts`):
+the RaiseNow TWINT paylink is `raisenow`, because the Wallee terminal will take TWINT too.
+Every reader normalizes the legacy `twint`, and the rules, `acknowledgeBill` and `adminMarkBillsPaid`
+still accept it from tabs running an old bundle. The reverse does not hold: a new bundle sends
+`raisenow`, which the *old* rules and callables reject — so deploy **functions + rules first,
+hosting last** (the kiosk loads the hosted checkout, so it follows hosting). Then rewrite the
+stored ids:
+
+```bash
+# Dry-run first: prints counts only (also reports bills with the retired paidVia "cash").
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-payment-method-ids.ts --prod --dry-run
+FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
+  npx tsx scripts/migrate-payment-method-ids.ts --prod
+```
+
+Idempotent — a second run reports 0. BigQuery is not rewritten: `stats` rows exported before the
+rename keep `paid_via = "twint"` (same meaning as `raisenow`). Once it has run on prod, the
+`twint` alias in `firestore.rules` and `acknowledgeBill` can be dropped (the read-side normalizer
+stays for history).
+
 ### Member identity (ADR-0043) — data gate BEFORE the functions + rules deploy
 
 Login resolves by `users.email` and the Auth-linked phone must equal `users.phone`, both by exact

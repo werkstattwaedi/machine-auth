@@ -13,7 +13,7 @@ import {
   zeroItemsInvoice,
   longInvoice,
   paidInvoice,
-  twintMethodInvoice,
+  raisenowMethodInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
@@ -268,7 +268,7 @@ describe("buildInvoicePdf — content", () => {
   // and (c) omit the QR payment slip so nobody pays twice. It must NOT
   // claim "Bezahlt am …" — we have no bank-side confirmation.
   it("TWINT-method invoice: 'Quittung' title, TWINT notice, no QR slip (#426)", async () => {
-    const text = await pdfText(twintMethodInvoice());
+    const text = await pdfText(raisenowMethodInvoice());
     expect(text).to.include("Quittung Self-Checkout");
     expect(text).to.not.include("Rechnung Self-Checkout");
     // The underlying bill is still kind "invoice" → RE- reference kept.

@@ -27,7 +27,7 @@ export interface StatementEntry {
 }
 
 /** Which channel the statement covers — determines the booked `paidVia`. */
-export type StatementKind = "camt" | "twint"
+export type StatementKind = "camt" | "raisenow"
 
 /** Statement-level metadata + credit entries. */
 export interface ParsedStatement {
@@ -161,7 +161,7 @@ export function parseRaiseNowCsv(csv: string): ParsedStatement {
       debtorName,
     })
   }
-  return { kind: "twint", entries, toDateMs: latestMs }
+  return { kind: "raisenow", entries, toDateMs: latestMs }
 }
 
 /** RaiseNow "Erstellt" format: `07/05/2026 10:14:26 PM` (MM/DD/YYYY, 12h). */

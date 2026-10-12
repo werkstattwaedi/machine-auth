@@ -5,7 +5,7 @@ import { expect } from "chai";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { Timestamp } from "firebase-admin/firestore";
 import { buildDownloadOptions } from "../../src/invoice/get_invoice_download_url";
-import type { BillEntity } from "../../src/invoice/types";
+import { billDocumentPrefix, type BillEntity } from "../../src/invoice/types";
 
 if (getApps().length === 0) {
   initializeApp({ projectId: "test-project" });
@@ -79,17 +79,21 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     );
   });
 
-  it("names a TWINT-settled invoice Quittung_RE-XXXXXX.pdf", () => {
+  it("names a RaiseNow-settled invoice Quittung_RE-XXXXXX.pdf", () => {
     // The PDF inside is titled "Quittung Self-Checkout" (#426); the
     // filename must not keep calling it a Rechnung — same contract #405
     // established for Belege.
     const opts = buildDownloadOptions(
       makeBill({ referenceNumber: 130, kind: "invoice" }),
-      "twint",
+      "raisenow",
     );
     expect(opts.responseDisposition).to.equal(
       'attachment; filename="Quittung_RE-000013.pdf"',
     );
+  });
+
+  it("still names a legacy 'twint' checkout a Quittung (pre-migration docs)", () => {
+    expect(billDocumentPrefix("invoice", "twint")).to.equal("Quittung");
   });
 
   it("keeps the Rechnung prefix for the aggregated Sammelrechnung (paymentMethod 'monthly')", () => {
@@ -107,7 +111,7 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
   it("Beleg kind wins over any payment method", () => {
     const opts = buildDownloadOptions(
       makeBill({ referenceNumber: 150, kind: "beleg" }),
-      "twint",
+      "raisenow",
     );
     expect(opts.responseDisposition).to.equal(
       'attachment; filename="Beleg_BL-000015.pdf"',

@@ -330,7 +330,7 @@ export async function seedUsageBills(authUserUid: string): Promise<void> {
     storagePath: "bills/e2e-bill-paid-001.pdf",
     created: Timestamp.fromDate(USAGE_BILL_PAID_CREATED),
     paidAt: Timestamp.fromDate(USAGE_BILL_PAID_PAID_AT),
-    paidVia: "twint",
+    paidVia: "raisenow",
   })
 
   await db.collection("bills").doc(USAGE_BILL_OPEN_ID).set({

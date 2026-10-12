@@ -158,7 +158,7 @@ describe("stats export (integration)", function () {
       storagePath: "invoices/b-paid.pdf",
       created: ts("2026-07-18T15:31:00Z"),
       paidAt: ts("2026-07-18T18:00:00Z"),
-      paidVia: "twint",
+      paidVia: "raisenow",
     });
     await db.collection("bills").doc("b-unpaid").set({
       userId: db.doc("users/u1"),

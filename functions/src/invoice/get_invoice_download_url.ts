@@ -7,6 +7,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor } from "../util/storage_download";
 import { billDocumentPrefix, formatBillReference, type BillEntity } from "./types";
+import { normalizePaymentMethod } from "@oww/shared";
 import type { CheckoutEntity, PaymentMethod } from "../types/firestore_entities";
 
 /**
@@ -24,7 +25,7 @@ export function buildDownloadOptions(
 } {
   // Filename mirrors the document type inside the PDF (issue #405 for
   // Belege, #426 follow-up for TWINT): "Beleg_BL-…", "Quittung_RE-…" for
-  // a TWINT-settled visit, "Rechnung_RE-…" for everything payable.
+  // a visit paid during the checkout, "Rechnung_RE-…" for everything payable.
   const reference = formatBillReference(bill.referenceNumber, bill.kind);
   const prefix = billDocumentPrefix(bill.kind, paymentMethod);
   const filename = `${prefix}_${reference}.pdf`;
@@ -80,9 +81,9 @@ export const getInvoiceDownloadUrlHandler = async (
   if (firstCheckoutRef) {
     try {
       const checkoutSnap = await firstCheckoutRef.get();
-      paymentMethod =
-        (checkoutSnap.data() as CheckoutEntity | undefined)?.paymentMethod ??
-        null;
+      paymentMethod = normalizePaymentMethod(
+        (checkoutSnap.data() as CheckoutEntity | undefined)?.paymentMethod,
+      );
     } catch {
       paymentMethod = null;
     }

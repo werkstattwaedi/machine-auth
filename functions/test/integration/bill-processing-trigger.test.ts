@@ -69,6 +69,7 @@ import type {
   CheckoutEntity,
   CheckoutPersonEntity,
   CheckoutSummaryEntity,
+  StoredPaymentMethod,
 } from "../../src/types/firestore_entities";
 
 interface FakeFile {
@@ -112,7 +113,7 @@ interface SeedBillOptions {
   emailSentAt?: Timestamp | null;
   paymentMethodConfirmationTime?: Timestamp | null;
   paymentMethodConfirmationSource?: "user" | "auto" | null;
-  paidVia?: "twint" | "ebanking" | "cash" | "free" | null;
+  paidVia?: BillEntity["paidVia"];
   checkoutIds?: string[];
   kind?: "invoice" | "beleg";
   source?: "checkout" | "membership-renewal";
@@ -129,7 +130,7 @@ interface SeedCheckoutOptions {
   // `null` seeds a guest (anonymous) checkout without an account holder —
   // the case that went untested between #487 and #651.
   userId?: string | null;
-  paymentMethod?: "rechnung" | "monthly" | "twint" | null;
+  paymentMethod?: StoredPaymentMethod | null;
 }
 
 async function seedCheckout(
@@ -359,7 +360,7 @@ describe("bill processing triggers (Integration)", () => {
       const billId = "bill-426-twint-regen";
       // Checkout records the TWINT selection (as acknowledgeBill writes it).
       await seedCheckout("co-default", {
-        paymentMethod: "twint",
+        paymentMethod: "raisenow",
         summary: { totalPrice: 25.5, entryFees: 15, machineCost: 10.5, materialCost: 0, tip: 0 },
       });
       // Mimic a just-created bill: storagePath set (create-time QR PDF) and
@@ -1022,11 +1023,11 @@ describe("bill processing triggers (Integration)", () => {
           .false;
       });
 
-      it("picks twint template when checkout.paymentMethod is 'twint'", async () => {
+      it("picks twint template when checkout.paymentMethod is 'raisenow'", async () => {
         const billId = "bill-twint";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
-          paymentMethod: "twint",
+          paymentMethod: "raisenow",
         });
         await seedBill(billId, {
           storagePath: "invoices/bill-twint.pdf",
@@ -1048,6 +1049,33 @@ describe("bill processing triggers (Integration)", () => {
         // attachment filename must match the document type, mirroring the
         // Beleg filename contract from #405.
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
+      });
+
+      // Checkouts closed before the twint → raisenow rename keep the old id
+      // until the migration runs; they must still get the receipt mail.
+      it("picks twint template for a legacy checkout.paymentMethod 'twint'", async () => {
+        const billId = "bill-legacy-twint";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
+        await seedCheckout("co-default", {
+          paymentMethod: "twint",
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-legacy-twint.pdf",
+          referenceNumber: 120,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          {
+            template: { id: string };
+            attachments: Array<{ filename: string }>;
+          },
+        ];
+        expect(entity.template.id).to.equal("test-twint-template");
+        expect(entity.attachments[0].filename).to.equal("Quittung-RE-000012.pdf");
       });
 
       // Issue #323: a membership-renewal bill is minted with paymentMethod

@@ -14,6 +14,8 @@ import {
   usageDiscount,
   isMachineItem,
   USAGE_DISCOUNT_LABELS,
+  PAYMENT_METHOD_INFO,
+  type StoredPaidVia,
   type UsageType,
 } from "@oww/shared";
 
@@ -58,10 +60,14 @@ const UNIT_LABELS: Record<string, string> = {
   sla: "l",
 };
 
-const PAID_VIA_LABELS: Record<string, string> = {
+// Keyed by stored value, so the legacy "twint" / "cash" still render on
+// regenerated PDFs of old bills.
+const PAID_VIA_LABELS: Record<StoredPaidVia, string> = {
+  raisenow: " via TWINT",
   twint: " via TWINT",
   ebanking: " via E-Banking",
   cash: " bar",
+  free: "",
 };
 
 /** Entry fee labels per user type */
@@ -197,13 +203,17 @@ export async function buildInvoicePdf(
     // dates; (b) catch-up runs only happen after a cron failure, which
     // is rare enough not to justify a "Mai–Juni 2026" label.
     const isBeleg = data.kind === "beleg";
-    // TWINT self-checkout (issue #426): the customer paid via TWINT in the
-    // app, so the document is a receipt ("Quittung"), not a payable
-    // Rechnung — title it accordingly and (further down) omit the QR slip.
+    // Paid during the checkout (issue #426 — TWINT via RaiseNow): the
+    // document is a receipt ("Quittung"), not a payable Rechnung — title
+    // it accordingly and (further down) omit the QR slip.
     // The underlying bill is still kind "invoice" with an "RE-" reference,
     // so the Rechnungsnummer label stays; we deliberately do NOT claim
     // "Bezahlt am …" since there is no bank-side confirmation yet.
-    const isTwint = !isBeleg && data.paymentMethod === "twint";
+    const paidMethodInfo =
+      data.paymentMethod && PAYMENT_METHOD_INFO[data.paymentMethod].paidDuringCheckout
+        ? PAYMENT_METHOD_INFO[data.paymentMethod]
+        : null;
+    const isReceipt = !isBeleg && paidMethodInfo !== null;
     // Membership renewal (issue #323): the bill was minted by the
     // renewalInvoicer cron, not a workshop visit — title it after the
     // Mitgliederbeitrag and (below) swap the visit header for a short
@@ -212,7 +222,7 @@ export async function buildInvoicePdf(
     let title: string;
     if (isBeleg) {
       title = "Beleg Self-Checkout";
-    } else if (isTwint) {
+    } else if (isReceipt) {
       title = "Quittung Self-Checkout";
     } else if (isRenewal) {
       title = "Rechnung Mitgliederbeitrag";
@@ -251,7 +261,7 @@ export async function buildInvoicePdf(
     if (data.supersedes) {
       const lead = isBeleg
         ? "Dieser Beleg ersetzt den Beleg"
-        : isTwint
+        : isReceipt
           ? "Diese Quittung ersetzt die Quittung"
           : data.checkouts.length > 1
             ? "Diese Sammelrechnung ersetzt die Rechnung"
@@ -329,7 +339,7 @@ export async function buildInvoicePdf(
     } else if (isPaid) {
       // --- Paid notice ---
       y = ensureSpace(doc, y, 40);
-      const viaLabel = PAID_VIA_LABELS[data.paidVia ?? ""] ?? "";
+      const viaLabel = data.paidVia ? PAID_VIA_LABELS[data.paidVia] ?? "" : "";
       const paidDateStr = formatDateOnly(data.paidAt!);
       doc.fontSize(11).font("Helvetica-Bold");
       doc.text(`Bezahlt${viaLabel} am ${paidDateStr}`, MARGIN_LEFT, y);
@@ -342,21 +352,21 @@ export async function buildInvoicePdf(
       }
 
       addPageFooters(doc, data, doc.bufferedPageRange().count);
-    } else if (data.paymentMethod === "twint") {
-      // --- TWINT-selected notice (issue #251) ---
-      // The user said TWINT in the UI; we have no bank-side confirmation
-      // yet, so the PDF doesn't claim "Bezahlt". The QR-bill payment slip
-      // is intentionally omitted — folks who already paid via TWINT in
-      // the app shouldn't think they need to pay again. The email
-      // surfaces the kasse@ contact for the "TWINT didn't go through"
-      // recovery path.
+    } else if (paidMethodInfo) {
+      // --- Paid-during-checkout notice (issue #251) ---
+      // The user said they paid (TWINT via RaiseNow); we have no
+      // bank-side confirmation yet, so the PDF doesn't claim "Bezahlt".
+      // The QR-bill payment slip is intentionally omitted — folks who
+      // already paid in the app shouldn't think they need to pay again.
+      // The email surfaces the kasse@ contact for the "payment didn't go
+      // through" recovery path.
       y = ensureSpace(doc, y, 40);
       doc.fontSize(11).font("Helvetica-Bold");
-      doc.text("Zahlweise: TWINT", MARGIN_LEFT, y);
+      doc.text(`Zahlweise: ${paidMethodInfo.label}`, MARGIN_LEFT, y);
       y += 16;
       doc.fontSize(9).font("Helvetica");
       doc.text(
-        "Du hast deinen Self-Checkout mit TWINT abgeschlossen. Falls die Zahlung nicht durchgegangen ist, melde dich bitte bei der Kasse.",
+        `Du hast deinen Self-Checkout mit ${paidMethodInfo.label} abgeschlossen. Falls die Zahlung nicht durchgegangen ist, melde dich bitte bei der Kasse.`,
         MARGIN_LEFT,
         y,
         { width: CONTENT_WIDTH },

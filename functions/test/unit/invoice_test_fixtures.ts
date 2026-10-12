@@ -484,20 +484,21 @@ export function paidInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 70;
   base.paidAt = zurich(2025, 5, 16);
-  base.paidVia = "twint";
+  base.paidVia = "raisenow";
   return base;
 }
 
 /**
- * Issue #251: TWINT-method invoice. The customer selected TWINT in the
- * Bezahlen step, so the PDF shows a "Zahlweise: TWINT" notice and omits
+ * Issue #251: RaiseNow-method invoice. The customer selected TWINT
+ * (RaiseNow paylink) in the Bezahlen step, so the PDF shows a
+ * "Zahlweise: TWINT" notice and omits
  * the QR payment slip. paidVia stays null — we have no bank confirmation
  * at the point this PDF is regenerated.
  */
-export function twintMethodInvoice(): InvoiceData {
+export function raisenowMethodInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 100;
-  base.paymentMethod = "twint";
+  base.paymentMethod = "raisenow";
   return base;
 }
 
