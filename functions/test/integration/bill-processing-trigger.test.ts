@@ -27,22 +27,12 @@ process.env.PAYMENT_RECIPIENT_COUNTRY = "CH";
 process.env.PAYMENT_CURRENCY = "CHF";
 process.env.RESEND_API_KEY = "re_test_fake";
 process.env.RESEND_FROM_EMAIL = "OWW Test <test@localhost>";
-process.env.RESEND_QRBILL_TEMPLATE_ID = "test-qrbill-template";
-process.env.RESEND_CORRECTION_TEMPLATE_ID = "test-correction-template";
-process.env.RESEND_CANCELLATION_TEMPLATE_ID = "test-cancellation-template";
-process.env.RESEND_TWINT_TEMPLATE_ID = "test-twint-template";
-// RESEND_MONTHLY_TEMPLATE_ID is the per-visit Beleg "charge queued" notice.
-process.env.RESEND_MONTHLY_TEMPLATE_ID = "test-monthly-template";
-// Issue #245/#502: RESEND_SAMMELRECHNUNG_TEMPLATE_ID is the aggregated,
-// payable Sammelrechnung invoice emitted by monthlyBillRun — a distinct
-// template from the Beleg notice above (they must not share copy).
-process.env.RESEND_SAMMELRECHNUNG_TEMPLATE_ID = "test-sammelrechnung-template";
-// Issue #323: membership-renewal bills (bill.source "membership-renewal")
-// get the Vorstand renewal letter, not the Self-Checkout copy.
-process.env.RESEND_RENEWAL_TEMPLATE_ID = "test-renewal-template";
+// Generated templates are addressed as `<env>-<mail>` (ADR-0046).
+process.env.RESEND_TEMPLATE_ENV = "test";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
+import { EMAIL_CONTRACT, type MailName } from "@oww/shared";
 import * as sinon from "sinon";
 import { Timestamp } from "firebase-admin/firestore";
 import * as storageModule from "firebase-admin/storage";
@@ -240,6 +230,20 @@ async function getOperationsLog(): Promise<
   const db = getFirestore();
   const snap = await db.collection("operations_log").get();
   return snap.docs.map((d) => d.data() as never);
+}
+
+
+/**
+ * The send carries exactly the contract's variables for its mail (ADR-0046):
+ * Resend rejects a send that misses a declared one, and the generated
+ * template declares precisely this list.
+ */
+function expectContractVariables(template: { id: string; variables?: Record<string, string> }) {
+  const mail = template.id.replace(/^test-/, "") as MailName;
+  expect(EMAIL_CONTRACT[mail], `unknown mail ${template.id}`).to.exist;
+  expect(Object.keys(template.variables ?? {}).sort()).to.deep.equal(
+    [...EMAIL_CONTRACT[mail].variables].sort(),
+  );
 }
 
 describe("bill processing triggers (Integration)", () => {
@@ -734,7 +738,8 @@ describe("bill processing triggers (Integration)", () => {
         expect(path).to.equal("/emails");
         expect(entity.from).to.equal("OWW Test <test@localhost>");
         expect(entity.to).to.equal("alice@example.com");
-        expect(entity.template.id).to.equal("test-qrbill-template");
+        expect(entity.template.id).to.equal("test-bill-invoice");
+        expectContractVariables(entity.template);
         expect(entity.template.variables.RECIPIENT_NAME).to.equal("Alice Adult");
         expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000007");
         expect(entity.template.variables.AMOUNT).to.equal("42.50");
@@ -1023,7 +1028,7 @@ describe("bill processing triggers (Integration)", () => {
           .false;
       });
 
-      it("picks twint template when checkout.paymentMethod is 'raisenow'", async () => {
+      it("picks the receipt mail when checkout.paymentMethod is 'raisenow'", async () => {
         const billId = "bill-twint";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -1044,7 +1049,8 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-twint-template");
+        expect(entity.template.id).to.equal("test-bill-receipt");
+        expectContractVariables(entity.template);
         // The PDF inside is a "Quittung Self-Checkout" (#426) — the
         // attachment filename must match the document type, mirroring the
         // Beleg filename contract from #405.
@@ -1053,7 +1059,7 @@ describe("bill processing triggers (Integration)", () => {
 
       // Checkouts closed before the twint → raisenow rename keep the old id
       // until the migration runs; they must still get the receipt mail.
-      it("picks twint template for a legacy checkout.paymentMethod 'twint'", async () => {
+      it("picks the receipt mail for a legacy checkout.paymentMethod 'twint'", async () => {
         const billId = "bill-legacy-twint";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -1074,7 +1080,8 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-twint-template");
+        expect(entity.template.id).to.equal("test-bill-receipt");
+        expectContractVariables(entity.template);
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000012.pdf");
       });
 
@@ -1104,7 +1111,8 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-renewal-template");
+        expect(entity.template.id).to.equal("test-membership-renewal");
+        expectContractVariables(entity.template);
         // A renewal is a payable Rechnung — filename keeps the prefix.
         expect(entity.attachments[0].filename).to.equal("Rechnung-RE-000021.pdf");
       });
@@ -1113,11 +1121,10 @@ describe("bill processing triggers (Integration)", () => {
         // Post-#245 a `kind: "invoice"` bill whose linked checkout has
         // paymentMethod "monthly" is the aggregated Sammelrechnung
         // emitted by monthlyBillRun. This is the actual payable invoice,
-        // so (post-#502) it gets its own RESEND_SAMMELRECHNUNG_TEMPLATE_ID
-        // rather than sharing the per-visit Beleg's "charge queued"
-        // template — the copy is wrong for a "this IS your invoice" email.
-        // Per-visit Belege use RESEND_MONTHLY_TEMPLATE_ID, covered
-        // separately below (#405).
+        // so (post-#502) it gets its own bill-sammelrechnung mail rather
+        // than sharing the per-visit Beleg's "charge queued" template — the
+        // copy is wrong for a "this IS your invoice" email. Per-visit Belege
+        // use bill-beleg, covered separately below (#405).
         const billId = "bill-sammelrechnung";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -1136,7 +1143,8 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { template: { id: string } },
         ];
-        expect(entity.template.id).to.equal("test-sammelrechnung-template");
+        expect(entity.template.id).to.equal("test-bill-sammelrechnung");
+        expectContractVariables(entity.template);
       });
 
       it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {
@@ -1155,17 +1163,16 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { template: { id: string } },
         ];
-        expect(entity.template.id).to.equal("test-qrbill-template");
+        expect(entity.template.id).to.equal("test-bill-invoice");
+        expectContractVariables(entity.template);
       });
 
       // Issue #405: a per-visit Beleg (member picked the "Sammelrechnung"
       // payment method at checkout) must email a *receipt* — the Beleg
-      // template (RESEND_MONTHLY_TEMPLATE_ID / self-checkout-monthly, the
-      // "charge queued" notice), a BL-… reference, and a Beleg-named
-      // attachment — even though it carries no payment-method ack stamp
-      // (the kind transition is its commit). NOT the Sammelrechnung
-      // invoice template (RESEND_SAMMELRECHNUNG_TEMPLATE_ID /
-      // self-checkout-sammelrechnung) — that's the aggregated, payable
+      // mail (bill-beleg, the "charge queued" notice), a BL-… reference,
+      // and a Beleg-named attachment — even though it carries no
+      // payment-method ack stamp (the kind transition is its commit). NOT
+      // the bill-sammelrechnung mail — that's the aggregated, payable
       // invoice from monthlyBillRun, covered in the test above.
       it("emails a per-visit Beleg as a receipt with the Beleg template, not the Sammelrechnung invoice template (#405)", async () => {
         const billId = "bill-beleg-email";
@@ -1201,7 +1208,8 @@ describe("bill processing triggers (Integration)", () => {
           },
         ];
         expect(entity.to).to.equal("bea@example.com");
-        expect(entity.template.id).to.equal("test-monthly-template");
+        expect(entity.template.id).to.equal("test-bill-beleg");
+        expectContractVariables(entity.template);
         expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000014");
         expect(entity.attachments[0].filename).to.equal("Beleg-BL-000014.pdf");
 
@@ -1283,12 +1291,12 @@ describe("bill processing triggers (Integration)", () => {
       expect(await trySendEmail("beleg-new")).to.be.true;
       expect(resendSendStub.calledOnce).to.be.true;
       const entity = sentEntity();
-      expect(entity.template.id).to.equal("test-correction-template");
+      expect(entity.template.id).to.equal("test-bill-correction");
+      expectContractVariables(entity.template);
       expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000061-1");
       expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("BL-000061");
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Beleg");
       expect(entity.template.variables.REASON).to.equal("Menge korrigiert");
-      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("");
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal("");
       expect(entity.template.variables.PAYMENT_NOTE).to.include("nächste Sammelrechnung");
       expect(entity.attachments).to.have.length(1);
@@ -1381,12 +1389,11 @@ describe("bill processing triggers (Integration)", () => {
       expect(await trySendEmail("agg-rev")).to.be.true;
       expect(resendSendStub.calledOnce).to.be.true;
       const entity = sentEntity();
-      expect(entity.template.id).to.equal("test-correction-template");
+      expect(entity.template.id).to.equal("test-bill-correction");
+      expectContractVariables(entity.template);
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Sammelrechnung");
       expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000050-1");
       expect(entity.template.variables.SUPERSEDED_INVOICE_NUMBER).to.equal("RE-000050");
-      expect(entity.template.variables.CORRECTED_DOCUMENTS).to.equal("BL-000061-1");
-      expect(entity.template.variables.CANCELLED_DOCUMENTS).to.equal("BL-000062");
       expect(entity.template.variables.CORRECTION_DETAILS).to.equal(
         "Korrigierte Belege: BL-000061-1 · Stornierte Belege: BL-000062",
       );
@@ -1431,7 +1438,8 @@ describe("bill processing triggers (Integration)", () => {
       expect(resendSendStub.calledOnce).to.be.true;
       const entity = sentEntity();
       expect(entity.to).to.equal("alice@example.com");
-      expect(entity.template.id).to.equal("test-cancellation-template");
+      expect(entity.template.id).to.equal("test-bill-cancellation");
+      expectContractVariables(entity.template);
       expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000007");
       expect(entity.template.variables.DOCUMENT_KIND).to.equal("Rechnung");
       expect(entity.template.variables.REASON).to.equal("Doppelt erfasst");

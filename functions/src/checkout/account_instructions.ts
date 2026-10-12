@@ -18,7 +18,6 @@
  */
 
 import * as logger from "firebase-functions/logger";
-import { defineString } from "firebase-functions/params";
 import {
   HttpsError,
   type CallableRequest,
@@ -27,13 +26,6 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { isEmulator } from "../auth/login-code/helpers";
 import { sendTemplate } from "../util/resend_template";
 import { requireActsAs } from "./kiosk_session";
-
-// No default: unset must fail loudly at send time (see
-// `assertTemplateConfigured` inside sendTemplate) instead of calling Resend
-// with an empty template id. Emulator mode skips Resend entirely.
-const resendAccountInstructionsTemplateId = defineString(
-  "RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID"
-);
 
 /** Repeated taps on the kiosk button must not turn into inbox spam. */
 const RESEND_THROTTLE_MS = 60 * 60 * 1000;
@@ -56,8 +48,8 @@ export async function sendAccountInstructionsEmail(
   }
   await sendTemplate({
     to: email,
-    templateId: resendAccountInstructionsTemplateId.value(),
-    templateIdParam: "RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID",
+    mail: "account-instructions",
+    dims: {},
     variables: { GREETING: greeting },
   });
 }

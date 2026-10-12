@@ -26,17 +26,7 @@ import {
   normalizeEmail,
   parseIntParamOrDie,
 } from "./helpers";
-import {
-  assertTemplateConfigured,
-  sendTemplate,
-} from "../../util/resend_template";
-
-// No default: an unset param must fail loudly (see
-// `assertResendLoginTemplateConfigured`) rather than silently calling
-// Resend with an empty template id and producing an opaque provider
-// error. In emulator mode we skip Resend entirely so the assertion is
-// a no-op (issue #149, mirrors PR #142's LOGIN_ALLOWED_ORIGINS pattern).
-const resendLoginTemplateId = defineString("RESEND_LOGIN_TEMPLATE_ID");
+import { sendTemplate } from "../../util/resend_template";
 
 // Per-email rate-limit tunables (issue #152). Stored as strings so they can
 // be tuned via the operations repo without a code change. Defaults match
@@ -47,15 +37,6 @@ const perEmailWindowMsParam = defineString("LOGIN_PER_EMAIL_WINDOW_MS", {
 const maxCodesPerEmailParam = defineString("LOGIN_MAX_CODES_PER_EMAIL", {
   default: "20",
 });
-
-/**
- * Thin wrapper around the shared `assertTemplateConfigured` helper. Kept
- * for backwards compatibility with `test/unit/login-code-helpers.test.ts`
- * which imports this symbol directly.
- */
-export function assertResendLoginTemplateConfigured(value: string): void {
-  assertTemplateConfigured(value, "RESEND_LOGIN_TEMPLATE_ID");
-}
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -199,8 +180,8 @@ async function sendLoginEmail(
 ): Promise<void> {
   await sendTemplate({
     to: email,
-    templateId: resendLoginTemplateId.value(),
-    templateIdParam: "RESEND_LOGIN_TEMPLATE_ID",
+    mail: "login",
+    dims: {},
     variables: {
       CODE: code,
       MAGIC_LINK: magicLink,

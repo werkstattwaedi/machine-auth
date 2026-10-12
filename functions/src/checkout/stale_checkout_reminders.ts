@@ -53,11 +53,6 @@ import {
   sendTemplate,
 } from "../util/resend_template";
 
-/** Resend template alias for the reminder email (operations-repo config). */
-const resendCheckoutReminderTemplateId = defineString(
-  "RESEND_CHECKOUT_REMINDER_TEMPLATE_ID",
-);
-
 /**
  * Comma-separated business-day offsets that each trigger one reminder, e.g.
  * `"1,7"` → a reminder the business day after the checkout opened, and again
@@ -293,7 +288,6 @@ export async function runStaleCheckoutReminders(
       CHECKOUT_DATE: formatCheckoutDate(created),
       CHECKOUT_LINK: buildCheckoutReminderLink(domain, doc.id),
       STALE_DAYS: String(businessDaysBetween(created, now)),
-      REMINDER_OFFSET: String(dueOffset),
     };
 
     // Stamp before the send so a Resend failure can't cause a retry storm:
@@ -313,8 +307,8 @@ export async function runStaleCheckoutReminders(
       try {
         await sendTemplate({
           to: recipient,
-          templateId: resendCheckoutReminderTemplateId.value(),
-          templateIdParam: "RESEND_CHECKOUT_REMINDER_TEMPLATE_ID",
+          mail: "checkout-reminder",
+          dims: {},
           variables,
         });
       } catch (error) {

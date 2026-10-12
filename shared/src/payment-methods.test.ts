@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest"
 import {
   PAYMENT_METHODS,
+  billDocument,
   enabledPaymentMethods,
   isPaidDuringCheckout,
   isPaymentMethodEnabledAnywhere,
@@ -110,5 +111,27 @@ describe("isPaymentMethodEnabledAnywhere", () => {
     const config = { kiosk: ["rechnung"], web: ["rechnung", "raisenow"] } as const
     expect(isPaymentMethodEnabledAnywhere(config, "raisenow")).toBe(true)
     expect(isPaymentMethodEnabledAnywhere(config, "monthly")).toBe(false)
+  })
+})
+
+describe("billDocument", () => {
+  it("routes Belege to the Beleg mail whatever the method", () => {
+    expect(billDocument("beleg", "monthly")).toBe("beleg")
+    expect(billDocument("beleg", null)).toBe("beleg")
+  })
+
+  it("treats an aggregated invoice as the Sammelrechnung", () => {
+    expect(billDocument("invoice", "monthly")).toBe("sammelrechnung")
+  })
+
+  it("issues a receipt for methods paid during the checkout, incl. legacy ids", () => {
+    expect(billDocument("invoice", "raisenow")).toBe("receipt")
+    expect(billDocument(undefined, "twint")).toBe("receipt")
+  })
+
+  it("falls back to the payable invoice", () => {
+    expect(billDocument("invoice", "rechnung")).toBe("invoice")
+    expect(billDocument(undefined, null)).toBe("invoice")
+    expect(billDocument("invoice", "bogus")).toBe("invoice")
   })
 })

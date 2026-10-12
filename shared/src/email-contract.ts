@@ -1,0 +1,163 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+/**
+ * Contract between the functions that send transactional mail and the
+ * generator in the operations repo that builds and publishes the Resend
+ * templates (ADR-0046).
+ *
+ * Each mail declares its build-time dimensions (one published template per
+ * combination) and the variables the function fills in at send time. The
+ * function resolves a template through `templateAlias`; the generator
+ * enumerates the same combinations and refuses to publish a template whose
+ * placeholders differ from `variables`. Resend rejects a send that misses a
+ * declared variable, so the two sides must agree exactly.
+ *
+ * Kept free of imports: the operations repo loads this file straight from
+ * the sibling checkout.
+ */
+
+/** Environment prefix of every alias; staging and prod publish separately. */
+export const EMAIL_ENVS = ["prod", "staging", "test"] as const
+export type EmailEnv = (typeof EMAIL_ENVS)[number]
+
+/**
+ * What the bill document is, derived from payment-method *properties*, never
+ * from a method id — new payment integrations must not add templates.
+ */
+export const BILL_DOCUMENTS = ["invoice", "receipt", "beleg", "sammelrechnung"] as const
+export type BillDocument = (typeof BILL_DOCUMENTS)[number]
+
+interface MailSpec {
+  /** Build-time dimensions, in alias order. */
+  readonly dims: Readonly<Record<string, readonly string[]>>
+  /** Send-time variables, exactly as the template uses them. */
+  readonly variables: readonly string[]
+}
+
+export const EMAIL_CONTRACT = {
+  login: {
+    dims: {},
+    variables: ["CODE", "MAGIC_LINK", "EXPIRES_MINUTES"],
+  },
+  invite: {
+    dims: {},
+    variables: ["INVITER_NAME", "MEMBERSHIP_NAME", "ACCEPT_LINK"],
+  },
+  "checkout-reminder": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "CHECKOUT_LINK", "STALE_DAYS"],
+  },
+  "account-instructions": {
+    dims: {},
+    variables: ["GREETING"],
+  },
+  // Payable QR-bill invoice for a single checkout.
+  "bill-invoice": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY"],
+  },
+  // Paid during the checkout (`paidDuringCheckout`): receipt, no QR slip.
+  "bill-receipt": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
+  },
+  // Per-checkout Beleg queued for the Sammelrechnung (`isAggregated`). Not
+  // payable — must never share copy with the Sammelrechnung (issue #502).
+  "bill-beleg": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
+  },
+  // The monthly aggregate of Belege — payable, QR slip attached.
+  "bill-sammelrechnung": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
+  },
+  "membership-renewal": {
+    dims: {},
+    variables: ["RECIPIENT_NAME", "INVOICE_NUMBER", "AMOUNT", "CURRENCY"],
+  },
+  // Corrected re-issue of any document (ADR-0042).
+  "bill-correction": {
+    dims: {},
+    variables: [
+      "RECIPIENT_NAME",
+      "INVOICE_NUMBER",
+      "AMOUNT",
+      "CURRENCY",
+      "KASSE_EMAIL",
+      "DOCUMENT_KIND",
+      "SUPERSEDED_INVOICE_NUMBER",
+      "REASON",
+      "PAYMENT_NOTE",
+      "CORRECTION_DETAILS",
+    ],
+  },
+  // Pure cancellation without replacement (ADR-0042).
+  "bill-cancellation": {
+    dims: {},
+    variables: [
+      "RECIPIENT_NAME",
+      "INVOICE_NUMBER",
+      "AMOUNT",
+      "CURRENCY",
+      "KASSE_EMAIL",
+      "DOCUMENT_KIND",
+      "REASON",
+      "PAYMENT_NOTE",
+    ],
+  },
+} as const satisfies Record<string, MailSpec>
+
+export type MailName = keyof typeof EMAIL_CONTRACT
+export const MAIL_NAMES = Object.keys(EMAIL_CONTRACT) as MailName[]
+
+export type MailDims<M extends MailName> = {
+  -readonly [K in keyof (typeof EMAIL_CONTRACT)[M]["dims"]]: (typeof EMAIL_CONTRACT)[M]["dims"][K] extends readonly (infer V)[]
+    ? V
+    : never
+}
+
+export type MailVariables<M extends MailName> = Record<
+  (typeof EMAIL_CONTRACT)[M]["variables"][number],
+  string
+>
+
+/** The mail that carries a bill of the given document type. */
+export function billMail(document: BillDocument): MailName {
+  return `bill-${document}` as const
+}
+
+export function isEmailEnv(value: unknown): value is EmailEnv {
+  return typeof value === "string" && (EMAIL_ENVS as readonly string[]).includes(value)
+}
+
+/**
+ * Resend alias of one published template: `<env>-<mail>[-<dim value>…]`,
+ * dimension values in the contract's declaration order.
+ */
+export function templateAlias<M extends MailName>(
+  env: EmailEnv,
+  mail: M,
+  dims: MailDims<M>,
+): string {
+  const spec: MailSpec = EMAIL_CONTRACT[mail]
+  const values = Object.keys(spec.dims).map((key) => {
+    const value = (dims as Record<string, string>)[key]
+    if (!spec.dims[key].includes(value)) {
+      throw new Error(`Invalid ${key} "${value}" for mail ${mail}`)
+    }
+    return value
+  })
+  return [env, mail, ...values].join("-")
+}
+
+/** Every dimension combination of a mail — one published template each. */
+export function mailCombinations<M extends MailName>(mail: M): MailDims<M>[] {
+  const spec: MailSpec = EMAIL_CONTRACT[mail]
+  let combos: Record<string, string>[] = [{}]
+  for (const [key, values] of Object.entries(spec.dims)) {
+    combos = combos.flatMap((combo) => values.map((value) => ({ ...combo, [key]: value })))
+  }
+  return combos as MailDims<M>[]
+}
