@@ -59,6 +59,25 @@ export function deviceRows(
     )
 }
 
+/**
+ * Status docs refresh `lastSeen` at most hourly while all is well (the
+ * kiosk reports once a day), so "last heard" is only that precise. Longer
+ * silence means the reports stopped — e.g. a dead gateway, whose own doc
+ * can't say "offline". Same thresholds as scripts/deploy-log.ts.
+ */
+export const QUIET_AFTER_MS: Record<DeviceStatusDoc["kind"], number> = {
+  gateways: 75 * 60 * 1000,
+  maco: 75 * 60 * 1000,
+  kiosks: 25 * 60 * 60 * 1000,
+}
+
+export function isQuiet(
+  status: Pick<DeviceStatusDoc, "kind" | "online" | "lastSeen">,
+  now: number,
+): boolean {
+  return status.online && now - status.lastSeen.toMillis() > QUIET_AFTER_MS[status.kind]
+}
+
 export const STANDING_LABEL: Record<VersionStanding, string> = {
   current: "aktuell",
   behind: "veraltet",

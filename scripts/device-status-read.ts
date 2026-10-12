@@ -62,9 +62,12 @@ export async function readRunningDevices(): Promise<{
       const names = new Map(macos.docs.map((d) => [d.id, d.get("name") as unknown]));
       for (const doc of statuses.docs) {
         const d = doc.data();
-        const kind = d.kind;
+        // The path says it too (<kind>/<deviceId>/status/current); docs
+        // written before kind/deviceId were stored fall back to it.
+        const parent = doc.ref.parent.parent;
+        const kind = typeof d.kind === "string" ? d.kind : parent?.parent.id;
         if (kind !== "maco" && kind !== "gateways" && kind !== "kiosks") continue;
-        const deviceId = typeof d.deviceId === "string" ? d.deviceId : doc.ref.parent.parent?.id ?? "?";
+        const deviceId = typeof d.deviceId === "string" ? d.deviceId : parent?.id ?? "?";
         const label = names.get(deviceId);
         devices.push({
           env,
@@ -82,10 +85,15 @@ export async function readRunningDevices(): Promise<{
     }
   }
   // Open gRPC channels would keep the deploy script alive after it is done.
-  await Promise.all(
-    getApps()
-      .filter((a) => a.name.startsWith("device-status-"))
-      .map((a) => deleteApp(a).catch(() => {}))
-  );
+  // Bounded too: after a timeout the query may still be in flight, and
+  // closing must not wait for it (the callers also exit explicitly).
+  await withTimeout(
+    Promise.all(
+      getApps()
+        .filter((a) => a.name.startsWith("device-status-"))
+        .map((a) => deleteApp(a).catch(() => {}))
+    ),
+    "closing Firestore"
+  ).catch(() => {});
   return { devices, problems };
 }

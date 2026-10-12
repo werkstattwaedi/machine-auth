@@ -31,6 +31,7 @@ import {
 import { Cpu } from "lucide-react"
 import {
   deviceRows,
+  isQuiet,
   RESET_REASON_LABEL,
   STANDING_LABEL,
   targetRelease,
@@ -105,7 +106,7 @@ function VersionsPage() {
   const db = useDb()
   const functionsVersion = useFunctionsVersion()
   const checkoutVersion = useCheckoutVersion()
-  const { data: statuses, loading } = useCollection(deviceStatusGroup(db))
+  const { data: statuses, loading, error } = useCollection(deviceStatusGroup(db))
   const { data: macos } = useCollection(macosCollection(db))
 
   const macoNames = useMemo(() => new Map(macos.map((m) => [m.id, m.name])), [macos])
@@ -119,6 +120,7 @@ function VersionsPage() {
     statuses,
   )
   const rows = deviceRows(statuses, macoNames, target)
+  const now = Date.now()
 
   return (
     <div className="space-y-4">
@@ -161,6 +163,10 @@ function VersionsPage() {
         <CardContent>
           {loading ? (
             <PageLoading />
+          ) : error ? (
+            <p className="text-sm text-destructive" role="alert">
+              Gerätestatus konnte nicht geladen werden: {error.message}
+            </p>
           ) : rows.length === 0 ? (
             <EmptyState
               icon={Cpu}
@@ -174,7 +180,9 @@ function VersionsPage() {
                   <TableHead>Gerät</TableHead>
                   <TableHead>Version</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Zuletzt gehört</TableHead>
+                  <TableHead title="Stündlich aktualisiert, der Kiosk täglich">
+                    Zuletzt gehört
+                  </TableHead>
                   <TableHead>Letzter Neustart</TableHead>
                 </TableRow>
               </TableHeader>
@@ -192,12 +200,18 @@ function VersionsPage() {
                       <VersionCell version={r.status.version ?? undefined} target={target} />
                     </TableCell>
                     <TableCell>
-                      {r.status.online ? (
-                        <Badge variant="success">online</Badge>
-                      ) : (
+                      {!r.status.online ? (
                         <Badge variant="destructive">
                           offline · {formatRelativeTime(r.status.since)}
                         </Badge>
+                      ) : isQuiet(r.status, now) ? (
+                        // A dead gateway can't report itself offline; its
+                        // reports just stop.
+                        <Badge variant="destructive">keine Meldung</Badge>
+                      ) : r.kind === "kiosks" ? (
+                        <Badge variant="success">gemeldet</Badge>
+                      ) : (
+                        <Badge variant="success">online</Badge>
                       )}
                     </TableCell>
                     <TableCell title={formatDateTime(r.status.lastSeen)}>

@@ -97,16 +97,51 @@ function deviceLabel(d: RunningDevice): string {
 }
 
 /**
- * Warnings worth a look — never a reason to block a deploy: devices on an
- * older release than the latest one, and devices that are offline.
+ * The newest clean release deployed to `env`, per the log — what devices
+ * there should run. Per environment: a staging deploy of a newer release
+ * must not make every prod device look behind.
  */
-export function runningDrift(devices: RunningDevice[], latest: string | undefined): string[] {
+export function deployedRelease(entries: DeployEntry[], env: DeployEnv): string | undefined {
+  let best: string | undefined;
+  for (const e of entries) {
+    if (e.env !== env || !e.version || !/^\d{4}\.\d{1,2}\.\d+$/.test(e.version)) continue;
+    if (!best || isBehind(best, e.version)) best = e.version;
+  }
+  return best;
+}
+
+/**
+ * Status docs refresh `lastSeen` at most hourly while all is well (the
+ * kiosk reports once a day), so "last heard" is only that precise. Longer
+ * silence than this means the reports stopped — e.g. a dead gateway, whose
+ * own doc can't say "offline".
+ */
+export const QUIET_AFTER_MS: Record<RunningDevice["kind"], number> = {
+  gateways: 75 * 60 * 1000,
+  maco: 75 * 60 * 1000,
+  kiosks: 25 * 60 * 60 * 1000,
+};
+
+export function isQuiet(d: RunningDevice, now: Date): boolean {
+  return d.online && d.lastSeen !== null && now.getTime() - Date.parse(d.lastSeen) > QUIET_AFTER_MS[d.kind];
+}
+
+/**
+ * Warnings worth a look — never a reason to block a deploy: devices that
+ * are offline or have gone quiet, and devices on an older release than the
+ * one deployed to their environment (e.g. a gateway not restarted yet, a
+ * terminal not reflashed).
+ */
+export function runningDrift(devices: RunningDevice[], entries: DeployEntry[], now: Date): string[] {
   const warnings: string[] = [];
   for (const d of devices) {
+    const deployed = deployedRelease(entries, d.env);
     if (!d.online) {
       warnings.push(`${d.env}: ${deviceLabel(d)} is offline${d.since ? ` since ${formatTime(d.since)}` : ""}`);
-    } else if (latest && isBehind(d.version, latest)) {
-      warnings.push(`${d.env}: ${deviceLabel(d)} runs ${d.version}, the latest release is ${latest}`);
+    } else if (isQuiet(d, now)) {
+      warnings.push(`${d.env}: ${deviceLabel(d)} not heard since ${formatTime(d.lastSeen!)}`);
+    } else if (deployed && isBehind(d.version, deployed)) {
+      warnings.push(`${d.env}: ${deviceLabel(d)} runs ${d.version}, ${d.env} has ${deployed} deployed`);
     }
   }
   return warnings;
@@ -239,8 +274,6 @@ export interface RepoFacts {
   mainAheadOfProd?: number;
   /** Commits in the latest staging firebase deploy not yet in prod. */
   stagingAheadOfProd?: number;
-  /** Newest `vYYYY.M.N` release, without the "v". */
-  latestRelease?: string;
   /** What the devices report as running; undefined when not read. */
   running?: RunningDevice[];
   /** Why the live view is missing or incomplete. */
@@ -294,7 +327,7 @@ export function renderState(
     );
   }
   if (facts.running) {
-    for (const w of runningDrift(facts.running, facts.latestRelease)) drift.push(`- ⚠️ ${cell(w)}`);
+    for (const w of runningDrift(facts.running, entries, now)) drift.push(`- ⚠️ ${cell(w)}`);
   }
   if (drift.length > 0) {
     lines.push("## Drift");
@@ -307,9 +340,12 @@ export function renderState(
     lines.push("## Running (live)");
     lines.push("");
     lines.push(
-      "_What the devices report (their `status` documents), as of the render time" +
-        (facts.latestRelease ? `; latest release ${facts.latestRelease}` : "") +
-        "._"
+      "_What the devices report (their `status` documents) as of the render time, " +
+        "against the newest release deployed to their environment" +
+        ENVS.map((env) => deployedRelease(entries, env))
+          .map((r, i) => (r ? ` (${ENVS[i]}: ${r})` : ""))
+          .join("") +
+        ". Last heard is refreshed hourly (the kiosk: daily)._"
     );
     lines.push("");
     const running = [...(facts.running ?? [])].sort(
@@ -322,9 +358,14 @@ export function renderState(
       lines.push("| Env | Device | Version | Status | Last heard |");
       lines.push("|---|---|---|---|---|");
       for (const d of running) {
-        const behind = facts.latestRelease ? isBehind(d.version, facts.latestRelease) : null;
+        const deployed = deployedRelease(entries, d.env);
+        const behind = deployed ? isBehind(d.version, deployed) : null;
         const version = d.version ? `${d.version}${behind ? " ⚠️ behind" : ""}` : "unknown";
-        const status = d.online ? "online" : `⚠️ offline${d.since ? ` since ${formatTime(d.since)}` : ""}`;
+        const status = !d.online
+          ? `⚠️ offline${d.since ? ` since ${formatTime(d.since)}` : ""}`
+          : isQuiet(d, now)
+            ? "⚠️ quiet"
+            : "online";
         lines.push(
           `| ${d.env} | ${cell(deviceLabel(d))} | ${cell(version)} | ${status} | ` +
             `${d.lastSeen ? formatTime(d.lastSeen) : "–"} |`

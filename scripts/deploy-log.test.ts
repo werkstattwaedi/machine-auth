@@ -14,6 +14,7 @@ import {
   deployTagName,
   formatTime,
   parseLog,
+  deployedRelease,
   isBehind,
   renderState,
   type RunningDevice,
@@ -122,16 +123,43 @@ test("a device is behind only when its release is older", () => {
   assert.equal(isBehind("dev", "2026.10.3"), null);
 });
 
-test("drift names devices behind the latest release and offline devices", () => {
-  const warnings = runningDrift(running, "2026.10.3");
-  assert.equal(warnings.length, 2);
-  assert.match(warnings[0], /Laser.*2026\.10\.2.*2026\.10\.3/);
+// prod has 2026.10.3 deployed; staging already runs 2026.10.4.
+const versioned: DeployEntry[] = [
+  ...entries,
+  { at: "2026-10-11T08:00:00.000Z", env: "prod", component: "firebase", commit: "f".repeat(40), version: "2026.10.3", by: "Mike" },
+  { at: "2026-10-12T07:00:00.000Z", env: "staging", component: "firebase", commit: "e".repeat(40), version: "2026.10.4", by: "Mike" },
+  { at: "2026-10-12T07:30:00.000Z", env: "staging", component: "kiosk", commit: "e".repeat(40), version: "2026.10.5-dev.1+gabc", by: "Mike" },
+];
+const NOW = new Date("2026-10-12T08:30:00Z");
+
+test("the deployed release is per environment and ignores dev builds", () => {
+  assert.equal(deployedRelease(versioned, "prod"), "2026.10.3");
+  assert.equal(deployedRelease(versioned, "staging"), "2026.10.4");
+  assert.equal(deployedRelease(entries, "prod"), undefined);
+});
+
+test("drift: offline, quiet, and behind what was deployed to the device's own environment", () => {
+  const warnings = runningDrift(
+    [
+      ...running,
+      // Up to date for prod, even though staging is on 2026.10.4.
+      { env: "prod", kind: "kiosks", deviceId: "checkout", version: "2026.10.3", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+      // A dead gateway's doc still says online — only lastSeen tells.
+      { env: "staging", kind: "gateways", deviceId: "test-pi", version: "2026.10.4", online: true, since: null, lastSeen: "2026-10-12T06:00:00.000Z" },
+    ],
+    versioned,
+    NOW
+  );
+  assert.equal(warnings.length, 3);
+  assert.match(warnings[0], /Laser.*runs 2026\.10\.2, prod has 2026\.10\.3 deployed/);
   assert.match(warnings[1], /0a10aced202194944a042f05 is offline since 2026-10-12 08:00/);
+  assert.match(warnings[2], /gateway test-pi not heard since 2026-10-12 08:00/);
 });
 
 test("STATE.md shows the live devices, and says when the live view is missing", () => {
-  const md = renderState(entries, { latestRelease: "2026.10.3", running }, new Date("2026-10-12T09:00:00Z"));
+  const md = renderState(versioned, { running }, NOW);
   assert.match(md, /## Running \(live\)/);
+  assert.match(md, /\(staging: 2026\.10\.4\) \(prod: 2026\.10\.3\)/);
   assert.match(md, /\| prod \| terminal Laser \(0a10aced202194944a042f04\) \| 2026\.10\.2 ⚠️ behind \| online \|/);
   assert.match(md, /⚠️ offline since 2026-10-12 08:00/);
   assert.match(md, /## Drift[\s\S]*⚠️ prod: terminal Laser/);

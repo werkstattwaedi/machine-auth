@@ -241,10 +241,19 @@ hours, so it gets no absence alert.
 - **Drift:** every deploy record and `deploy-record.ts render` read the
   status documents of both projects (`scripts/device-status-read.ts`,
   Application Default Credentials) and add a "Running (live)" table to
-  `STATE.md`, next to what was deployed; devices behind the latest release
-  tag or offline go into its Drift section and are printed as warnings at
-  the end of the deploy — never a reason to fail it. Without credentials
-  STATE.md says the live view was unavailable.
+  `STATE.md`, next to what was deployed. Devices that are offline, quiet
+  (see below), or on an older release than the newest one **deployed to
+  their own environment** per the log go into its Drift section and are
+  printed as warnings at the end of the deploy — never a reason to fail it.
+  Per environment, because a staging deploy of a newer release must not
+  make every prod device look behind; a gateway not restarted after its
+  deploy shows up exactly this way. Without credentials STATE.md says the
+  live view was unavailable.
+- **Precision:** `lastSeen` is refreshed hourly while a device is fine (the
+  kiosk daily), so "last heard" is that precise, and a dead gateway's doc
+  still says online — its reports just stop. Both views therefore flag a
+  device as *quiet* ("keine Meldung") once `lastSeen` is older than 75
+  minutes (kiosk: 25 hours). Real-time liveness is the alerts' job.
 
 Rollout order: build provenance (2a + 2b), status reports and alerting
 (2c), the Versionen page, drift.

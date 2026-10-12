@@ -535,4 +535,12 @@ async function main() {
   }
 }
 
-void main();
+// Explicit exit: the deploy record's live-status read may leave a closing
+// Firestore client behind, which must not hold the process open.
+main().then(
+  () => process.exit(0),
+  (e) => {
+    console.error(e instanceof Error ? e.message : e);
+    process.exit(1);
+  }
+);

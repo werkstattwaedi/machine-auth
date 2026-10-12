@@ -75,7 +75,7 @@ import {
   runningDrift,
   serializeEntry,
 } from "./deploy-log.ts";
-import { buildVersion, compareReleaseTags, parseReleaseTag, RELEASE_TAG_GLOB } from "./build-version.ts";
+import { buildVersion } from "./build-version.ts";
 import { readRunningDevices } from "./device-status-read.ts";
 import { opsRevision, overrideRequested, preflightProblems } from "./deploy-preflight.ts";
 
@@ -238,23 +238,11 @@ function countBetween(from: string, to: string): number | undefined {
   return out === null ? undefined : Number(out);
 }
 
-/** Facts that don't come from the log: the latest release, the live devices. */
-type LiveFacts = Pick<RepoFacts, "latestRelease" | "running" | "runningProblems">;
+/** Facts that don't come from the log: the live devices. */
+type LiveFacts = Pick<RepoFacts, "running" | "runningProblems">;
 
-function latestReleaseTag(): string | undefined {
-  const tags = (tryGit(projectRoot, ["tag", "--list", RELEASE_TAG_GLOB]) ?? "")
-    .split("\n")
-    .filter((t) => parseReleaseTag(t))
-    .sort(compareReleaseTags);
-  return tags[0]?.slice(1);
-}
-
-/**
- * The live part of STATE.md (ADR-0045 phase 3). Prints the drift warnings
- * too — a deploy shows them, it never fails on them.
- */
+/** The live part of STATE.md (ADR-0045 phase 3). */
 async function liveFacts(): Promise<LiveFacts> {
-  const latestRelease = latestReleaseTag();
   let running: LiveFacts["running"];
   let runningProblems: string[] = [];
   try {
@@ -262,9 +250,21 @@ async function liveFacts(): Promise<LiveFacts> {
   } catch (e) {
     runningProblems = [(e as Error).message.split("\n")[0]];
   }
-  for (const w of runningDrift(running ?? [], latestRelease)) warn(w);
   for (const p of runningProblems) warn(`live device status not read — ${p}`);
-  return { latestRelease, running, runningProblems };
+  return { running, runningProblems };
+}
+
+/**
+ * Print the drift warnings at the end of a deploy — it shows them, it
+ * never fails on them. Judged against the log as it now stands on the
+ * operations repo's main (plus entries still pending).
+ */
+function printDrift(live: LiveFacts, extra: DeployEntry[]): void {
+  if (!live.running) return;
+  const logged = parseLog(tryGit(opsDir, ["show", `origin/main:${LOG_REL}`]) ?? "");
+  const seen = new Set(logged.map(serializeEntry));
+  const entries = [...logged, ...extra.filter((e) => !seen.has(serializeEntry(e)))];
+  for (const w of runningDrift(live.running, entries, new Date())) warn(w);
 }
 
 function repoFacts(entries: DeployEntry[], live: LiveFacts): RepoFacts {
@@ -412,7 +412,9 @@ export async function recordDeploy(opts: RecordOptions): Promise<void> {
     opts.kind === "deploy"
       ? `deploy: ${entry.component} → ${entry.env}${entry.target ? ` (${entry.target})` : ""} @ ${entry.commit?.slice(0, 8)}`
       : `ops: ${entry.env} — ${entry.note ?? "event"}`;
-  const sent = persist([entry], subject, push, push ? await liveFacts() : {});
+  const live = push ? await liveFacts() : {};
+  const sent = persist([entry], subject, push, live);
+  printDrift(live, [...readPending(), entry]);
 
   // The entry is safe now (on GitHub or pending), so a published tag can
   // never exist without its record.
@@ -447,6 +449,7 @@ async function main(): Promise<void> {
     const pending = readPending().length;
     const live = await liveFacts();
     if (persist([], `deploy state: re-render${pending ? ` (+${pending} pending)` : ""}`, true, live)) {
+      printDrift(live, readPending());
       info("STATE.md is up to date on the operations repo's main");
     }
     return;
@@ -479,8 +482,13 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((e) => {
-    warn((e as Error).message);
-    process.exit(1);
-  });
+  // Explicit exit: a Firestore client still closing (live view, after a
+  // timeout) must not keep a deploy that is done from returning.
+  main().then(
+    () => process.exit(0),
+    (e) => {
+      warn((e as Error).message);
+      process.exit(1);
+    }
+  );
 }
