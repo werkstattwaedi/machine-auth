@@ -47,6 +47,7 @@ import {
   planStatusUpdate,
   type StatusPlan,
   type StoredStatus,
+  terminalHeardAt,
   terminalState,
 } from "./status_plan";
 
@@ -175,14 +176,17 @@ export async function applyGatewayReport(
     const stored = fromStatusDoc(snaps[i].data());
     const t = reported.get(id);
     let next: DeviceState;
+    let heardAt: number | null;
     if (t) {
       next = terminalState(t, now);
+      heardAt = terminalHeardAt(t, now);
     } else if (stored) {
       next = { ...stored, online: false };
+      heardAt = null; // not heard since the gateway restarted
     } else {
       return; // unheard and never stored: nothing to say
     }
-    const plan = planStatusUpdate(stored, next, now);
+    const plan = planStatusUpdate(stored, next, now, heardAt);
     logEvents("maco", id, plan, context);
     if (plan.write) {
       batch.set(refs[i], { ...toStatusDoc(plan.doc), gatewayId: report.gatewayId });
@@ -206,11 +210,13 @@ export async function applyGatewayReport(
     now
   );
   logEvents("gateways", report.gatewayId, gatewayPlan, {});
-  if (gatewayPlan.write || !sameSet(knownOnline, online)) {
-    batch.set(gatewayRef, {
-      ...toStatusDoc({ ...gatewayPlan.doc, lastSeen: now }),
-      terminals: online,
-    });
+  if (gatewayPlan.write) {
+    batch.set(gatewayRef, { ...toStatusDoc(gatewayPlan.doc), terminals: online });
+    writes++;
+  } else if (!sameSet(knownOnline, online)) {
+    // Only the online list changed: write just that, so a reboot the plan
+    // is holding back (crash loop) isn't stored without its log line.
+    batch.set(gatewayRef, { terminals: online }, { merge: true });
     writes++;
   }
 
@@ -231,6 +237,14 @@ export async function deviceStatusHandler(
     logger.warn("device-status rejected", { reason: e.message });
     res.status(400).send({ message: e.message });
     return;
+  }
+  if (report.problems.length > 0) {
+    // Firmware-sent data the report carried but we couldn't use; the rest
+    // of the report is applied. WARNING: device-triggered, daily digest.
+    logger.warn("device-status: dropped invalid terminal data", {
+      gatewayId: report.gatewayId,
+      problems: report.problems.slice(0, 20),
+    });
   }
   const { writes } = await applyGatewayReport(report);
   // The liveness signal: a Cloud Monitoring metric-absence condition on this

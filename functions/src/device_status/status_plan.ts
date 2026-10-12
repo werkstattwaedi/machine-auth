@@ -74,16 +74,25 @@ export interface StatusPlan {
   doc: StoredStatus;
 }
 
+/**
+ * `heardAt` is when the device was last actually heard from — for a
+ * terminal its last ping, which the gateway reports as an age; `null` when
+ * nobody heard it (a terminal a restarted gateway no longer mentions).
+ * `lastSeen` stores that, not the report time, so a dead terminal doesn't
+ * look alive.
+ */
 export function planStatusUpdate(
   stored: StoredStatus | undefined,
   next: DeviceState,
-  now: number
+  now: number,
+  heardAt: number | null = now
 ): StatusPlan {
   if (!stored) {
+    const seen = heardAt ?? now;
     return {
       write: true,
       events: ["first_seen"],
-      doc: { ...next, firstSeen: now, lastSeen: now, since: now, rebootWrittenAt: null },
+      doc: { ...next, firstSeen: seen, lastSeen: seen, since: now, rebootWrittenAt: null },
     };
   }
 
@@ -98,8 +107,9 @@ export function planStatusUpdate(
   // Online and version changes are written at once. A reboot is written at
   // once too, unless one was written within the hour: then it waits for the
   // hourly refresh, so a crash loop costs one write (and one log line) per
-  // hour instead of one per report.
-  const stale = now - stored.lastSeen >= REFRESH_MS;
+  // hour instead of one per report. An offline device has nothing to
+  // refresh: it is written when it goes offline and when it comes back.
+  const stale = next.online && now - stored.lastSeen >= REFRESH_MS;
   const rebootDue =
     rebooted &&
     (stored.rebootWrittenAt === null || now - stored.rebootWrittenAt >= REFRESH_MS);
@@ -119,7 +129,7 @@ export function planStatusUpdate(
       resetReason: next.resetReason ?? stored.resetReason,
       bootCount: next.bootCount ?? stored.bootCount,
       firstSeen: stored.firstSeen,
-      lastSeen: write ? now : stored.lastSeen,
+      lastSeen: write && heardAt !== null ? Math.max(heardAt, stored.lastSeen) : stored.lastSeen,
       since: stored.online !== next.online ? now : stored.since,
       rebootWrittenAt: rebooted && write ? now : stored.rebootWrittenAt,
     },
@@ -133,6 +143,8 @@ export class InvalidReport extends Error {}
 const GATEWAY_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const DEVICE_ID_RE = /^[0-9a-f]{24}$/;
 const VERSION_RE = /^[0-9A-Za-z.+-]{1,64}$/;
+/** Ten years in ms — far above any real uptime or age, and still a valid Timestamp. */
+const MAX_COUNT = 10 * 365 * 24 * 60 * 60 * 1000;
 const MAX_TERMINALS = 50;
 
 export interface TerminalReport {
@@ -151,6 +163,8 @@ export interface GatewayReport {
   version: string | null;
   uptimeMs: number;
   terminals: TerminalReport[];
+  /** Terminal fields (or terminals) dropped because they didn't validate. */
+  problems: string[];
 }
 
 function optionalVersion(value: unknown): string | null {
@@ -163,16 +177,35 @@ function optionalVersion(value: unknown): string | null {
 
 function optionalCount(value: unknown, field: string): number | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > MAX_COUNT) {
     throw new InvalidReport(`invalid ${field}`);
   }
   return Math.floor(value);
+}
+
+/** A field that doesn't validate is dropped (null) and noted, not fatal. */
+function lenient<T>(parse: () => T | null, problems: string[], what: string): T | null {
+  try {
+    return parse();
+  } catch {
+    problems.push(what);
+    return null;
+  }
 }
 
 export function parseKioskVersion(value: unknown): string | null {
   return optionalVersion(value);
 }
 
+/**
+ * Only the gateway's own identity and uptime are fatal: without them the
+ * report can't be attributed, and the 400 is the right signal. Anything a
+ * terminal sends — straight from its firmware — is dropped field by field
+ * (or the terminal skipped, without a usable id), never the whole report:
+ * one odd firmware build must not silence the heartbeat for every other
+ * device and set off the "gateway missing" alert. `problems` lists what
+ * was dropped, for a warning.
+ */
 export function parseGatewayReport(body: unknown): GatewayReport {
   const b = (body ?? {}) as Record<string, unknown>;
   const gateway = (b.gateway ?? {}) as Record<string, unknown>;
@@ -181,29 +214,58 @@ export function parseGatewayReport(body: unknown): GatewayReport {
   }
   const uptimeMs = optionalCount(gateway.uptimeMs, "gateway uptime");
   if (uptimeMs === null) throw new InvalidReport("missing gateway uptime");
-  if (!Array.isArray(b.terminals) || b.terminals.length > MAX_TERMINALS) {
-    throw new InvalidReport("invalid terminals");
-  }
-  const terminals = b.terminals.map((raw): TerminalReport => {
+  if (!Array.isArray(b.terminals)) throw new InvalidReport("invalid terminals");
+
+  const problems: string[] = [];
+  if (b.terminals.length > MAX_TERMINALS) problems.push(`terminals beyond ${MAX_TERMINALS}`);
+  const terminals: TerminalReport[] = [];
+  const ids = new Set<string>();
+  b.terminals.slice(0, MAX_TERMINALS).forEach((raw, i) => {
     const t = (raw ?? {}) as Record<string, unknown>;
     if (typeof t.deviceId !== "string" || !DEVICE_ID_RE.test(t.deviceId)) {
-      throw new InvalidReport("invalid device id");
+      problems.push(`terminal #${i}: device id`);
+      return;
     }
-    if (typeof t.online !== "boolean") throw new InvalidReport("invalid online flag");
-    return {
+    if (ids.has(t.deviceId)) {
+      problems.push(`${t.deviceId}: duplicate`);
+      return;
+    }
+    if (typeof t.online !== "boolean") {
+      problems.push(`${t.deviceId}: online flag`);
+      return;
+    }
+    ids.add(t.deviceId);
+    const field = (name: string) => `${t.deviceId}: ${name}`;
+    terminals.push({
       deviceId: t.deviceId,
-      version: optionalVersion(t.version),
+      version: lenient(() => optionalVersion(t.version), problems, field("version")),
       online: t.online,
-      uptimeMs: optionalCount(t.uptimeMs, "uptime"),
-      lastPingAgoMs: optionalCount(t.lastPingAgoMs, "lastPingAgoMs"),
-      resetReason: optionalCount(t.resetReason, "resetReason"),
-      bootCount: optionalCount(t.bootCount, "bootCount"),
-    };
+      uptimeMs: lenient(() => optionalCount(t.uptimeMs, "uptime"), problems, field("uptimeMs")),
+      lastPingAgoMs: lenient(
+        () => optionalCount(t.lastPingAgoMs, "lastPingAgoMs"),
+        problems,
+        field("lastPingAgoMs")
+      ),
+      resetReason: lenient(
+        () => optionalCount(t.resetReason, "resetReason"),
+        problems,
+        field("resetReason")
+      ),
+      bootCount: lenient(() => optionalCount(t.bootCount, "bootCount"), problems, field("bootCount")),
+    });
   });
-  if (new Set(terminals.map((t) => t.deviceId)).size !== terminals.length) {
-    throw new InvalidReport("duplicate device id");
-  }
-  return { gatewayId: gateway.id, version: optionalVersion(gateway.version), uptimeMs, terminals };
+  return {
+    gatewayId: gateway.id,
+    version: lenient(() => optionalVersion(gateway.version), problems, "gateway version"),
+    uptimeMs,
+    terminals,
+    problems,
+  };
+}
+
+/** When the gateway last heard the terminal (its last ping), as of `now`. */
+export function terminalHeardAt(t: TerminalReport, now: number): number {
+  return now - (t.lastPingAgoMs ?? 0);
 }
 
 /** A terminal's state as of `now`, from the gateway's report. */

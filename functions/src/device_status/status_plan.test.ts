@@ -110,6 +110,27 @@ describe("planStatusUpdate", () => {
     expect(plan.write).to.equal(false);
   });
 
+  it("stores when the device was last heard, not when it was reported", () => {
+    const plan = planStatusUpdate(undefined, state, T0, T0 - 10_000);
+    expect(plan.doc.lastSeen).to.equal(T0 - 10_000);
+  });
+
+  it("does not refresh an offline device: a dead terminal must not look alive", () => {
+    const off = planStatusUpdate(stored(), { ...state, online: false }, T0 + MIN, T0);
+    expect(off.write).to.equal(true);
+    expect(off.doc.lastSeen).to.equal(T0); // its last ping
+    for (const hours of [1, 2, 10]) {
+      const later = planStatusUpdate(off.doc, { ...state, online: false }, T0 + hours * REFRESH_MS, T0);
+      expect(later.write, `after ${hours} h`).to.equal(false);
+    }
+  });
+
+  it("keeps lastSeen when nobody heard the device (restarted gateway)", () => {
+    const plan = planStatusUpdate(stored({ lastSeen: T0 }), { ...state, online: false }, T0 + 5 * MIN, null);
+    expect(plan.write).to.equal(true);
+    expect(plan.doc.lastSeen).to.equal(T0);
+  });
+
   it("keeps fields an older sender doesn't report", () => {
     const plan = planStatusUpdate(
       stored(),
@@ -137,6 +158,7 @@ describe("parseGatewayReport", () => {
     const parsed = parseGatewayReport(report);
     expect(parsed.gatewayId).to.equal("workshop");
     expect(parsed.terminals[0]).to.deep.equal(terminal);
+    expect(parsed.problems).to.deep.equal([]);
   });
 
   it("accepts terminals on old firmware that report no status", () => {
@@ -149,16 +171,41 @@ describe("parseGatewayReport", () => {
 
   for (const [name, body] of [
     ["a path-like gateway id", { ...report, gateway: { ...report.gateway, id: "../users" } }],
-    ["a non-hex device id", { ...report, terminals: [{ ...terminal, deviceId: "users/abc" }] }],
-    ["a version with spaces", { ...report, terminals: [{ ...terminal, version: "1 2" }] }],
-    ["a negative count", { ...report, terminals: [{ ...terminal, bootCount: -1 }] }],
-    ["a duplicate terminal", { ...report, terminals: [terminal, terminal] }],
+    ["a missing gateway uptime", { ...report, gateway: { id: "workshop" } }],
+    ["an absurd gateway uptime", { ...report, gateway: { ...report.gateway, uptimeMs: 1e300 } }],
     ["no terminals array", { gateway: report.gateway }],
   ] as const) {
     it(`rejects ${name}`, () => {
       expect(() => parseGatewayReport(body)).to.throw(InvalidReport);
     });
   }
+
+  it("drops a terminal's bad fields instead of the whole report", () => {
+    // One odd firmware build must not silence every device's heartbeat.
+    const other = { ...terminal, deviceId: "0a10aced202194944a042f05" };
+    const parsed = parseGatewayReport({
+      ...report,
+      terminals: [{ ...terminal, version: "custom build/1", bootCount: -1, uptimeMs: 1e300 }, other],
+    });
+    expect(parsed.terminals).to.have.length(2);
+    expect(parsed.terminals[0]).to.include({ version: null, bootCount: null, uptimeMs: null, online: true });
+    expect(parsed.terminals[1]).to.deep.equal(other);
+    expect(parsed.problems).to.have.length(3);
+  });
+
+  it("skips terminals without a usable id, duplicates and missing online flags", () => {
+    const parsed = parseGatewayReport({
+      ...report,
+      terminals: [
+        { ...terminal, deviceId: "users/abc" },
+        terminal,
+        terminal,
+        { ...terminal, deviceId: "0a10aced202194944a042f05", online: "yes" },
+      ],
+    });
+    expect(parsed.terminals.map((t) => t.deviceId)).to.deep.equal([terminal.deviceId]);
+    expect(parsed.problems).to.have.length(3);
+  });
 });
 
 describe("terminalState", () => {

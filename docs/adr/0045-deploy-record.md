@@ -197,8 +197,12 @@ credentials are deferred until there is a second gateway.
 **Writes only on change.** The function compares each report with the
 stored document and writes when something changed (version, online at
 once; a reboot at once unless one was already written within the hour —
-a crash loop costs one write and one log line per hour) and otherwise
-refreshes `lastSeen` at most hourly. That is about 24 writes per device
+a crash loop costs one write and one log line per hour) and otherwise,
+while the device is online, refreshes `lastSeen` at most hourly. `lastSeen`
+is when the device was last heard (for a terminal: its last ping), so a
+dead terminal keeps the time it died. A terminal field that doesn't
+validate is dropped, not the report: one odd firmware build must not
+silence the heartbeat for every device. That is about 24 writes per device
 per day, ~150 for a gateway with five terminals; the 5-minute beat itself
 costs no writes.
 

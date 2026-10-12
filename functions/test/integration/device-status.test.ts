@@ -39,7 +39,7 @@ function terminal(deviceId: string, overrides: Partial<TerminalReport> = {}): Te
 }
 
 function report(terminals: TerminalReport[], uptimeMs = 30 * MIN): GatewayReport {
-  return { gatewayId: "workshop", version: "2026.10.3", uptimeMs, terminals };
+  return { gatewayId: "workshop", version: "2026.10.3", uptimeMs, terminals, problems: [] };
 }
 
 describe("device status reports (Integration)", () => {
@@ -64,6 +64,7 @@ describe("device status reports (Integration)", () => {
     const t = (await statusRef(db, "maco", A).get()).data()!;
     expect(t).to.include({ version: "2026.10.3", online: true, resetReason: "power_cycle", gatewayId: "workshop" });
     expect(t.bootedAt.toMillis()).to.equal(T0 - 5_000 - 60 * MIN);
+    expect(t.lastSeen.toMillis()).to.equal(T0 - 5_000); // its last ping
 
     const g = (await statusRef(db, "gateways", "workshop").get()).data()!;
     expect(g.terminals).to.deep.equal([A]);
@@ -87,7 +88,7 @@ describe("device status reports (Integration)", () => {
     const db = getFirestore();
     await applyGatewayReport(report([terminal(A)]), T0, db);
     const { writes } = await applyGatewayReport(
-      report([terminal(A, { online: false, lastPingAgoMs: 70_000, uptimeMs: 60 * MIN })], 31 * MIN),
+      report([terminal(A, { online: false, lastPingAgoMs: 65_000, uptimeMs: 60 * MIN })], 31 * MIN),
       T0 + MIN,
       db
     );
@@ -97,6 +98,16 @@ describe("device status reports (Integration)", () => {
     expect(t.since.toMillis()).to.equal(T0 + MIN);
     const g = (await statusRef(db, "gateways", "workshop").get()).data()!;
     expect(g.terminals).to.deep.equal([]);
+
+    // Still offline hours later: nothing to write, lastSeen stays at the
+    // last ping.
+    const later = await applyGatewayReport(
+      report([terminal(A, { online: false, lastPingAgoMs: 3 * 60 * MIN + 65_000 })], 3 * 60 * MIN),
+      T0 + 3 * 60 * MIN + MIN,
+      db
+    );
+    expect(later.writes).to.equal(1); // the gateway's own hourly refresh
+    expect((await statusRef(db, "maco", A).get()).data()!.lastSeen.toMillis()).to.equal(T0 - 5_000);
   });
 
   it("marks a terminal offline that a restarted gateway never hears from again", async () => {

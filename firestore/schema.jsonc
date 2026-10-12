@@ -466,7 +466,7 @@
           "resetReason": "string | null",  // unknown | watchdog | panic | power_cycle | ota_update | user_requested
           "bootCount": "number | null",    // consecutive incomplete boots (ADR-0040)
           "firstSeen": "timestamp",
-          "lastSeen": "timestamp",         // refreshed at most hourly
+          "lastSeen": "timestamp",         // last heard (terminal: last ping); refreshed at most hourly while online
           "rebootWrittenAt": "timestamp | null",
           "gatewayId": "string",           // terminals: the reporting gateway
           "terminals": "string[]"          // gateways: terminal ids last reported online

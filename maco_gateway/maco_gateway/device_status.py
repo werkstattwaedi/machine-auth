@@ -173,13 +173,17 @@ class DeviceStatusReporter:
         if not self._due(now):
             return
         self._last_sent = now
+        # Clear before sending: a terminal that drops out or reboots while
+        # the request is in flight sets it again and gets its own report,
+        # instead of being swallowed by this one's success.
+        was_urgent, self._urgent = self._urgent, False
         try:
             ok = await self._client.post_device_status(self.payload())
         except Exception:  # never let reporting disturb the gateway
             logger.debug("status report raised", exc_info=True)
             ok = False
-        if ok:
-            self._urgent = False
+        if not ok:
+            self._urgent = self._urgent or was_urgent
         if ok and self._last_ok is not True:
             logger.info("status: reporting to the cloud")
         elif not ok and self._last_ok is not False:

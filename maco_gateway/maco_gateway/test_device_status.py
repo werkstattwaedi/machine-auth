@@ -134,6 +134,22 @@ class ReporterTest(unittest.TestCase):
         self.tick()  # still urgent: retried
         self.assertEqual(len(self.client.reports), 2)
 
+    def test_a_change_during_an_in_flight_report_gets_its_own_report(self):
+        reporter = self.reporter
+
+        class _SlowClient(_StubClient):
+            async def post_device_status(inner, report: dict) -> bool:
+                # A terminal shows up while the request is in flight.
+                reporter.on_ping(DEVICE, version="2026.10.3", uptime_ms=1_000, reset_reason=3, boot_count=1)
+                return await super().post_device_status(report)
+
+        reporter._client = _SlowClient()
+        self.tick()
+        self.assertEqual(len(reporter._client.reports), 1)
+        self.advance(MIN_URGENT_GAP_S)
+        self.tick()
+        self.assertEqual(len(reporter._client.reports), 2)
+
     def test_old_firmware_fields_are_reported_as_unknown(self):
         self.reporter.on_ping(DEVICE, version="", uptime_ms=0, reset_reason=0, boot_count=0)
         t = self.reporter.payload()["terminals"][0]
