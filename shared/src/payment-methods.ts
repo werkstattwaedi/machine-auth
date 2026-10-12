@@ -16,18 +16,6 @@
 export const PAYMENT_METHODS = ["rechnung", "monthly", "raisenow"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
-/**
- * Ids that may still sit in stored checkouts from before the rename. Every
- * read of a stored method goes through `normalizePaymentMethod`, so these
- * keep working until the migration has rewritten them.
- */
-const LEGACY_PAYMENT_METHODS: Readonly<Record<string, PaymentMethod>> = {
-  twint: "raisenow",
-}
-
-/** A `paymentMethod` value as it may be stored in Firestore. */
-export type StoredPaymentMethod = PaymentMethod | "twint"
-
 export interface PaymentMethodInfo {
   /** Customer-facing label (German UI). */
   label: string
@@ -74,19 +62,11 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
   )
 }
 
-/** Maps a stored or client-supplied method to its current id; null if unknown. */
-export function normalizePaymentMethod(value: unknown): PaymentMethod | null {
-  if (isPaymentMethod(value)) return value
-  if (typeof value === "string" && Object.prototype.hasOwnProperty.call(LEGACY_PAYMENT_METHODS, value)) {
-    return LEGACY_PAYMENT_METHODS[value]
-  }
-  return null
-}
-
-/** True when the (possibly legacy) method yields a receipt instead of an invoice. */
-export function isPaidDuringCheckout(value: unknown): boolean {
-  const method = normalizePaymentMethod(value)
-  return method !== null && PAYMENT_METHOD_INFO[method].paidDuringCheckout
+/** True when the method yields a receipt instead of an invoice. */
+export function isPaidDuringCheckout(
+  method: PaymentMethod | null | undefined
+): boolean {
+  return !!method && PAYMENT_METHOD_INFO[method].paidDuringCheckout
 }
 
 /**
@@ -95,24 +75,6 @@ export function isPaidDuringCheckout(value: unknown): boolean {
  */
 export const PAID_VIA = ["raisenow", "ebanking", "free"] as const
 export type PaidVia = (typeof PAID_VIA)[number]
-
-const LEGACY_PAID_VIA: Readonly<Record<string, PaidVia>> = {
-  twint: "raisenow",
-}
-
-/**
- * A `paidVia` value as it may be stored in Firestore. `cash` was offered by
- * the admin mark-paid dialog although the workshop takes no cash; it has no
- * current equivalent and is kept only so old bills still type-check.
- */
-export type StoredPaidVia = PaidVia | "twint" | "cash"
-
-/** Maps a stored paidVia to its current id; null if unknown or legacy-only. */
-export function normalizePaidVia(value: unknown): PaidVia | null {
-  if (typeof value !== "string") return null
-  if ((PAID_VIA as readonly string[]).includes(value)) return value as PaidVia
-  return Object.prototype.hasOwnProperty.call(LEGACY_PAID_VIA, value) ? LEGACY_PAID_VIA[value] : null
-}
 
 /**
  * Where the checkout runs. The kiosk is the shared workshop terminal

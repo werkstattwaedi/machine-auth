@@ -23,7 +23,6 @@ import type {
   MembershipEntity,
   UsageMachineEntity,
 } from "../types/firestore_entities";
-import { normalizePaidVia } from "@oww/shared";
 import type { BillEntity } from "../invoice/types";
 
 export type StatsRow = Record<string, unknown>;
@@ -161,9 +160,7 @@ export function buildBillRow(
     paid_at: bill.paidAt.toDate().toISOString(),
     subject_key: subjectKey,
     amount: bill.amount ?? null,
-    // Legacy "twint" (bills paid before the rename, not yet exported) lands
-    // as "raisenow"; "cash" has no current id and passes through raw.
-    paid_via: normalizePaidVia(bill.paidVia) ?? bill.paidVia ?? null,
+    paid_via: bill.paidVia ?? null,
     kind: bill.kind ?? "invoice",
     source: bill.source ?? "checkout",
   };

@@ -30,7 +30,7 @@ import {
 import type { BillEntity } from "../../src/invoice/types";
 import type {
   CheckoutEntity,
-  StoredPaymentMethod,
+  PaymentMethod,
 } from "../../src/types/firestore_entities";
 
 interface SeedBillOpts {
@@ -39,7 +39,7 @@ interface SeedBillOpts {
   checkoutId: string;
   amount?: number;
   paidVia?: BillEntity["paidVia"];
-  paymentMethod?: StoredPaymentMethod | null;
+  paymentMethod?: PaymentMethod | null;
   createdMsAgo?: number;
 }
 
@@ -235,22 +235,22 @@ describe("acknowledgeBill callable (Integration)", () => {
     expect(bill.paymentMethodConfirmationSource).to.equal("user");
   });
 
-  // A kiosk/browser tab still running the pre-rename bundle sends "twint".
-  // It must keep working until the alias is removed, and must store the
-  // current id so the migration never has to revisit the doc.
-  it("accepts the legacy 'twint' id and stores it as 'raisenow'", async () => {
+  // The pre-rename id was migrated away (ADR-0044); accepting it again
+  // would let a stale client re-introduce it.
+  it("rejects the retired 'twint' id", async () => {
     await seedBillAndCheckout({
       billId: "b1",
       ownerUid: "alice",
       checkoutId: "co1",
     });
-
-    await call("alice", { billId: "b1", paymentMethod: "twint" });
-
-    const bill = await readBill("b1");
-    expect(bill.paymentMethodConfirmationSource).to.equal("user");
+    try {
+      await call("alice", { billId: "b1", paymentMethod: "twint" });
+      throw new Error("Expected invalid-argument");
+    } catch (err) {
+      expect((err as { code?: string }).code).to.equal("invalid-argument");
+    }
     const checkout = await readCheckout("co1");
-    expect(checkout.paymentMethod).to.equal("raisenow");
+    expect(checkout.paymentMethod ?? null).to.not.equal("twint");
   });
 
   // Ops can switch an integration off for every client type (e.g. RaiseNow
@@ -274,19 +274,17 @@ describe("acknowledgeBill callable (Integration)", () => {
       }
     });
 
-    it("rejects raisenow (and its legacy id) with failed-precondition", async () => {
+    it("rejects raisenow with failed-precondition", async () => {
       await seedBillAndCheckout({
         billId: "b1",
         ownerUid: "alice",
         checkoutId: "co1",
       });
-      for (const paymentMethod of ["raisenow", "twint"]) {
-        try {
-          await call("alice", { billId: "b1", paymentMethod });
-          throw new Error("Expected failed-precondition");
-        } catch (err) {
-          expect((err as { code?: string }).code).to.equal("failed-precondition");
-        }
+      try {
+        await call("alice", { billId: "b1", paymentMethod: "raisenow" });
+        throw new Error("Expected failed-precondition");
+      } catch (err) {
+        expect((err as { code?: string }).code).to.equal("failed-precondition");
       }
       const bill = await readBill("b1");
       expect(bill.paymentMethodConfirmationTime ?? null).to.equal(null);

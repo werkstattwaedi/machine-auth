@@ -7,7 +7,7 @@ import {
   CheckoutPersonEntity,
   CheckoutItemEntity,
   PaymentMethod,
-  StoredPaidVia,
+  PaidVia,
   UsageType,
 } from "../types/firestore_entities";
 
@@ -28,8 +28,7 @@ export interface BillEntity {
   storagePath: string | null;
   created: Timestamp;
   paidAt: Timestamp | null;
-  // May hold the legacy values "twint" / "cash" — read through normalizePaidVia.
-  paidVia: StoredPaidVia | null;
+  paidVia: PaidVia | null;
   pdfGeneratedAt: Timestamp | null;
   emailSentAt: Timestamp | null;
   // Set once by trySendEmail when no recipient resolves (no account-holder
@@ -143,7 +142,7 @@ export interface InvoiceData {
   grandTotal: number;
   currency: string;
   paidAt?: Date | null;
-  paidVia?: StoredPaidVia | null;
+  paidVia?: PaidVia | null;
   /**
    * Customer's chosen payment method from Step 4 (Bezahlen). Null at
    * bill-create time (PDF generated before the user picks). Set after
@@ -152,7 +151,6 @@ export interface InvoiceData {
    * during the checkout and the Sammelrechnung get a method-specific
    * notice instead, so users don't think they need to pay via QR after
    * already settling or having it routed to their monthly bill.
-   * Always the normalized id (never the legacy "twint").
    */
   paymentMethod?: PaymentMethod | null;
   /**
@@ -259,7 +257,7 @@ export function formatBillReference(
  */
 export function billDocumentPrefix(
   kind: BillKind | undefined,
-  paymentMethod: string | null | undefined,
+  paymentMethod: PaymentMethod | null | undefined,
 ): "Beleg" | "Quittung" | "Rechnung" {
   if ((kind ?? "invoice") === "beleg") return "Beleg";
   if (isPaidDuringCheckout(paymentMethod)) return "Quittung";
