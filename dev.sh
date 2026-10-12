@@ -24,12 +24,12 @@ for arg in "$@"; do
 done
 
 # Check prerequisites
-command -v node >/dev/null 2>&1 || error "node is required. Install Node.js 22+."
+command -v node >/dev/null 2>&1 || error "node is required. Install Node.js 24+ (see .nvmrc)."
 command -v firebase >/dev/null 2>&1 || error "firebase CLI is required. Run: npm i -g firebase-tools"
 
 NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 20 ]; then
-  error "Node.js 20+ required, found $(node -v)"
+if [ "$NODE_VERSION" -lt 24 ]; then
+  error "Node.js 24+ required, found $(node -v)"
 fi
 
 # Install all workspaces (shared, web/*, functions, kiosk, scripts) at root
