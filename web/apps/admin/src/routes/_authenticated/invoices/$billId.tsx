@@ -11,7 +11,7 @@ import { where } from "firebase/firestore"
 import { useCollection, useDocument } from "@modules/lib/firestore"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { billRef, billsCollection } from "@modules/lib/firestore-helpers"
-import type { StoredPaidVia } from "@modules/lib/firestore-entities"
+import type { PaidVia } from "@modules/lib/firestore-entities"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useLookup, resolveRef } from "@modules/lib/lookup"
@@ -33,12 +33,9 @@ export const Route = createFileRoute("/_authenticated/invoices/$billId")({
   component: BillDetailPage,
 })
 
-// Keyed by stored value: "twint" and "cash" only appear on old bills.
-const PAID_VIA_LABELS: Record<StoredPaidVia, string> = {
+const PAID_VIA_LABELS: Record<PaidVia, string> = {
   raisenow: "TWINT (RaiseNow)",
-  twint: "TWINT (RaiseNow)",
   ebanking: "E-Banking",
-  cash: "Bar",
   free: "Gratis",
 }
 

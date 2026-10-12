@@ -6,7 +6,7 @@
 
 **Amends:** [ADR-0020](0020-dual-payment-qrbill-twint-paylink.md) (the RaiseNow PayLink becomes one switchable integration among several)
 
-**Applies to:** `shared/src/payment-methods.ts`, `functions/src/payments/`, `functions/src/invoice/acknowledge_bill.ts`, `web/apps/checkout/src/components/checkout/payment-{methods,result}.tsx`, `web/apps/checkout/src/lib/payment-config.ts`, `scripts/generate-env.ts`, `scripts/migrate-payment-method-ids.ts`
+**Applies to:** `shared/src/payment-methods.ts`, `functions/src/payments/`, `functions/src/invoice/acknowledge_bill.ts`, `web/apps/checkout/src/components/checkout/payment-{methods,result}.tsx`, `web/apps/checkout/src/lib/payment-config.ts`, `scripts/generate-env.ts`
 
 ## Context
 
@@ -21,7 +21,7 @@ Two problems followed:
 
 1. **Method ids name the integration.** `"twint"` becomes `"raisenow"`, for both `checkouts.paymentMethod` and `bills.paidVia`. Future ids follow the same rule (`wallee_terminal`, `wallee_web`). The brand is only a label.
 2. **One method table** in `@oww/shared` (`PAYMENT_METHOD_INFO`) holds the per-method behaviour: `paidDuringCheckout` (the document is a receipt / "Quittung" without a QR slip), `isAggregated` (becomes a Beleg for the Sammelrechnung), `requiresMembership`, and the label. Callers read properties; they don't compare ids. The checkout UI has a matching table (`PAYMENT_METHOD_UI`) for icon, panel, commit label and commit gate.
-3. **Legacy ids are normalized on read** (`normalizePaymentMethod` / `normalizePaidVia`). `scripts/migrate-payment-method-ids.ts` rewrites stored Firestore docs. Until it has run on prod, `firestore.rules` and `acknowledgeBill` also accept `"twint"` on write, for tabs still running an old bundle. BigQuery `stats.paid_via` history is **not** rewritten; rows exported before the rename keep `twint` (same meaning as `raisenow`).
+3. **Stored ids are migrated, not aliased.** `scripts/migrate-payment-method-ids.ts` rewrote `checkouts.paymentMethod` and `bills.paidVia` on staging and prod (2026-10-12). During the rollout the rules, `acknowledgeBill` and `adminMarkBillsPaid` accepted `"twint"` from tabs still running an old bundle; that alias, the read-side normalizers and the retired `paidVia: "cash"` were removed afterwards, so the code knows only the current ids. BigQuery `stats.paid_via` history is **not** rewritten: rows exported before the rename keep `twint` (same meaning as `raisenow`).
 4. **Enablement per client type, from the operations config.** `ClientType = "kiosk" | "web"`. `web.paymentMethodsKiosk` / `web.paymentMethodsWeb` are comma-separated ids in tab order. `generate-env` writes them to both `VITE_PAYMENT_METHODS_*` (checkout app) and `PAYMENT_METHODS_*` (functions), and rejects unknown ids. Empty means the defaults `rechnung,monthly,raisenow`.
 5. **The server gates only "enabled for some client type".** `acknowledgeBill` refuses a method that is switched off everywhere (`failed-precondition`), and the PayLink is not built at all then. Which client type shows which tab is a UI decision: a customer gains nothing by picking a method another client offers, so it is not a security boundary.
 6. **Integrations live in `functions/src/payments/`** (`raisenow.ts` today, `config.ts` for the switch). `PaymentData` carries one optional field per integration (`paylinkUrl: string | null`), and the UI drops a tab whose data is missing.
@@ -34,7 +34,7 @@ Two problems followed:
 - Stored data says which integration was used, which reconciliation and statistics need once two integrations take TWINT.
 
 **Cons:**
-- The rename needs a one-time migration and a transitional alias in rules and `acknowledgeBill`, which a follow-up must remove once prod is migrated.
+- The rename needed a one-time migration plus a short-lived write alias (both done; see Decision 3).
 - BigQuery holds two spellings for RaiseNow payments (`twint` before, `raisenow` after). Queries must treat them as one.
 - A config change needs a hosting **and** functions deploy, because both read it at build/deploy time.
 - `firestore.rules` still lists the allowed `paymentMethod` values literally, so each new method also needs a rules change.

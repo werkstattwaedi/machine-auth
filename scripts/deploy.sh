@@ -12,8 +12,14 @@
 #   scripts/deploy.sh prod             # deploy everything to oww-maco
 #   scripts/deploy.sh staging prod     # staging first, then prod
 #   scripts/deploy.sh prod --yes       # skip the production confirmation
+#   scripts/deploy.sh staging --allow-off-main   # deploy a branch (recorded as such)
 #
-# Per environment this runs:
+# Refuses to run unless machine-auth AND the operations repo are on the
+# latest main with no uncommitted changes (scripts/deploy-preflight.ts,
+# ADR-0045); --allow-off-main overrides that and the deploy log says so.
+#
+# Per environment this runs (and finally records the deploy — git tag plus
+# the operations repo's deploys/log.jsonl and STATE.md, ADR-0045):
 #   1. generate-env (staging: --env staging overlay per ADR-0034)
 #   2. functions deploy via scripts/deploy-functions.ts (packs @oww/shared,
 #      restores package.json/lockfile even on failure)
@@ -49,7 +55,8 @@ for arg in "$@"; do
     staging) WANT_STAGING=1 ;;
     prod) WANT_PROD=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
-    *) fail "Unknown argument: $arg (expected: staging, prod, --yes)" ;;
+    --allow-off-main) export DEPLOY_ALLOW_OFF_MAIN=1 ;;
+    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --allow-off-main)" ;;
   esac
 done
 [ $((WANT_STAGING + WANT_PROD)) -gt 0 ] || fail "Usage: scripts/deploy.sh [staging] [prod] [--yes]"
@@ -84,6 +91,17 @@ if grep -q '"@oww/shared": "file:' functions/package.json 2>/dev/null \
   rm -f functions/oww-shared-*.tgz
 fi
 rm -rf functions/node_modules/@oww/shared
+
+step "Preflight: latest main in machine-auth and the operations repo"
+npx tsx scripts/deploy-preflight.ts --component firebase || exit 1
+
+# What gets deployed, captured before anything below touches the tree —
+# deploy-record.ts records (and tags) this, not whatever is checked out
+# when the run ends.
+DEPLOY_RECORD_COMMIT="$(git rev-parse HEAD)"
+DEPLOY_RECORD_DIRTY=0
+[ -z "$(git status --porcelain --ignore-submodules --untracked-files=no)" ] || DEPLOY_RECORD_DIRTY=1
+export DEPLOY_RECORD_COMMIT DEPLOY_RECORD_DIRTY
 
 step "Install workspace dependencies (also builds @oww/shared via postinstall)"
 npm install
@@ -132,6 +150,11 @@ deploy_env() {
 
   step "[$env] Hosting (checkout + admin) → $project"
   WEB_BUILD_SCRIPT="$web_build" firebase deploy --only hosting --project "$project"
+
+  step "[$env] Recording the deploy (ADR-0045)"
+  npx tsx scripts/deploy-record.ts deploy --env "$env" --component firebase \
+    || warn "Deploy succeeded but was not recorded — record it by hand:
+  npx tsx scripts/deploy-record.ts deploy --env $env --component firebase"
 
   step "[$env] Done → $project"
 }

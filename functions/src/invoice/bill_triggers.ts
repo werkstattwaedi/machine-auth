@@ -55,7 +55,6 @@ import {
   billMail,
   classifyBillKind,
   classifyCheckoutKind,
-  normalizePaymentMethod,
   type CheckoutKind,
   type MailName,
 } from "@oww/shared";
@@ -257,7 +256,7 @@ async function assembleInvoiceData(
   // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
   // notice — fall through to the rechnung path.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const rawPaymentMethod = normalizePaymentMethod(primaryCheckoutData?.paymentMethod);
+  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
   const kind = bill.kind ?? "invoice";
   const paymentMethod =
     kind === "invoice" &&
@@ -508,7 +507,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
-  const paymentMethod = normalizePaymentMethod(checkout.paymentMethod);
+  const paymentMethod = checkout.paymentMethod ?? null;
   const mail = pickBillMail(paymentMethod, bill);
 
   // Acquire lock
@@ -802,9 +801,9 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
       template: templateRef("bill-cancellation", {}, {
         RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
         INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-        DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+        DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
         REASON: bill.cancellationReason ?? "",
-        PAYMENT_NOTE: cancellationPaymentNote(bill, normalizePaymentMethod(checkout.paymentMethod)),
+        PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
         AMOUNT: bill.amount.toFixed(2),
         CURRENCY: bill.currency,
         KASSE_EMAIL: kasseEmail.value(),
