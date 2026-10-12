@@ -162,7 +162,9 @@ function noteText(e: DeployEntry, withVersion: boolean): string {
 
 function cell(text: string | undefined): string {
   if (!text) return "";
-  return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+  // Backslashes first: a note ending in "\" would otherwise turn the
+  // pipe escape that follows into a literal backslash and an open pipe.
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
 /**

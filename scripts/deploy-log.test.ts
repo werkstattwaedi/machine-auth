@@ -80,6 +80,13 @@ test("dirty deploys are flagged and pipes in notes cannot break the table", () =
   assert.match(md, /a \\\| b/);
 });
 
+test("backslashes in notes are escaped before pipes", () => {
+  const md = renderState([
+    { at: "2026-10-01T08:00:00Z", env: "staging", component: "firebase", commit: "f".repeat(40), by: "Mike", note: "C:\\path\\| x" },
+  ]);
+  assert.ok(md.includes("C:\\\\path\\\\\\| x"), md);
+});
+
 test("an overridden preflight is flagged with its reasons", () => {
   const md = renderState([
     { at: "2026-10-01T08:00:00Z", env: "staging", component: "firebase", commit: "f".repeat(40), by: "Mike", offMain: ["machine-auth: on branch feat/x, not main"] },
