@@ -25,6 +25,8 @@ interface LogClientErrorInput {
   message?: unknown;
   path?: unknown;
   userAgent?: unknown;
+  /** Web build version (ADR-0045) — which bundle the error came from. */
+  version?: unknown;
 }
 
 interface SanitizedPayload {
@@ -34,6 +36,7 @@ interface SanitizedPayload {
   message: string | null;
   path: string | null;
   userAgent: string | null;
+  version: string | null;
 }
 
 function toCappedString(value: unknown): string | null {
@@ -59,6 +62,7 @@ export function buildClientErrorLogPayload(
     message: toCappedString(data.message),
     path: toCappedString(data.path),
     userAgent: toCappedString(data.userAgent),
+    version: toCappedString(data.version)?.slice(0, 64) ?? null,
   };
 
   // Drop `message` if the total JSON body is over budget. Metadata stays so
@@ -77,6 +81,7 @@ export function buildClientErrorLogPayload(
       path: sanitized.path,
       uid,
       userAgent: sanitized.userAgent,
+      clientVersion: sanitized.version,
     },
   };
 }

@@ -35,8 +35,13 @@ export interface DeployEntry {
   commit?: string;
   /** Working tree had uncommitted changes (submodules ignored). */
   dirty?: boolean;
-  /** Component version where one exists (kiosk package.json). */
+  /** Release version (scripts/build-version.ts), e.g. `2026.10.3`. */
   version?: string;
+  /**
+   * Operations repo config revision the deploy was built with — its last
+   * commit outside `deploys/` and `STATE.md` (deploy-preflight.ts).
+   */
+  opsRevision?: string;
   by: string;
   note?: string;
   /** machine-auth git tag created for this deploy. */

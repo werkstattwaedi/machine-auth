@@ -29,6 +29,7 @@ import {
 import { httpsCallable, type Functions } from "firebase/functions"
 import { useDb, useFunctions } from "./firebase-context"
 import { getClientSessionId } from "./client-session"
+import { BUILD_VERSION } from "./build-version"
 
 interface UseCollectionResult<T> {
   data: (T & { id: string })[]
@@ -122,6 +123,7 @@ function reportQueryError(
         message: string
         path: string
         userAgent: string
+        version: string
       },
       { ok: boolean }
     >(functions, "logClientError")
@@ -133,6 +135,7 @@ function reportQueryError(
       path,
       userAgent:
         typeof navigator !== "undefined" ? navigator.userAgent ?? "" : "",
+      version: BUILD_VERSION,
     }).catch(() => {
       // Swallow: never let logClientError failure recurse into reportQueryError.
     })

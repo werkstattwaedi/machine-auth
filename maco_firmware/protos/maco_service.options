@@ -2,5 +2,5 @@
 # Sets max_size for string and bytes fields to enable fixed-size encoding
 
 maco.EchoMessage.data                       max_size:256
-maco.DeviceInfoResponse.firmware_version    max_size:32
+maco.DeviceInfoResponse.firmware_version    max_size:48
 maco.DeviceInfoResponse.build_target        max_size:16

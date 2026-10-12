@@ -28,6 +28,8 @@ export interface ResetSessionOptions {
 export interface Bridge {
   mode: BridgeMode
   features: readonly string[]
+  // Release version of this kiosk build (ADR-0045), e.g. "2026.10.3".
+  version: string
   bearer: () => Promise<string | null>
   resetSession: (opts?: ResetSessionOptions) => Promise<void>
   getUrl: () => Promise<string>

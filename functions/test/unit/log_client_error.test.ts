@@ -19,6 +19,7 @@ describe("logClientError — payload sanitization", () => {
         message: "Missing or insufficient permissions.",
         path: "/bills",
         userAgent: "Mozilla/5.0",
+        version: "2026.10.3",
       },
       "user-42",
     );
@@ -30,7 +31,16 @@ describe("logClientError — payload sanitization", () => {
       path: "/bills",
       uid: "user-42",
       userAgent: "Mozilla/5.0",
+      clientVersion: "2026.10.3",
     });
+  });
+
+  it("caps the client version and treats a missing one as null", () => {
+    const long = buildClientErrorLogPayload({ sessionId: "s", version: "v".repeat(500) }, null);
+    expect((long.logFields.clientVersion as string).length).to.equal(64);
+    // Bundles from before ADR-0045 send no version.
+    const old = buildClientErrorLogPayload({ sessionId: "s" }, null);
+    expect(old.logFields.clientVersion).to.equal(null);
   });
 
   it("drops the message when total body exceeds 4096 bytes", () => {

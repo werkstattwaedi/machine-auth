@@ -1,6 +1,6 @@
 {
   "name": "checkout-kiosk",
-  "version": "1.0.14",
+  "version": "0.0.0-dev",
   "description": "Electron hardware bridge for the OWW checkout kiosk (NFC).",
   "main": "dist/main.js",
   "scripts": {
@@ -12,8 +12,8 @@
     "dev:kiosk": "npm run start:kiosk",
     "start:kiosk:staging": "node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && electron .",
     "build:kiosk": "npm run _compile && cross-env KIOSK_DIST=dev electron-builder --config electron-builder.kiosk.yml",
-    "build:kiosk:staging": "npx tsx ../scripts/deploy-preflight.ts --component kiosk && node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && cross-env KIOSK_DIST=staging electron-builder --config electron-builder.kiosk.yml --win && (npx tsx ../scripts/deploy-record.ts deploy --env staging --component kiosk --note \"installer built; install on the kiosk PC by hand\" || echo Kiosk build not recorded)",
-    "build:kiosk:prod": "npx tsx ../scripts/deploy-preflight.ts --component kiosk && node scripts/inject-build-config.mjs --prod && npm run tsc:main && npm run tsc:renderer && cross-env KIOSK_DIST=prod electron-builder --config electron-builder.kiosk.yml --win && (npx tsx ../scripts/deploy-record.ts deploy --env prod --component kiosk --note \"installer built; install on the kiosk PC by hand\" || echo Kiosk build not recorded)",
+    "build:kiosk:staging": "npx tsx ../scripts/deploy-kiosk.ts --env staging",
+    "build:kiosk:prod": "npx tsx ../scripts/deploy-kiosk.ts --env prod",
     "test": "npm run inject-build-config && tsx --test \"src/**/*.test.ts\"",
     "rebuild": "electron-rebuild",
     "postinstall": "electron-rebuild",

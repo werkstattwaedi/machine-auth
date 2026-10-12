@@ -1,6 +1,7 @@
 # Copyright Offene Werkstatt Wädenswil
 # SPDX-License-Identifier: MIT
 
+load("@pigweed//pw_build_info:substitute_workspace_status.bzl", "pw_substitute_workspace_status")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 package(default_visibility = ["//maco_firmware:__subpackages__"])
@@ -10,10 +11,30 @@ cc_library(
     srcs = ["maco_service.cc"],
     hdrs = ["maco_service.h"],
     deps = [
+        ":build_version",
         "//maco_firmware/protos:maco_service_nanopb_rpc",
         "//maco_firmware/system:headers",
         "@pigweed//pw_chrono:system_clock",
         "@pigweed//pw_log",
         "@pigweed//pw_status",
     ],
+)
+
+# Release version (ADR-0045). Only --config=prod sets the workspace status
+# command (.bazelrc) that defines STABLE_MACO_BUILD_VERSION, so the stamped
+# source is selected for prod builds only and is "manual" for wildcards.
+pw_substitute_workspace_status(
+    name = "build_version_stamped_cc",
+    src = "build_version.cc.in",
+    out = "build_version_stamped.cc",
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "build_version",
+    srcs = select({
+        "//maco_firmware/targets/p2:is_prod": [":build_version_stamped_cc"],
+        "//conditions:default": ["build_version_dev.cc"],
+    }),
+    hdrs = ["build_version.h"],
 )

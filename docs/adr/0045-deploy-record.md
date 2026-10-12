@@ -1,6 +1,6 @@
 # ADR-0045: Deploy record and release versions
 
-**Status:** Accepted (phase 1 implemented); phases 2–3 proposed
+**Status:** Accepted (phases 1 and 2a–2b implemented; 2c and 3 planned)
 
 **Date:** 2026-10-12
 

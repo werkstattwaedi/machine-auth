@@ -326,6 +326,16 @@ case "$1" in
     # -c opt; prod boots without the 10s serial wait and arms the watchdog.
     # Latest main in both repos, or DEPLOY_ALLOW_OFF_MAIN=1 (ADR-0045).
     npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-preflight.ts" --component firmware || exit 1
+    # Name the release before building — the prod build stamps it into the
+    # firmware (scripts/release.ts). ./pw prod-flash [--yes] [--new-release]
+    RELEASE_ARGS=()
+    for arg in "$@"; do
+      case "$arg" in
+        --yes|--new-release) RELEASE_ARGS+=("$arg") ;;
+      esac
+    done
+    npx tsx "$_PW_SCRIPT_DIR/scripts/release.ts" --question "flash it as PRODUCTION firmware" \
+      ${RELEASE_ARGS[@]+"${RELEASE_ARGS[@]}"} || exit 1
     # Device id for the deploy record — read before flashing,
     # while the device is not rebooting.
     DEVICE_ID=$(npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-record.ts" usb-device 2>/dev/null)

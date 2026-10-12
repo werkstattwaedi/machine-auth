@@ -10,6 +10,9 @@ CLI tools for device provisioning and configuration. User/token management has m
 | `sync-device-config.ts` | Sync machine config from Firebase → Particle ledger | Firebase + Particle creds |
 | `seed-emulator.ts` | Populate Firebase emulator with test data | Running emulators |
 | `deploy-record.ts` | Record a deploy / ops event: git tag + operations repo `deploys/log.jsonl` + `STATE.md` (ADR-0045) | Operations repo sibling |
+| `release.ts` | Name the release a deploy ships: reuse the commit's `vYYYY.M.N` tag or cut the next one after a confirmation (ADR-0045) | Push access to origin |
+| `build-version.ts` | Print the version every component reports (`2026.10.3`, `2026.10.3-dev.4+g…`) | git |
+| `deploy-kiosk.ts` | Build the kiosk installer for staging/prod: preflight → release → build → record (`npm run build:kiosk:staging\|prod`) | Operations repo sibling, gcloud |
 
 ## Setup
 

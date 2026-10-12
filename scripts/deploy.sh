@@ -11,12 +11,19 @@
 #   scripts/deploy.sh staging          # deploy everything to oww-maco-staging
 #   scripts/deploy.sh prod             # deploy everything to oww-maco
 #   scripts/deploy.sh staging prod     # staging first, then prod
-#   scripts/deploy.sh prod --yes       # skip the production confirmation
+#   scripts/deploy.sh prod --yes       # skip the confirmations (release + production)
 #   scripts/deploy.sh staging --allow-off-main   # deploy a branch (recorded as such)
+#   scripts/deploy.sh prod --new-release         # new release name for an already
+#                                                # released commit (ops config change)
 #
 # Refuses to run unless machine-auth AND the operations repo are on the
 # latest main with no uncommitted changes (scripts/deploy-preflight.ts,
 # ADR-0045); --allow-off-main overrides that and the deploy log says so.
+#
+# Then it names the release (scripts/release.ts): a commit deployed before
+# reuses its vYYYY.M.N tag; a new commit gets the next number after one
+# confirmation — for prod, that question replaces "Deploy to PRODUCTION?".
+# Every build below carries that version (BUILD_VERSION).
 #
 # Per environment this runs (and finally records the deploy — git tag plus
 # the operations repo's deploys/log.jsonl and STATE.md, ADR-0045):
@@ -50,13 +57,15 @@ STAGING_PROJECT="oww-maco-staging"
 WANT_STAGING=0
 WANT_PROD=0
 ASSUME_YES=0
+NEW_RELEASE=0
 for arg in "$@"; do
   case "$arg" in
     staging) WANT_STAGING=1 ;;
     prod) WANT_PROD=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
     --allow-off-main) export DEPLOY_ALLOW_OFF_MAIN=1 ;;
-    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --allow-off-main)" ;;
+    --new-release) NEW_RELEASE=1 ;;
+    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --allow-off-main, --new-release)" ;;
   esac
 done
 [ $((WANT_STAGING + WANT_PROD)) -gt 0 ] || fail "Usage: scripts/deploy.sh [staging] [prod] [--yes]"
@@ -103,6 +112,26 @@ DEPLOY_RECORD_DIRTY=0
 [ -z "$(git status --porcelain --ignore-submodules --untracked-files=no)" ] || DEPLOY_RECORD_DIRTY=1
 export DEPLOY_RECORD_COMMIT DEPLOY_RECORD_DIRTY
 
+step "Release"
+if [ "$WANT_STAGING" -eq 1 ] && [ "$WANT_PROD" -eq 1 ]; then
+  question="deploy to staging, then PRODUCTION ($PROD_PROJECT)"
+elif [ "$WANT_PROD" -eq 1 ]; then
+  question="deploy to PRODUCTION ($PROD_PROJECT)"
+else
+  question="deploy to staging"
+fi
+release_args=(--question "$question")
+[ "$ASSUME_YES" -eq 1 ] && release_args+=(--yes)
+[ "$NEW_RELEASE" -eq 1 ] && release_args+=(--new-release)
+release_out="$(mktemp)"
+npx tsx scripts/release.ts "${release_args[@]}" --out "$release_out" || { rm -f "$release_out"; exit 1; }
+# Only BUILD_VERSION=<semver> and RELEASE_CONFIRMED=<0|1>, written by release.ts.
+BUILD_VERSION="$(sed -n 's/^BUILD_VERSION=//p' "$release_out")"
+RELEASE_CONFIRMED="$(sed -n 's/^RELEASE_CONFIRMED=//p' "$release_out")"
+rm -f "$release_out"
+[ -n "$BUILD_VERSION" ] || fail "release.ts reported no version"
+export BUILD_VERSION
+
 step "Install workspace dependencies (also builds @oww/shared via postinstall)"
 npm install
 
@@ -111,8 +140,9 @@ deploy_env() {
   if [ "$env" = "prod" ]; then
     project="$PROD_PROJECT"
     web_build="build"
-    if [ "$ASSUME_YES" -ne 1 ]; then
-      echo -en "\n${YELLOW}Deploy to PRODUCTION ($project)? [y/N] ${NC}"
+    # A newly cut release already asked (and named production).
+    if [ "$ASSUME_YES" -ne 1 ] && [ "$RELEASE_CONFIRMED" != 1 ]; then
+      echo -en "\n${YELLOW}Deploy $BUILD_VERSION to PRODUCTION ($project)? [y/N] ${NC}"
       read -r answer || answer=""
       [[ "$answer" =~ ^[Yy] ]] || fail "Aborted."
     fi
@@ -165,7 +195,7 @@ done
 
 cat <<EOF
 
-${GREEN}[deploy] All requested environments deployed: ${ENVS[*]}${NC}
+${GREEN}[deploy] $BUILD_VERSION deployed to: ${ENVS[*]}${NC}
 
 Not covered by this script (see docs/deployment-checklist.md):
   - Gateway (npx tsx scripts/deploy-gateway.ts) and kiosk

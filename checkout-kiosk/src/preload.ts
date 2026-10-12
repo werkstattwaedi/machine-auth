@@ -79,11 +79,13 @@ ipcRenderer.on(
 const bootstrap = ipcRenderer.sendSync("bridge:bootstrap") as {
   mode: BridgeMode
   features: readonly string[]
+  version: string
 }
 
 const bridge: Bridge = {
   mode: bootstrap.mode,
   features: bootstrap.features,
+  version: bootstrap.version,
   bearer: () => ipcRenderer.invoke("bridge:bearer"),
   resetSession: (opts?: ResetSessionOptions) =>
     ipcRenderer.invoke("bridge:reset-session", opts),

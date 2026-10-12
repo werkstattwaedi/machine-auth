@@ -28,6 +28,7 @@ import { httpsCallable, type Functions } from "firebase/functions"
 import { toast } from "sonner"
 import { useFunctions } from "../lib/firebase-context"
 import { getClientSessionId } from "../lib/client-session"
+import { BUILD_VERSION } from "../lib/build-version"
 
 /** Structured error returned by `useAsyncMutation`. */
 export interface MutationError {
@@ -160,6 +161,7 @@ function reportMutationError(
         message: string
         path: string
         userAgent: string
+        version: string
       },
       { ok: boolean }
     >(functions, "logClientError")
@@ -171,6 +173,7 @@ function reportMutationError(
       path: payload.path,
       userAgent:
         typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "",
+      version: BUILD_VERSION,
     }).catch(() => {
       // Swallow: telemetry failure must not recurse.
     })

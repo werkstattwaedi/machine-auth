@@ -20,6 +20,8 @@
  *                            protobuf~=5.28, which conflicts with our generated
  *                            code's runtime requirement.
  *     - requirements.txt     pip deps: httpx, ascon, python-dotenv, protobuf
+ *     - VERSION              the release version (ADR-0045), reported by the
+ *                            gateway at runtime
  *
  * Steps:
  *   1. Build proto via Bazel (gateway service + pw_rpc/internal/packet)
@@ -36,9 +38,12 @@
  *   npx tsx scripts/deploy-gateway.ts --build-only   # just build, no deploy
  *   npx tsx scripts/deploy-gateway.ts --env staging --host maker1@test-pi.internal
  *   npx tsx scripts/deploy-gateway.ts --host … --allow-off-main   # deploy a branch (recorded)
+ *   npx tsx scripts/deploy-gateway.ts --host … --yes              # cut a new release without asking
  *
  * Deploys refuse to run unless machine-auth (incl. submodules) and the
- * operations repo are on the latest main — see deploy-preflight.ts.
+ * operations repo are on the latest main — see deploy-preflight.ts — and
+ * then name the release (scripts/release.ts): reuse the commit's
+ * vYYYY.M.N tag, or cut the next one after a confirmation.
  *
  * `--env <name>` (ADR-0034) deep-merges the operations repo's
  * `config.<name>.jsonc` overlay before reading gateway.* values, so the
@@ -63,8 +68,10 @@ import { execSync } from "child_process";
 import { parseArgs } from "util";
 
 import type { DeployEnv } from "./deploy-log.ts";
+import { buildVersion } from "./build-version.ts";
 import { enforcePreflight } from "./deploy-preflight.ts";
 import { recordDeploy } from "./deploy-record.ts";
+import { ensureReleaseOrExit } from "./release.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -211,7 +218,7 @@ function copyDirRecursive(srcDir: string, destDir: string) {
   }
 }
 
-function buildPayload(): string {
+function buildPayload(version: string): string {
   console.log("\n=== Building gateway deploy payload ===\n");
 
   execSync(
@@ -268,6 +275,8 @@ function buildPayload(): string {
   writeFileSync(resolve(stage, "pw_rpc/internal/__init__.py"), "");
 
   writeFileSync(resolve(stage, "requirements.txt"), REQUIREMENTS_TXT);
+  writeFileSync(resolve(stage, "VERSION"), `${version}\n`);
+  console.log(`  Version: ${version}`);
 
   const tarPath = resolve(projectRoot, "out/gateway-deploy.tar.gz");
   execSync(`tar czf ${tarPath} -C ${stage} .`, { stdio: "inherit" });
@@ -457,7 +466,7 @@ Persistent logs across reboots (one-time, if /var/log/journal/ doesn't exist):
 
 // --- Main ---
 
-function main() {
+async function main() {
   const { values } = parseArgs({
     options: {
       host: { type: "string", short: "h" },
@@ -465,20 +474,38 @@ function main() {
       "build-only": { type: "boolean", default: false },
       env: { type: "string" },
       "allow-off-main": { type: "boolean", default: false },
+      yes: { type: "boolean", default: false },
+      "new-release": { type: "boolean", default: false },
     },
     strict: true,
   });
 
   if (!values["build-only"] && !values.host) {
-    console.error("Usage: deploy-gateway.ts --host maker1@maco-gateway.internal [--remote-dir ~/gateway] [--env staging] [--allow-off-main]");
+    console.error(
+      "Usage: deploy-gateway.ts --host maker1@maco-gateway.internal [--remote-dir ~/gateway] [--env staging]\n" +
+        "                         [--allow-off-main] [--yes] [--new-release]"
+    );
     console.error("       deploy-gateway.ts --build-only");
     process.exit(1);
   }
 
-  // ADR-0045: only latest main ships to a Pi (a build-only run is local).
-  if (!values["build-only"]) enforcePreflight("gateway", values["allow-off-main"]!);
+  // ADR-0045: only latest main ships to a Pi, as a named release (a
+  // build-only run is local and just reports the checkout's version).
+  let version: string;
+  if (values["build-only"]) {
+    version = buildVersion();
+  } else {
+    enforcePreflight("gateway", values["allow-off-main"]!);
+    const env = values.env ?? "prod";
+    ({ version } = await ensureReleaseOrExit({
+      yes: values.yes,
+      newRelease: values["new-release"],
+      question: `deploy the gateway (${env}) to ${values.host}`,
+    }));
+    process.env.BUILD_VERSION = version;
+  }
 
-  const payloadPath = buildPayload();
+  const payloadPath = buildPayload(version);
   const { envPath, saPath } = generateEnv(values.env ?? null);
 
   if (values["build-only"]) {
@@ -496,6 +523,7 @@ function main() {
         env: (values.env ?? "prod") as DeployEnv,
         component: "gateway",
         target: values.host!,
+        version,
         note: "payload deployed; running after `systemctl restart gateway`",
       });
     } catch (e) {
@@ -504,4 +532,4 @@ function main() {
   }
 }
 
-main();
+void main();

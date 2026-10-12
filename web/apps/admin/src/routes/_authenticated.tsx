@@ -6,6 +6,7 @@ import {
   AuthenticatedLayout,
   type AuthenticatedLayoutNavItem,
 } from "@modules/components/authenticated-layout"
+import { BUILD_VERSION } from "@modules/lib/build-version"
 import { LookupProvider } from "@modules/lib/lookup"
 import {
   ClipboardList,
@@ -41,6 +42,9 @@ function AdminAuthenticatedLayout() {
       navItems={navItems}
       gate={{ kind: "admin" }}
       wrapper={LookupProvider}
+      // Built bundles only: the dev server (and the e2e screenshots taken
+      // on it) says "dev" and shows nothing.
+      footerNote={BUILD_VERSION === "dev" ? null : `Version ${BUILD_VERSION}`}
     />
   )
 }

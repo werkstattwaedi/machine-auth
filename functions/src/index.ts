@@ -6,6 +6,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { createMintTestTap } from "./testing/mint_test_tap";
 import { isStagingProject } from "./testing/staging_guard";
 import { createUploadTestUsage } from "./testing/upload_test_usage";
+import { BUILD_VERSION } from "./util/build_info";
 import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
@@ -67,9 +68,10 @@ app.use(authMiddleware);
 
 // Keep-warm ping from the gateway during workshop opening hours
 // (ADR-0037). Sits after authMiddleware so it validates the bearer key;
-// touches no Firestore and decodes no payload.
+// touches no Firestore and decodes no payload. Reports the deployed
+// release version (ADR-0045).
 app.get("/ping", (_req: express.Request, res: express.Response) => {
-  res.status(200).send({ ok: true });
+  res.status(200).send({ ok: true, version: BUILD_VERSION });
 });
 
 // Middleware to attach config to request

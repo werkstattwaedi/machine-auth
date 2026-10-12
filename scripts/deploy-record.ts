@@ -34,8 +34,9 @@
  *   npx tsx scripts/deploy-record.ts render       # send pending entries, re-render STATE.md
  *   npx tsx scripts/deploy-record.ts usb-device   # print the single USB Particle device id
  *
- * Options: --note, --target, --version, --no-push (keep the entry pending
- * and the tag local, e.g. offline).
+ * Options: --note, --target, --version (default: BUILD_VERSION, else
+ * scripts/build-version.ts), --no-push (keep the entry pending and the tag
+ * local, e.g. offline).
  *
  * Deploy paths run deploy-preflight.ts BEFORE deploying (latest main in both
  * repos, or an explicit override that ends up in the entry's `offMain`).
@@ -72,7 +73,8 @@ import {
   type RepoFacts,
   serializeEntry,
 } from "./deploy-log.ts";
-import { overrideRequested, preflightProblems } from "./deploy-preflight.ts";
+import { buildVersion } from "./build-version.ts";
+import { opsRevision, overrideRequested, preflightProblems } from "./deploy-preflight.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -159,15 +161,6 @@ function usbDeviceId(): string | undefined {
   return undefined;
 }
 
-function kioskVersion(): string | undefined {
-  try {
-    const pkg = JSON.parse(readFileSync(resolve(projectRoot, "checkout-kiosk/package.json"), "utf8"));
-    return typeof pkg.version === "string" ? pkg.version : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function createTag(entry: DeployEntry, at: Date): string | undefined {
   if (!entry.commit) return undefined;
   if (entry.dirty) {
@@ -178,6 +171,7 @@ function createTag(entry: DeployEntry, at: Date): string | undefined {
   const tag = deployTagName(entry.env, entry.component, at);
   const message = [
     `${entry.component} → ${entry.env}${entry.target ? ` (${entry.target})` : ""}`,
+    entry.version ? `version ${entry.version}` : "",
     `by ${entry.by}`,
     entry.note ?? "",
   ]
@@ -354,6 +348,11 @@ export function recordDeploy(opts: RecordOptions): void {
   };
   if (opts.kind === "deploy") {
     Object.assign(entry, deployedCommit());
+    // The deploy scripts export BUILD_VERSION (scripts/release.ts), so this
+    // is the version that was built, not a re-derivation afterwards.
+    entry.version = opts.version ?? buildVersion();
+    const ops = opsRevision();
+    if (ops) entry.opsRevision = ops;
     // The deploy path ran deploy-preflight.ts first; with its override set,
     // the log has to say what was not latest main.
     if (overrideRequested()) {
@@ -361,9 +360,7 @@ export function recordDeploy(opts: RecordOptions): void {
       if (problems.length > 0) entry.offMain = problems;
     }
   }
-  const version = opts.version ?? (opts.component === "kiosk" ? kioskVersion() : undefined);
   if (opts.target) entry.target = opts.target;
-  if (version) entry.version = version;
   if (opts.note) entry.note = opts.note;
 
   const tag = opts.kind === "deploy" ? createTag(entry, at) : undefined;
