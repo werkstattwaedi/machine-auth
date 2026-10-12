@@ -123,7 +123,7 @@ Deploy uses `scripts/deploy-functions.ts` to pack `@oww/shared` and rewrite
 rm -rf lib/ && npm run build
 ```
 
-`lib/` and `shared/dist` survive branch switches, and the pre-commit hook runs *every* compiled test under `lib/test/` — after checking out a branch with fewer sources, `rm -rf functions/lib shared/dist` first, or the hook fails on a test whose source no longer exists.
+`lib/` and `shared/dist` survive branch switches, and the pre-commit hook runs *every* compiled unit test under `lib/` — after checking out a branch with fewer sources, `rm -rf functions/lib shared/dist` first, or the hook fails on a test whose source no longer exists.
 
 ### Firestore Schema
 
@@ -240,7 +240,7 @@ that `@playwright/test` uses, so a split silently installs the wrong browser.
 
 ## Testing
 
-**Before committing / during code review — always run:**
+**The pre-commit hook** builds and unit-tests only the suites the staged files touch (`scripts/precommit-select.ts`; `test:hook:web` / `test:hook:functions`) — no emulators, no e2e. **CI** runs the full suite below plus the e2e matrix on every PR; run it locally when iterating on rules or integration-tested code:
 
 ```bash
 npm run test:precommit   # Builds + tests both web apps and functions
