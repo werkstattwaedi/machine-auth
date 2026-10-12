@@ -212,7 +212,7 @@ String parameters (`DIVERSIFICATION_SYSTEM_NAME`, `LOGIN_*`, …) are
 `defineString` params read from `functions/.env.<projectId>`
 at deploy time — they are NOT set via the deprecated `functions:config:set`.
 
-After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`, `RESEND_LOGIN_TEMPLATE_ID`) will be missing from the deployed environment and login will silently break.
+After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env` from the repo root to refresh `functions/.env.<projectId>` (and the web/maco_gateway env files) before deploying. Otherwise newly-added Firebase Functions params (e.g. `LOGIN_ALLOWED_ORIGINS`, `RESEND_TEMPLATE_ENV`) will be missing from the deployed environment and login will silently break.
 
 Verify `config/pricing` exists in Firestore (Admin → Firestore → `config/pricing`). Per issue #149 the checkout UI and the `closeCheckoutAndGetPayment` function refuse to operate when the doc is missing or fails the shape check, so a missing doc breaks all checkouts loudly rather than silently misbilling with hardcoded fallbacks.
 
@@ -246,65 +246,44 @@ Smoke test after deploy: verify a phone number on `/account/profile`
 session lands as the ephemeral actsAs principal (the header shows no
 account avatar and "Besuch starten" appears).
 
-### Kiosk sign-up + account-instructions email (issue #595)
+### Transactional mail templates (ADR-0046)
 
-The kiosk sign-up (`signupKiosk`) and the unclaimed-member offer
-(`sendAccountInstructions`) send the `self-checkout-account-instructions`
-Resend template. One-time setup before the functions deploy:
+Every mail the functions send is a Resend template generated and published
+from the operations repo (`email/`), addressed as `<env>-<mail>[-<dim>…]`
+per `shared/src/email-contract.ts`. `functions.resendTemplateEnv` (`prod` /
+`staging`) feeds `RESEND_TEMPLATE_ENV`; an unset or unknown value fails
+every send loudly (`failed-precondition`, bill mails into
+`operations_log`), it does not block the deploy.
 
-1. Create/publish the template from the operations repo
-   (`email/account-instructions.html`; upload commands in
-   `email/README.md` — remember `--subject` and `--var GREETING:string`).
-2. The operations config carries
-   `functions.resendAccountInstructionsTemplateId`
-   (`self-checkout-account-instructions`); run `npm run generate-env` so
-   `RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID` lands in
-   `functions/.env.<projectId>`. An empty param fails the send loudly at
-   runtime (`assertTemplateConfigured`), it does not block the deploy.
+**Whenever the contract changed** (a mail, dimension or variable added or
+renamed), before the functions deploy of each project:
 
-Smoke test after deploy: sign up with a fresh e-mail at the kiosk
-(`/checkin?kiosk`) — the visitor should land identified (identity strip)
-and receive the instructions email; an unclaimed member's e-mail should
-sign in with a code and get the 4-step "Willkommen" onboarding overlay
-(step 4 offers the same instructions email).
+```bash
+cd ../machine-auth-operations
+export RESEND_API_KEY=$(firebase functions:secrets:access RESEND_API_KEY -P oww-maco)
+npm run email:publish -- --env staging   # then: --env prod
+```
 
-### Membership-renewal invoice email (issue #323)
+Publishing is additive, so the still-running functions keep their
+aliases. After the deploy has settled, `npm run email:publish -- --env
+<env> --prune` removes aliases nothing uses any more. A copy-only change
+needs no functions deploy at all.
 
-Renewal bills (`bill.source === "membership-renewal"`, minted by the
-`renewalInvoicer` cron) send the `membership-renewal` Resend template.
-One-time setup before the functions deploy:
+**First rollout of the generated templates (replaces the hand-maintained
+`self-checkout-*` / `membership-renewal` templates):** publish both
+environments, add `functions.resendTemplateEnv` to `config.jsonc` /
+`config.staging.jsonc`, `npm run generate-env`, deploy functions to
+staging, `/smoke-staging`, then prod. Keep the old templates and the
+`functions.resend*TemplateId` config keys (no longer read) for one billing
+cycle so a rollback to the previous functions still finds them, then
+delete both by hand.
 
-1. Create/publish the template from the operations repo
-   (`email/invoice-renewal.html`; upload commands in `email/README.md` —
-   remember `--subject` and the four `--var` declarations).
-2. The operations config carries
-   `functions.resendMembershipRenewalTemplateId` (`membership-renewal`);
-   run `npm run generate-env` so `RESEND_RENEWAL_TEMPLATE_ID` lands in
-   `functions/.env.<projectId>`. If the param is unset, `pickTemplate`
-   silently falls back to the generic QR-bill template — the email still
-   sends, but with Self-Checkout copy instead of the Vorstand renewal
-   letter, so this misconfiguration does NOT fail loudly.
-
-### Bill correction + cancellation emails (ADR-0042)
-
-Corrected re-issues (`RE-…-1`) and pure cancellations send two dedicated Resend templates.
-One-time setup before the functions deploy:
-
-1. Create/publish the templates from the operations repo — `self-checkout-correction`
-   (variables: RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, SUPERSEDED_INVOICE_NUMBER,
-   DOCUMENT_KIND, AMOUNT, CURRENCY, REASON, KASSE_EMAIL, PAYMENT_NOTE (pre-composed "what to
-   do about payment" sentence — new QR slip / TWINT already paid / next Sammelrechnung /
-   nothing to pay), CORRECTION_DETAILS (pre-composed Sammelrechnung line, empty otherwise),
-   CORRECTED_DOCUMENTS, CANCELLED_DOCUMENTS; the
-   corrected PDF plus any corrected Belege are attached — HTML + upload commands live in the
-   operations repo under `email/`) and
-   `self-checkout-cancellation` (RECIPIENT_NAME, CHECKOUT_DATE, INVOICE_NUMBER, DOCUMENT_KIND,
-   REASON, AMOUNT, CURRENCY, KASSE_EMAIL, PAYMENT_NOTE; no attachment).
-2. Add `functions.resendCorrectionTemplateId` / `functions.resendCancellationTemplateId` to the
-   operations config and run `npm run generate-env`.
-3. Until both are set, the correction mail falls back to the generic QR-bill template and the
-   cancellation notice fails into `operations_log` (retried hourly) — so set them before the first
-   correction, not after.
+Smoke test for the kiosk account-instructions mail (issue #595): sign up
+with a fresh e-mail at the kiosk (`/checkin?kiosk`) — the visitor should
+land identified (identity strip) and receive the instructions email; an
+unclaimed member's e-mail should sign in with a code and get the 4-step
+"Willkommen" onboarding overlay (step 4 offers the same instructions
+email).
 
 ### Bill-number migration (ADR-0042) — once per project, RIGHT AFTER the functions deploy
 

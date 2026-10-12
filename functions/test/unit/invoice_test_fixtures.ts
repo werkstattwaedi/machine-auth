@@ -126,6 +126,59 @@ export function membershipOnlyInvoice(): InvoiceData {
 }
 
 /**
+ * Issue #660: a self-service badge bought at the kiosk — a `materialbezug`
+ * checkout with one badge item and nobody visiting. Heads "Einkauf vom …",
+ * not "Besuch vom …".
+ */
+export function badgeOnlyInvoice(): InvoiceData {
+  const base = membershipOnlyInvoice();
+  return {
+    ...base,
+    referenceNumber: 510,
+    recipientName: "Bea Badge",
+    checkouts: [
+      {
+        ...base.checkouts[0],
+        persons: [{ name: "Bea Badge", email: "bea@example.com", userType: "erwachsen" }],
+        personEntryFees: [{ name: "Bea Badge", userType: "erwachsen", fee: 15 }],
+        items: [
+          makeItem({
+            description: "Badge — Standard",
+            workshop: "diverses",
+            totalPrice: 5,
+            catalogId: { id: "badge-sku-fixture" } as never,
+            tokenId: "04c339aa1e1890",
+          }),
+        ],
+        materialCost: 5,
+        totalPrice: 5,
+      },
+    ],
+    grandTotal: 5,
+  };
+}
+
+/** Issue #660: the gratis badge — a zero-amount purchase, settled as "free". */
+export function freeBadgeInvoice(): InvoiceData {
+  const base = badgeOnlyInvoice();
+  const checkout = base.checkouts[0];
+  return {
+    ...base,
+    checkouts: [
+      {
+        ...checkout,
+        items: [{ ...checkout.items[0], description: "Badge — Gratis", unitPrice: 0, totalPrice: 0 }],
+        materialCost: 0,
+        totalPrice: 0,
+      },
+    ],
+    grandTotal: 0,
+    paidAt: base.invoiceDate,
+    paidVia: "free",
+  };
+}
+
+/**
  * Issue #263: a mixed checkout — membership plus regular workshop material.
  * The bill shows the "Mitgliedschaft" block first, then the workshop group;
  * the membership must NOT bleed into a Diverses heading.

@@ -38,7 +38,6 @@ import {
 import { isAllowedOrigin, isEmulator } from "../auth/login-code/helpers";
 import { sendTemplate } from "../util/resend_template";
 import { formatFullName } from "../util/username-utils";
-import { defineString } from "firebase-functions/params";
 
 export interface InviteFamilyMemberRequest {
   membershipId: string;
@@ -56,10 +55,6 @@ export interface InviteCallerContext {
    *  allowlist used by the login flow. */
   requestOrigin: string | undefined | null;
 }
-
-// No default: empty/whitespace fails loudly inside `sendTemplate` before
-// hitting Resend (mirrors RESEND_LOGIN_TEMPLATE_ID, issue #149).
-const resendInviteTemplateId = defineString("RESEND_INVITE_TEMPLATE_ID");
 
 /**
  * Pure handler — exported so integration tests can drive it without going
@@ -160,8 +155,8 @@ export async function handleInviteFamilyMember(
     try {
       await sendTemplate({
         to: normalizedEmail,
-        templateId: resendInviteTemplateId.value(),
-        templateIdParam: "RESEND_INVITE_TEMPLATE_ID",
+        mail: "invite",
+        dims: {},
         variables: {
           INVITER_NAME: inviterName,
           MEMBERSHIP_NAME: membershipName,

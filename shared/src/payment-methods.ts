@@ -13,6 +13,8 @@
  * here rather than as string literals at the call sites.
  */
 
+import type { BillDocument } from "./email-contract"
+
 export const PAYMENT_METHODS = ["rechnung", "monthly", "raisenow"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
@@ -138,4 +140,24 @@ export function isPaymentMethodEnabledAnywhere(
   method: PaymentMethod
 ): boolean {
   return CLIENT_TYPES.some((c) => config[c].includes(method))
+}
+
+/**
+ * What a bill document is, for the mail that carries it (ADR-0046): a Beleg
+ * queued for the Sammelrechnung, the Sammelrechnung itself (an aggregated
+ * invoice whose checkouts were paid "monthly"), a receipt for a method paid
+ * during the checkout, or a payable QR-bill invoice — also when no method
+ * was picked (auto-ack). Reads method properties only, so a new payment
+ * integration needs no new template.
+ */
+export function billDocument(
+  billKind: "invoice" | "beleg" | undefined,
+  paymentMethod: unknown
+): BillDocument {
+  if ((billKind ?? "invoice") === "beleg") return "beleg"
+  if (!isPaymentMethod(paymentMethod)) return "invoice"
+  const method = paymentMethod
+  if (PAYMENT_METHOD_INFO[method].isAggregated) return "sammelrechnung"
+  if (PAYMENT_METHOD_INFO[method].paidDuringCheckout) return "receipt"
+  return "invoice"
 }

@@ -69,17 +69,9 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
 
 const FUNCTIONS_RESEND: VarMapping[] = [
   { envVar: "RESEND_FROM_EMAIL", jsonPath: "functions.resendFromEmail" },
-  { envVar: "RESEND_TWINT_TEMPLATE_ID", jsonPath: "functions.resendTwintTemplateId" },
-  { envVar: "RESEND_MONTHLY_TEMPLATE_ID", jsonPath: "functions.resendMonthlyTemplateId" },
-  { envVar: "RESEND_SAMMELRECHNUNG_TEMPLATE_ID", jsonPath: "functions.resendSammelrechnungInvoiceTemplateId" },
-  { envVar: "RESEND_RENEWAL_TEMPLATE_ID", jsonPath: "functions.resendMembershipRenewalTemplateId" },
-  { envVar: "RESEND_CORRECTION_TEMPLATE_ID", jsonPath: "functions.resendCorrectionTemplateId" },
-  { envVar: "RESEND_CANCELLATION_TEMPLATE_ID", jsonPath: "functions.resendCancellationTemplateId" },
-  { envVar: "RESEND_QRBILL_TEMPLATE_ID", jsonPath: "functions.resendQrBillTemplateId" },
-  { envVar: "RESEND_LOGIN_TEMPLATE_ID", jsonPath: "functions.resendLoginTemplateId" },
-  { envVar: "RESEND_INVITE_TEMPLATE_ID", jsonPath: "functions.resendInviteTemplateId" },
-  { envVar: "RESEND_CHECKOUT_REMINDER_TEMPLATE_ID", jsonPath: "functions.resendCheckoutReminderTemplateId" },
-  { envVar: "RESEND_ACCOUNT_INSTRUCTIONS_TEMPLATE_ID", jsonPath: "functions.resendAccountInstructionsTemplateId" },
+  // Alias prefix of the generated mail templates (ADR-0046): "prod" /
+  // "staging"; the publish script in the operations repo reads the same key.
+  { envVar: "RESEND_TEMPLATE_ENV", jsonPath: "functions.resendTemplateEnv" },
   // Optional cadence override for the stale-checkout reminder cron (#531).
   // Empty falls back to the built-in "1,7" default at read time.
   { envVar: "CHECKOUT_REMINDER_OFFSET_DAYS", jsonPath: "functions.checkoutReminderOffsetDays" },
@@ -187,18 +179,7 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     loginMaxAttemptsPerEmail: "30",
     kioskElevationTtlMs: "900000",
     resendFromEmail: "OWW CI <ci@test.localhost>",
-    resendQrBillTemplateId: "ci-test-qrbill-template",
-    resendLoginTemplateId: "ci-test-login-template",
-    resendInviteTemplateId: "ci-test-invite-template",
-    resendTwintTemplateId: "ci-test-twint-template",
-    resendMonthlyTemplateId: "ci-test-monthly-template",
-    resendSammelrechnungInvoiceTemplateId: "ci-test-sammelrechnung-template",
-    resendMembershipRenewalTemplateId: "ci-test-renewal-template",
-    resendCorrectionTemplateId: "ci-test-correction-template",
-    resendCancellationTemplateId: "ci-test-cancellation-template",
-
-    resendCheckoutReminderTemplateId: "ci-test-checkout-reminder-template",
-    resendAccountInstructionsTemplateId: "ci-test-account-instructions-template",
+    resendTemplateEnv: "test",
     kasseEmail: "kasse@test.localhost",
     autoAckMinAgeHours: "1",
     logDigestEmail: "ops@test.localhost",

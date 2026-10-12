@@ -52,7 +52,7 @@ Both verify functions share a `mintSessionToken(email, method)` helper that reso
 
 **Cons:**
 - We now own this code path. If it breaks, no Firebase-side fallback.
-- Needs a Resend template (`RESEND_LOGIN_TEMPLATE_ID`) and a production origin allowlist (`LOGIN_ALLOWED_ORIGINS`) set per environment — documented in `docs/config.md` and the deployment checklist. A missing origin allowlist causes 100% failure in production (intentional — fail closed).
+- Needs a Resend template (originally `RESEND_LOGIN_TEMPLATE_ID`; since [ADR-0046](0046-generated-mail-templates.md) the generated `<env>-login` alias) and a production origin allowlist (`LOGIN_ALLOWED_ORIGINS`) set per environment — documented in `docs/config.md` and the deployment checklist. A missing origin allowlist causes 100% failure in production (intentional — fail closed).
 - Each login costs ~3 Firestore ops (1 write for request, 1 read + 1 write for verify). At current scale this stays well inside the 100 K/month budget, but something to watch if user counts grow 100×.
 - Attacker who knows a victim's email can burn their 5 attempts per minute — a narrow DoS on that user's ability to log in. Acceptable for a private makerspace; worth noting.
 

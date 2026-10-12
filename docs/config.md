@@ -428,7 +428,7 @@ Use this checklist when setting up a new environment:
 
 - [ ] Firebase project created
 - [ ] Authentication enabled (Google + Email/Password providers)
-- [ ] Resend login template created in Resend dashboard with variables `{{CODE}}`, `{{MAGIC_LINK}}`, `{{EXPIRES_MINUTES}}`; template ID set as `RESEND_LOGIN_TEMPLATE_ID` in `config.jsonc`
+- [ ] Mail templates published from the operations repo (`npm run email:publish -- --env prod`, see its `email/README.md`); `functions.resendTemplateEnv` set in `config.jsonc` (ADR-0046)
 - [ ] Firestore database created
 - [ ] Hosting enabled
 - [ ] Service account key downloaded (for scripts/CI)

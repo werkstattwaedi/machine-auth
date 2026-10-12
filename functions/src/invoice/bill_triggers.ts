@@ -24,7 +24,7 @@ import { downloadUrlFor, pdfSaveOptions } from "../util/storage_download";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
 import { billDocumentPrefix, formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
-import { assertTemplateConfigured } from "../util/resend_template";
+import { contractVariables, templateRef } from "../util/resend_template";
 // The recipient resolver lives in its own module (`util/checkout_recipient`)
 // so the stale-checkout reminder cron can reuse it without importing this
 // module's PDF stack (#531). Re-exported to preserve the existing surface.
@@ -49,7 +49,15 @@ import type {
   CheckoutItemEntity,
   PaymentMethod,
 } from "../types/firestore_entities";
-import { PAYMENT_METHOD_INFO } from "@oww/shared";
+import {
+  PAYMENT_METHOD_INFO,
+  billDocument,
+  billMail,
+  classifyBillKind,
+  classifyCheckoutKind,
+  type CheckoutKind,
+  type MailName,
+} from "@oww/shared";
 
 // --- Params ---
 
@@ -63,59 +71,9 @@ const paymentCurrency = defineString("PAYMENT_CURRENCY");
 
 const resendApiKey = defineSecret("RESEND_API_KEY");
 const resendFromEmail = defineString("RESEND_FROM_EMAIL");
-const resendQrBillTemplateId = defineString("RESEND_QRBILL_TEMPLATE_ID");
-// Issue #251: method-aware invoice emails. Ops repo populates the values;
-// emulator runs send fine with empty defaults via assertTemplateConfigured.
-//
-// Two easily-confused, DIFFERENT templates cover the "Sammelrechnung"
-// (collective-billing) payment method — see issue #502, which happened
-// because they used to share one template and its copy:
-//   - resendBelegForMonthlyInvoiceTemplateId (env RESEND_MONTHLY_TEMPLATE_ID,
-//     Resend alias "self-checkout-monthly"): the per-visit Beleg, a
-//     "this charge is queued for next month's invoice" receipt. NOT
-//     payable, NO QR-bill slip.
-//   - resendSammelrechnungInvoiceTemplateId (env
-//     RESEND_SAMMELRECHNUNG_TEMPLATE_ID, Resend alias
-//     "self-checkout-sammelrechnung"): the aggregated invoice itself,
-//     emitted once a month by monthlyBillRun. IS payable, HAS a QR-bill
-//     slip attached. Falls back to the generic QR-bill template when
-//     unset (emulator mode / not yet configured in the ops repo).
-const resendBelegForMonthlyInvoiceTemplateId = defineString(
-  "RESEND_MONTHLY_TEMPLATE_ID",
-  { default: "" },
-);
-const resendSammelrechnungInvoiceTemplateId = defineString(
-  "RESEND_SAMMELRECHNUNG_TEMPLATE_ID",
-  { default: "" },
-);
-const resendTwintTemplateId = defineString(
-  "RESEND_TWINT_TEMPLATE_ID",
-  { default: "" },
-);
-// Issue #323: annual membership-renewal invoices (bill.source
-// "membership-renewal", minted by the renewalInvoicer cron) get their own
-// Vorstand-letter template instead of the Self-Checkout copy. Falls back
-// to the generic QR-bill template when unset.
-const resendMembershipRenewalTemplateId = defineString(
-  "RESEND_RENEWAL_TEMPLATE_ID",
-  { default: "" },
-);
-// Contact address surfaced on the TWINT email ("contact kasse@... if in
-// error"). Set in the operations repo per env.
+// Contact address surfaced on the receipt, Beleg, Sammelrechnung and
+// correction mails. Set in the operations repo per env.
 const kasseEmail = defineString("KASSE_EMAIL", { default: "" });
-// Corrected re-issue / cancellation mails (ADR-0042). One correction
-// template serves every document kind (DOCUMENT_KIND carries the noun);
-// the cancellation template is for pure cancellations without a
-// replacement. Both fall back like the other optional templates.
-const resendCorrectionTemplateId = defineString(
-  "RESEND_CORRECTION_TEMPLATE_ID",
-  { default: "" },
-);
-const resendCancellationTemplateId = defineString(
-  "RESEND_CANCELLATION_TEMPLATE_ID",
-  { default: "" },
-);
-
 // Stale lock threshold: if a lock is older than this, treat it as failed
 const STALE_LOCK_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -436,84 +394,29 @@ export async function tryGeneratePdf(
  * Exported for integration testing — invoked directly to bypass the
  * Firestore trigger wrapper.
  */
-interface TemplateChoice {
-  id: string;
-  paramName: string;
-}
+/**
+ * Which mail of the email contract (ADR-0046) carries this bill. A
+ * corrected re-issue and a membership renewal have their own copy, checked
+ * first since they keep their original kind/method; everything else is
+ * keyed by the bill document, read from payment-method properties — never
+ * from a method id, so a new payment integration needs no new template.
+ *
+ * The method is the checkout's last-selected one: an auto-ack on a user who
+ * tapped a paid-during-checkout tab but didn't commit still gets the
+ * receipt (it doesn't claim the payment was verified), and an auto-ack
+ * without any selection gets the payable QR-Rechnung. A per-visit Beleg
+ * ("charge queued") and the aggregated Sammelrechnung ("please pay") must
+ * never share a template (issue #502).
+ */
+type BillMailName = Extract<
+  MailName,
+  "bill-correction" | "membership-renewal" | `bill-${ReturnType<typeof billDocument>}`
+>;
 
-function pickTemplate(
-  method: PaymentMethod | null,
-  bill: BillEntity,
-): TemplateChoice {
-  const kind = bill.kind ?? "invoice";
-
-  // Corrected re-issue (ADR-0042). Checked first: a replacement keeps its
-  // original kind/source and would otherwise fall into those branches.
-  if (bill.supersedesBillRef) {
-    const id = resendCorrectionTemplateId.value();
-    return {
-      id: id || resendQrBillTemplateId.value(),
-      paramName: id ? "RESEND_CORRECTION_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
-    };
-  }
-
-  // Membership renewal (issue #323): the renewalInvoicer cron mints these
-  // with paymentMethod "rechnung", so without the source check they'd read
-  // as a Self-Checkout visit ("Rechnung für deinen Self-Checkout vom …").
-  // The dedicated template carries the Vorstand renewal letter instead.
-  if ((bill.source ?? "checkout") === "membership-renewal") {
-    const id = resendMembershipRenewalTemplateId.value();
-    return {
-      id: id || resendQrBillTemplateId.value(),
-      paramName: id ? "RESEND_RENEWAL_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
-    };
-  }
-
-  // Per-visit Beleg (issue #245/#405): a "charge queued for next month's
-  // Sammelrechnung" receipt, emailed when a member picks "monthly" at
-  // checkout. NOT a payable invoice. Ops owns the template copy (the
-  // "self-checkout-monthly" template). Falls back to the generic QR-bill
-  // template when unset (emulator / not-yet-configured).
-  if (kind === "beleg") {
-    const id = resendBelegForMonthlyInvoiceTemplateId.value();
-    return {
-      id: id || resendQrBillTemplateId.value(),
-      paramName: id ? "RESEND_MONTHLY_TEMPLATE_ID" : "RESEND_QRBILL_TEMPLATE_ID",
-    };
-  }
-
-  // Aggregated monthly Sammelrechnung (issue #245), emitted by
-  // monthlyBillRun: kind "invoice" whose linked checkout still records
-  // paymentMethod "monthly" (inherited from the Belege it aggregates).
-  // This IS the payable invoice — a QR-bill PDF is attached — so it needs
-  // its own "ready to pay" copy, distinct from the Beleg "queued" notice
-  // above (they must not share a template — see issue #502). Falls back
-  // to the generic QR-bill template when unset.
-  if (kind === "invoice" && method && PAYMENT_METHOD_INFO[method].isAggregated) {
-    const id = resendSammelrechnungInvoiceTemplateId.value();
-    return {
-      id: id || resendQrBillTemplateId.value(),
-      paramName: id
-        ? "RESEND_SAMMELRECHNUNG_TEMPLATE_ID"
-        : "RESEND_QRBILL_TEMPLATE_ID",
-    };
-  }
-
-  // Remaining paths are the RaiseNow (TWINT) receipt, rechnung, and the
-  // null pre-ack default.
-  switch (method) {
-    case "raisenow":
-      return {
-        id: resendTwintTemplateId.value(),
-        paramName: "RESEND_TWINT_TEMPLATE_ID",
-      };
-    case "rechnung":
-    default:
-      return {
-        id: resendQrBillTemplateId.value(),
-        paramName: "RESEND_QRBILL_TEMPLATE_ID",
-      };
-  }
+function pickBillMail(method: PaymentMethod | null, bill: BillEntity): BillMailName {
+  if (bill.supersedesBillRef) return "bill-correction";
+  if ((bill.source ?? "checkout") === "membership-renewal") return "membership-renewal";
+  return billMail(billDocument(bill.kind, method)) as BillMailName;
 }
 
 export async function trySendEmail(billId: string): Promise<boolean> {
@@ -604,23 +507,13 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
-  // Template selection always reads the checkout's last paymentMethod.
-  // Auto-ack on a user who tapped the RaiseNow (TWINT) tab but didn't commit
-  // still uses the TWINT-was-selected template (safe because it doesn't
-  // claim payment).
-  const template = pickTemplate(checkout.paymentMethod ?? null, bill);
+  const paymentMethod = checkout.paymentMethod ?? null;
+  const mail = pickBillMail(paymentMethod, bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
 
   try {
-    // Configured-template assertion runs after the lock so a thrown
-    // misconfiguration goes through the catch block (lock released,
-    // operations_log written, returns false). Without this, an unset
-    // template id in prod would throw past trySendEmail and block any
-    // downstream onBillUpdate work (membership activation).
-    assertTemplateConfigured(template.id, template.paramName);
-
     const bucket = getStorage().bucket();
     const file = bucket.file(bill.storagePath);
     // Unreachable in emulator mode today (early return above), but routed
@@ -637,8 +530,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       checkout.created.toDate(),
       "dd. MMMM yyyy, HH:mm",
     );
-    // Correction-only variables (ADR-0042). Kept off the regular templates
-    // so their variable set stays exactly what ops published.
+    // Correction-only variables (ADR-0042).
     const correctedDocuments = attachedBills
       .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
       .join(", ");
@@ -650,16 +542,14 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+          DOCUMENT_KIND: documentKindLabel(bill, paymentMethod),
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
             bill,
-            checkout.paymentMethod ?? null,
+            paymentMethod,
             supersededReference,
           ),
-          CORRECTED_DOCUMENTS: correctedDocuments,
-          CANCELLED_DOCUMENTS: cancelledDocuments,
           // Resend templates have no conditionals: one pre-composed line the
           // template prints verbatim — empty (an invisible paragraph) for a
           // single-document correction.
@@ -681,29 +571,43 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       })),
     );
 
+    // Resolved inside the try so a misconfiguration (unset template env,
+    // missing variable) goes through the catch block — lock released,
+    // operations_log written, returns false — instead of throwing past
+    // trySendEmail and blocking downstream onBillUpdate work (membership
+    // activation).
+    // The per-checkout mails word a membership or badge purchase differently
+    // from a visit (issue #660); the others have no such dimension.
+    const dims =
+      mail === "bill-invoice" || mail === "bill-receipt" || mail === "bill-beleg"
+        ? { kind: await loadBillKind(bill) }
+        : {};
+    const template = templateRef(
+      mail,
+      dims as never,
+      contractVariables(mail, {
+        RECIPIENT_NAME: recipientName,
+        CHECKOUT_DATE: checkoutDate,
+        INVOICE_NUMBER: invoiceNumber,
+        AMOUNT: bill.amount.toFixed(2),
+        CURRENCY: bill.currency,
+        KASSE_EMAIL: kasseEmail.value(),
+        PAYMENT_LABEL: paymentMethod ? PAYMENT_METHOD_INFO[paymentMethod].label : "",
+        ...correctionVariables,
+      }),
+    );
+
     // Lazy import: same rationale as build_invoice_pdf above.
     const { Resend } = await import("resend");
     const resend = new Resend(resendApiKey.value());
     const { error } = await resend.emails.send({
       from: resendFromEmail.value(),
       to: recipientEmail,
-      template: {
-        id: template.id,
-        variables: {
-          RECIPIENT_NAME: recipientName,
-          CHECKOUT_DATE: checkoutDate,
-          INVOICE_NUMBER: invoiceNumber,
-          AMOUNT: bill.amount.toFixed(2),
-          CURRENCY: bill.currency,
-          KASSE_EMAIL: kasseEmail.value(),
-          CONFIRMATION_SOURCE: bill.paymentMethodConfirmationSource ?? "",
-          ...correctionVariables,
-        },
-      },
+      template,
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, paymentMethod)}-${invoiceNumber}.pdf`,
         },
         ...extraAttachments,
       ],
@@ -726,12 +630,33 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 }
 
 /**
+ * Visit, membership or purchase across all checkouts of a bill (issue
+ * #660). A checkout doc that has gone missing counts as a visit — the
+ * wording every bill had before.
+ */
+async function loadBillKind(bill: BillEntity): Promise<CheckoutKind> {
+  const membershipCatalogId = await loadMembershipCatalogId(getFirestore());
+  const kinds = await Promise.all(
+    bill.checkouts.map(async (ref) => {
+      const [snap, items] = await Promise.all([ref.get(), ref.collection("items").get()]);
+      const checkout = snap.data() as CheckoutEntity | undefined;
+      return classifyCheckoutKind({
+        usageType: checkout?.usageType ?? "regular",
+        items: items.docs.map((d) => d.data() as CheckoutItemEntity),
+        membershipCatalogId,
+      });
+    }),
+  );
+  return classifyBillKind(kinds);
+}
+
+/**
  * Noun for the correction/cancellation copy: Rechnung / Quittung / Beleg /
  * Sammelrechnung. Mirrors the PDF title rule in `build_invoice_pdf.ts`
  * (a one-visit aggregate is titled "Rechnung Self-Checkout", only a
  * multi-visit one "Sammelrechnung") so the mail names the document the
  * customer actually holds — deliberately NOT the `paymentMethod`-based
- * template choice in `pickTemplate`, which picks copy, not the noun.
+ * mail choice in `pickBillMail`, which picks copy, not the noun.
  */
 function documentKindLabel(
   bill: BillEntity,
@@ -868,31 +793,21 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
   await billRef.update({ cancellationNoticeSentAt: Timestamp.now() });
 
   try {
-    const templateId = resendCancellationTemplateId.value();
-    assertTemplateConfigured(templateId, "RESEND_CANCELLATION_TEMPLATE_ID");
-
     const { Resend } = await import("resend");
     const resend = new Resend(resendApiKey.value());
     const { error } = await resend.emails.send({
       from: resendFromEmail.value(),
       to: recipientEmail,
-      template: {
-        id: templateId,
-        variables: {
-          RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
-          CHECKOUT_DATE: formatWorkshopDateTime(
-            checkout.created.toDate(),
-            "dd. MMMM yyyy, HH:mm",
-          ),
-          INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
-          REASON: bill.cancellationReason ?? "",
-          PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
-          AMOUNT: bill.amount.toFixed(2),
-          CURRENCY: bill.currency,
-          KASSE_EMAIL: kasseEmail.value(),
-        },
-      },
+      template: templateRef("bill-cancellation", {}, {
+        RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
+        INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
+        DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+        REASON: bill.cancellationReason ?? "",
+        PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
+        AMOUNT: bill.amount.toFixed(2),
+        CURRENCY: bill.currency,
+        KASSE_EMAIL: kasseEmail.value(),
+      }),
     });
     if (error) {
       throw new Error(JSON.stringify(error));
