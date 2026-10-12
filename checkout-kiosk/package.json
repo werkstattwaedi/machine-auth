@@ -11,7 +11,7 @@
     "start:kiosk": "npm run _compile && electron .",
     "dev:kiosk": "npm run start:kiosk",
     "start:kiosk:staging": "node scripts/inject-build-config.mjs --env staging && npm run tsc:main && npm run tsc:renderer && electron .",
-    "build:kiosk": "npm run _compile && cross-env KIOSK_DIST=dev electron-builder --config electron-builder.kiosk.yml",
+    "build:kiosk": "npx tsx ../scripts/deploy-kiosk.ts --dev",
     "build:kiosk:staging": "npx tsx ../scripts/deploy-kiosk.ts --env staging",
     "build:kiosk:prod": "npx tsx ../scripts/deploy-kiosk.ts --env prod",
     "test": "npm run inject-build-config && tsx --test \"src/**/*.test.ts\"",

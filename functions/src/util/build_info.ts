@@ -7,9 +7,10 @@
  * right before uploading; anywhere else (emulator, tests) the file is
  * absent and the version is "dev".
  *
- * Reported by the keep-warm pings (`GET /api/ping`, the dispatchers'
- * `ping` method). They are unauthenticated by design (ADR-0037); the
- * version is no secret — the repo and its release tags are public.
+ * Reported by the keep-warm pings: `GET /api/ping` (behind the gateway API
+ * key) and the dispatchers' `ping` method, which is unauthenticated by
+ * design (ADR-0037). The version is no secret — the repo and its release
+ * tags are public.
  */
 
 import { readFileSync } from "fs";

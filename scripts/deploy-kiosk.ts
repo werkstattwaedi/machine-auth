@@ -20,6 +20,11 @@
  *
  * Usage (or `npm run build:kiosk:staging|prod` in checkout-kiosk/):
  *   npx tsx scripts/deploy-kiosk.ts --env staging [--yes] [--new-release] [--allow-off-main]
+ *
+ * `--dev` (`npm run build:kiosk`) builds a local, native-platform binary
+ * against localhost: no preflight, no release, no record — but it still
+ * carries the checkout's version (`2026.10.3-dev.4+g…`), so it never looks
+ * older than the release it was built after.
  */
 
 import { execSync } from "child_process";
@@ -29,6 +34,7 @@ import { parseArgs } from "util";
 
 import { ENVS, type DeployEnv } from "./deploy-log.ts";
 import { enforcePreflight } from "./deploy-preflight.ts";
+import { buildVersion } from "./build-version.ts";
 import { recordDeploy } from "./deploy-record.ts";
 import { ensureReleaseOrExit } from "./release.ts";
 
@@ -44,15 +50,29 @@ async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
       env: { type: "string" },
+      dev: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
       "new-release": { type: "boolean", default: false },
       "allow-off-main": { type: "boolean", default: false },
     },
     strict: true,
   });
+  if (values.dev) {
+    const version = buildVersion();
+    const devEnv = { ...process.env, BUILD_VERSION: version, KIOSK_DIST: "dev" };
+    run("node scripts/inject-build-config.mjs", devEnv);
+    run("npm run tsc:main", devEnv);
+    run("npm run tsc:renderer", devEnv);
+    run(
+      `npx electron-builder --config electron-builder.kiosk.yml -c.extraMetadata.version=${version}`,
+      devEnv
+    );
+    return;
+  }
+
   const env = values.env as DeployEnv | undefined;
   if (!env || !ENVS.includes(env)) {
-    console.error(`--env must be one of: ${ENVS.join(", ")}`);
+    console.error(`--env must be one of: ${ENVS.join(", ")} (or --dev)`);
     process.exit(2);
   }
 

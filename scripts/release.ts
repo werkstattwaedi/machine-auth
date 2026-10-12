@@ -109,7 +109,10 @@ function releaseTagsAt(commit: string): string[] {
 }
 
 function fetchTags(): void {
-  if (tryGit(["fetch", "--quiet", "--tags", "origin"]) === null) {
+  // --force: origin is the authority on release names. A local tag that
+  // disagrees with origin's (same name, other commit) is replaced, not
+  // trusted; tags that exist only locally are left alone.
+  if (tryGit(["fetch", "--quiet", "--tags", "--force", "origin"]) === null) {
     throw new Error("could not fetch tags from origin — cannot name a release");
   }
 }
@@ -141,6 +144,10 @@ function releaseNotes(commit: string, ops: string | undefined): { previous?: str
   return { previous, body };
 }
 
+function onOrigin(tag: string): boolean {
+  return Boolean(tryGit(["ls-remote", "--tags", "origin", `refs/tags/${tag}`]));
+}
+
 async function ask(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -166,6 +173,15 @@ export async function ensureRelease(opts: ReleaseOptions = {}): Promise<ReleaseR
   fetchTags();
   const existing = releaseTagsAt(commit);
   if (existing.length > 0 && !opts.newRelease) {
+    // A deploy interrupted between `git tag` and the push leaves a tag that
+    // only this clone knows. Publish it now, or another machine could hand
+    // the same name to a different commit.
+    if (!onOrigin(existing[0])) {
+      if (tryGit(["push", "--quiet", "origin", `refs/tags/${existing[0]}`]) === null) {
+        throw new Error(`${existing[0]} exists only locally and could not be pushed to origin`);
+      }
+      say(`${existing[0]} was only local — pushed it`);
+    }
     say(`${existing[0]} (already released)`);
     return { version: existing[0].slice(1), tag: existing[0], confirmed: false };
   }
