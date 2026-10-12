@@ -218,6 +218,16 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
     erasure: "none",
   },
   {
+    // Not audited (the subcollection is outside the audit trigger's path);
+    // listed so the register states it holds no personal data.
+    collection: "maco/*/status, gateways/*/status, kiosks/*/status",
+    piiFields: ["none (device version, online state, boot times)"],
+    legalBasis: "—",
+    retention: "Operational (one doc per device, overwritten in place)",
+    erasure: "none",
+    notes: "Device status reports, ADR-0045 phase 2c.",
+  },
+  {
     collection: "catalog",
     piiFields: ["none"],
     legalBasis: "—",

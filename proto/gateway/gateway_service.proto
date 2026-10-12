@@ -120,10 +120,25 @@ message LogResponse {
   uint32 pending_count = 2;
 }
 
-// Ping request.
+// Ping request. Also carries the terminal's status, which the gateway
+// reports to the cloud (ADR-0045, phase 2c). Older firmware sends the
+// fields empty; the gateway treats empty as unknown.
 message PingRequest {
   // Client timestamp (milliseconds since epoch)
   uint64 client_timestamp_ms = 1;
+
+  // Release version the firmware was built as ("2026.10.3", "dev").
+  string version = 2;
+
+  // Time since boot. A smaller value than in the previous ping means the
+  // terminal rebooted in between.
+  uint64 uptime_ms = 3;
+
+  // maco::system::ResetReason of the last reset (0 = unknown).
+  uint32 reset_reason = 4;
+
+  // Consecutive boots that did not complete (ADR-0040); 1 when healthy.
+  uint32 boot_count = 5;
 }
 
 // Ping response.

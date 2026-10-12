@@ -58,7 +58,12 @@ from maco_gateway.key_store import KeyStore
 from maco_gateway.print_worker import PrintWorker
 from maco_gateway.printer import parse_printer_endpoint
 from maco_gateway.sensing.service import SensingService
-from maco_gateway.warm import FunctionWarmer, parse_warm_schedule
+from maco_gateway.device_status import (
+    DeviceStatusReporter,
+    default_gateway_id,
+    read_version,
+    valid_gateway_id,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -101,12 +106,14 @@ class ClientConnection:
         gateway_service: GatewayServiceImpl,
         replay_guard: DeviceReplayGuard,
         sensing: SensingService,
+        status: Optional[DeviceStatusReporter] = None,
     ) -> None:
         self._reader = reader
         self._writer = writer
         self._key_store = key_store
         self._gateway_service = gateway_service
         self._sensing = sensing
+        self._status = status
         self._addr = writer.get_extra_info("peername")
 
         self._ascon = AsconTransport()
@@ -305,6 +312,16 @@ class ClientConnection:
         req = PingRequest()
         req.MergeFromString(payload)
 
+        # The ping doubles as the terminal's status report (ADR-0045).
+        if self._status is not None and self._device_id is not None:
+            self._status.on_ping(
+                self._device_id,
+                version=req.version,
+                uptime_ms=req.uptime_ms,
+                reset_reason=req.reset_reason,
+                boot_count=req.boot_count,
+            )
+
         result = self._gateway_service.ping(
             client_timestamp_ms=req.client_timestamp_ms,
         )
@@ -380,12 +397,14 @@ class GatewayServer:
         key_store: KeyStore,
         firebase_client: FirebaseClient,
         sensing: SensingService,
+        status: Optional[DeviceStatusReporter] = None,
     ) -> None:
         self._host = host
         self._port = port
         self._key_store = key_store
         self._firebase_client = firebase_client
         self._sensing = sensing
+        self._status = status
         self._gateway_service = GatewayServiceImpl(firebase_client)
         self._connections: Dict[str, ClientConnection] = {}
         # One replay guard for the whole server so per-device nonce history
@@ -418,6 +437,7 @@ class GatewayServer:
                 self._gateway_service,
                 self._replay_guard,
                 self._sensing,
+                self._status,
             )
             self._connections[addr] = conn
             await conn.handle()
@@ -508,12 +528,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--warm-schedule",
-        default=os.environ.get("WARM_SCHEDULE", ""),
+        "--gateway-id",
+        default=os.environ.get("GATEWAY_ID") or default_gateway_id(),
         help=(
-            "Weekly window for keep-warm pings to the Firebase api function, "
-            "e.g. 'Mon-Sun 08-22' (local time, end hour exclusive). "
-            "Empty → no warm pings (ADR-0037)."
+            "Id this gateway reports its status under (ADR-0045); "
+            "default: GATEWAY_ID, else the host name."
         ),
     )
     parser.add_argument(
@@ -552,6 +571,12 @@ def main() -> int:
         logger.error("--gateway-api-key is required")
         return 1
 
+    if not valid_gateway_id(args.gateway_id):
+        logger.error(
+            "Invalid gateway id %r: lowercase letters, digits and dashes", args.gateway_id
+        )
+        return 1
+
     logger.info("Starting MACO Gateway")
     logger.info("  Host: %s", args.host)
     logger.info("  Port: %d", args.port)
@@ -568,12 +593,17 @@ def main() -> int:
     # background. Always available (probers are created lazily on first lease).
     sensing = SensingService()
 
+    # Heartbeat + terminal status to the cloud (ADR-0045, phase 2c); also
+    # keeps the api function warm (replaced the ADR-0037 warm pinger).
+    status = DeviceStatusReporter(firebase_client, args.gateway_id, read_version())
+
     server = GatewayServer(
         host=args.host,
         port=args.port,
         key_store=key_store,
         firebase_client=firebase_client,
         sensing=sensing,
+        status=status,
     )
 
     # Optional label print worker: only started when a printer is configured.
@@ -584,24 +614,10 @@ def main() -> int:
         worker = PrintWorker(printer_host, printer_port, project=args.gcp_project)
         logger.info("  Printer: %s:%d", printer_host, printer_port)
 
-    # Optional keep-warm pinger (ADR-0037): only started when a schedule is
-    # configured. A malformed schedule fails startup loudly.
-    try:
-        warm_config = parse_warm_schedule(args.warm_schedule)
-    except ValueError as e:
-        logger.error("%s", e)
-        return 1
-    warmer = None
-    if warm_config is not None:
-        warmer = FunctionWarmer(firebase_client, warm_config)
-        logger.info("  Warm schedule: %s", args.warm_schedule)
-
     async def serve() -> None:
-        tasks = [server.run(), sensing.run_reaper()]
+        tasks = [server.run(), sensing.run_reaper(), status.run()]
         if worker is not None:
             tasks.append(worker.run())
-        if warmer is not None:
-            tasks.append(warmer.run())
         await asyncio.gather(*tasks)
 
     try:

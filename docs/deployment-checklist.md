@@ -26,6 +26,35 @@ deploy a branch on purpose: `--allow-off-main` or `DEPLOY_ALLOW_OFF_MAIN=1`;
 the record then says "off main" and why.
 
 
+Then each of them names the **release** it ships (`scripts/release.ts`):
+a commit that was deployed before reuses its `vYYYY.M.N` tag; a new commit
+gets the next number of the month (`v2026.10.3`) after one question that
+lists the commits since the previous release — and the operations config
+commits, if the config changed. For `deploy.sh prod` that question replaces
+"Deploy to PRODUCTION?". `--yes` answers it (`./pw prod-flash --yes`,
+`npm run build:kiosk:prod -- --yes`); without a terminal it refuses. A
+config-only change keeps the version unless you ask for a new one with
+`--new-release`. Off-main or dirty deploys never cut a release; they ship
+a `-dev` version. Every component reports that version: the pings
+(`/api/ping`, the dispatchers' `ping`), the web apps' `/version.json` and
+the admin sidebar, the kiosk tray, the gateway's `VERSION` file and the
+firmware's `GetDeviceInfo`. `git show v2026.10.3` shows the release notes.
+
+**Device status (ADR-0045 phase 2c).** Rolling it out: functions first
+(`/api/device-status`, `reportKioskStatus`), then the gateway (until then it
+logs "report failed" and retries), then firmware and kiosk whenever they
+next ship — older firmware and kiosks just report less. Only once the
+gateway reports, create the two alert policies from the operations repo's
+`docs/monitoring.md` ("Gateway heartbeat missing", "Terminal offline");
+created earlier, the first one fires at once.
+
+After every deploy, the record step reads what the devices report (the
+`status` documents of both projects) into STATE.md's "Running (live)"
+section and warns about devices on an older release or offline. It needs
+Application Default Credentials (`gcloud auth application-default login`);
+without them STATE.md just says the live view was unavailable. The same
+view, live, is the admin app's **Versionen** page.
+
 Every successful `deploy.sh` run, gateway deploy, kiosk installer build and
 `./pw prod-flash` records itself: a `deploy/<env>/<component>/<timestamp>`
 git tag plus an entry in the operations repo's `deploys/log.jsonl`, from

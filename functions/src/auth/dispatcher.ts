@@ -36,6 +36,7 @@ import {
   verifyKioskElevationHandler,
 } from "../checkout/kiosk_elevation";
 import { probeTagHandler } from "../checkout/probe_tag";
+import { reportKioskStatusHandler } from "../device_status/handle_device_status";
 import { privacyReportHandler } from "../privacy/privacy_report";
 import { privacyEraseHandler } from "../privacy/erase_subject";
 import { privacyTrimHandler } from "../privacy/trim";
@@ -63,6 +64,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   resolveTag: resolveTagHandler,
   verifyTagCheckout: verifyTagCheckoutHandler,
   probeTag: probeTagHandler,
+  // Kiosk build version report (ADR-0045, phase 2c), kiosk-bearer gated.
+  reportKioskStatus: reportKioskStatusHandler,
   // Admin-only DSAR tooling (ADR-0038). Deliberately grouped here rather
   // than a fifth dispatcher: traffic is rare, and sharing authCall's warm
   // instance beats a dedicated cold container.

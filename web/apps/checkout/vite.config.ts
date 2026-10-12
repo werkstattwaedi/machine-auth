@@ -4,10 +4,13 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite"
 import basicSsl from "@vitejs/plugin-basic-ssl"
+import { viteBuildVersion } from "../../../scripts/build-version.ts"
 
 export default defineConfig({
   plugins: [
     basicSsl(),
+    // Release version in the bundle + /version.json (ADR-0045).
+    viteBuildVersion(),
     TanStackRouterVite({ quoteStyle: "double" }),
     react(),
     tailwindcss(),

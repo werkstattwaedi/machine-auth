@@ -14,7 +14,11 @@ import {
   deployTagName,
   formatTime,
   parseLog,
+  deployedRelease,
+  isBehind,
   renderState,
+  type RunningDevice,
+  runningDrift,
   serializeEntry,
 } from "./deploy-log.ts";
 
@@ -100,4 +104,67 @@ test("drift lines render only when facts are known", () => {
   const md = renderState(entries, { mainAheadOfProd: 7, stagingAheadOfProd: 3 });
   assert.match(md, /Staging is \*\*3\*\* commit/);
   assert.match(md, /`main` is \*\*7\*\* commit/);
+});
+
+// Phase 3: what runs, next to what was deployed.
+const running: RunningDevice[] = [
+  { env: "prod", kind: "gateways", deviceId: "workshop", version: "2026.10.3", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+  { env: "prod", kind: "maco", deviceId: "0a10aced202194944a042f04", name: "Laser", version: "2026.10.2", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+  { env: "prod", kind: "maco", deviceId: "0a10aced202194944a042f05", version: null, online: false, since: "2026-10-12T06:00:00.000Z", lastSeen: "2026-10-12T05:59:00.000Z" },
+];
+
+test("a device is behind only when its release is older", () => {
+  assert.equal(isBehind("2026.10.2", "2026.10.3"), true);
+  assert.equal(isBehind("2026.10.2-dev.4+gabc", "2026.10.3"), true);
+  assert.equal(isBehind("2026.10.3-dev.1+gabc", "2026.10.3"), false);
+  assert.equal(isBehind("2026.9.30", "2026.10.1"), true);
+  assert.equal(isBehind("2026.10.10", "2026.10.9"), false);
+  assert.equal(isBehind(null, "2026.10.3"), null);
+  assert.equal(isBehind("dev", "2026.10.3"), null);
+});
+
+// prod has 2026.10.3 deployed; staging already runs 2026.10.4.
+const versioned: DeployEntry[] = [
+  ...entries,
+  { at: "2026-10-11T08:00:00.000Z", env: "prod", component: "firebase", commit: "f".repeat(40), version: "2026.10.3", by: "Mike" },
+  { at: "2026-10-12T07:00:00.000Z", env: "staging", component: "firebase", commit: "e".repeat(40), version: "2026.10.4", by: "Mike" },
+  { at: "2026-10-12T07:30:00.000Z", env: "staging", component: "kiosk", commit: "e".repeat(40), version: "2026.10.5-dev.1+gabc", by: "Mike" },
+];
+const NOW = new Date("2026-10-12T08:30:00Z");
+
+test("the deployed release is per environment and ignores dev builds", () => {
+  assert.equal(deployedRelease(versioned, "prod"), "2026.10.3");
+  assert.equal(deployedRelease(versioned, "staging"), "2026.10.4");
+  assert.equal(deployedRelease(entries, "prod"), undefined);
+});
+
+test("drift: offline, quiet, and behind what was deployed to the device's own environment", () => {
+  const warnings = runningDrift(
+    [
+      ...running,
+      // Up to date for prod, even though staging is on 2026.10.4.
+      { env: "prod", kind: "kiosks", deviceId: "checkout", version: "2026.10.3", online: true, since: null, lastSeen: "2026-10-12T08:00:00.000Z" },
+      // A dead gateway's doc still says online — only lastSeen tells.
+      { env: "staging", kind: "gateways", deviceId: "test-pi", version: "2026.10.4", online: true, since: null, lastSeen: "2026-10-12T06:00:00.000Z" },
+    ],
+    versioned,
+    NOW
+  );
+  assert.equal(warnings.length, 3);
+  assert.match(warnings[0], /Laser.*runs 2026\.10\.2, prod has 2026\.10\.3 deployed/);
+  assert.match(warnings[1], /0a10aced202194944a042f05 is offline since 2026-10-12 08:00/);
+  assert.match(warnings[2], /gateway test-pi not heard since 2026-10-12 08:00/);
+});
+
+test("STATE.md shows the live devices, and says when the live view is missing", () => {
+  const md = renderState(versioned, { running }, NOW);
+  assert.match(md, /## Running \(live\)/);
+  assert.match(md, /\(staging: 2026\.10\.4\) \(prod: 2026\.10\.3\)/);
+  assert.match(md, /\| prod \| terminal Laser \(0a10aced202194944a042f04\) \| 2026\.10\.2 ⚠️ behind \| online \|/);
+  assert.match(md, /⚠️ offline since 2026-10-12 08:00/);
+  assert.match(md, /## Drift[\s\S]*⚠️ prod: terminal Laser/);
+
+  const offline = renderState(entries, { runningProblems: ["oww-maco: no credentials"] });
+  assert.match(offline, /Live view incomplete: oww-maco: no credentials/);
+  assert.doesNotMatch(renderState(entries, {}), /Running \(live\)/);
 });

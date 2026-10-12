@@ -21,6 +21,7 @@ import { Route as AuthenticatedPermissionsRouteImport } from "./routes/_authenti
 import { Route as AuthenticatedPriceListsRouteImport } from "./routes/_authenticated/price-lists"
 import { Route as AuthenticatedUsagesRouteImport } from "./routes/_authenticated/usages"
 import { Route as AuthenticatedUsersRouteImport } from "./routes/_authenticated/users"
+import { Route as AuthenticatedVersionsRouteImport } from "./routes/_authenticated/versions"
 import { Route as AuthenticatedVisitsRouteImport } from "./routes/_authenticated/visits"
 import { Route as TestLabelPreviewRouteImport } from "./routes/_test.label-preview"
 import { Route as LoginVerifyRouteImport } from "./routes/login_.verify"
@@ -102,6 +103,11 @@ const AuthenticatedUsagesRoute = AuthenticatedUsagesRouteImport.update({
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: "/users",
   path: "/users",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedVersionsRoute = AuthenticatedVersionsRouteImport.update({
+  id: "/versions",
+  path: "/versions",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedVisitsRoute = AuthenticatedVisitsRouteImport.update({
@@ -245,6 +251,7 @@ export interface FileRoutesByFullPath {
   "/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
   "/usages": typeof AuthenticatedUsagesRoute
   "/users": typeof AuthenticatedUsersRouteWithChildren
+  "/versions": typeof AuthenticatedVersionsRoute
   "/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
@@ -274,6 +281,7 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute
   "/audit": typeof AuthenticatedAuditRoute
   "/usages": typeof AuthenticatedUsagesRoute
+  "/versions": typeof AuthenticatedVersionsRoute
   "/label-preview": typeof TestLabelPreviewRoute
   "/login/verify": typeof LoginVerifyRoute
   "/invoices/$billId": typeof AuthenticatedInvoicesBillIdRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   "/_authenticated/price-lists": typeof AuthenticatedPriceListsRouteWithChildren
   "/_authenticated/usages": typeof AuthenticatedUsagesRoute
   "/_authenticated/users": typeof AuthenticatedUsersRouteWithChildren
+  "/_authenticated/versions": typeof AuthenticatedVersionsRoute
   "/_authenticated/visits": typeof AuthenticatedVisitsRouteWithChildren
   "/_test/label-preview": typeof TestLabelPreviewRoute
   "/login_/verify": typeof LoginVerifyRoute
@@ -347,6 +356,7 @@ export interface FileRouteTypes {
     | "/price-lists"
     | "/usages"
     | "/users"
+    | "/versions"
     | "/visits"
     | "/label-preview"
     | "/login/verify"
@@ -376,6 +386,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/audit"
     | "/usages"
+    | "/versions"
     | "/label-preview"
     | "/login/verify"
     | "/invoices/$billId"
@@ -411,6 +422,7 @@ export interface FileRouteTypes {
     | "/_authenticated/price-lists"
     | "/_authenticated/usages"
     | "/_authenticated/users"
+    | "/_authenticated/versions"
     | "/_authenticated/visits"
     | "/_test/label-preview"
     | "/login_/verify"
@@ -528,6 +540,13 @@ declare module "@tanstack/react-router" {
       path: "/users"
       fullPath: "/users"
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/versions": {
+      id: "/_authenticated/versions"
+      path: "/versions"
+      fullPath: "/versions"
+      preLoaderRoute: typeof AuthenticatedVersionsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/visits": {
@@ -815,6 +834,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPriceListsRoute: typeof AuthenticatedPriceListsRouteWithChildren
   AuthenticatedUsagesRoute: typeof AuthenticatedUsagesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRouteWithChildren
+  AuthenticatedVersionsRoute: typeof AuthenticatedVersionsRoute
   AuthenticatedVisitsRoute: typeof AuthenticatedVisitsRouteWithChildren
 }
 
@@ -827,6 +847,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPriceListsRoute: AuthenticatedPriceListsRouteWithChildren,
   AuthenticatedUsagesRoute: AuthenticatedUsagesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRouteWithChildren,
+  AuthenticatedVersionsRoute: AuthenticatedVersionsRoute,
   AuthenticatedVisitsRoute: AuthenticatedVisitsRouteWithChildren,
 }
 

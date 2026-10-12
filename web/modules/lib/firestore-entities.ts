@@ -148,6 +148,27 @@ export interface MacoDoc extends AuditFields {
   hwRevision?: string | null
 }
 
+// ── device status (ADR-0045 phase 2c) ───────────────────────────────────
+// maco/{id}/status/current, gateways/{id}/status/current,
+// kiosks/{id}/status/current — written only by the functions, admin-read.
+
+export interface DeviceStatusDoc {
+  kind: "maco" | "gateways" | "kiosks"
+  deviceId: string
+  version: string | null
+  online: boolean
+  since: Timestamp
+  bootedAt: Timestamp | null
+  resetReason: string | null
+  bootCount: number | null
+  firstSeen: Timestamp
+  lastSeen: Timestamp
+  /** Terminals: the gateway that reported them. */
+  gatewayId?: string
+  /** Gateways: terminal ids last reported online. */
+  terminals?: string[]
+}
+
 // ── tokens ───────────────────────────────────────────────────────────────
 
 export interface TokenDoc extends AuditFields {

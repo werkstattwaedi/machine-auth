@@ -22,15 +22,19 @@
  */
 
 import { spawnSync } from "child_process";
-import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+
+import { buildVersion } from "./build-version.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const FUNCTIONS = join(ROOT, "functions");
 const PKG_JSON_PATH = join(FUNCTIONS, "package.json");
 const LOCK_PATH = join(ROOT, "package-lock.json");
+// Read by functions/src/util/build_info.ts; the pings report it (ADR-0045).
+const BUILD_INFO_PATH = join(FUNCTIONS, "lib", "build-info.json");
 
 const originalPkgJson = readFileSync(PKG_JSON_PATH, "utf-8");
 // Snapshot the lockfile too: any `npm install` while package.json points
@@ -41,6 +45,8 @@ const originalPkgJson = readFileSync(PKG_JSON_PATH, "utf-8");
 const originalLock = readFileSync(LOCK_PATH, "utf-8");
 
 function cleanup(): void {
+  // Left behind, the local emulator would claim the deployed version.
+  rmSync(BUILD_INFO_PATH, { force: true });
   writeFileSync(PKG_JSON_PATH, originalPkgJson);
   writeFileSync(LOCK_PATH, originalLock);
   for (const entry of readdirSync(FUNCTIONS)) {
@@ -73,6 +79,11 @@ function cleanupAndExit(signal: NodeJS.Signals): void {
 }
 process.on("SIGINT", cleanupAndExit);
 process.on("SIGTERM", cleanupAndExit);
+
+// The predeploy `tsc` writes into lib/ without clearing it, so the file
+// survives into the upload.
+mkdirSync(dirname(BUILD_INFO_PATH), { recursive: true });
+writeFileSync(BUILD_INFO_PATH, JSON.stringify({ version: buildVersion() }) + "\n");
 
 const args = ["deploy", "--only", "functions", ...process.argv.slice(2)];
 const result = spawnSync("firebase", args, { cwd: ROOT, stdio: "inherit" });

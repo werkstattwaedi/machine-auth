@@ -13,6 +13,9 @@ maco.gateway.LogEntry.module            max_size:32
 maco.gateway.LogEntry.message           max_size:256
 maco.gateway.LogEntry.data              max_size:256
 
+# PingRequest (must hold maco_firmware/services:build_version)
+maco.gateway.PingRequest.version                max_size:48
+
 # Sensing lease
 maco.gateway.XToolLaserControl.host             max_size:64
 maco.gateway.RenewSensingLeaseRequest.lease_id  max_size:40

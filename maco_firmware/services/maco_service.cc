@@ -5,15 +5,13 @@
 
 #include <cstring>
 
+#include "maco_firmware/services/build_version.h"
 #include "maco_firmware/system/system.h"
 #include "pw_chrono/system_clock.h"
 #include "pw_log/log.h"
 
 namespace maco {
 namespace {
-
-// Firmware version - update on releases
-constexpr const char* kFirmwareVersion = "0.1.0-dev";
 
 // Build target identifier set at compile time
 #if defined(__arm__)
@@ -37,8 +35,7 @@ pw::Status MacoService::GetDeviceInfo(const ::maco_Empty& /*request*/,
                                       ::maco_DeviceInfoResponse& response) {
   PW_LOG_INFO("GetDeviceInfo RPC called");
 
-  // Set firmware version
-  std::strncpy(response.firmware_version, kFirmwareVersion,
+  std::strncpy(response.firmware_version, kBuildVersion,
                sizeof(response.firmware_version) - 1);
   response.firmware_version[sizeof(response.firmware_version) - 1] = '\0';
 

@@ -304,13 +304,17 @@ gcloud secrets create GATEWAY_FIRESTORE_SA --data-file=/tmp/maco-gateway-printer
 rm /tmp/maco-gateway-printer.json   # the key now lives only in Secret Manager
 ```
 
-### Keep-warm pings (ADR-0037)
+### Heartbeat and device status (ADR-0045)
 
-`WARM_SCHEDULE` (operations config `gateway.warmSchedule`, e.g.
-`Mon-Sun 08-22`) makes the gateway ping the Firebase `api` function's
-`/ping` route every 10 minutes inside the weekly window, so the first tag
-check-in of the day doesn't pay a cold start. Empty or absent disables the
-pinger. See [ADR-0037](adr/0037-keep-warm-pings.md).
+The gateway posts its own status and that of every terminal it hears from
+to the `api` function's `/device-status` route every 5 minutes, around the
+clock, and at once when a terminal drops out, comes back or reboots. That
+heartbeat also keeps the `api` function warm (it replaced the opening-hours
+warm ping of [ADR-0037](adr/0037-keep-warm-pings.md); `gateway.warmSchedule`
+is no longer read). The gateway reports under `GATEWAY_ID` (operations
+config `gateway.id`, optional — default: the Pi's host name). Status lands
+in `maco/{deviceId}/status/current` and `gateways/{id}/status/current`; see
+[ADR-0045](adr/0045-deploy-record.md) for the write budget and the alerts.
 
 ### Local Development
 

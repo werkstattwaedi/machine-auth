@@ -1,0 +1,12 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+// Template: Bazel substitutes the workspace status (--config=prod).
+
+#include "maco_firmware/services/build_version.h"
+
+namespace maco {
+
+const char kBuildVersion[] = "${STABLE_MACO_BUILD_VERSION}";
+
+}  // namespace maco

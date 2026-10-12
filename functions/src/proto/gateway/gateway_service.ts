@@ -77,10 +77,25 @@ export interface LogResponse {
   pendingCount: number;
 }
 
-/** Ping request. */
+/**
+ * Ping request. Also carries the terminal's status, which the gateway
+ * reports to the cloud (ADR-0045, phase 2c). Older firmware sends the
+ * fields empty; the gateway treats empty as unknown.
+ */
 export interface PingRequest {
   /** Client timestamp (milliseconds since epoch) */
   clientTimestampMs: bigint;
+  /** Release version the firmware was built as ("2026.10.3", "dev"). */
+  version: string;
+  /**
+   * Time since boot. A smaller value than in the previous ping means the
+   * terminal rebooted in between.
+   */
+  uptimeMs: bigint;
+  /** maco::system::ResetReason of the last reset (0 = unknown). */
+  resetReason: number;
+  /** Consecutive boots that did not complete (ADR-0040); 1 when healthy. */
+  bootCount: number;
 }
 
 /** Ping response. */
@@ -462,7 +477,7 @@ export const LogResponse: MessageFns<LogResponse> = {
 };
 
 function createBasePingRequest(): PingRequest {
-  return { clientTimestampMs: 0n };
+  return { clientTimestampMs: 0n, version: "", uptimeMs: 0n, resetReason: 0, bootCount: 0 };
 }
 
 export const PingRequest: MessageFns<PingRequest> = {
@@ -472,6 +487,21 @@ export const PingRequest: MessageFns<PingRequest> = {
         throw new globalThis.Error("value provided for field message.clientTimestampMs of type uint64 too large");
       }
       writer.uint32(8).uint64(message.clientTimestampMs);
+    }
+    if (message.version !== "") {
+      writer.uint32(18).string(message.version);
+    }
+    if (message.uptimeMs !== 0n) {
+      if (BigInt.asUintN(64, message.uptimeMs) !== message.uptimeMs) {
+        throw new globalThis.Error("value provided for field message.uptimeMs of type uint64 too large");
+      }
+      writer.uint32(24).uint64(message.uptimeMs);
+    }
+    if (message.resetReason !== 0) {
+      writer.uint32(32).uint32(message.resetReason);
+    }
+    if (message.bootCount !== 0) {
+      writer.uint32(40).uint32(message.bootCount);
     }
     return writer;
   },
@@ -491,6 +521,38 @@ export const PingRequest: MessageFns<PingRequest> = {
           message.clientTimestampMs = reader.uint64() as bigint;
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.version = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.uptimeMs = reader.uint64() as bigint;
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.resetReason = reader.uint32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.bootCount = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -506,6 +568,10 @@ export const PingRequest: MessageFns<PingRequest> = {
   fromPartial(object: DeepPartial<PingRequest>): PingRequest {
     const message = createBasePingRequest();
     message.clientTimestampMs = object.clientTimestampMs ?? 0n;
+    message.version = object.version ?? "";
+    message.uptimeMs = object.uptimeMs ?? 0n;
+    message.resetReason = object.resetReason ?? 0;
+    message.bootCount = object.bootCount ?? 0;
     return message;
   },
 };

@@ -24,6 +24,7 @@
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_effects/terminal_effects.h"
 #include "maco_firmware/modules/terminal_ui/terminal_ui.h"
+#include "maco_firmware/services/build_version.h"
 #include "maco_firmware/services/maco_service.h"
 #include "maco_firmware/system/system.h"
 #include "session_upload/session_store.h"
@@ -307,7 +308,14 @@ void AppInit() {
         maco::system::GetGatewayClient(),
         system_state,
         pw::async2::GetSystemTimeProvider(),
-        pw::System().allocator());
+        pw::System().allocator(),
+        maco::gateway::TerminalStatus{
+            .version = maco::kBuildVersion,
+            .reset_reason =
+                static_cast<uint32_t>(maco::system::GetResetReason()),
+            .boot_count =
+                static_cast<uint32_t>(maco::system::LastBootCount()),
+        });
     gateway_connection_check.Start(pw::System().dispatcher());
 
     // Cloud check-in (PR #194) requires machine_id to enforce

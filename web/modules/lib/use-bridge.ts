@@ -27,6 +27,8 @@ export interface ResetSessionOptions {
 interface BridgeApi {
   mode: BridgeMode
   features: readonly string[]
+  // Kiosk release version (ADR-0045). Absent on kiosk builds before it.
+  version?: string
   bearer: () => Promise<string | null>
   resetSession: (opts?: ResetSessionOptions) => Promise<void>
   getUrl: () => Promise<string>
@@ -47,6 +49,8 @@ interface UseBridgeResult {
   available: boolean
   mode: BridgeMode | null
   features: readonly string[]
+  // Kiosk release version; null outside the kiosk or on an older build.
+  version: string | null
   bearer: () => Promise<string | null>
   resetSession: (opts?: ResetSessionOptions) => Promise<void>
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
@@ -85,6 +89,7 @@ export function useBridge(): UseBridgeResult {
         available: false,
         mode: null,
         features: EMPTY_FEATURES,
+        version: null,
         bearer: async () => null,
         resetSession: async () => {},
         onNfcTag: () => NO_OP_UNSUBSCRIBE,
@@ -97,6 +102,7 @@ export function useBridge(): UseBridgeResult {
       available: true,
       mode: bridge.mode,
       features: bridge.features,
+      version: bridge.version ?? null,
       bearer: bridge.bearer,
       resetSession: bridge.resetSession,
       onNfcTag: bridge.onNfcTag,

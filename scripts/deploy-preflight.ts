@@ -124,6 +124,43 @@ export function preflightProblems(
   ];
 }
 
+/**
+ * The operations repo's config revision: its last commit that touched
+ * anything but the deploy record itself (`deploys/`, `STATE.md`). Every
+ * deploy commits there, so HEAD alone says nothing about the config
+ * (ADR-0045, phase 2a).
+ */
+export function opsRevision(): string | undefined {
+  return (
+    tryGit(opsDir, [
+      "log",
+      "-1",
+      "--format=%H",
+      "HEAD",
+      "--",
+      ".",
+      ":(exclude)deploys",
+      ":(exclude)STATE.md",
+    ]) || undefined
+  );
+}
+
+/** Config commits in the operations repo between two config revisions. */
+export function opsConfigCommitsBetween(from: string, to: string): string[] | undefined {
+  const out = tryGit(opsDir, [
+    "log",
+    "--oneline",
+    "--no-decorate",
+    `${from}..${to}`,
+    "--",
+    ".",
+    ":(exclude)deploys",
+    ":(exclude)STATE.md",
+  ]);
+  if (out === null) return undefined;
+  return out === "" ? [] : out.split("\n");
+}
+
 export function overrideRequested(): boolean {
   return process.env[OVERRIDE_ENV] === "1";
 }

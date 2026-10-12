@@ -6,6 +6,7 @@ import {
   AuthenticatedLayout,
   type AuthenticatedLayoutNavItem,
 } from "@modules/components/authenticated-layout"
+import { BUILD_VERSION } from "@modules/lib/build-version"
 import { LookupProvider } from "@modules/lib/lookup"
 import {
   ClipboardList,
@@ -14,6 +15,7 @@ import {
   History,
   Package,
   Receipt,
+  Server,
   Users,
 } from "lucide-react"
 
@@ -33,6 +35,8 @@ const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/visits", label: "Besuche", icon: ClipboardList },
   { to: "/usages", label: "Nutzungen", icon: History },
   { to: "/audit", label: "Audit-Log", icon: FileText },
+  // What runs where right now (ADR-0045 phase 3).
+  { to: "/versions", label: "Versionen", icon: Server },
 ]
 
 function AdminAuthenticatedLayout() {
@@ -41,6 +45,9 @@ function AdminAuthenticatedLayout() {
       navItems={navItems}
       gate={{ kind: "admin" }}
       wrapper={LookupProvider}
+      // Built bundles only: the dev server (and the e2e screenshots taken
+      // on it) says "dev" and shows nothing.
+      footerNote={BUILD_VERSION === "dev" ? null : `Version ${BUILD_VERSION}`}
     />
   )
 }

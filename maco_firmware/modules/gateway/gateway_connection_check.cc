@@ -5,6 +5,9 @@
 
 #include "gateway/gateway_connection_check.h"
 
+#include <chrono>
+#include <cstring>
+
 #include "pw_async2/future_timeout.h"
 #include "pw_log/log.h"
 
@@ -28,10 +31,12 @@ GatewayConnectionCheck::GatewayConnectionCheck(
     GatewayClient& gateway,
     app_state::SystemState& system_state,
     pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider,
-    pw::allocator::Allocator& allocator)
+    pw::allocator::Allocator& allocator,
+    TerminalStatus status)
     : gateway_(gateway),
       system_state_(system_state),
       time_provider_(time_provider),
+      status_(status),
       coro_cx_(allocator) {}
 
 void GatewayConnectionCheck::Start(pw::async2::Dispatcher& dispatcher) {
@@ -46,6 +51,14 @@ void GatewayConnectionCheck::Start(pw::async2::Dispatcher& dispatcher) {
 pw::async2::Coro<pw::Status> GatewayConnectionCheck::Ping(
     [[maybe_unused]] pw::async2::CoroContext cx) {
   maco_gateway_PingRequest request = maco_gateway_PingRequest_init_zero;
+  // Status the gateway forwards to the cloud (ADR-0045, phase 2c).
+  std::strncpy(request.version, status_.version, sizeof(request.version) - 1);
+  request.uptime_ms = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          time_provider_.now().time_since_epoch())
+          .count());
+  request.reset_reason = status_.reset_reason;
+  request.boot_count = status_.boot_count;
 
   // Register future BEFORE starting RPC (callback may fire synchronously).
   auto future = ping_provider_.Get();

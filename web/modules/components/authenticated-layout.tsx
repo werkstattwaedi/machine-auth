@@ -79,6 +79,11 @@ export interface AuthenticatedLayoutProps {
     checkoutPath: string
     onSignOut: () => void
   }
+  /**
+   * Small print under the account row — the admin app shows the release
+   * version there (ADR-0045).
+   */
+  footerNote?: ReactNode
 }
 
 export function AuthenticatedLayout({
@@ -88,6 +93,7 @@ export function AuthenticatedLayout({
   headerAction,
   signOutRedirect,
   kiosk,
+  footerNote,
 }: AuthenticatedLayoutProps) {
   const {
     user,
@@ -354,6 +360,11 @@ export function AuthenticatedLayout({
             </Tooltip>
           </TooltipProvider>
         </div>
+        {footerNote ? (
+          <div className="px-3 pt-1 text-[11px] text-muted-foreground truncate">
+            {footerNote}
+          </div>
+        ) : null}
       </div>
     </>
   )

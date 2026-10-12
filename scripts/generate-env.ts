@@ -133,9 +133,9 @@ const GATEWAY: VarMapping[] = [
   { envVar: "MASTER_KEY", jsonPath: "gateway.masterKey" },
   { envVar: "FIREBASE_URL", jsonPath: "gateway.firebaseUrl" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "gateway.gatewayApiKey" },
-  // Keep-warm ping window for the api function (ADR-0037), e.g.
-  // "Mon-Sun 08-22". Absent key → empty → warming disabled.
-  { envVar: "WARM_SCHEDULE", jsonPath: "gateway.warmSchedule" },
+  // Id the gateway reports its status under (ADR-0045, phase 2c). Absent
+  // key → empty → the gateway uses its host name.
+  { envVar: "GATEWAY_ID", jsonPath: "gateway.id" },
 ];
 
 // --- Test fixtures ---
@@ -721,7 +721,7 @@ function emitGatewayEnv(opts: {
     `FIREBASE_URL=${resolveValue(envConfig, "gateway.firebaseUrl")}`,
     `MASTER_KEY=${masterKey}`,
     `GATEWAY_API_KEY=${gatewayApiKey}`,
-    `WARM_SCHEDULE=${resolveValue(envConfig, "gateway.warmSchedule")}`,
+    `GATEWAY_ID=${resolveValue(envConfig, "gateway.id")}`,
     "",
   ].join("\n");
   writeFileSync(resolve(projectRoot, relPath), content);

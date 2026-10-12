@@ -32,10 +32,12 @@
  *   npx tsx scripts/deploy-record.ts deploy --env prod --component firmware --target <device id>
  *   npx tsx scripts/deploy-record.ts event  --env prod --note "rotated KIOSK_BEARER_KEY"
  *   npx tsx scripts/deploy-record.ts render       # send pending entries, re-render STATE.md
+ *                                                 # (incl. the live device status, ADR-0045 phase 3)
  *   npx tsx scripts/deploy-record.ts usb-device   # print the single USB Particle device id
  *
- * Options: --note, --target, --version, --no-push (keep the entry pending
- * and the tag local, e.g. offline).
+ * Options: --note, --target, --version (default: BUILD_VERSION, else
+ * scripts/build-version.ts), --no-push (keep the entry pending and the tag
+ * local, e.g. offline).
  *
  * Deploy paths run deploy-preflight.ts BEFORE deploying (latest main in both
  * repos, or an explicit override that ends up in the entry's `offMain`).
@@ -70,9 +72,12 @@ import {
   parseLog,
   renderState,
   type RepoFacts,
+  runningDrift,
   serializeEntry,
 } from "./deploy-log.ts";
-import { overrideRequested, preflightProblems } from "./deploy-preflight.ts";
+import { buildVersion } from "./build-version.ts";
+import { readRunningDevices } from "./device-status-read.ts";
+import { opsRevision, overrideRequested, preflightProblems } from "./deploy-preflight.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -159,15 +164,6 @@ function usbDeviceId(): string | undefined {
   return undefined;
 }
 
-function kioskVersion(): string | undefined {
-  try {
-    const pkg = JSON.parse(readFileSync(resolve(projectRoot, "checkout-kiosk/package.json"), "utf8"));
-    return typeof pkg.version === "string" ? pkg.version : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function createTag(entry: DeployEntry, at: Date): string | undefined {
   if (!entry.commit) return undefined;
   if (entry.dirty) {
@@ -178,6 +174,7 @@ function createTag(entry: DeployEntry, at: Date): string | undefined {
   const tag = deployTagName(entry.env, entry.component, at);
   const message = [
     `${entry.component} → ${entry.env}${entry.target ? ` (${entry.target})` : ""}`,
+    entry.version ? `version ${entry.version}` : "",
     `by ${entry.by}`,
     entry.note ?? "",
   ]
@@ -241,10 +238,39 @@ function countBetween(from: string, to: string): number | undefined {
   return out === null ? undefined : Number(out);
 }
 
-function repoFacts(entries: DeployEntry[]): RepoFacts {
+/** Facts that don't come from the log: the live devices. */
+type LiveFacts = Pick<RepoFacts, "running" | "runningProblems">;
+
+/** The live part of STATE.md (ADR-0045 phase 3). */
+async function liveFacts(): Promise<LiveFacts> {
+  let running: LiveFacts["running"];
+  let runningProblems: string[] = [];
+  try {
+    ({ devices: running, problems: runningProblems } = await readRunningDevices());
+  } catch (e) {
+    runningProblems = [(e as Error).message.split("\n")[0]];
+  }
+  for (const p of runningProblems) warn(`live device status not read — ${p}`);
+  return { running, runningProblems };
+}
+
+/**
+ * Print the drift warnings at the end of a deploy — it shows them, it
+ * never fails on them. Judged against the log as it now stands on the
+ * operations repo's main (plus entries still pending).
+ */
+function printDrift(live: LiveFacts, extra: DeployEntry[]): void {
+  if (!live.running) return;
+  const logged = parseLog(tryGit(opsDir, ["show", `origin/main:${LOG_REL}`]) ?? "");
+  const seen = new Set(logged.map(serializeEntry));
+  const entries = [...logged, ...extra.filter((e) => !seen.has(serializeEntry(e)))];
+  for (const w of runningDrift(live.running, entries, new Date())) warn(w);
+}
+
+function repoFacts(entries: DeployEntry[], live: LiveFacts): RepoFacts {
   const prod = latestCommit(entries, "prod");
   const staging = latestCommit(entries, "staging");
-  const facts: RepoFacts = {};
+  const facts: RepoFacts = { ...live };
   if (prod) {
     facts.mainAheadOfProd = countBetween(prod, "origin/main");
     if (staging) facts.stagingAheadOfProd = countBetween(prod, staging);
@@ -253,7 +279,12 @@ function repoFacts(entries: DeployEntry[]): RepoFacts {
 }
 
 /** Apply entries onto the worktree's log, re-render STATE.md, commit. */
-function writeAndCommit(wt: string, entries: DeployEntry[], subject: string): boolean {
+function writeAndCommit(
+  wt: string,
+  entries: DeployEntry[],
+  subject: string,
+  live: LiveFacts
+): boolean {
   const logPath = join(wt, LOG_REL);
   mkdirSync(dirname(logPath), { recursive: true });
   if (entries.length > 0) appendFileSync(logPath, entries.map(serializeEntry).join(""));
@@ -270,7 +301,7 @@ function writeAndCommit(wt: string, entries: DeployEntry[], subject: string): bo
   const all = parseLog(readFileSync(logPath, "utf8"), (line) =>
     warn(`deploys/log.jsonl has an unreadable line, left out of STATE.md: ${line}`)
   );
-  writeFileSync(join(wt, STATE_REL), renderState(all, repoFacts(all)));
+  writeFileSync(join(wt, STATE_REL), renderState(all, repoFacts(all, live)));
 
   git(wt, ["add", LOG_REL, STATE_REL, ".gitattributes"]);
   if (tryGit(wt, ["diff", "--cached", "--quiet"]) !== null) return false; // nothing changed
@@ -283,7 +314,12 @@ function writeAndCommit(wt: string, entries: DeployEntry[], subject: string): bo
  * Returns true when they are on GitHub; otherwise they wait in the pending
  * file. Never throws for remote trouble.
  */
-function persist(entries: DeployEntry[], subject: string, push: boolean): boolean {
+function persist(
+  entries: DeployEntry[],
+  subject: string,
+  push: boolean,
+  live: LiveFacts
+): boolean {
   if (!push) {
     keepPending(entries);
     return false;
@@ -299,7 +335,7 @@ function persist(entries: DeployEntry[], subject: string, push: boolean): boolea
   try {
     git(opsDir, ["worktree", "add", "--quiet", "--detach", wt, "origin/main"]);
     for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
-      const changed = writeAndCommit(wt, all, subject);
+      const changed = writeAndCommit(wt, all, subject, live);
       if (!changed || tryGit(wt, ["push", "--quiet", "origin", "HEAD:main"]) !== null) {
         rmSync(pendingPath(), { force: true });
         return true;
@@ -338,7 +374,7 @@ export interface RecordOptions {
   push?: boolean;
 }
 
-export function recordDeploy(opts: RecordOptions): void {
+export async function recordDeploy(opts: RecordOptions): Promise<void> {
   if (!ENVS.includes(opts.env)) throw new Error(`unknown env "${opts.env}" — not recorded`);
   requireOpsRepo();
   const push = opts.push ?? true;
@@ -354,6 +390,11 @@ export function recordDeploy(opts: RecordOptions): void {
   };
   if (opts.kind === "deploy") {
     Object.assign(entry, deployedCommit());
+    // The deploy scripts export BUILD_VERSION (scripts/release.ts), so this
+    // is the version that was built, not a re-derivation afterwards.
+    entry.version = opts.version ?? buildVersion();
+    const ops = opsRevision();
+    if (ops) entry.opsRevision = ops;
     // The deploy path ran deploy-preflight.ts first; with its override set,
     // the log has to say what was not latest main.
     if (overrideRequested()) {
@@ -361,9 +402,7 @@ export function recordDeploy(opts: RecordOptions): void {
       if (problems.length > 0) entry.offMain = problems;
     }
   }
-  const version = opts.version ?? (opts.component === "kiosk" ? kioskVersion() : undefined);
   if (opts.target) entry.target = opts.target;
-  if (version) entry.version = version;
   if (opts.note) entry.note = opts.note;
 
   const tag = opts.kind === "deploy" ? createTag(entry, at) : undefined;
@@ -373,7 +412,9 @@ export function recordDeploy(opts: RecordOptions): void {
     opts.kind === "deploy"
       ? `deploy: ${entry.component} → ${entry.env}${entry.target ? ` (${entry.target})` : ""} @ ${entry.commit?.slice(0, 8)}`
       : `ops: ${entry.env} — ${entry.note ?? "event"}`;
-  const sent = persist([entry], subject, push);
+  const live = push ? await liveFacts() : {};
+  const sent = persist([entry], subject, push, live);
+  printDrift(live, [...readPending(), entry]);
 
   // The entry is safe now (on GitHub or pending), so a published tag can
   // never exist without its record.
@@ -381,7 +422,7 @@ export function recordDeploy(opts: RecordOptions): void {
   info(`${sent ? "recorded" : "recorded locally"}: ${subject}${tag ? ` [${tag}]` : ""}`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: {
@@ -406,7 +447,9 @@ function main(): void {
     requireOpsRepo();
     tryGit(projectRoot, ["fetch", "--quiet", "origin"]);
     const pending = readPending().length;
-    if (persist([], `deploy state: re-render${pending ? ` (+${pending} pending)` : ""}`, true)) {
+    const live = await liveFacts();
+    if (persist([], `deploy state: re-render${pending ? ` (+${pending} pending)` : ""}`, true, live)) {
+      printDrift(live, readPending());
       info("STATE.md is up to date on the operations repo's main");
     }
     return;
@@ -427,7 +470,7 @@ function main(): void {
   }
   if (command === "event" && !values.note) throw new Error("an event needs --note");
 
-  recordDeploy({
+  await recordDeploy({
     kind: command,
     env,
     component,
@@ -439,10 +482,13 @@ function main(): void {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (e) {
-    warn((e as Error).message);
-    process.exit(1);
-  }
+  // Explicit exit: a Firestore client still closing (live view, after a
+  // timeout) must not keep a deploy that is done from returning.
+  main().then(
+    () => process.exit(0),
+    (e) => {
+      warn((e as Error).message);
+      process.exit(1);
+    }
+  );
 }

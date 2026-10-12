@@ -61,7 +61,8 @@ describe("dispatchRpc", () => {
       {},
       makeRequest({ method: "ping", payload: {} })
     );
-    expect(result).to.deep.equal({ ok: true });
+    // Outside a deploy there is no lib/build-info.json (ADR-0045).
+    expect(result).to.deep.equal({ ok: true, version: "dev" });
   });
 
   it("throws not-found for an unknown method", () => {

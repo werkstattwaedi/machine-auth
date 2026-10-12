@@ -37,6 +37,7 @@ cc_library(
         "//maco_firmware/modules/led_animator:button_effects",
         "//maco_firmware/modules/led_animator:nfc_effects",
         "//maco_firmware/modules/terminal_effects",
+        "//maco_firmware/services:build_version",
         "//maco_firmware/services:maco_service",
         "//maco_firmware/system",
         "//maco_firmware/system:headers",

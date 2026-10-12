@@ -29,6 +29,7 @@ import {
   type HttpsCallableResult,
 } from "firebase/functions"
 import { getClientSessionId } from "./client-session"
+import { BUILD_VERSION } from "./build-version"
 
 export type RpcGroup =
   | "authCall"
@@ -54,6 +55,7 @@ export const RpcMethod = {
     "resolveTag",
     "verifyTagCheckout",
     "probeTag",
+    "reportKioskStatus",
   ],
   membershipCall: [
     "purchaseMembership",
@@ -137,6 +139,7 @@ export function reportRpcError(
       path,
       userAgent:
         typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : "",
+      version: BUILD_VERSION,
     }).catch(() => {
       // Swallow: telemetry failure must never surface to the UI.
     })

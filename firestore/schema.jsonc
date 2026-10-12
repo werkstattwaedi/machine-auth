@@ -451,7 +451,29 @@
   "maco": {
     "{deviceId}": { //  particle device id (e.g., "0a10aced202194944a042f04")
       "name": "string", // Human readable terminal name (e.g., "Dev Terminal 01")
-      "hwRevision": "string | null" // Hardware revision from Particle device info
+      "hwRevision": "string | null", // Hardware revision from Particle device info
+      "status": {
+        // Device status (ADR-0045, phase 2c) — written only by the functions
+        // from the gateway's reports, admin-readable, NOT audited. The same
+        // document shape lives under gateways/{gatewayId}/status/current
+        // (+ "terminals") and kiosks/{kioskId}/status/current; the parents
+        // have no documents of their own.
+        "current": {
+          "kind": "maco | gateways | kiosks", // repeats the path (collection-group reads)
+          "deviceId": "string",            // repeats the path
+          "version": "string | null",      // release version, e.g. "2026.10.3"
+          "online": "boolean",
+          "since": "timestamp",            // when online last flipped
+          "bootedAt": "timestamp | null",  // derived from uptime; changes on reboot
+          "resetReason": "string | null",  // unknown | watchdog | panic | power_cycle | ota_update | user_requested
+          "bootCount": "number | null",    // consecutive incomplete boots (ADR-0040)
+          "firstSeen": "timestamp",
+          "lastSeen": "timestamp",         // last heard (terminal: last ping); refreshed at most hourly while online
+          "rebootWrittenAt": "timestamp | null",
+          "gatewayId": "string",           // terminals: the reporting gateway
+          "terminals": "string[]"          // gateways: terminal ids last reported online
+        }
+      }
     }
   },
   "tokens": {

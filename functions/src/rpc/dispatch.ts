@@ -18,6 +18,7 @@
 
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
+import { BUILD_VERSION } from "../util/build_info";
 
 export type RpcHandler = (
   request: CallableRequest<any>
@@ -41,8 +42,9 @@ export function dispatchRpc(
   // supports it. Answered before the handler lookup and per-handler auth by
   // design — an unauthenticated ping still boots the container, which is
   // the whole point. Placed before the request log to keep pings out of it.
+  // Reports the deployed release version (ADR-0045) — public anyway.
   if (method === "ping") {
-    return { ok: true };
+    return { ok: true, version: BUILD_VERSION };
   }
   const handler = handlers[method];
   if (!handler) {
