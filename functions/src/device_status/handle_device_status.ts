@@ -163,7 +163,9 @@ export async function applyGatewayReport(
   // missing ones are offline.
   const reported = new Map(report.terminals.map((t) => [t.deviceId, t]));
   const settled = report.uptimeMs >= GATEWAY_SETTLE_MS;
-  const unheard = knownOnline.filter((id) => !reported.has(id));
+  // Skipped terminals were mentioned, i.e. alive — never "unheard".
+  const mentioned = new Set([...reported.keys(), ...report.skippedIds]);
+  const unheard = knownOnline.filter((id) => !mentioned.has(id));
   const ids = [...reported.keys(), ...(settled ? unheard : [])];
 
   const refs = ids.map((id) => statusRef(db, "maco", id));
@@ -197,6 +199,8 @@ export async function applyGatewayReport(
   const online = [
     ...report.terminals.filter((t) => t.online).map((t) => t.deviceId),
     ...(settled ? [] : unheard),
+    // Mentioned but unreadable: keep whatever the list said about them.
+    ...report.skippedIds.filter((id) => knownOnline.includes(id)),
   ].sort();
   const gatewayPlan = planStatusUpdate(
     fromStatusDoc(gatewayData),

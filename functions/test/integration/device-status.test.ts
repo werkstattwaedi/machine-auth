@@ -39,7 +39,7 @@ function terminal(deviceId: string, overrides: Partial<TerminalReport> = {}): Te
 }
 
 function report(terminals: TerminalReport[], uptimeMs = 30 * MIN): GatewayReport {
-  return { gatewayId: "workshop", version: "2026.10.3", uptimeMs, terminals, problems: [] };
+  return { gatewayId: "workshop", version: "2026.10.3", uptimeMs, terminals, problems: [], skippedIds: [] };
 }
 
 describe("device status reports (Integration)", () => {
@@ -117,6 +117,15 @@ describe("device status reports (Integration)", () => {
     // Gateway restarted 30 s ago and has only heard from A so far: B may
     // still be reconnecting — keep it.
     await applyGatewayReport(report([terminal(A, { uptimeMs: 61 * MIN })], 30_000), T0 + MIN, db);
+    expect((await statusRef(db, "maco", B).get()).data()!.online).to.equal(true);
+    expect((await statusRef(db, "gateways", "workshop").get()).data()!.terminals).to.deep.equal([A, B]);
+
+    // B mentioned but unreadable (e.g. a bad online flag): alive, kept.
+    await applyGatewayReport(
+      { ...report([terminal(A, { uptimeMs: 63 * MIN })], 3 * MIN), skippedIds: [B] },
+      T0 + 3 * MIN,
+      db
+    );
     expect((await statusRef(db, "maco", B).get()).data()!.online).to.equal(true);
     expect((await statusRef(db, "gateways", "workshop").get()).data()!.terminals).to.deep.equal([A, B]);
 

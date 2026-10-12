@@ -16,6 +16,7 @@ import {
   REFRESH_MS,
   resetReasonName,
   type StoredStatus,
+  terminalHeardAt,
   terminalState,
 } from "./status_plan";
 
@@ -205,6 +206,25 @@ describe("parseGatewayReport", () => {
     });
     expect(parsed.terminals.map((t) => t.deviceId)).to.deep.equal([terminal.deviceId]);
     expect(parsed.problems).to.have.length(3);
+    // The one with the bad online flag was still mentioned — alive.
+    expect(parsed.skippedIds).to.deep.equal(["0a10aced202194944a042f05"]);
+  });
+
+  it("counts terminals beyond the limit as mentioned, not as gone", () => {
+    const many = Array.from({ length: 52 }, (_, i) => ({
+      ...terminal,
+      deviceId: (BigInt("0x0a10aced202194944a040000") + BigInt(i)).toString(16).padStart(24, "0"),
+    }));
+    const parsed = parseGatewayReport({ ...report, terminals: many });
+    expect(parsed.terminals).to.have.length(50);
+    expect(parsed.skippedIds).to.have.length(2);
+  });
+
+  it("dates a terminal's last ping from its age, or now while it is online", () => {
+    const base = parseGatewayReport(report).terminals[0];
+    expect(terminalHeardAt(base, T0)).to.equal(T0 - 10_000);
+    expect(terminalHeardAt({ ...base, lastPingAgoMs: null }, T0)).to.equal(T0);
+    expect(terminalHeardAt({ ...base, lastPingAgoMs: null, online: false }, T0)).to.equal(null);
   });
 });
 

@@ -165,6 +165,12 @@ export interface GatewayReport {
   terminals: TerminalReport[];
   /** Terminal fields (or terminals) dropped because they didn't validate. */
   problems: string[];
+  /**
+   * Ids of terminals the report mentions but that were skipped (unusable
+   * online flag, duplicate, beyond the limit). Mentioned means alive: they
+   * must not be mistaken for terminals a restarted gateway forgot.
+   */
+  skippedIds: string[];
 }
 
 function optionalVersion(value: unknown): string | null {
@@ -217,13 +223,18 @@ export function parseGatewayReport(body: unknown): GatewayReport {
   if (!Array.isArray(b.terminals)) throw new InvalidReport("invalid terminals");
 
   const problems: string[] = [];
+  const skipped = new Set<string>();
   if (b.terminals.length > MAX_TERMINALS) problems.push(`terminals beyond ${MAX_TERMINALS}`);
   const terminals: TerminalReport[] = [];
   const ids = new Set<string>();
-  b.terminals.slice(0, MAX_TERMINALS).forEach((raw, i) => {
+  b.terminals.forEach((raw, i) => {
     const t = (raw ?? {}) as Record<string, unknown>;
     if (typeof t.deviceId !== "string" || !DEVICE_ID_RE.test(t.deviceId)) {
       problems.push(`terminal #${i}: device id`);
+      return;
+    }
+    if (i >= MAX_TERMINALS) {
+      skipped.add(t.deviceId);
       return;
     }
     if (ids.has(t.deviceId)) {
@@ -232,6 +243,7 @@ export function parseGatewayReport(body: unknown): GatewayReport {
     }
     if (typeof t.online !== "boolean") {
       problems.push(`${t.deviceId}: online flag`);
+      skipped.add(t.deviceId);
       return;
     }
     ids.add(t.deviceId);
@@ -260,12 +272,18 @@ export function parseGatewayReport(body: unknown): GatewayReport {
     uptimeMs,
     terminals,
     problems,
+    skippedIds: [...skipped].filter((id) => !ids.has(id)),
   };
 }
 
-/** When the gateway last heard the terminal (its last ping), as of `now`. */
-export function terminalHeardAt(t: TerminalReport, now: number): number {
-  return now - (t.lastPingAgoMs ?? 0);
+/**
+ * When the gateway last heard the terminal (its last ping), as of `now`.
+ * Without the age: online means it pinged within the last minute, so now
+ * is close enough; offline, nobody knows — null keeps the stored time.
+ */
+export function terminalHeardAt(t: TerminalReport, now: number): number | null {
+  if (t.lastPingAgoMs !== null) return now - t.lastPingAgoMs;
+  return t.online ? now : null;
 }
 
 /** A terminal's state as of `now`, from the gateway's report. */
