@@ -19,6 +19,8 @@ py_library(
     srcs = [
         "maco_gateway/__init__.py",
         "maco_gateway/ascon_transport.py",
+        # Heartbeat + terminal status reports (ADR-0045, phase 2c).
+        "maco_gateway/device_status.py",
         "maco_gateway/firebase_client.py",
         "maco_gateway/gateway_service.py",
         "maco_gateway/key_store.py",
@@ -34,8 +36,6 @@ py_library(
         "maco_gateway/sensing/backends.py",
         "maco_gateway/sensing/service.py",
         "maco_gateway/sensing/wsv2.py",
-        # Keep-warm pinger for the Firebase api function (ADR-0037).
-        "maco_gateway/warm.py",
     ],
     imports = ["."],  # Makes maco_gateway package importable
     deps = [
@@ -62,9 +62,9 @@ py_library(
 ]
 
 py_test(
-    name = "test_warm",
-    srcs = ["maco_gateway/test_warm.py"],
-    main = "maco_gateway/test_warm.py",
+    name = "test_device_status",
+    srcs = ["maco_gateway/test_device_status.py"],
+    main = "maco_gateway/test_device_status.py",
     deps = [":gateway_lib"],
 )
 

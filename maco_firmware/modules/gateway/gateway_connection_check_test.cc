@@ -109,6 +109,31 @@ TEST_F(GatewayConnectionCheckTest, WaitsForWifiBeforePing) {
   EXPECT_EQ(rpc_ctx_.output().total_packets(), 1u);
 }
 
+// Every ping carries the terminal status the gateway forwards to the cloud
+// (ADR-0045, phase 2c); uptime is read per ping so a reboot shows as a drop.
+TEST_F(GatewayConnectionCheckTest, PingCarriesTerminalStatus) {
+  SetWifiConnected();
+  auto gw = CreateGatewayClient();
+  GatewayConnectionCheck check(gw,
+                               system_state_,
+                               time_provider_,
+                               test_allocator_,
+                               TerminalStatus{.version = "2026.10.3",
+                                              .reset_reason = 1,
+                                              .boot_count = 2});
+  time_provider_.AdvanceTime(42s);
+  check.Start(dispatcher_);
+  dispatcher_.RunUntilStalled();
+
+  auto requests = rpc_ctx_.output().requests<GatewayService::Ping>();
+  ASSERT_EQ(requests.size(), 1u);
+  const maco_gateway_PingRequest& sent = requests.front();
+  EXPECT_STREQ(sent.version, "2026.10.3");
+  EXPECT_EQ(sent.reset_reason, 1u);
+  EXPECT_EQ(sent.boot_count, 2u);
+  EXPECT_GE(sent.uptime_ms, 42'000u);
+}
+
 // Phase 2: First ping succeeds — gateway connected, system ready.
 TEST_F(GatewayConnectionCheckTest, StartupPingSuccess) {
   SetWifiConnected();

@@ -55,6 +55,7 @@ export const RpcMethod = {
     "resolveTag",
     "verifyTagCheckout",
     "probeTag",
+    "reportKioskStatus",
   ],
   membershipCall: [
     "purchaseMembership",

@@ -47,6 +47,11 @@ therefore the only free-tier keep-alive mechanism.
    (well inside the 2M/month invocation free tier), and when the workshop
    Pi is off they stop anyway.
 
+   *Superseded (2026-10, ADR-0045 phase 2c):* the gateway's 5-minute
+   status heartbeat (`POST /api/device-status`, around the clock) hits the
+   same `api` function and keeps it warm, so `warm.py` and
+   `WARM_SCHEDULE` are gone. `/api/ping` stays for manual checks.
+
 ## Consequences
 
 - Cold starts move off the interactive path for the covered surfaces at

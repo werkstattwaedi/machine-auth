@@ -214,6 +214,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Device status (ADR-0045, phase 2c): written only by the functions
+    // (Admin SDK) from gateway and kiosk reports; admins read it — also as
+    // the collection group "status" for the admin Versionen page. The
+    // gateways/kiosks parents have no documents of their own yet.
+    match /{kind}/{deviceId}/status/{docId} {
+      allow read: if isAdmin() && kind in ['maco', 'gateways', 'kiosks'];
+      allow write: if false;
+    }
+    match /{path=**}/status/{docId} {
+      allow read: if isAdmin();
+    }
+
     // Machine usage (from MaCo terminals)
     match /usage_machine/{usageId} {
       allow read: if isAdmin() ||

@@ -332,6 +332,9 @@ function generateEnv(envName: string | null): {
     `MASTER_KEY=${masterKey}`,
     `FIREBASE_URL=${firebaseUrl}`,
     `GATEWAY_API_KEY=${gatewayApiKey}`,
+    // Status reports (ADR-0045): the id this gateway reports under. Empty →
+    // the Pi's host name.
+    `GATEWAY_ID=${resolveValue(config, "gateway.id")}`,
   ];
 
   const outDir = resolve(projectRoot, "out");

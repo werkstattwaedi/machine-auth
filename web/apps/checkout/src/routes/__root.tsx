@@ -10,6 +10,7 @@ import { auth, db, functions } from "@modules/lib/firebase"
 import { BridgeNfcRouter } from "@/components/bridge-nfc-router"
 import { KioskElevationProvider } from "@/components/checkout/kiosk-elevation-dialog"
 import { KioskAccountIdleWatcher } from "@/components/account/kiosk-account-idle-watcher"
+import { KioskStatusReporter } from "@/components/kiosk-status-reporter"
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -25,6 +26,7 @@ function RootLayout() {
         <KioskElevationProvider>
           <BridgeNfcRouter />
           <KioskAccountIdleWatcher />
+          <KioskStatusReporter />
           <Outlet />
           <Toaster />
           <MarkerIO />

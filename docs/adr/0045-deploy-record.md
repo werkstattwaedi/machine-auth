@@ -1,6 +1,6 @@
 # ADR-0045: Deploy record and release versions
 
-**Status:** Accepted (phases 1 and 2a–2b implemented; 2c and 3 planned)
+**Status:** Accepted (phases 1 and 2 implemented; 3 planned)
 
 **Date:** 2026-10-12
 
@@ -146,7 +146,7 @@ should get its own name.
 | Functions | build-info file generated at deploy | `/api/ping` and the dispatcher ping return `{ok, version}` |
 | Web apps | Vite `define` + static `/version.json` | admin footer; `logClientError` sends it (`serviceContext.version`, #586) |
 | Gateway | `VERSION` file written by `deploy-gateway.ts` | its heartbeat |
-| Firmware | `pw_build_info` workspace-status stamping, `build:prod` only | `GetDeviceInfo`; new optional `PingRequest` fields `version`, `boot_count`, `reset_reason` sent to the gateway |
+| Firmware | `pw_build_info` workspace-status stamping, `build:prod` only | `GetDeviceInfo`; new optional `PingRequest` fields `version`, `uptime_ms`, `reset_reason`, `boot_count` sent to the gateway |
 | Kiosk | build-time version, `bridge.version` | its status report |
 
 Returning the version on the public ping is a deliberate minor disclosure:
@@ -161,7 +161,9 @@ place, in a `status` subcollection under its own path:
 - gateway: `gateways/{gatewayId}/status/current`
 - kiosk: `kiosks/{kioskId}/status/current`
 
-Fields: version, online, first/last seen, boot count, reset reason. The
+Fields: version, online (and since when), boot time, reset reason, boot
+count, first/last seen; terminals also name their gateway, the gateway
+lists the terminals it last reported online. The
 audit trigger matches `maco/{docId}` only, so status writes neither touch
 the admin-edited terminal document nor fill the audit log. `gateways` and
 `kiosks` have no documents of their own yet (ids come from the operations
@@ -173,20 +175,29 @@ subject data), rules allowing admin reads only, and no client writes. (Not
 
 **Gateway heartbeat, every 5 minutes, around the clock.** The gateway posts
 `POST /api/device-status` (bearer `GATEWAY_API_KEY`) with its own state and
-that of every terminal it knows: version, boot count and reset reason from
-the new `PingRequest` fields, and whether the terminal still pings. The
+that of every terminal it knows: version, uptime, reset reason and boot
+count from the new `PingRequest` fields, and how long ago the terminal last
+pinged. The
 route lives on the `api` function, so the heartbeat also keeps that
 function warm — around the clock instead of every 10 minutes in opening
 hours — and replaces the warm pinger (ADR-0037) and its `WARM_SCHEDULE`
-entirely. An idle instance without `minInstances` costs nothing. A terminal that misses its 15 s pings for a minute, comes
-back, or reboots is reported **at once**, not at the next heartbeat. The
-gateway identifies itself by `gatewayId` from the operations config; the
+entirely. An idle instance without `minInstances` costs nothing. A
+terminal that shows up, misses its 15 s pings for a minute, comes back,
+reboots (its uptime went down) or runs a new version is reported **at
+once**, not at the next heartbeat — at most one extra report per 30 s. The
+function dates boots from ages (uptime + time since the last ping), so the
+gateway's clock never enters the record. A terminal the gateway reported
+online before but no longer mentions (it died while the gateway
+restarted) is marked offline once the gateway has been up for two
+minutes. The gateway identifies itself by `gateway.id` from the
+operations config (default: its host name); the
 API key is shared, so a gateway could claim any id. Per-gateway
 credentials are deferred until there is a second gateway.
 
 **Writes only on change.** The function compares each report with the
-stored document and writes when something changed (version, online, boot
-count; a crash loop coalesced to one write per hour) and otherwise
+stored document and writes when something changed (version, online at
+once; a reboot at once unless one was already written within the hour —
+a crash loop costs one write and one log line per hour) and otherwise
 refreshes `lastSeen` at most hourly. That is about 24 writes per device
 per day, ~150 for a gateway with five terminals; the 5-minute beat itself
 costs no writes.

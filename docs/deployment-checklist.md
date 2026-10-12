@@ -40,6 +40,14 @@ a `-dev` version. Every component reports that version: the pings
 the admin sidebar, the kiosk tray, the gateway's `VERSION` file and the
 firmware's `GetDeviceInfo`. `git show v2026.10.3` shows the release notes.
 
+**Device status (ADR-0045 phase 2c).** Rolling it out: functions first
+(`/api/device-status`, `reportKioskStatus`), then the gateway (until then it
+logs "report failed" and retries), then firmware and kiosk whenever they
+next ship — older firmware and kiosks just report less. Only once the
+gateway reports, create the two alert policies from the operations repo's
+`docs/monitoring.md` ("Gateway heartbeat missing", "Terminal offline");
+created earlier, the first one fires at once.
+
 Every successful `deploy.sh` run, gateway deploy, kiosk installer build and
 `./pw prod-flash` records itself: a `deploy/<env>/<component>/<timestamp>`
 git tag plus an entry in the operations repo's `deploys/log.jsonl`, from

@@ -25,8 +25,10 @@ import {
   getAdminFirestore,
 } from "./emulator-helper"
 import {
+  collectionGroup,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -1749,6 +1751,60 @@ describe("cross-user: family-roster join on users", () => {
         updateDoc(doc(tagSessionDb("bob"), "users", "alice"), {
           firstName: "pwned",
         }),
+    )
+  })
+})
+
+describe("cross-user: device status (admin read only, ADR-0045)", () => {
+  // Status docs are machine-written by the functions (Admin SDK) from the
+  // gateway/kiosk reports. Nobody writes them through the rules, and only
+  // admins read them — directly or as the "status" collection group.
+  async function seedStatus(kind: string, id: string) {
+    await getAdminFirestore()
+      .collection(kind)
+      .doc(id)
+      .collection("status")
+      .doc("current")
+      .set({ version: "2026.10.3", online: true })
+  }
+
+  it("lets an admin read a terminal's status and the status collection group", async () => {
+    await seedStatus("maco", "0a10aced202194944a042f04")
+    await seedStatus("gateways", "workshop")
+    await assertSucceeds(
+      getDoc(doc(adminDb(), "maco", "0a10aced202194944a042f04", "status", "current")),
+    )
+    await assertSucceeds(getDocs(collectionGroup(adminDb(), "status")))
+  })
+
+  it("denies a signed-in non-admin reading status", async () => {
+    await seedStatus("gateways", "workshop")
+    await assertCrossUserDenied(
+      "gateways/{id}/status read leaked to non-admin",
+      "firestore.rules: device status read",
+      () => getDoc(doc(authedDb("alice"), "gateways", "workshop", "status", "current")),
+    )
+    await assertCrossUserDenied(
+      "status collection group leaked to non-admin",
+      "firestore.rules: device status collection group",
+      () => getDocs(collectionGroup(authedDb("alice"), "status")),
+    )
+  })
+
+  it("denies a kiosk tag-tap session reading status", async () => {
+    await seedStatus("kiosks", "checkout")
+    await assertCrossUserDenied(
+      "kiosks/{id}/status read leaked to tag-tap session",
+      "firestore.rules: device status read",
+      () => getDoc(doc(tagSessionDb("alice"), "kiosks", "checkout", "status", "current")),
+    )
+  })
+
+  it("denies writes even to an admin — only the functions write status", async () => {
+    await assertFails(
+      setDoc(doc(adminDb(), "maco", "0a10aced202194944a042f04", "status", "current"), {
+        online: false,
+      }),
     )
   })
 })

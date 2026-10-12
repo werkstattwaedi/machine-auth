@@ -7,6 +7,7 @@ import { createMintTestTap } from "./testing/mint_test_tap";
 import { isStagingProject } from "./testing/staging_guard";
 import { createUploadTestUsage } from "./testing/upload_test_usage";
 import { BUILD_VERSION } from "./util/build_info";
+import { deviceStatusHandler } from "./device_status/handle_device_status";
 import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
@@ -66,12 +67,21 @@ const authMiddleware = (
 
 app.use(authMiddleware);
 
-// Keep-warm ping from the gateway during workshop opening hours
-// (ADR-0037). Sits after authMiddleware so it validates the bearer key;
-// touches no Firestore and decodes no payload. Reports the deployed
-// release version (ADR-0045).
+// Bearer-checked no-op that reports the deployed release version
+// (ADR-0045) — the gateway's former keep-warm target (ADR-0037), now kept
+// for manual checks. Touches no Firestore and decodes no payload.
 app.get("/ping", (_req: express.Request, res: express.Response) => {
   res.status(200).send({ ok: true, version: BUILD_VERSION });
+});
+
+// Gateway heartbeat + terminal status (ADR-0045, phase 2c). Every 5 minutes
+// around the clock, so it also keeps this function warm (it replaced the
+// gateway's opening-hours warm ping, ADR-0037).
+app.post("/device-status", (req: express.Request, res: express.Response) => {
+  deviceStatusHandler(req, res).catch((error) => {
+    logger.error("device-status failed", { error: (error as Error).message });
+    res.status(500).send({ message: "Internal error" });
+  });
 });
 
 // Middleware to attach config to request
