@@ -925,11 +925,11 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     )
   })
 
-  // Pre-rename bundles (an open kiosk tab) still write the old id until the
-  // alias is dropped after the prod migration.
-  it("still accepts the legacy paymentMethod 'twint' on a closed checkout", async () => {
+  // The pre-rename id was migrated away (ADR-0044); a stale client must not
+  // write it back.
+  it("denies the retired paymentMethod 'twint' on a closed checkout", async () => {
     await seedClosedCheckout("co1", "alice")
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
         paymentMethod: "twint",
       }),

@@ -14,7 +14,7 @@ import {
 import type {
   BillDoc,
   CheckoutDoc,
-  StoredPaidVia,
+  PaidVia,
 } from "@modules/lib/firestore-entities"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { formatDate, formatCHF, formatBillReference } from "@modules/lib/format"
@@ -45,12 +45,9 @@ export const Route = createFileRoute("/_authenticated/account/usage")({
   component: UsagePage,
 })
 
-// Keyed by stored value: "twint" and "cash" only appear on old bills.
-const paidViaLabel: Partial<Record<StoredPaidVia, string>> = {
+const paidViaLabel: Partial<Record<PaidVia, string>> = {
   raisenow: "TWINT",
-  twint: "TWINT",
   ebanking: "E-Banking",
-  cash: "Bar",
 }
 
 type FilterKey = "all" | "open" | "paid"

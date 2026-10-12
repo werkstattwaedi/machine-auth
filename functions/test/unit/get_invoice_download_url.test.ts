@@ -5,7 +5,7 @@ import { expect } from "chai";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { Timestamp } from "firebase-admin/firestore";
 import { buildDownloadOptions } from "../../src/invoice/get_invoice_download_url";
-import { billDocumentPrefix, type BillEntity } from "../../src/invoice/types";
+import type { BillEntity } from "../../src/invoice/types";
 
 if (getApps().length === 0) {
   initializeApp({ projectId: "test-project" });
@@ -92,9 +92,6 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     );
   });
 
-  it("still names a legacy 'twint' checkout a Quittung (pre-migration docs)", () => {
-    expect(billDocumentPrefix("invoice", "twint")).to.equal("Quittung");
-  });
 
   it("keeps the Rechnung prefix for the aggregated Sammelrechnung (paymentMethod 'monthly')", () => {
     // The aggregated monthly invoice's checkout still records

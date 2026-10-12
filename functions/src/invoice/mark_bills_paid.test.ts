@@ -30,17 +30,13 @@ describe("parseMarkBillsPaidRequest", () => {
     expect(() =>
       parseMarkBillsPaidRequest({ bills: [{ billId: "b1", paidVia: "free" }] })
     ).to.throw(/paidVia/);
-    // The workshop takes no cash — the channel is retired.
-    expect(() =>
-      parseMarkBillsPaidRequest({ bills: [{ billId: "b1", paidVia: "cash" }] })
-    ).to.throw(/paidVia/);
-  });
-
-  it("accepts the pre-rename 'twint' from an old admin tab and books it as raisenow", () => {
-    const [parsed] = parseMarkBillsPaidRequest({
-      bills: [{ billId: "b1", paidVia: "twint" }],
-    });
-    expect(parsed.paidVia).to.equal("raisenow");
+    // Retired channels: RaiseNow books as "raisenow" since ADR-0044, and
+    // the workshop takes no cash.
+    for (const paidVia of ["twint", "cash"]) {
+      expect(() =>
+        parseMarkBillsPaidRequest({ bills: [{ billId: "b1", paidVia }] })
+      ).to.throw(/paidVia/);
+    }
   });
 
   it("rejects missing bill ids and non-numeric paidAtMs", () => {

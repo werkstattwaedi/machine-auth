@@ -49,7 +49,7 @@ import type {
   CheckoutItemEntity,
   PaymentMethod,
 } from "../types/firestore_entities";
-import { PAYMENT_METHOD_INFO, normalizePaymentMethod } from "@oww/shared";
+import { PAYMENT_METHOD_INFO } from "@oww/shared";
 
 // --- Params ---
 
@@ -298,7 +298,7 @@ async function assembleInvoiceData(
   // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
   // notice — fall through to the rechnung path.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const rawPaymentMethod = normalizePaymentMethod(primaryCheckoutData?.paymentMethod);
+  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
   const kind = bill.kind ?? "invoice";
   const paymentMethod =
     kind === "invoice" &&
@@ -608,7 +608,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // Auto-ack on a user who tapped the RaiseNow (TWINT) tab but didn't commit
   // still uses the TWINT-was-selected template (safe because it doesn't
   // claim payment).
-  const template = pickTemplate(normalizePaymentMethod(checkout.paymentMethod), bill);
+  const template = pickTemplate(checkout.paymentMethod ?? null, bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -650,12 +650,12 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
             bill,
-            normalizePaymentMethod(checkout.paymentMethod),
+            checkout.paymentMethod ?? null,
             supersededReference,
           ),
           CORRECTED_DOCUMENTS: correctedDocuments,
@@ -703,7 +703,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, normalizePaymentMethod(checkout.paymentMethod))}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, checkout.paymentMethod ?? null)}-${invoiceNumber}.pdf`,
         },
         ...extraAttachments,
       ],
@@ -885,9 +885,9 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
             "dd. MMMM yyyy, HH:mm",
           ),
           INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+          DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
           REASON: bill.cancellationReason ?? "",
-          PAYMENT_NOTE: cancellationPaymentNote(bill, normalizePaymentMethod(checkout.paymentMethod)),
+          PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
           AMOUNT: bill.amount.toFixed(2),
           CURRENCY: bill.currency,
           KASSE_EMAIL: kasseEmail.value(),

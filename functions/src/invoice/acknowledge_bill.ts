@@ -34,13 +34,12 @@ import {
   getFirestore,
   type DocumentReference,
 } from "firebase-admin/firestore";
-import { PAYMENT_METHOD_INFO, normalizePaymentMethod } from "@oww/shared";
+import { PAYMENT_METHOD_INFO, isPaymentMethod } from "@oww/shared";
 import { isPaymentMethodEnabled } from "../payments/config";
 import type { BillEntity } from "./types";
 import type {
   CheckoutEntity,
   PaymentMethod,
-  StoredPaymentMethod,
 } from "../types/firestore_entities";
 
 const autoAckMinAgeHours = defineString("AUTO_ACK_MIN_AGE_HOURS", {
@@ -52,8 +51,7 @@ const BATCH_LIMIT = 500;
 
 interface AcknowledgeBillRequest {
   billId: string;
-  /** Legacy "twint" from a not-yet-reloaded client is accepted and stored as "raisenow". */
-  paymentMethod: StoredPaymentMethod;
+  paymentMethod: PaymentMethod;
 }
 
 /**
@@ -89,13 +87,12 @@ export const acknowledgeBillHandler = async (
     throw new HttpsError("unauthenticated", "Authentication required");
   }
 
-  const { billId, paymentMethod: rawPaymentMethod } =
+  const { billId, paymentMethod } =
     request.data ?? ({} as AcknowledgeBillRequest);
   if (!billId || typeof billId !== "string") {
     throw new HttpsError("invalid-argument", "billId is required");
   }
-  const paymentMethod = normalizePaymentMethod(rawPaymentMethod);
-  if (!paymentMethod) {
+  if (!isPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "invalid paymentMethod");
   }
   if (!isPaymentMethodEnabled(paymentMethod)) {
@@ -283,7 +280,7 @@ export async function runAutoAcknowledgeBills(
         const coSnap = await tx.get(linkedCheckoutRef);
         if (coSnap.exists) {
           const co = coSnap.data() as CheckoutEntity;
-          checkoutPaymentMethod = normalizePaymentMethod(co.paymentMethod);
+          checkoutPaymentMethod = co.paymentMethod ?? null;
         }
       }
 

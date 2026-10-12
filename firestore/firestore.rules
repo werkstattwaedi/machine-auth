@@ -309,9 +309,7 @@ service cloud.firestore {
       // Value validation: `rechnung` or `raisenow` always; `monthly` only
       // when the user doc has an active membership. Anonymous flow on a
       // null-userId checkout can't consult a membership doc, so monthly
-      // is intentionally denied. `twint` is the pre-rename id of
-      // `raisenow`, still accepted so tabs running an old bundle don't hit
-      // permission errors; drop it once the migration has run on prod.
+      // is intentionally denied.
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
@@ -330,13 +328,13 @@ service cloud.firestore {
          ]) &&
          (
            (isCheckoutPrincipalFor(resource.data.userId) && (
-             request.resource.data.paymentMethod in ['rechnung', 'raisenow', 'twint'] ||
+             request.resource.data.paymentMethod in ['rechnung', 'raisenow'] ||
              (request.resource.data.paymentMethod == 'monthly' &&
               hasActiveMembership(resource.data.userId))
            )) ||
            (resource.data.userId == null && isAnonymousAuth() &&
             resource.data.get('firebaseUid', null) == request.auth.uid &&
-            request.resource.data.paymentMethod in ['rechnung', 'raisenow', 'twint'])
+            request.resource.data.paymentMethod in ['rechnung', 'raisenow'])
          ));
       allow delete: if isAdmin();
 

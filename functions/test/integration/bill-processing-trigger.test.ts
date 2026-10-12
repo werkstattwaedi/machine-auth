@@ -69,7 +69,7 @@ import type {
   CheckoutEntity,
   CheckoutPersonEntity,
   CheckoutSummaryEntity,
-  StoredPaymentMethod,
+  PaymentMethod,
 } from "../../src/types/firestore_entities";
 
 interface FakeFile {
@@ -130,7 +130,7 @@ interface SeedCheckoutOptions {
   // `null` seeds a guest (anonymous) checkout without an account holder —
   // the case that went untested between #487 and #651.
   userId?: string | null;
-  paymentMethod?: StoredPaymentMethod | null;
+  paymentMethod?: PaymentMethod | null;
 }
 
 async function seedCheckout(
@@ -1049,33 +1049,6 @@ describe("bill processing triggers (Integration)", () => {
         // attachment filename must match the document type, mirroring the
         // Beleg filename contract from #405.
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
-      });
-
-      // Checkouts closed before the twint → raisenow rename keep the old id
-      // until the migration runs; they must still get the receipt mail.
-      it("picks twint template for a legacy checkout.paymentMethod 'twint'", async () => {
-        const billId = "bill-legacy-twint";
-        await seedUser("u-bill-proc", { email: "payer@example.com" });
-        await seedCheckout("co-default", {
-          paymentMethod: "twint",
-        });
-        await seedBill(billId, {
-          storagePath: "invoices/bill-legacy-twint.pdf",
-          referenceNumber: 120,
-          paymentMethodConfirmationTime: Timestamp.now(),
-          paymentMethodConfirmationSource: "user",
-        });
-
-        await trySendEmail(billId);
-        const [, entity] = resendSendStub.firstCall.args as [
-          string,
-          {
-            template: { id: string };
-            attachments: Array<{ filename: string }>;
-          },
-        ];
-        expect(entity.template.id).to.equal("test-twint-template");
-        expect(entity.attachments[0].filename).to.equal("Quittung-RE-000012.pdf");
       });
 
       // Issue #323: a membership-renewal bill is minted with paymentMethod

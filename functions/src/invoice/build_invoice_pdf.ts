@@ -15,7 +15,7 @@ import {
   isMachineItem,
   USAGE_DISCOUNT_LABELS,
   PAYMENT_METHOD_INFO,
-  type StoredPaidVia,
+  type PaidVia,
   type UsageType,
 } from "@oww/shared";
 
@@ -60,13 +60,9 @@ const UNIT_LABELS: Record<string, string> = {
   sla: "l",
 };
 
-// Keyed by stored value, so the legacy "twint" / "cash" still render on
-// regenerated PDFs of old bills.
-const PAID_VIA_LABELS: Record<StoredPaidVia, string> = {
+const PAID_VIA_LABELS: Record<PaidVia, string> = {
   raisenow: " via TWINT",
-  twint: " via TWINT",
   ebanking: " via E-Banking",
-  cash: " bar",
   free: "",
 };
 
