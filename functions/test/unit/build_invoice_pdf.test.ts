@@ -17,6 +17,8 @@ import {
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
+  badgeOnlyInvoice,
+  freeBadgeInvoice,
   membershipMixedInvoice,
   membershipRenewalInvoice,
   volunteeringDiscountInvoice,
@@ -325,6 +327,37 @@ describe("buildInvoicePdf — content", () => {
     // confusing rendering Marco reported.
     expect(text).to.not.include("Diverses");
     expect(text).to.not.include("diverses");
+  });
+
+  // Issue #660: a membership or badge bought at the kiosk is no visit.
+  describe("date header by checkout kind (#660)", () => {
+    it("membership-only: no date header — the Mitgliedschaft block follows directly", async () => {
+      const text = await pdfText(membershipOnlyInvoice());
+      expect(text).to.not.include("Besuch vom");
+      expect(text).to.not.include("Einkauf vom");
+    });
+
+    it("badge-only: Einkauf vom …", async () => {
+      const text = await pdfText(badgeOnlyInvoice());
+      expect(text).to.include("Einkauf vom");
+      expect(text).to.not.include("Besuch vom");
+    });
+
+    it("membership bought during a visit still reads as the visit", async () => {
+      const text = await pdfText(membershipMixedInvoice());
+      expect(text).to.include("Besuch vom");
+    });
+
+    it("a free badge has nothing to pay for this purchase, not this visit", async () => {
+      const text = await pdfText(freeBadgeInvoice());
+      expect(text).to.include("Für diesen Einkauf ist nichts zu bezahlen");
+      expect(text).to.not.include("Besuch vom");
+    });
+
+    it("a free intern visit keeps the visit wording", async () => {
+      const text = await pdfText(freeZeroAmountInvoice());
+      expect(text).to.include("Für diesen Besuch ist nichts zu bezahlen");
+    });
   });
 
   // Issue #262/#263 (PR #347 review): a membership-only bill (membership item,

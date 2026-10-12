@@ -15,7 +15,17 @@ import { PAYMENT_METHODS } from "./payment-methods"
 describe("templateAlias", () => {
   it("prefixes the environment", () => {
     expect(templateAlias("prod", "login", {})).toBe("prod-login")
-    expect(templateAlias("staging", "bill-receipt", {})).toBe("staging-bill-receipt")
+    expect(templateAlias("staging", "bill-sammelrechnung", {})).toBe("staging-bill-sammelrechnung")
+  })
+
+  it("appends dimension values in contract order", () => {
+    expect(templateAlias("prod", "bill-receipt", { kind: "membership" })).toBe(
+      "prod-bill-receipt-membership",
+    )
+  })
+
+  it("rejects a value outside the dimension", () => {
+    expect(() => templateAlias("prod", "bill-invoice", { kind: "bogus" as never })).toThrow()
   })
 
   it("never names a payment method", () => {
@@ -41,6 +51,14 @@ describe("billMail", () => {
 describe("mailCombinations", () => {
   it("yields one empty combination for a mail without dimensions", () => {
     expect(mailCombinations("login")).toEqual([{}])
+  })
+
+  it("yields one combination per dimension value", () => {
+    expect(mailCombinations("bill-beleg")).toEqual([
+      { kind: "visit" },
+      { kind: "membership" },
+      { kind: "purchase" },
+    ])
   })
 })
 

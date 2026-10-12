@@ -59,8 +59,25 @@ export function templateRef<M extends MailName>(
 ): { id: string; variables: Record<string, string> } {
   return {
     id: templateAlias(templateEnvFrom(resendTemplateEnv.value()), mail, dims),
-    variables,
+    variables: Object.fromEntries(
+      Object.entries(variables as Record<string, string>).map(([name, value]) => [
+        name,
+        stripMarkup(value),
+      ])
+    ),
   };
+}
+
+/**
+ * Resend substitutes `{{{VARIABLES}}}` unescaped, and several carry user
+ * input (a name typed at check-in, an inviter's family name) into a mail
+ * that may go to someone else. Dropping `<` and `>` rules out injected
+ * markup; entity-escaping instead would show `&amp;` in the plain-text
+ * part, which receives the same values. No legitimate value (names, dates,
+ * URLs, amounts) contains either character.
+ */
+export function stripMarkup(value: string): string {
+  return value.replace(/[<>]/g, "");
 }
 
 /**

@@ -32,7 +32,7 @@ process.env.RESEND_TEMPLATE_ENV = "test";
 process.env.KASSE_EMAIL = "kasse@test.localhost";
 
 import { expect } from "chai";
-import { EMAIL_CONTRACT, type MailName } from "@oww/shared";
+import { EMAIL_CONTRACT, MAIL_NAMES, type MailName } from "@oww/shared";
 import * as sinon from "sinon";
 import { Timestamp } from "firebase-admin/firestore";
 import * as storageModule from "firebase-admin/storage";
@@ -121,6 +121,9 @@ interface SeedCheckoutOptions {
   // the case that went untested between #487 and #651.
   userId?: string | null;
   paymentMethod?: StoredPaymentMethod | null;
+  usageType?: CheckoutEntity["usageType"];
+  /** Seeded into the `items` subcollection; catalog ids as plain doc ids. */
+  items?: Array<{ catalogId?: string; type?: "machine" | "material" }>;
 }
 
 async function seedCheckout(
@@ -139,7 +142,7 @@ async function seedCheckout(
   const checkout: CheckoutEntity = {
     userId: userRef,
     status: opts.status ?? "closed",
-    usageType: "regular",
+    usageType: opts.usageType ?? "regular",
     created: now,
     workshopsVisited: opts.workshopsVisited ?? ["holz"],
     persons: opts.persons ?? [
@@ -153,6 +156,19 @@ async function seedCheckout(
   if (opts.paymentMethod !== undefined) checkout.paymentMethod = opts.paymentMethod;
 
   await db.collection("checkouts").doc(checkoutId).set(checkout);
+  for (const [i, item] of (opts.items ?? []).entries()) {
+    await db.collection("checkouts").doc(checkoutId).collection("items").doc(`i${i}`).set({
+      workshop: "diverses",
+      description: `Item ${i}`,
+      origin: "manual",
+      type: item.type ?? "material",
+      catalogId: item.catalogId ? db.doc(`catalog/${item.catalogId}`) : null,
+      created: now,
+      quantity: 1,
+      unitPrice: 5,
+      totalPrice: 5,
+    });
+  }
 }
 
 async function seedUser(
@@ -239,8 +255,12 @@ async function getOperationsLog(): Promise<
  * template declares precisely this list.
  */
 function expectContractVariables(template: { id: string; variables?: Record<string, string> }) {
-  const mail = template.id.replace(/^test-/, "") as MailName;
-  expect(EMAIL_CONTRACT[mail], `unknown mail ${template.id}`).to.exist;
+  // Longest match: "bill-invoice-visit" is the bill-invoice mail.
+  const mail = MAIL_NAMES.filter((m) => template.id.startsWith(`test-${m}`)).sort(
+    (a, b) => b.length - a.length,
+  )[0] as MailName | undefined;
+  expect(mail, `unknown mail ${template.id}`).to.exist;
+  if (!mail) return;
   expect(Object.keys(template.variables ?? {}).sort()).to.deep.equal(
     [...EMAIL_CONTRACT[mail].variables].sort(),
   );
@@ -738,7 +758,7 @@ describe("bill processing triggers (Integration)", () => {
         expect(path).to.equal("/emails");
         expect(entity.from).to.equal("OWW Test <test@localhost>");
         expect(entity.to).to.equal("alice@example.com");
-        expect(entity.template.id).to.equal("test-bill-invoice");
+        expect(entity.template.id).to.equal("test-bill-invoice-visit");
         expectContractVariables(entity.template);
         expect(entity.template.variables.RECIPIENT_NAME).to.equal("Alice Adult");
         expect(entity.template.variables.INVOICE_NUMBER).to.equal("RE-000007");
@@ -1049,7 +1069,7 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-bill-receipt");
+        expect(entity.template.id).to.equal("test-bill-receipt-visit");
         expectContractVariables(entity.template);
         // The PDF inside is a "Quittung Self-Checkout" (#426) — the
         // attachment filename must match the document type, mirroring the
@@ -1080,9 +1100,73 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-bill-receipt");
+        expect(entity.template.id).to.equal("test-bill-receipt-visit");
         expectContractVariables(entity.template);
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000012.pdf");
+      });
+
+      // Issue #660: a membership or badge bought at the kiosk is no visit,
+      // so its mail must not say "Danke für deinen Besuch".
+      describe("checkout kind (#660)", () => {
+        async function sendFor(
+          opts: SeedCheckoutOptions,
+        ): Promise<{ id: string; variables: Record<string, string> }> {
+          const db = getFirestore();
+          await db.doc("config/catalog-references").set({
+            membership: db.doc("catalog/membership-sku"),
+          });
+          await seedUser("u-bill-proc", { email: "payer@example.com" });
+          await seedCheckout("co-default", opts);
+          await seedBill("bill-kind", {
+            storagePath: "invoices/bill-kind.pdf",
+            referenceNumber: 120,
+            paymentMethodConfirmationTime: Timestamp.now(),
+            paymentMethodConfirmationSource: "user",
+          });
+          expect(await trySendEmail("bill-kind")).to.be.true;
+          const [, entity] = resendSendStub.firstCall.args as [
+            string,
+            { template: { id: string; variables: Record<string, string> } },
+          ];
+          expectContractVariables(entity.template);
+          return entity.template;
+        }
+
+        it("a membership-only checkout gets the membership wording", async () => {
+          const template = await sendFor({
+            paymentMethod: "rechnung",
+            usageType: "materialbezug",
+            items: [{ catalogId: "membership-sku" }],
+          });
+          expect(template.id).to.equal("test-bill-invoice-membership");
+        });
+
+        it("a badge-only checkout is a purchase, with the method's label on the receipt", async () => {
+          const template = await sendFor({
+            paymentMethod: "raisenow",
+            usageType: "materialbezug",
+            items: [{ catalogId: "badge-sku" }],
+          });
+          expect(template.id).to.equal("test-bill-receipt-purchase");
+          expect(template.variables.PAYMENT_LABEL).to.equal("TWINT");
+        });
+
+        it("a machine item keeps a materialbezug checkout a visit", async () => {
+          const template = await sendFor({
+            paymentMethod: "rechnung",
+            usageType: "materialbezug",
+            items: [{ catalogId: "laser", type: "machine" }],
+          });
+          expect(template.id).to.equal("test-bill-invoice-visit");
+        });
+
+        it("strips markup from user-supplied values", async () => {
+          const template = await sendFor({
+            paymentMethod: "rechnung",
+            persons: [{ name: "<b>Eve</b> & Co", email: "eve@example.com", userType: "erwachsen" }],
+          });
+          expect(template.variables.RECIPIENT_NAME).to.equal("bEve/b & Co");
+        });
       });
 
       // Issue #323: a membership-renewal bill is minted with paymentMethod
@@ -1163,7 +1247,7 @@ describe("bill processing triggers (Integration)", () => {
           string,
           { template: { id: string } },
         ];
-        expect(entity.template.id).to.equal("test-bill-invoice");
+        expect(entity.template.id).to.equal("test-bill-invoice-visit");
         expectContractVariables(entity.template);
       });
 
@@ -1208,7 +1292,7 @@ describe("bill processing triggers (Integration)", () => {
           },
         ];
         expect(entity.to).to.equal("bea@example.com");
-        expect(entity.template.id).to.equal("test-bill-beleg");
+        expect(entity.template.id).to.equal("test-bill-beleg-visit");
         expectContractVariables(entity.template);
         expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000014");
         expect(entity.attachments[0].filename).to.equal("Beleg-BL-000014.pdf");

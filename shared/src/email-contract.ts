@@ -28,6 +28,14 @@ export type EmailEnv = (typeof EMAIL_ENVS)[number]
 export const BILL_DOCUMENTS = ["invoice", "receipt", "beleg", "sammelrechnung"] as const
 export type BillDocument = (typeof BILL_DOCUMENTS)[number]
 
+/**
+ * What a checkout was (issue #660): a workshop visit, a membership
+ * purchase, or a plain purchase (badge, material) without a visit. Decided
+ * by `classifyCheckoutKind`; declared here because it is a mail dimension.
+ */
+export const CHECKOUT_KINDS = ["visit", "membership", "purchase"] as const
+export type CheckoutKind = (typeof CHECKOUT_KINDS)[number]
+
 interface MailSpec {
   /** Build-time dimensions, in alias order. */
   readonly dims: Readonly<Record<string, readonly string[]>>
@@ -54,18 +62,27 @@ export const EMAIL_CONTRACT = {
   },
   // Payable QR-bill invoice for a single checkout.
   "bill-invoice": {
-    dims: {},
+    dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY"],
   },
   // Paid during the checkout (`paidDuringCheckout`): receipt, no QR slip.
+  // PAYMENT_LABEL is the method's brand ("TWINT"), never part of the alias.
   "bill-receipt": {
-    dims: {},
-    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
+    dims: { kind: CHECKOUT_KINDS },
+    variables: [
+      "RECIPIENT_NAME",
+      "CHECKOUT_DATE",
+      "INVOICE_NUMBER",
+      "AMOUNT",
+      "CURRENCY",
+      "KASSE_EMAIL",
+      "PAYMENT_LABEL",
+    ],
   },
   // Per-checkout Beleg queued for the Sammelrechnung (`isAggregated`). Not
   // payable — must never share copy with the Sammelrechnung (issue #502).
   "bill-beleg": {
-    dims: {},
+    dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
   },
   // The monthly aggregate of Belege — payable, QR slip attached.

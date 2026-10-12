@@ -53,7 +53,10 @@ import {
   PAYMENT_METHOD_INFO,
   billDocument,
   billMail,
+  classifyBillKind,
+  classifyCheckoutKind,
   normalizePaymentMethod,
+  type CheckoutKind,
   type MailName,
 } from "@oww/shared";
 
@@ -505,7 +508,8 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
-  const mail = pickBillMail(normalizePaymentMethod(checkout.paymentMethod), bill);
+  const paymentMethod = normalizePaymentMethod(checkout.paymentMethod);
+  const mail = pickBillMail(paymentMethod, bill);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -539,12 +543,12 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, normalizePaymentMethod(checkout.paymentMethod)),
+          DOCUMENT_KIND: documentKindLabel(bill, paymentMethod),
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
             bill,
-            normalizePaymentMethod(checkout.paymentMethod),
+            paymentMethod,
             supersededReference,
           ),
           // Resend templates have no conditionals: one pre-composed line the
@@ -573,9 +577,15 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     // operations_log written, returns false — instead of throwing past
     // trySendEmail and blocking downstream onBillUpdate work (membership
     // activation).
+    // The per-checkout mails word a membership or badge purchase differently
+    // from a visit (issue #660); the others have no such dimension.
+    const dims =
+      mail === "bill-invoice" || mail === "bill-receipt" || mail === "bill-beleg"
+        ? { kind: await loadBillKind(bill) }
+        : {};
     const template = templateRef(
       mail,
-      {},
+      dims as never,
       contractVariables(mail, {
         RECIPIENT_NAME: recipientName,
         CHECKOUT_DATE: checkoutDate,
@@ -583,6 +593,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
         AMOUNT: bill.amount.toFixed(2),
         CURRENCY: bill.currency,
         KASSE_EMAIL: kasseEmail.value(),
+        PAYMENT_LABEL: paymentMethod ? PAYMENT_METHOD_INFO[paymentMethod].label : "",
         ...correctionVariables,
       }),
     );
@@ -597,7 +608,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, normalizePaymentMethod(checkout.paymentMethod))}-${invoiceNumber}.pdf`,
+          filename: `${billDocumentPrefix(bill.kind, paymentMethod)}-${invoiceNumber}.pdf`,
         },
         ...extraAttachments,
       ],
@@ -617,6 +628,27 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     await logOperationError("bills", billId, "email_send", message);
     return false;
   }
+}
+
+/**
+ * Visit, membership or purchase across all checkouts of a bill (issue
+ * #660). A checkout doc that has gone missing counts as a visit — the
+ * wording every bill had before.
+ */
+async function loadBillKind(bill: BillEntity): Promise<CheckoutKind> {
+  const membershipCatalogId = await loadMembershipCatalogId(getFirestore());
+  const kinds = await Promise.all(
+    bill.checkouts.map(async (ref) => {
+      const [snap, items] = await Promise.all([ref.get(), ref.collection("items").get()]);
+      const checkout = snap.data() as CheckoutEntity | undefined;
+      return classifyCheckoutKind({
+        usageType: checkout?.usageType ?? "regular",
+        items: items.docs.map((d) => d.data() as CheckoutItemEntity),
+        membershipCatalogId,
+      });
+    }),
+  );
+  return classifyBillKind(kinds);
 }
 
 /**

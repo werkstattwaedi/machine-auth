@@ -18,7 +18,8 @@ Resend templates only substitute `{{{VARIABLES}}}`. They have no conditionals. S
 2. **The contract lives here, in `@oww/shared` (`email-contract.ts`).** It lists every mail with its dimensions and its exact variable list. The functions send through `templateAlias(env, mail, dims)` with exactly those variables (`contractVariables` picks them; tests assert the set). The generator imports the same file from the sibling checkout and refuses to publish a template whose placeholders differ. Resend rejects a send that misses a declared variable, so the two sides must match exactly, and each side checks it on its own CI.
 3. **Aliases are `<env>-<mail>[-<dim>…]`.** There is no per-template config: the 11 `RESEND_*_TEMPLATE_ID` params are gone, and one `RESEND_TEMPLATE_ENV` (`prod` / `staging`, from `functions.resendTemplateEnv`) selects the environment. Staging and prod publish separate templates.
 4. **No payment-method id in an alias.** Bill mails are keyed by *document*: `invoice` / `receipt` / `beleg` / `sammelrechnung`, from `billDocument()`, which reads `PAYMENT_METHOD_INFO` properties (ADR-0044). A new payment integration adds no template. Brand names are send-time variables.
-5. **Publishing is additive.** Publish both environments, then deploy functions, then `--prune` the aliases nothing uses any more. A copy-only change is a publish with no functions deploy.
+5. **Send-time values are plain text.** Resend substitutes `{{{…}}}` unescaped and several values are user input (names), so `templateRef` strips `<` and `>` from every value. Entity-escaping would show up as `&amp;` in the plain-text part, which receives the same values.
+6. **Publishing is additive.** Publish both environments, then deploy functions, then `--prune` the aliases nothing uses any more. A copy-only change is a publish with no functions deploy.
 
 ## Consequences
 

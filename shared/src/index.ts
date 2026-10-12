@@ -12,6 +12,7 @@ export * from "./catalog-import"
 export * from "./billing"
 export * from "./payment-methods"
 export * from "./checkout-summary"
+export * from "./checkout-kind"
 
 export * from "./rejection"
 export * from "./log-triage"

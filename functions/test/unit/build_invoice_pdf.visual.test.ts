@@ -21,6 +21,7 @@ import {
   registeredUserInvoice,
   zeroItemsInvoice,
   membershipOnlyInvoice,
+  badgeOnlyInvoice,
   membershipMixedInvoice,
   membershipRenewalInvoice,
   volunteeringDiscountInvoice,
@@ -219,6 +220,11 @@ describe("buildInvoicePdf — visual regression", function () {
   // no workshop groups, no "Diverses" heading.
   it("membership-only (Mitgliedschaft block, no workshop groups)", async () => {
     await compareAllPages("membership-only", membershipOnlyInvoice());
+  });
+
+  // Issue #660: a kiosk badge purchase heads "Einkauf vom …", not a visit.
+  it("badge-only (Einkauf vom, no visit)", async () => {
+    await compareAllPages("badge-only", badgeOnlyInvoice());
   });
 
   // Issue #263: mixed bill — "Mitgliedschaft" block first, then the

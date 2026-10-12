@@ -10,11 +10,14 @@ import type { InvoiceData, InvoiceCheckout, PaymentConfig } from "./types";
 import type { PricingModel } from "../types/firestore_entities";
 import { generateScorReference } from "./scor_reference";
 import {
+  classifyBillKind,
+  classifyCheckoutKind,
   partitionMembership,
   usageDiscount,
   isMachineItem,
   USAGE_DISCOUNT_LABELS,
   PAYMENT_METHOD_INFO,
+  type CheckoutKind,
   type StoredPaidVia,
   type UsageType,
 } from "@oww/shared";
@@ -329,8 +332,14 @@ export async function buildInvoicePdf(
       doc.text("Keine Zahlung erforderlich", MARGIN_LEFT, y);
       y += 16;
       doc.fontSize(9).font("Helvetica");
+      const billKind = classifyBillKind(data.checkouts.map((c) => checkoutKind(c, data)));
+      const subject = {
+        visit: "diesen Besuch",
+        membership: "diese Mitgliedschaft",
+        purchase: "diesen Einkauf",
+      }[billKind];
       doc.text(
-        `Für diesen Besuch ist nichts zu bezahlen (Betrag ${data.currency} 0.00).`,
+        `Für ${subject} ist nichts zu bezahlen (Betrag ${data.currency} 0.00).`,
         MARGIN_LEFT,
         y,
       );
@@ -587,6 +596,14 @@ function renderVorstandSignoff(doc: PDFKit.PDFDocument, y: number): number {
   return y;
 }
 
+function checkoutKind(checkout: InvoiceCheckout, data: InvoiceData): CheckoutKind {
+  return classifyCheckoutKind({
+    usageType: checkout.usageType,
+    items: checkout.items,
+    membershipCatalogId: data.membershipCatalogId,
+  });
+}
+
 function renderCheckoutSection(
   doc: PDFKit.PDFDocument,
   y: number,
@@ -600,13 +617,19 @@ function renderCheckoutSection(
   const discount = usageDiscount(checkout.usageType as UsageType);
   const discountLabel = USAGE_DISCOUNT_LABELS[checkout.usageType as UsageType];
 
-  // Visit date header. A membership renewal has no visit — its checkout is
-  // a synthetic doc minted by the renewalInvoicer cron, so "Besuch vom …"
-  // would misdescribe the bill (issue #323).
-  if (data.source !== "membership-renewal") {
+  // Date header, worded by what the checkout was (issue #660). A membership
+  // gets none: the "Mitgliedschaft" block heading follows directly. That
+  // also covers the renewal, whose synthetic checkout (renewalInvoicer cron)
+  // holds only the membership (issue #323).
+  const kind = checkoutKind(checkout, data);
+  if (kind !== "membership") {
     y = ensureSpace(doc, y, 30);
     doc.fontSize(11).font("Helvetica-Bold");
-    doc.text(`Besuch vom ${formatDate(checkout.date)}`, MARGIN_LEFT, y);
+    doc.text(
+      `${kind === "visit" ? "Besuch" : "Einkauf"} vom ${formatDate(checkout.date)}`,
+      MARGIN_LEFT,
+      y,
+    );
     y += 20;
   }
 
