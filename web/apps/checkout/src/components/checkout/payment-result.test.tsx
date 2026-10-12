@@ -112,6 +112,7 @@ describe("PaymentResult", () => {
     it("shows the QR code and rechnung instructions on first render", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -135,6 +136,7 @@ describe("PaymentResult", () => {
     it("uses the rechnung-specific commit label", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -152,6 +154,7 @@ describe("PaymentResult", () => {
     it("does not render a back button (closed checkout — no rewind)", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -167,13 +170,13 @@ describe("PaymentResult", () => {
   // must be hidden so invoices aren't saved to the kiosk's local disk. The
   // button stays visible in the default (non-kiosk) flow above.
   describe("issue #418: kiosk hides the PDF download", () => {
-    it("hides the 'Rechnung als PDF' button when kiosk is true", () => {
+    it("hides the 'Rechnung als PDF' button on the kiosk client", () => {
       render(
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
-          kiosk
+          clientType="kiosk"
           onReset={() => {}}
           initialPaymentData={PAYMENT_FIXTURE}
         />,
@@ -183,13 +186,13 @@ describe("PaymentResult", () => {
       ).toBeNull()
     })
 
-    it("still shows the 'Rechnung als PDF' button when kiosk is false", () => {
+    it("still shows the 'Rechnung als PDF' button on the web client", () => {
       render(
         <PaymentResult
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
-          kiosk={false}
+          clientType="web"
           onReset={() => {}}
           initialPaymentData={PAYMENT_FIXTURE}
         />,
@@ -204,6 +207,7 @@ describe("PaymentResult", () => {
     it("hides the Sammelrechnung tab for non-members", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -217,6 +221,7 @@ describe("PaymentResult", () => {
     it("shows the Sammelrechnung tab for members", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -230,6 +235,7 @@ describe("PaymentResult", () => {
     it("switches to the monthly panel + commit label when the tab is clicked", async () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -271,6 +277,7 @@ describe("PaymentResult", () => {
     it("renders the TWINT pay-link and method-specific commit label", async () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -304,6 +311,7 @@ describe("PaymentResult", () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -331,6 +339,7 @@ describe("PaymentResult", () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -358,6 +367,7 @@ describe("PaymentResult", () => {
     it("does not gate the rechnung or Sammelrechnung commit buttons", async () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -385,6 +395,7 @@ describe("PaymentResult", () => {
     it("keeps the gate open once the pay-link was clicked, across tab switches", async () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -409,6 +420,7 @@ describe("PaymentResult", () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -438,6 +450,7 @@ describe("PaymentResult", () => {
 
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -460,6 +473,7 @@ describe("PaymentResult", () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
+          clientType="web"
           checkoutId={null}
           totalPrice={25}
           isMember={false}
@@ -487,6 +501,7 @@ describe("PaymentResult", () => {
     it("writes paymentMethod on the checkout doc when the user switches tabs", async () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember
@@ -521,6 +536,7 @@ describe("PaymentResult", () => {
 
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -535,6 +551,7 @@ describe("PaymentResult", () => {
 
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -556,6 +573,7 @@ describe("PaymentResult", () => {
 
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-1"
           totalPrice={25}
           isMember={false}
@@ -579,6 +597,7 @@ describe("PaymentResult", () => {
     it("renders the kostenlos copy and hides all payment-method tabs at totalPrice=0", () => {
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-free"
           totalPrice={0}
           isMember
@@ -618,6 +637,7 @@ describe("PaymentResult", () => {
       const handleReset = vi.fn()
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-free"
           totalPrice={0}
           isMember={false}
@@ -653,6 +673,7 @@ describe("PaymentResult", () => {
 
       render(
         <PaymentResult
+          clientType="web"
           checkoutId="checkout-free"
           totalPrice={0}
           isMember={false}
@@ -662,6 +683,81 @@ describe("PaymentResult", () => {
 
       expect(mockGetPaymentQrData).not.toHaveBeenCalled()
       expect(screen.getByText(/kostenlos/i)).toBeDefined()
+    })
+  })
+
+  // Methods are configured per client type (operations config →
+  // VITE_PAYMENT_METHODS_*); the tabs follow that list and its order.
+  describe("payment methods per client type", () => {
+    const methodConfig = {
+      kiosk: ["rechnung", "monthly"],
+      web: ["raisenow", "rechnung"],
+    } as const
+    const tabNames = () =>
+      screen.getAllByRole("tab").map((t) => t.textContent?.trim())
+
+    it("shows only the kiosk's methods on the kiosk", () => {
+      render(
+        <PaymentResult
+          clientType="kiosk"
+          methodConfig={methodConfig}
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(tabNames()).toEqual(["QR-Rechnung", "Sammelrechnung"])
+    })
+
+    it("follows the configured order and preselects the first method on the web", () => {
+      render(
+        <PaymentResult
+          clientType="web"
+          methodConfig={methodConfig}
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(tabNames()).toEqual(["TWINT", "QR-Rechnung"])
+      expect(screen.getByRole("tab", { name: /TWINT/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      )
+    })
+
+    it("drops TWINT when the server sent no paylink", () => {
+      render(
+        <PaymentResult
+          clientType="web"
+          methodConfig={methodConfig}
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember
+          onReset={() => {}}
+          initialPaymentData={{ ...PAYMENT_FIXTURE, paylinkUrl: null }}
+        />,
+      )
+      expect(tabNames()).toEqual(["QR-Rechnung"])
+    })
+
+    it("falls back to the QR bill when nothing is configured for the client", () => {
+      render(
+        <PaymentResult
+          clientType="kiosk"
+          methodConfig={{ kiosk: [], web: ["rechnung"] }}
+          checkoutId="checkout-1"
+          totalPrice={25}
+          isMember={false}
+          onReset={() => {}}
+          initialPaymentData={PAYMENT_FIXTURE}
+        />,
+      )
+      expect(tabNames()).toEqual(["QR-Rechnung"])
     })
   })
 

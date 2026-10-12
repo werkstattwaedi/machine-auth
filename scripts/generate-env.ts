@@ -15,6 +15,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
+import { parsePaymentMethodList } from "../shared/src/payment-methods";
 
 // --- Types ---
 
@@ -113,6 +114,12 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   // and local builds are recognisable. Absent key → empty → no prefix;
   // config.staging.jsonc sets "[staging]", config.local.jsonc "[local]".
   { envVar: "VITE_ENV_LABEL", jsonPath: "web.envLabel" },
+  // Payment methods offered per client type, comma-separated ids in tab
+  // order (shared/src/payment-methods.ts). Absent key → empty → today's
+  // default "rechnung,monthly,raisenow". Same keys feed the functions
+  // params (FUNCTIONS_PAYMENT) so UI and acknowledgeBill agree.
+  { envVar: "VITE_PAYMENT_METHODS_KIOSK", jsonPath: "web.paymentMethodsKiosk" },
+  { envVar: "VITE_PAYMENT_METHODS_WEB", jsonPath: "web.paymentMethodsWeb" },
 ];
 
 const FUNCTIONS_PAYMENT: VarMapping[] = [
@@ -124,6 +131,8 @@ const FUNCTIONS_PAYMENT: VarMapping[] = [
   { envVar: "PAYMENT_RECIPIENT_COUNTRY", jsonPath: "web.paymentRecipientCountry" },
   { envVar: "PAYMENT_CURRENCY", jsonPath: "web.currency" },
   { envVar: "RAISENOW_PAYLINK_SOLUTION_ID", jsonPath: "web.raisenowPaylinkSolutionId" },
+  { envVar: "PAYMENT_METHODS_KIOSK", jsonPath: "web.paymentMethodsKiosk" },
+  { envVar: "PAYMENT_METHODS_WEB", jsonPath: "web.paymentMethodsWeb" },
 ];
 
 const GATEWAY: VarMapping[] = [
@@ -206,6 +215,8 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     envLabel: "[ci]",
     iban: "CH00 0000 0000 0000 0000 0",
     raisenowPaylinkSolutionId: "test-fake-solution",
+    paymentMethodsKiosk: "rechnung,monthly,raisenow",
+    paymentMethodsWeb: "rechnung,monthly,raisenow",
     paymentRecipientName: "OWW CI Recipient",
     paymentRecipientStreet: "Teststrasse 1",
     paymentRecipientPostalCode: "0000",
@@ -317,6 +328,9 @@ function generateEnvContent(
     for (const { envVar, jsonPath } of section.vars) {
       const value =
         envVar in overrides ? overrides[envVar] : resolveValue(config, jsonPath);
+      // A typo in a payment-method list must fail here, before a deploy,
+      // not hide a payment tab (web) or reject every ack (functions).
+      if (envVar.includes("PAYMENT_METHODS_")) parsePaymentMethodList(value);
       lines.push(`${envVar}=${value}`);
     }
     lines.push("");

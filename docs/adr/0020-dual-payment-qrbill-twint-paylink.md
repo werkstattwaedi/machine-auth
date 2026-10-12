@@ -1,6 +1,6 @@
 # ADR-0020: Dual Payment Options — QR Bill + RaiseNow PayLink
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-10-11 by [ADR-0044](0044-payment-integrations-per-client-type.md): the PayLink is the `raisenow` payment method — stored id renamed from `twint` — and can be switched on or off per client type)
 
 **Date:** 2026-04-12
 

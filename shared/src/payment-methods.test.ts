@@ -4,7 +4,10 @@
 import { describe, expect, it } from "vitest"
 import {
   PAYMENT_METHODS,
+  enabledPaymentMethods,
   isPaidDuringCheckout,
+  isPaymentMethodEnabledAnywhere,
+  parsePaymentMethodList,
   normalizePaidVia,
   normalizePaymentMethod,
 } from "./payment-methods"
@@ -54,5 +57,58 @@ describe("normalizePaidVia", () => {
     expect(normalizePaidVia("cash")).toBeNull()
     expect(normalizePaidVia(null)).toBeNull()
     expect(normalizePaidVia("constructor")).toBeNull()
+  })
+})
+
+describe("parsePaymentMethodList", () => {
+  it("falls back to the defaults when unset or empty", () => {
+    expect(parsePaymentMethodList(undefined)).toEqual(["rechnung", "monthly", "raisenow"])
+    expect(parsePaymentMethodList("")).toEqual(["rechnung", "monthly", "raisenow"])
+    expect(parsePaymentMethodList(" , ")).toEqual(["rechnung", "monthly", "raisenow"])
+  })
+
+  it("keeps the configured order and drops duplicates", () => {
+    expect(parsePaymentMethodList(" raisenow, rechnung ,raisenow")).toEqual([
+      "raisenow",
+      "rechnung",
+    ])
+  })
+
+  it("throws on unknown ids, including the legacy twint", () => {
+    expect(() => parsePaymentMethodList("rechnung,bitcoin")).toThrow(/bitcoin/)
+    expect(() => parsePaymentMethodList("twint")).toThrow(/twint/)
+  })
+})
+
+describe("enabledPaymentMethods", () => {
+  const config = {
+    kiosk: ["rechnung", "monthly"],
+    web: ["raisenow", "rechnung", "monthly"],
+  } as const
+
+  it("returns the client type's list in configured order", () => {
+    expect(enabledPaymentMethods(config, "web", { isMember: true })).toEqual([
+      "raisenow",
+      "rechnung",
+      "monthly",
+    ])
+    expect(enabledPaymentMethods(config, "kiosk", { isMember: true })).toEqual([
+      "rechnung",
+      "monthly",
+    ])
+  })
+
+  it("hides membership-only methods from non-members", () => {
+    expect(enabledPaymentMethods(config, "kiosk", { isMember: false })).toEqual([
+      "rechnung",
+    ])
+  })
+})
+
+describe("isPaymentMethodEnabledAnywhere", () => {
+  it("is true if any client type offers the method", () => {
+    const config = { kiosk: ["rechnung"], web: ["rechnung", "raisenow"] } as const
+    expect(isPaymentMethodEnabledAnywhere(config, "raisenow")).toBe(true)
+    expect(isPaymentMethodEnabledAnywhere(config, "monthly")).toBe(false)
   })
 })

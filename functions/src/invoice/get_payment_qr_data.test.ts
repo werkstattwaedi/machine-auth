@@ -12,6 +12,7 @@
 import { expect } from "chai";
 import { Timestamp } from "firebase-admin/firestore";
 import { buildPaymentData } from "./get_payment_qr_data";
+import { paymentMethodConfig } from "../payments/config";
 import type { BillEntity } from "./types";
 
 // defineString params resolve from process.env at .value() time.
@@ -57,7 +58,7 @@ describe("buildPaymentData PayLink URL", () => {
 
   it("carries the SCOR reference as `reference.creditor`", () => {
     const data = buildPaymentData(testBill(), null, "b1", null);
-    const url = new URL(data.paylinkUrl);
+    const url = new URL(data.paylinkUrl ?? "");
     expect(url.origin).to.equal("https://pay.raisenow.io");
     expect(url.pathname).to.equal("/tstslnid");
     // The exact parameter TWINT reads — the SCOR payload is the stored
@@ -83,9 +84,40 @@ describe("buildPaymentData PayLink URL", () => {
     // SPC fields 28/29 in the builder's 1-based comments → indices 27/28.
     expect(lines[27]).to.equal("SCOR"); // reference type
     expect(lines[28]).to.equal(data.reference);
-    const url = new URL(data.paylinkUrl);
+    const url = new URL(data.paylinkUrl ?? "");
     expect(url.searchParams.get("reference.creditor")).to.equal(data.reference);
     expect(url.searchParams.get("supporter.first_name.value")).to.equal("Mike");
     expect(url.searchParams.get("supporter.last_name.value")).to.equal("Schneider");
+  });
+
+  it("degrades a misconfigured method list to the QR bill instead of throwing", () => {
+    const prev = process.env.PAYMENT_METHODS_KIOSK;
+    process.env.PAYMENT_METHODS_KIOSK = "rechnung,bitcoin";
+    try {
+      expect(paymentMethodConfig().kiosk).to.deep.equal(["rechnung"]);
+      // buildPaymentData still works (web list is the default → raisenow on).
+      expect(buildPaymentData(testBill(), null, "b1", null).qrBillPayload).to.be.a("string");
+    } finally {
+      if (prev === undefined) delete process.env.PAYMENT_METHODS_KIOSK;
+      else process.env.PAYMENT_METHODS_KIOSK = prev;
+    }
+  });
+
+  it("omits the PayLink when raisenow is disabled for every client type", () => {
+    const prev = [process.env.PAYMENT_METHODS_KIOSK, process.env.PAYMENT_METHODS_WEB];
+    process.env.PAYMENT_METHODS_KIOSK = "rechnung,monthly";
+    process.env.PAYMENT_METHODS_WEB = "rechnung";
+    try {
+      const data = buildPaymentData(testBill(), null, "b1", null);
+      expect(data.paylinkUrl).to.equal(null);
+      // The QR bill is unaffected.
+      expect(data.qrBillPayload.split("\n")[28]).to.equal(data.reference);
+    } finally {
+      const keys = ["PAYMENT_METHODS_KIOSK", "PAYMENT_METHODS_WEB"] as const;
+      keys.forEach((key, i) => {
+        if (prev[i] === undefined) delete process.env[key];
+        else process.env[key] = prev[i];
+      });
+    }
   });
 })

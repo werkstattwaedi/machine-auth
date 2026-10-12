@@ -253,6 +253,56 @@ describe("acknowledgeBill callable (Integration)", () => {
     expect(checkout.paymentMethod).to.equal("raisenow");
   });
 
+  // Ops can switch an integration off for every client type (e.g. RaiseNow
+  // once the Wallee terminal replaces it); a stale tab must not keep using it.
+  describe("with raisenow disabled for every client type", () => {
+    const saved = {
+      kiosk: process.env.PAYMENT_METHODS_KIOSK,
+      web: process.env.PAYMENT_METHODS_WEB,
+    };
+    beforeEach(() => {
+      process.env.PAYMENT_METHODS_KIOSK = "rechnung,monthly";
+      process.env.PAYMENT_METHODS_WEB = "rechnung";
+    });
+    afterEach(() => {
+      for (const [key, value] of [
+        ["PAYMENT_METHODS_KIOSK", saved.kiosk],
+        ["PAYMENT_METHODS_WEB", saved.web],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+
+    it("rejects raisenow (and its legacy id) with failed-precondition", async () => {
+      await seedBillAndCheckout({
+        billId: "b1",
+        ownerUid: "alice",
+        checkoutId: "co1",
+      });
+      for (const paymentMethod of ["raisenow", "twint"]) {
+        try {
+          await call("alice", { billId: "b1", paymentMethod });
+          throw new Error("Expected failed-precondition");
+        } catch (err) {
+          expect((err as { code?: string }).code).to.equal("failed-precondition");
+        }
+      }
+      const bill = await readBill("b1");
+      expect(bill.paymentMethodConfirmationTime ?? null).to.equal(null);
+    });
+
+    it("still accepts a method enabled for only one client type", async () => {
+      await seedBillAndCheckout({
+        billId: "b1",
+        ownerUid: "alice",
+        checkoutId: "co1",
+      });
+      await call("alice", { billId: "b1", paymentMethod: "monthly" });
+      expect((await readBill("b1")).kind).to.equal("beleg");
+    });
+  });
+
   it("rejects an invalid paymentMethod", async () => {
     await seedBillAndCheckout({
       billId: "b1",

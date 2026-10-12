@@ -2,15 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Callable function: returns the Swiss QR Bill payload string and the
- * RaiseNow PayLink URL for a bill. The client renders the QR bill as a
- * QR code and links to the PayLink for TWINT payments.
+ * Callable function: returns the Swiss QR Bill payload string and, when
+ * the RaiseNow integration is enabled, its PayLink URL for a bill. The
+ * client renders the QR bill as a QR code and links to the PayLink for
+ * TWINT payments.
  */
 
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { generateScorReference } from "./scor_reference";
+import { isPaymentMethodEnabled } from "../payments/config";
+import { buildRaisenowPaylinkUrl } from "../payments/raisenow";
 import type { BillEntity } from "./types";
 import type { CheckoutEntity } from "../types/firestore_entities";
 
@@ -26,11 +29,6 @@ const paymentRecipientPostalCode = defineString("PAYMENT_RECIPIENT_POSTAL_CODE")
 const paymentRecipientCity = defineString("PAYMENT_RECIPIENT_CITY");
 const paymentRecipientCountry = defineString("PAYMENT_RECIPIENT_COUNTRY");
 const paymentCurrency = defineString("PAYMENT_CURRENCY");
-
-// RaiseNow PayLink solution ID (the short code in https://pay.raisenow.io/{id})
-const raisenowPaylinkSolutionId = defineString("RAISENOW_PAYLINK_SOLUTION_ID");
-
-const RAISENOW_PAYLINK_BASE_URL = "https://pay.raisenow.io";
 
 interface GetPaymentQrDataRequest {
   billId: string;
@@ -68,7 +66,9 @@ export interface PaymentData {
   // never had its id.
   checkoutId: string | null;
   qrBillPayload: string;
-  paylinkUrl: string;
+  // RaiseNow PayLink — null when "raisenow" is switched off for every
+  // client type (payments/config.ts).
+  paylinkUrl: string | null;
   creditor: {
     iban: string;
     name: string;
@@ -141,6 +141,8 @@ function buildQrPayload(bill: BillEntity, scorReference: string): string {
 
 /**
  * Assemble the payment data (QR payload + PayLink + display fields) for a bill.
+ * Each integration contributes its own field; add new ones next to the
+ * PayLink rather than inside the QR-bill code.
  * Pure with respect to Firestore — caller provides the already-loaded bill and
  * payer info, so this can run inside or outside a transaction.
  */
@@ -156,27 +158,9 @@ export function buildPaymentData(
 
   const qrPayload = buildQrPayload(bill, scorReference);
 
-  const paylinkParams = new URLSearchParams();
-  paylinkParams.set("amount.values", bill.amount.toFixed(2));
-  paylinkParams.set("amount.custom", "false");
-  paylinkParams.set("reference.creditor", scorReference);
-
-  let payerName = "";
-  let payerEmail = "";
-  if (payer) {
-    payerName = payer.name;
-    payerEmail = payer.email ?? "";
-    const nameParts = payer.name.trim().split(/\s+/);
-    const firstName = nameParts[0] ?? "";
-    const lastName = nameParts.slice(1).join(" ") || firstName;
-    paylinkParams.set("supporter.first_name.value", firstName);
-    paylinkParams.set("supporter.last_name.value", lastName);
-    if (payer.email) {
-      paylinkParams.set("supporter.email.value", payer.email);
-    }
-  }
-
-  const paylinkUrl = `${RAISENOW_PAYLINK_BASE_URL}/${raisenowPaylinkSolutionId.value()}?${paylinkParams.toString()}`;
+  const paylinkUrl = isPaymentMethodEnabled("raisenow")
+    ? buildRaisenowPaylinkUrl({ amount: bill.amount, scorReference, payer })
+    : null;
 
   // Format IBAN with spaces for display (groups of 4)
   const ibanFormatted = paymentIban.value().replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
@@ -193,8 +177,8 @@ export function buildPaymentData(
       location: `${paymentRecipientPostalCode.value()} ${paymentRecipientCity.value()}`,
     },
     reference: scorReference,
-    payerName,
-    payerEmail,
+    payerName: payer?.name ?? "",
+    payerEmail: payer?.email ?? "",
     amount: bill.amount.toFixed(2),
     currency: paymentCurrency.value() || "CHF",
   };

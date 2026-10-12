@@ -40,8 +40,9 @@ export interface Bridge {
   // Sent by the chrome renderer once it detects the RaiseNow payment_result
   // URL on the overlay webview; main re-broadcasts to the checkout webview.
   notifyPaymentConfirmed: (paymentUuid: string) => void
-  // Subscribed by the checkout webview (web app) to auto-mark the bill paid
-  // when the TWINT payment completes in the overlay. Returns an unsubscribe fn.
+  // Subscribed by the checkout webview (web app) to auto-acknowledge the
+  // "raisenow" payment method when the TWINT payment completes in the
+  // overlay (the bill is not marked paid). Returns an unsubscribe fn.
   onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
   onNfcTag: (cb: (payload: NfcTagEvent) => void) => () => void
   // "Neuer Checkout" reset flow (issue #415). The chrome button asks the

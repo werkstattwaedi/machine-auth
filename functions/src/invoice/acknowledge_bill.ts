@@ -35,6 +35,7 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import { PAYMENT_METHOD_INFO, normalizePaymentMethod } from "@oww/shared";
+import { isPaymentMethodEnabled } from "../payments/config";
 import type { BillEntity } from "./types";
 import type {
   CheckoutEntity,
@@ -96,6 +97,12 @@ export const acknowledgeBillHandler = async (
   const paymentMethod = normalizePaymentMethod(rawPaymentMethod);
   if (!paymentMethod) {
     throw new HttpsError("invalid-argument", "invalid paymentMethod");
+  }
+  if (!isPaymentMethodEnabled(paymentMethod)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `paymentMethod ${paymentMethod} is not enabled`,
+    );
   }
   const isAggregated = PAYMENT_METHOD_INFO[paymentMethod].isAggregated;
 

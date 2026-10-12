@@ -345,8 +345,10 @@ ipcMain.on("bridge:nfc-subscribe", (event) => {
 
 // The chrome renderer detects the RaiseNow payment_result URL on the overlay
 // webview and forwards it here; re-broadcast to every subscribed webContents
-// so the checkout webview (web app) can mark the bill paid (#416). The
-// overlay webview itself is not a subscriber, so it never echoes back.
+// so the checkout webview (web app) can record the customer's "raisenow"
+// acknowledgement (#416) — not a verified payment: `paidAt` still comes from
+// the RaiseNow CSV import. The overlay webview itself is not a subscriber,
+// so it never echoes back.
 ipcMain.on("bridge:payment-confirmed", (_event, paymentUuid: string) => {
   for (const wc of nfcSubscribers) {
     try {
