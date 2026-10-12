@@ -210,14 +210,10 @@ banner and offer it in the admin UI, keeping the original untouched.
 - A merge tool (move tokens, memberships, checkouts, bills from uid B to uid A, then erase B) would also resolve the duplicates `privacy-cli audit-identity` can only report.
 - Until then: before an import, change the e-mail of known movers in the admin profile tab first (`updateUserEmail` moves Auth and the doc together), so the import sees the account as existing.
 
-### Payment methods — drop the `twint` alias + unify kiosk detection
-**Status:** 📋 Planned
+### Checkout — one kiosk detection signal
+**Status:** 💡 Idea
 
-**Context:** ADR-0044 renamed the RaiseNow method `twint` → `raisenow`. `firestore.rules` (closed-checkout `paymentMethod`) and `acknowledgeBill` still accept `twint` so tabs running a pre-rename bundle keep working.
-
-**Notes:**
-- Once `scripts/migrate-payment-method-ids.ts` has run on prod and the kiosk has reloaded, remove `twint` from the rules value list and from `StoredPaymentMethod` on the write path. Keep the read-side normalizer: PDFs regenerated for old bills and BigQuery history still carry it.
-- The checkout derives the client type from `?kiosk` in the wizard but uses `window.bridge` elsewhere (account area, NFC, payment auto-confirm). Payment enablement follows the wizard's `?kiosk`. One `useClientType()` over a single signal would stop the two drifting apart. That matters once the Wallee terminal can only work where the bridge exists.
+**Context:** The checkout derives the client type from `?kiosk` in the wizard but uses `window.bridge` elsewhere (account area, NFC, payment auto-confirm). Payment enablement follows the wizard's `?kiosk`. One `useClientType()` over a single signal would stop the two drifting apart. That matters once the Wallee terminal can only work where the bridge exists.
 
 ## Template
 
