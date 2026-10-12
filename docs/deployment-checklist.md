@@ -16,6 +16,30 @@ staging) — always passing `--project` explicitly. It does NOT cover the
 gateway, the kiosk, or the manual steps below (secrets, custom claims,
 smoke tests).
 
+### Latest main only, and the deploy record (ADR-0045)
+
+Every deploy path (`deploy.sh`, the gateway deploy, the kiosk build,
+`./pw prod-flash`) first checks that machine-auth and the operations repo
+are on `main`, up to date with `origin/main` and without uncommitted
+changes (gateway/firmware: submodules too) — and refuses otherwise. To
+deploy a branch on purpose: `--allow-off-main` or `DEPLOY_ALLOW_OFF_MAIN=1`;
+the record then says "off main" and why.
+
+
+Every successful `deploy.sh` run, gateway deploy, kiosk installer build and
+`./pw prod-flash` records itself: a `deploy/<env>/<component>/<timestamp>`
+git tag plus an entry in the operations repo's `deploys/log.jsonl`, from
+which its `STATE.md` (what runs where) is regenerated. Log every manual
+step from this checklist the same way:
+
+```bash
+npx tsx scripts/deploy-record.ts event --env prod --note "ran migrate-bill-numbers.ts"
+git log "$(git tag -l 'deploy/prod/firebase/*' | tail -1)"..origin/main --oneline   # not in prod yet
+```
+
+If a record step warns (e.g. offline), re-run it by hand —
+`npx tsx scripts/deploy-record.ts deploy --env <env> --component <component>`.
+
 ## Prerequisites
 
 - Firebase CLI authenticated: `firebase login`

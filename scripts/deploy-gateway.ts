@@ -35,6 +35,10 @@
  *   npx tsx scripts/deploy-gateway.ts --host maker1@maco-gateway.internal --remote-dir /opt/gateway
  *   npx tsx scripts/deploy-gateway.ts --build-only   # just build, no deploy
  *   npx tsx scripts/deploy-gateway.ts --env staging --host maker1@test-pi.internal
+ *   npx tsx scripts/deploy-gateway.ts --host … --allow-off-main   # deploy a branch (recorded)
+ *
+ * Deploys refuse to run unless machine-auth (incl. submodules) and the
+ * operations repo are on the latest main — see deploy-preflight.ts.
  *
  * `--env <name>` (ADR-0034) deep-merges the operations repo's
  * `config.<name>.jsonc` overlay before reading gateway.* values, so the
@@ -57,6 +61,10 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { parseArgs } from "util";
+
+import type { DeployEnv } from "./deploy-log.ts";
+import { enforcePreflight } from "./deploy-preflight.ts";
+import { recordDeploy } from "./deploy-record.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -456,15 +464,19 @@ function main() {
       "remote-dir": { type: "string", default: "~/gateway" },
       "build-only": { type: "boolean", default: false },
       env: { type: "string" },
+      "allow-off-main": { type: "boolean", default: false },
     },
     strict: true,
   });
 
   if (!values["build-only"] && !values.host) {
-    console.error("Usage: deploy-gateway.ts --host maker1@maco-gateway.internal [--remote-dir ~/gateway] [--env staging]");
+    console.error("Usage: deploy-gateway.ts --host maker1@maco-gateway.internal [--remote-dir ~/gateway] [--env staging] [--allow-off-main]");
     console.error("       deploy-gateway.ts --build-only");
     process.exit(1);
   }
+
+  // ADR-0045: only latest main ships to a Pi (a build-only run is local).
+  if (!values["build-only"]) enforcePreflight("gateway", values["allow-off-main"]!);
 
   const payloadPath = buildPayload();
   const { envPath, saPath } = generateEnv(values.env ?? null);
@@ -476,6 +488,19 @@ function main() {
     if (saPath) console.log(`  SA key:  ${saPath}`);
   } else {
     deploy(payloadPath, envPath, saPath, values.host!, values["remote-dir"]!);
+    // ADR-0045. Best effort: the gateway is deployed even if this fails.
+    try {
+      recordDeploy({
+        kind: "deploy",
+        // No --env means the base config, i.e. production (ADR-0034).
+        env: (values.env ?? "prod") as DeployEnv,
+        component: "gateway",
+        target: values.host!,
+        note: "payload deployed; running after `systemctl restart gateway`",
+      });
+    } catch (e) {
+      console.warn(`Deploy not recorded: ${(e as Error).message}`);
+    }
   }
 }
 
