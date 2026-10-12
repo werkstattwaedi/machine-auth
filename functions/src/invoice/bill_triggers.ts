@@ -625,7 +625,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
  * (a one-visit aggregate is titled "Rechnung Self-Checkout", only a
  * multi-visit one "Sammelrechnung") so the mail names the document the
  * customer actually holds — deliberately NOT the `paymentMethod`-based
- * template choice in `pickTemplate`, which picks copy, not the noun.
+ * mail choice in `pickBillMail`, which picks copy, not the noun.
  */
 function documentKindLabel(
   bill: BillEntity,

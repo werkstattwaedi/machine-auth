@@ -233,7 +233,7 @@ export async function runRenewalInvoicer(
       // The renewal is a real QR-Rechnung; mark the method up front so the
       // ack pipeline emails it and the PDF renders the slip. The email
       // template itself is selected via bill.source ("membership-renewal"
-      // → the Vorstand renewal letter, see pickTemplate in bill_triggers).
+      // → the Vorstand renewal letter, see pickBillMail in bill_triggers).
       paymentMethod: "rechnung",
       billRef,
       modifiedBy: null,
