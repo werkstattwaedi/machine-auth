@@ -20,6 +20,7 @@ import { test, expect, type Page } from "@playwright/test"
 import {
   clearCollections,
   getAdminFirestore,
+  openGuestSection,
   waitForLoginCode,
 } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
@@ -98,7 +99,8 @@ async function clearPriceList() {
     .catch(() => {})
 }
 
-async function signIn(page: Page) {
+/** Sign in and stop on /checkin — no visit is started. */
+async function signInWithoutCheckin(page: Page) {
   await clearCollections("loginCodes")
   await page.goto("/login")
   await page.getByTestId("login-email-input").fill(AUTH_USER_EMAIL)
@@ -114,12 +116,17 @@ async function signIn(page: Page) {
     timeout: 10_000,
   })
   // After sign-in the / dispatcher forwards to /checkin (no open checkout).
-  // Walk through /checkin so subsequent /visit/add/* deep-links don't
-  // bounce back via useBounceIfNoCheckout — the wizard now persists a
-  // persons roster + creates an open checkout doc on advance.
   await page.waitForURL((url) => url.pathname === "/checkin", {
     timeout: 10_000,
   })
+}
+
+async function signIn(page: Page) {
+  await signInWithoutCheckin(page)
+  // Walk through /checkin so subsequent /visit/add/* deep-links open the
+  // picker instead of being sent to the check-in first (no open checkout) —
+  // the wizard persists a persons roster + creates an open checkout doc on
+  // advance.
   await page.getByRole("button", { name: "Weiter" }).click()
   await page.waitForURL((url) => url.pathname === "/visit", {
     timeout: 10_000,
@@ -276,5 +283,120 @@ test.describe("Visit /add/* sub-routes (issue #213)", () => {
     await page.waitForURL((url) => url.pathname === "/visit", {
       timeout: 5000,
     })
+  })
+})
+
+// Issue #664: a material QR scanned without an open visit used to end on
+// "Kein offener Besuch" → /checkin with a "scan again" hint, dropping the
+// target. The target now rides along in `next` and the check-in's primary
+// button leads straight to the promised picker.
+test.describe("cold QR scan carries the target (issue #664)", () => {
+  const TARGET_BUTTON = "Besuch starten und Material hinzufügen"
+  const BANNER = /danach geht es direkt weiter zum gescannten Material/
+
+  test.beforeEach(async () => {
+    await clearCollections("checkouts", "loginCodes")
+    await clearPriceList()
+    await seedPriceList()
+  })
+
+  test.afterEach(async () => {
+    await clearPriceList()
+  })
+
+  /** The cold deep link lands on /checkin with the path in `next`, without
+   *  the visitor having to dismiss the no-checkout dialog. */
+  async function expectCheckinWithTarget(page: Page, target: string) {
+    await page.waitForURL(
+      (url) =>
+        url.pathname === "/checkin" && url.searchParams.get("next") === target,
+      { timeout: 10_000 },
+    )
+    await expect(page.getByText(BANNER)).toBeVisible()
+    await expect(page.getByText("Kein offener Besuch")).toHaveCount(0)
+    // The generic label is replaced, not accompanied.
+    await expect(page.getByRole("button", { name: "Weiter" })).toHaveCount(0)
+  }
+
+  test("signed in, price-list QR → check-in → that list's picker", async ({
+    page,
+  }) => {
+    await signInWithoutCheckin(page)
+    const target = `/visit/add/list/${PRICE_LIST_ID}`
+    await page.goto(target)
+    await expectCheckinWithTarget(page, target)
+
+    await page.getByRole("button", { name: TARGET_BUTTON }).click()
+
+    await page.waitForURL((url) => url.pathname === target, {
+      timeout: 10_000,
+    })
+    await expect(page.getByPlaceholder("Material suchen…")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText("E2E Testmaterial")).toBeVisible()
+    await expect(page.getByText("E2E Holzplatte")).toBeVisible()
+    await expect(page.getByText(/^Filament$/)).toHaveCount(0)
+  })
+
+  test("signed in, item QR → check-in → that item's form", async ({ page }) => {
+    await signInWithoutCheckin(page)
+    await page.goto("/visit/add/item/9001")
+    await expectCheckinWithTarget(page, "/visit/add/item/9001")
+
+    await page.getByRole("button", { name: TARGET_BUTTON }).click()
+
+    await page.waitForURL((url) => url.pathname === "/visit/add/item/9001", {
+      timeout: 10_000,
+    })
+    await expect(page.getByText("E2E Testmaterial")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByRole("button", { name: "Hinzufügen" })).toBeVisible()
+  })
+
+  test("a `next` outside the add routes is ignored", async ({ page }) => {
+    await signInWithoutCheckin(page)
+    await page.goto("/checkin?next=/account/profile")
+
+    const weiter = page.getByRole("button", { name: "Weiter" })
+    await expect(weiter).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(BANNER)).toHaveCount(0)
+    await expect(page.getByRole("button", { name: TARGET_BUTTON })).toHaveCount(0)
+    await weiter.click()
+
+    await page.waitForURL((url) => url.pathname === "/visit", {
+      timeout: 10_000,
+    })
+  })
+
+  test("guest (signed out), price-list QR → guest check-in → picker", async ({
+    page,
+  }) => {
+    const target = `/visit/add/list/${PRICE_LIST_ID}`
+    await page.goto(target)
+    await expectCheckinWithTarget(page, target)
+
+    await openGuestSection(page)
+    const field = (label: string) =>
+      page
+        .locator(`label:has-text("${label}")`)
+        .first()
+        .locator("..")
+        .locator("input")
+    await field("Vorname").fill("Gina")
+    await field("Nachname").fill("Gast")
+    await field("E-Mail").fill("gina.gast@test.com")
+    await page.locator("#terms-accept").click()
+    await page.getByRole("button", { name: TARGET_BUTTON }).click()
+
+    await page.waitForURL((url) => url.pathname === target, {
+      timeout: 10_000,
+    })
+    await expect(page.getByPlaceholder("Material suchen…")).toBeVisible({
+      timeout: 10_000,
+    })
+    await expect(page.getByText("E2E Testmaterial")).toBeVisible()
+    await expect(page.getByText(/^Filament$/)).toHaveCount(0)
   })
 })

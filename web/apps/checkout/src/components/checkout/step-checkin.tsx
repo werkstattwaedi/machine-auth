@@ -81,6 +81,15 @@ interface StepCheckinProps {
    */
   hasOpenCheckout?: boolean
   /**
+   * Issue #664: set when the check-in was reached from a cold QR scan whose
+   * target `onAdvance` resumes. It replaces the label of the `onAdvance`
+   * button ("Weiter" / "Material erfassen") so the button itself says where
+   * it leads, and on the kiosk makes that button the filled primary —
+   * "Besuch starten" alone would hand the terminal back and drop the
+   * scanned target, so it steps down to the outline secondary.
+   */
+  advanceLabel?: string
+  /**
    * Family roster members of the signed-in user that aren't on the visit
    * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
    * membership, or non-owner users.
@@ -115,7 +124,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId, accountActions }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, advanceLabel, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId, accountActions }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -222,6 +231,12 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       setAdvancing(false)
     }
   }
+
+  // The long target label ("Besuch starten und Material hinzufügen") does
+  // not fit one line on a phone — let that button grow instead of overflow.
+  const advancePrimaryClass = advanceLabel
+    ? cn(FOOTER_PRIMARY, "h-auto min-h-[42px] py-2 text-left")
+    : FOOTER_PRIMARY
 
   const handleAddPerson = () => {
     setSubmitted(false)
@@ -524,13 +539,34 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           hasOpenCheckout ? (
             <button
               type="button"
-              className={FOOTER_PRIMARY}
+              className={advancePrimaryClass}
               onClick={() => handleAction(onAdvance)}
               disabled={advancing}
             >
-              Material erfassen
-              <ArrowRight className="h-4 w-4" />
+              {advanceLabel ?? "Material erfassen"}
+              <ArrowRight className="h-4 w-4 shrink-0" />
             </button>
+          ) : advanceLabel ? (
+            <>
+              <button
+                type="button"
+                className={FOOTER_SECONDARY}
+                onClick={() => handleAction(onStartVisit)}
+                disabled={advancing}
+              >
+                <Check className="h-4 w-4" />
+                Besuch starten
+              </button>
+              <button
+                type="button"
+                className={advancePrimaryClass}
+                onClick={() => handleAction(onAdvance)}
+                disabled={advancing}
+              >
+                {advanceLabel}
+                <ArrowRight className="h-4 w-4 shrink-0" />
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -556,7 +592,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         ) : (
           <button
             type="button"
-            className={FOOTER_PRIMARY}
+            className={advancePrimaryClass}
             onClick={() => handleAction(onAdvance)}
             // On the account side of the switcher there is nothing to
             // advance with yet — the visitor signs in (or switches to the
@@ -565,8 +601,8 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             // screen.
             disabled={advancing || (isAnonymous && section === "account")}
           >
-            Weiter
-            <ArrowRight className="h-4 w-4" />
+            {advanceLabel ?? "Weiter"}
+            <ArrowRight className="h-4 w-4 shrink-0" />
           </button>
         )}
       </div>

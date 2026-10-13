@@ -83,4 +83,34 @@ describe("parseCheckoutQr", () => {
       expect(parseCheckoutQr(input)).toBeNull()
     })
   })
+
+  // Issue #664: the parser also validates the `next` search param that
+  // carries a cold scan's target through /checkin. That value is a bare
+  // path and fully attacker-controllable (anyone can craft the link).
+  describe("as the /checkin `next` validator", () => {
+    it.each([
+      ["/visit/add/list/abc123", { kind: "list", listId: "abc123" }],
+      ["/visit/add/item/3210", { kind: "item", code: "3210" }],
+      [
+        "/visit/add/item/3210/a3",
+        { kind: "itemVariant", code: "3210", variantId: "a3" },
+      ],
+      ["/visit/add/workshop/holz", { kind: "workshop", workshopId: "holz" }],
+    ])("accepts the bare path %s", (input, intent) => {
+      expect(parseCheckoutQr(input)).toEqual(intent)
+    })
+
+    it.each([
+      ["a member-area path", "/account/profile"],
+      ["another wizard step", "/checkout"],
+      // Scheme-less host: the first path segment is the host, not `visit`.
+      ["a protocol-relative URL", "//evil.example/visit/add/list/x"],
+      ["the target-less add index", "/visit/add"],
+      ["the target-less add index with slash", "/visit/add/"],
+      ["a relative path", "visit/add/list/abc"],
+      ["a javascript: URL", "javascript:alert(1)"],
+    ])("rejects %s", (_label, input) => {
+      expect(parseCheckoutQr(input)).toBeNull()
+    })
+  })
 })

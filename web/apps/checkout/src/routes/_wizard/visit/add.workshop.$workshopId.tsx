@@ -7,7 +7,6 @@ import type { WorkshopId } from "@modules/lib/workshop-config"
 import { MaterialPicker } from "@/components/usage/material-picker"
 import { restorePickerScrollAnchor } from "@/components/usage/picker-scroll-anchor"
 import { useWizardContext } from "@/components/checkout/wizard-context"
-import { useBounceIfNoCheckout } from "@/components/checkout/use-bounce-if-no-checkout"
 import { EmptyState } from "@modules/components/empty-state"
 import { AlertTriangle } from "lucide-react"
 
@@ -18,7 +17,6 @@ export const Route = createFileRoute(
 })
 
 function AddWorkshopRoute() {
-  useBounceIfNoCheckout()
   const { workshopId } = Route.useParams()
   const navigate = useNavigate()
   const ctx = useWizardContext()
