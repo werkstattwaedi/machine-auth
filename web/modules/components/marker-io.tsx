@@ -39,7 +39,8 @@ export interface MarkerIOProps {
 
 /**
  * Loads the Marker.io widget for every visitor (issue #669). The floating
- * launcher stays visible only on staging; elsewhere the capture is opened
+ * launcher shows only where the operations config sets
+ * web.markerLauncherVisible (staging); elsewhere the capture is opened
  * from the account menu / admin sidebar or with Ctrl+Shift+PrintScreen.
  */
 export function MarkerIO({ app }: MarkerIOProps) {
@@ -85,12 +86,7 @@ export function MarkerIO({ app }: MarkerIOProps) {
     window.Marker = stub
 
     // Queued before the shim loads, so it replays before the launcher paints.
-    if (
-      !shouldShowMarkerLauncher({
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        dev: import.meta.env.DEV,
-      })
-    ) {
+    if (!shouldShowMarkerLauncher(import.meta.env.VITE_MARKER_LAUNCHER_VISIBLE)) {
       window.Marker.hide?.()
     }
 

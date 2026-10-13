@@ -101,6 +101,10 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   // → disabled; set web.smsLoginEnabled: "true" in the operations config to
   // roll out (the Firebase project also needs the phone provider enabled).
   { envVar: "VITE_SMS_LOGIN_ENABLED", jsonPath: "web.smsLoginEnabled" },
+  // Marker.io floating "Problem melden" launcher (issue #669). Absent key →
+  // empty → hidden (the capture stays reachable via menu + shortcut);
+  // config.staging.jsonc sets "true".
+  { envVar: "VITE_MARKER_LAUNCHER_VISIBLE", jsonPath: "web.markerLauncherVisible" },
   // Deployment label prefixed to the web tab titles (and, via the kiosk's
   // inject-build-config.mjs, the Electron window/tray title) so staging
   // and local builds are recognisable. Absent key → empty → no prefix;
@@ -194,6 +198,8 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     smsLoginEnabled: "true",
     // Labels emulator-backed CI/e2e tabs; no test asserts on document.title.
     envLabel: "[ci]",
+    // markerLauncherVisible stays unset: the floating launcher would shift
+    // the e2e screenshot baselines.
     iban: "CH00 0000 0000 0000 0000 0",
     raisenowPaylinkSolutionId: "test-fake-solution",
     paymentMethodsKiosk: "rechnung,monthly,raisenow",

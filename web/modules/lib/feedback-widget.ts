@@ -3,23 +3,18 @@
 
 // Marker.io "Problem melden" helpers (issue #669). The widget loads for
 // every visitor — the kiosk is where most reports come from — but its
-// floating launcher overlapped the UI, so it only shows on staging. Elsewhere
-// the capture is reached through the account menu, the admin sidebar and the
+// floating launcher overlapped the UI, so it only shows where the operations
+// config sets web.markerLauncherVisible (staging). Elsewhere the capture is
+// reached through the account menu, the admin sidebar and the
 // Ctrl+Shift+PrintScreen shortcut.
 
-/** Firebase project of the staging deployment. */
-export const STAGING_FIREBASE_PROJECT_ID = "oww-maco-staging"
-
 /**
- * Whether Marker.io's floating launcher button should be visible. Only built
- * staging bundles show it; production and the dev server (incl. e2e, whose
- * env carries the production project id) keep it hidden.
+ * Whether Marker.io's floating launcher button should be visible, given the
+ * VITE_MARKER_LAUNCHER_VISIBLE flag. Absent/empty (production, local, e2e)
+ * keeps it hidden.
  */
-export function shouldShowMarkerLauncher(env: {
-  projectId: string | undefined
-  dev: boolean
-}): boolean {
-  return !env.dev && env.projectId === STAGING_FIREBASE_PROJECT_ID
+export function shouldShowMarkerLauncher(flag: string | undefined): boolean {
+  return flag === "true"
 }
 
 /** Ctrl+Shift+PrintScreen opens the capture. */

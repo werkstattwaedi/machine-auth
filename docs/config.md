@@ -230,6 +230,7 @@ Beyond Firebase config, the following deployment-specific variables are used:
 | `VITE_CURRENCY` | Currency code | `CHF` |
 | `VITE_ORGANIZATION_NAME` | Organization name | `My Workshop` |
 | `VITE_SMS_LOGIN_ENABLED` | SMS login codes rollout flag (ADR-0031); requires the phone provider enabled on the Firebase project | `true` |
+| `VITE_MARKER_LAUNCHER_VISIBLE` | Shows Marker.io's floating "Problem melden" launcher (`web.markerLauncherVisible`). Empty/absent = hidden; the capture is still reachable via the account menu / admin sidebar and Ctrl+Shift+PrintScreen. Set on staging only | `true` |
 | `VITE_ENV_LABEL` | Prefix for the browser tab title (`web.envLabel`; the kiosk window/tray title reads the same key). Empty in production | `[staging]` |
 | `VITE_PAYMENT_METHODS_KIOSK` / `VITE_PAYMENT_METHODS_WEB` | Payment methods offered per client type, comma-separated ids in tab order (`web.paymentMethodsKiosk` / `web.paymentMethodsWeb`, ADR-0044). The functions get the same keys as `PAYMENT_METHODS_*`. Empty = `rechnung,monthly,raisenow`; unknown ids fail `generate-env` | `rechnung,monthly` |
 

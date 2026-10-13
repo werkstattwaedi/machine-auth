@@ -12,14 +12,6 @@ vi.mock("@modules/lib/use-bridge", () => ({
   useBridge: () => ({ available: mockBridgeAvailable }),
 }))
 
-// The test env pins VITE_FIREBASE_PROJECT_ID, so the environment decision
-// (covered in feedback-widget.test.ts) is stubbed here.
-let mockShowLauncher = false
-vi.mock("@modules/lib/feedback-widget", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@modules/lib/feedback-widget")>()),
-  shouldShowMarkerLauncher: () => mockShowLauncher,
-}))
-
 const { MarkerIO } = await import("./marker-io")
 
 function queue(): unknown[][] {
@@ -29,11 +21,12 @@ function queue(): unknown[][] {
 beforeEach(() => {
   mockAuth = { user: null, userDoc: null, sessionKind: null }
   mockBridgeAvailable = false
-  mockShowLauncher = false
+  vi.stubEnv("VITE_MARKER_LAUNCHER_VISIBLE", "")
 })
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllEnvs()
   delete window.Marker
   delete window.__Marker
   delete window.markerConfig
@@ -52,13 +45,13 @@ describe("MarkerIO", () => {
     })
   })
 
-  it("hides the launcher outside staging", () => {
+  it("hides the launcher when the config flag is unset", () => {
     render(<MarkerIO app="checkout" />)
     expect(queue()).toContainEqual(["hide"])
   })
 
-  it("keeps the launcher on staging", () => {
-    mockShowLauncher = true
+  it("keeps the launcher when the config flag is \"true\"", () => {
+    vi.stubEnv("VITE_MARKER_LAUNCHER_VISIBLE", "true")
     render(<MarkerIO app="admin" />)
     expect(queue()).not.toContainEqual(["hide"])
   })

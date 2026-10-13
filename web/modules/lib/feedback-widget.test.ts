@@ -25,31 +25,14 @@ afterEach(() => {
 })
 
 describe("shouldShowMarkerLauncher", () => {
-  it("shows the launcher on a staging build", () => {
-    expect(
-      shouldShowMarkerLauncher({ projectId: "oww-maco-staging", dev: false }),
-    ).toBe(true)
+  it("shows the launcher when the config flag is \"true\"", () => {
+    expect(shouldShowMarkerLauncher("true")).toBe(true)
   })
 
-  it("hides it on production", () => {
-    expect(shouldShowMarkerLauncher({ projectId: "oww-maco", dev: false })).toBe(
-      false,
-    )
-  })
-
-  it("hides it on the dev server, even against staging", () => {
-    expect(
-      shouldShowMarkerLauncher({ projectId: "oww-maco-staging", dev: true }),
-    ).toBe(false)
-    expect(shouldShowMarkerLauncher({ projectId: "oww-maco", dev: true })).toBe(
-      false,
-    )
-  })
-
-  it("hides it when the project is unknown", () => {
-    expect(shouldShowMarkerLauncher({ projectId: undefined, dev: false })).toBe(
-      false,
-    )
+  it("hides it when the flag is unset, empty or anything else", () => {
+    expect(shouldShowMarkerLauncher(undefined)).toBe(false)
+    expect(shouldShowMarkerLauncher("")).toBe(false)
+    expect(shouldShowMarkerLauncher("false")).toBe(false)
   })
 })
 
