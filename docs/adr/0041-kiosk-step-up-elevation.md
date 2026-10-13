@@ -135,14 +135,16 @@ interstitial collapses to a single *Code senden* button. Then the existing
 
 ### 4. Kiosk UX
 
-- **Entry points** in the wizard: a "Konto verwalten" action in the signed-in
-  "Deine Angaben" block and in the kiosk welcome onboarding's closing step
-  (replacing the "auf deinem eigenen Gerät" copy), plus "Mitglied werden" for
-  non-members, and the header account menu (`AccountMenu`: Profil /
-  Nutzungsverlauf / Mitgliedschaft; its "Abmelden" is the start-over wipe and
-  never steps up). If already elevated → navigate; otherwise
+- **Entry point** in the wizard: the header account menu (`AccountMenu`:
+  Profil / Nutzungsverlauf / Mitgliedschaft; its "Abmelden" is the start-over
+  wipe and never steps up). The kiosk welcome onboarding's closing step points
+  visitors at it. If already elevated → navigate; otherwise
   `KioskElevationDialog` (§2): the channel interstitial, then the existing
   `CodeEntryDialog`.
+  *Amended (#719):* the check-in step originally also carried inline
+  "Konto verwalten" / "Mitglied werden" buttons (`KioskAccountActions`) under
+  "Deine Angaben". They duplicated the header menu and cluttered the
+  check-in screen, so they were removed; the menu is the single entry point.
 - **Account area in kiosk mode** (detected via `useBridge().available` — the
   `?kiosk` search param only exists on the wizard route):
   "Abmelden" runs `runStartOver` (signOut + partition wipe + reload to
@@ -241,7 +243,7 @@ tap still yields the checkout-only session it does today.
 - Web: `useAuth().kioskElevatedUntil` / `isKioskElevated` (`auth.tsx`, now on
   `onIdTokenChanged`), guards in `authenticated-layout.tsx` / `_authonly.tsx`,
   `KioskElevationProvider` + `useKioskElevation` (`kiosk-elevation-dialog.tsx`),
-  `useKioskSms`, `KioskAccountActions`, `KioskAccountIdleWatcher`,
+  `useKioskSms`, `AccountMenu`, `KioskAccountIdleWatcher`,
   shared `kiosk-idle-dialog.tsx`.
 
 ## Work breakdown (as shipped in one PR)

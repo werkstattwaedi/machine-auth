@@ -39,12 +39,6 @@ vi.mock("@/components/checkout/visit-started-dialog", () => ({
 
 // The embedded account sign-in needs the full Auth/Firebase provider stack
 // (covered by its own checkin-signin tests); stub it here.
-// The kiosk member-area entry points need the auth + elevation providers;
-// they are out of scope for the footer gating under test.
-vi.mock("@/components/checkout/kiosk-account-actions", () => ({
-  KioskAccountActions: () => null,
-}))
-
 vi.mock("@/components/checkout/checkin-signin", () => ({
   CheckinSignin: () => null,
 }))
@@ -125,5 +119,17 @@ describe("CheckinRoute — kiosk 'Besuch starten' gating (issue #467)", () => {
     renderCheckin({ isAnonymous: true, kiosk: false })
     expect(screen.queryByRole("button", { name: /Besuch starten/ })).toBeNull()
     expect(screen.getByRole("button", { name: /^Weiter$/ })).toBeTruthy()
+  })
+})
+
+// Issue #719: the inline "Konto verwalten" / "Mitglied werden" buttons
+// duplicated the header account menu, which is the single kiosk entry point
+// into the member area (ADR-0041 §4).
+describe("CheckinRoute — no inline kiosk account actions (issue #719)", () => {
+  it("renders no 'Konto verwalten' / 'Mitglied werden' for an identified non-member kiosk visitor", () => {
+    renderCheckin({ isAnonymous: false, kiosk: true })
+    expect(screen.queryByRole("button", { name: /Konto verwalten/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Mitglied werden/ })).toBeNull()
+    expect(screen.queryByTestId("kiosk-account-actions")).toBeNull()
   })
 })
