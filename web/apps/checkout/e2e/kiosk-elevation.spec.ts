@@ -57,6 +57,20 @@ test.beforeEach(async () => {
   )
 })
 
+/**
+ * Opens a member-area destination through the header account menu — the
+ * single kiosk entry point since the inline check-in buttons went (#719).
+ */
+async function openAccountMenuItem(
+  page: import("@playwright/test").Page,
+  name: "Profil" | "Nutzungsverlauf" | "Mitgliedschaft",
+) {
+  const trigger = page.getByRole("button", { name: "Konto-Menü" })
+  await expect(trigger).toBeVisible()
+  await trigger.click()
+  await page.getByRole("menuitem", { name }).click()
+}
+
 async function tapBadge2(page: import("@playwright/test").Page) {
   const { picc2, cmac2 } = readE2eData()
   await page.goto(`/checkin?kiosk&picc=${picc2}&cmac=${cmac2}`)
@@ -72,9 +86,13 @@ test.describe("Kiosk step-up elevation", () => {
   }) => {
     await tapBadge2(page)
 
-    // The badge user is not a member: both entry points show.
-    await expect(page.getByTestId("kiosk-account-actions")).toBeVisible()
-    await page.getByTestId("kiosk-become-member").click()
+    // Issue #719: no inline "Konto verwalten" / "Mitglied werden" buttons on
+    // the check-in step — the header account menu is the only entry point.
+    await expect(page.getByTestId("kiosk-account-actions")).toHaveCount(0)
+    await expect(
+      page.getByRole("button", { name: /Konto verwalten|Mitglied werden/ }),
+    ).toHaveCount(0)
+    await openAccountMenuItem(page, "Mitgliedschaft")
 
     // A badge-only session must step up first — the interstitial offers the
     // masked stored e-mail (no phone linked for this user → no SMS button).
@@ -115,7 +133,7 @@ test.describe("Kiosk step-up elevation", () => {
     expect(items.some((i) => i.variantId === "single")).toBe(true)
   })
 
-  // The header account menu is a second entry point into the same step-up
+  // The header account menu is the kiosk entry point into the step-up
   // (ADR-0041 §4). Selecting an item closes the Radix dropdown and opens the
   // Radix elevation dialog in the same tick — this checks the two overlays
   // hand over cleanly and the queued navigation still runs.
@@ -124,10 +142,7 @@ test.describe("Kiosk step-up elevation", () => {
   }) => {
     await tapBadge2(page)
 
-    const trigger = page.getByRole("button", { name: "Konto-Menü" })
-    await expect(trigger).toBeVisible()
-    await trigger.click()
-    await page.getByRole("menuitem", { name: "Mitgliedschaft" }).click()
+    await openAccountMenuItem(page, "Mitgliedschaft")
 
     await expect(page.getByRole("menu")).not.toBeVisible()
     await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
@@ -167,7 +182,7 @@ test.describe("Kiosk step-up elevation", () => {
     await linkPhone(NFC_USER_ID_2, BADGE2_PHONE)
     try {
       await tapBadge2(page)
-      await page.getByTestId("kiosk-manage-account").click()
+      await openAccountMenuItem(page, "Nutzungsverlauf")
 
       await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
       await expect(page.getByTestId("kiosk-elevation-sms")).toContainText(
@@ -201,7 +216,7 @@ test.describe("Kiosk step-up elevation", () => {
       timeout: 10_000,
     })
 
-    await page.getByTestId("kiosk-manage-account").click()
+    await openAccountMenuItem(page, "Nutzungsverlauf")
     await expect(page.getByTestId("kiosk-elevation-dialog")).not.toBeVisible()
     await expect(page).toHaveURL(/\/account\/usage/, { timeout: 10_000 })
 
