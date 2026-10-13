@@ -58,8 +58,26 @@ function preserveMemberTier(
   });
 }
 
+/** Catalog ids pinned to the top of any workshop (`config/pricing`). */
+async function loadPinnedIds(): Promise<Set<string>> {
+  const pricing = await getFirestore().doc("config/pricing").get();
+  const workshops = (pricing.get("workshops") ?? {}) as Record<
+    string,
+    { pinnedMachines?: unknown } | null
+  >;
+  const ids = new Set<string>();
+  for (const ws of Object.values(workshops)) {
+    const pinned = ws?.pinnedMachines;
+    if (Array.isArray(pinned)) for (const id of pinned) ids.add(String(id));
+  }
+  return ids;
+}
+
 async function loadCatalog(): Promise<CurrentCatalogItem[]> {
-  const snap = await getFirestore().collection("catalog").get();
+  const [snap, pinnedIds] = await Promise.all([
+    getFirestore().collection("catalog").get(),
+    loadPinnedIds(),
+  ]);
   const current: CurrentCatalogItem[] = [];
   for (const doc of snap.docs) {
     const d = doc.data();
@@ -73,6 +91,7 @@ async function loadCatalog(): Promise<CurrentCatalogItem[]> {
       workshops: Array.isArray(d.workshops) ? d.workshops.map(String) : [],
       active: d.active !== false,
       type: d.type ?? null,
+      pinned: pinnedIds.has(doc.id),
       variants: Array.isArray(d.variants) ? (d.variants as CatalogVariant[]) : [],
     });
   }

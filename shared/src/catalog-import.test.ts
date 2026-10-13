@@ -313,6 +313,15 @@ describe("diffCatalog", () => {
     ])
     expect(preview.diff.some((d) => d.kind === "retire")).toBe(false)
   })
+
+  it("never retires a pinned material absent from the workbook (Keramik-Brennen, #685)", () => {
+    const { entries } = normalizeRows([row({ code: "3001" })], DEFS) // holz only
+    const preview = diffCatalog(entries, [
+      current(),
+      current({ id: "brennen", code: "0011", name: "Brennen", type: "material", pinned: true }),
+    ])
+    expect(preview.diff.some((d) => d.kind === "retire")).toBe(false)
+  })
 })
 
 describe("buildImportPreview", () => {

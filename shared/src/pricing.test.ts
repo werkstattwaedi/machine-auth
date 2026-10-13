@@ -173,6 +173,22 @@ describe("usageTypeOptions / resolveUsageType (issue #628)", () => {
     )
   })
 
+  it("keeps materialbezug selectable for a kiln-firing-only cart (issue #685)", () => {
+    // Keramik-Brennen is pinned but bills as material: a firing pickup is a
+    // pure Materialbezug, not machine usage.
+    const brennen = { type: "material", pricingModel: "direct", totalPrice: 22.2 }
+    const hasMachineUsage = [brennen].some(isMachineItem)
+    expect(hasMachineUsage).toBe(false)
+    expect(
+      usageTypeOptions({ anonymous: false, hasMachineUsage }).find(
+        (o) => o.type === "materialbezug",
+      )?.disabledReason,
+    ).toBeUndefined()
+    expect(resolveUsageType("materialbezug", { hasMachineUsage })).toBe(
+      "materialbezug",
+    )
+  })
+
   it("resolves materialbezug + machine usage to regular, everything else unchanged", () => {
     expect(resolveUsageType("materialbezug", { hasMachineUsage: true })).toBe(
       "regular",

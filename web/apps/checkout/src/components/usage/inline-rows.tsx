@@ -332,21 +332,30 @@ export function WorkshopInlineSection({
   // material box also excludes NFC items defensively — production NFC usage
   // always carries type "machine", but this keeps a type-less NFC row out of
   // the material box rather than double-rendering it.
+  //
+  // Pinned rows are a separate concept from machine-ness (issue #685): a
+  // pinned entry shows at the top of the workshop whatever it bills as —
+  // Keramik-Brennen is pinned but bills as material. So pinned items are
+  // split off first and rendered by the pinned rows only, never also in
+  // the machine or material box.
+  const pinnedIds = new Set(pinnedCatalog.map((c) => c.id))
+  const isPinnedItem = (i: CheckoutItemLocal) =>
+    i.origin !== "nfc" && !!i.catalogId && pinnedIds.has(i.catalogId)
+  const pinnedItems = items.filter(isPinnedItem)
   const nfcItems = items.filter((i) => i.origin === "nfc")
-  const machineItems = items.filter((i) => isMachineItem(i))
+  const machineItems = items.filter((i) => isMachineItem(i) && !isPinnedItem(i))
   const materialItems = items.filter(
-    (i) => !isMachineItem(i) && i.origin !== "nfc",
+    (i) => !isMachineItem(i) && i.origin !== "nfc" && !isPinnedItem(i),
   )
   const materialTotal = materialItems.reduce((s, i) => s + i.totalPrice, 0)
 
-  const pinnedIds = new Set(pinnedCatalog.map((c) => c.id))
   // Machine items that are neither NFC nor pinned — e.g. a user-addable
   // machine catalog item picked via the material picker (Sandstrahlen). They
   // bill as machine, so without rendering them here they'd vanish from the
   // workshop view; surface them as ordinary removable rows in the machine
   // table (issue #105 review).
   const otherMachineRows: PositionRow[] = machineItems
-    .filter((i) => i.origin !== "nfc" && !(i.catalogId && pinnedIds.has(i.catalogId)))
+    .filter((i) => i.origin !== "nfc")
     .map(rowFromItem)
 
   const nfcRows: PositionRow[] = nfcItems.map((item) => {
@@ -375,9 +384,9 @@ export function WorkshopInlineSection({
   // (SpendeCard pattern) and committed on blur.
   const pinnedItemByCatalog = useMemo(() => {
     const m = new Map<string, CheckoutItemLocal>()
-    for (const i of machineItems) if (i.catalogId) m.set(i.catalogId, i)
+    for (const i of pinnedItems) if (i.catalogId) m.set(i.catalogId, i)
     return m
-  }, [machineItems])
+  }, [pinnedItems])
   const [pinnedText, setPinnedText] = useState<Record<string, string>>({})
   // Fields whose current text failed to parse (unknown unit). We keep the
   // verbatim text and show an inline error rather than silently zeroing it.
@@ -451,6 +460,10 @@ export function WorkshopInlineSection({
     // comparing the raw parse would make every blur of an unchanged field
     // look like an edit and re-fire updateItem.
     const hours = roundBaseQuantity(value)
+    // The catalog decides what the entry bills as, not the pinning (issue
+    // #685) — same default as the material picker. Re-stamped on update so
+    // an item committed before a catalog type change follows it.
+    const type: ItemType = cat.type ?? "material"
     const priced = direct
       ? { quantity: 1, unitPrice: total, totalPrice: total }
       : {
@@ -463,14 +476,14 @@ export function WorkshopInlineSection({
       if (direct ? existing.totalPrice === total : existing.quantity === hours) {
         return
       }
-      callbacks.updateItem(existing.id, { ...existing, ...priced })
+      callbacks.updateItem(existing.id, { ...existing, ...priced, type })
     } else {
       callbacks.addItem({
         id: crypto.randomUUID(),
         workshop: workshopId,
         description: cat.name,
         origin: "manual",
-        type: "machine",
+        type,
         catalogId: cat.id,
         variantId: variant?.id ?? "default",
         pricingModel: variant?.pricingModel ?? "time",
@@ -520,17 +533,16 @@ export function WorkshopInlineSection({
     }
   })
 
-  // Subtotal tracks pinned hours live (before blur/commit) so it never lags
+  // Subtotal tracks pinned values live (before blur/commit) so it never lags
   // the per-row Preis. Committed pinned items are excluded from the
-  // machineItems sum to avoid double-counting with `livePinnedTotal`.
+  // machineItems/materialItems sums to avoid double-counting with
+  // `livePinnedTotal`.
   const livePinnedTotal = pinnedRows.reduce(
     (s, r) => s + (parseFloat(r.preis) || 0),
     0,
   )
   const machineTotal =
-    machineItems
-      .filter((i) => !(i.catalogId && pinnedIds.has(i.catalogId)))
-      .reduce((s, i) => s + i.totalPrice, 0) + livePinnedTotal
+    machineItems.reduce((s, i) => s + i.totalPrice, 0) + livePinnedTotal
   const wsTotal = machineTotal + materialTotal
   const showMachineBox =
     nfcItems.length > 0 || otherMachineRows.length > 0 || pinnedCatalog.length > 0
@@ -640,8 +652,11 @@ export function WorkshopInlineSection({
 }
 
 // ---------------------------------------------------------------------------
-// Pinned machine rows (issue #105). For machines without a MaCo, the cost
-// step shows an always-visible input so visitors can record usage manually.
+// Pinned rows (issue #105). For machines without a MaCo, the cost step
+// shows an always-visible input so visitors can record usage manually.
+// Pinning only controls placement: the checkout item's `type` comes from
+// the catalog item, so a pinned material (Keramik-Brennen, issue #685)
+// bills as Materialbezug.
 // Each pinned machine is a catalog item referenced from
 // `config/pricing.workshops[ws].pinnedMachines`; the row IS the
 // representation of its checkout item — entering a value upserts it,

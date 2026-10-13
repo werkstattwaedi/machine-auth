@@ -15,9 +15,11 @@ import {
   assertBadgeItemsBelongToOwner,
   entryFeeFor,
   isValidItem,
+  priceCheckoutItems,
   recomputeSummary,
 } from "./close_checkout_and_get_payment";
 import type {
+  CheckoutItemEntity,
   CheckoutPersonEntity,
   ItemOrigin,
 } from "../types/firestore_entities";
@@ -461,6 +463,48 @@ describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {
       hasMembershipItem: false,
       hasPaidBadgeItem: false,
     });
+  });
+});
+
+describe("priceCheckoutItems: pinned Keramik-Brennen under Materialbezug (issue #685)", () => {
+  // Brennen is pinned at the top of Keramik but bills as material: a firing
+  // pickup is a pure Materialbezug, charged at the price on the slip.
+  function brennen(type: "material" | "machine"): CheckoutItemEntity {
+    return {
+      workshop: "keramik",
+      description: "Brennen",
+      origin: "manual",
+      type,
+      catalogId: null,
+      variantId: "pauschal",
+      created: null as unknown as CheckoutItemEntity["created"],
+      quantity: 1,
+      unitPrice: 22.2,
+      totalPrice: 22.2,
+      pricingModel: "direct",
+    } as CheckoutItemEntity;
+  }
+  const args = {
+    persons: [adultPerson],
+    usageType: "materialbezug" as const,
+    configFees: { erwachsen: { regular: 15 } },
+    membershipCatalogId: null,
+    tip: 0,
+  };
+
+  it("allows materialbezug and bills only the firing (no entry fee)", () => {
+    const { summary } = priceCheckoutItems({ ...args, items: [brennen("material")] });
+    expect(summary.materialCost).to.equal(22.2);
+    expect(summary.machineCost).to.equal(0);
+    expect(summary.totalPrice).to.equal(22.2);
+    // Raw entry fee stays on the summary; materialbezug waives all of it.
+    expect(summary.entryFees - (summary.discountAmount ?? 0)).to.equal(0);
+  });
+
+  it("still rejects materialbezug for a machine-typed item (issue #628 guard)", () => {
+    expect(() =>
+      priceCheckoutItems({ ...args, items: [brennen("machine")] }),
+    ).to.throw(/Materialbezug ist nicht möglich/);
   });
 });
 

@@ -309,6 +309,12 @@ export interface CurrentCatalogItem {
   workshops: string[]
   active: boolean
   type?: string | null
+  /**
+   * Listed in a workshop's `config/pricing.pinnedMachines`. Pinned entries
+   * are curated outside the price-list workbook (e.g. Keramik-Brennen, a
+   * material since issue #685), so a material import must not retire them.
+   */
+  pinned?: boolean
   /** Full stored variants (base + any cut options), for the variant diff. */
   variants: CatalogVariant[]
 }
@@ -396,7 +402,8 @@ function sameSet(a: string[], b: string[]): boolean {
  * - unchanged: code matches and everything is identical.
  * - retire: a *material* current item in one of the imported workshops whose
  *   code is absent from the import — set inactive. Machine/NFC items
- *   (`type === "machine"`) are never retired by a material import.
+ *   (`type === "machine"`) and pinned items are never retired by a material
+ *   import.
  *
  * Retirement is scoped to the workshops actually present in the import, so a
  * Holz-only file never deactivates Metall items.
@@ -452,6 +459,7 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
 
   for (const cur of current) {
     if (cur.type === "machine") continue
+    if (cur.pinned) continue
     if (!cur.active) continue
     if (!cur.workshops.some((w) => importedWorkshops.has(w))) continue
     if (importedCodes.has(cur.code)) continue

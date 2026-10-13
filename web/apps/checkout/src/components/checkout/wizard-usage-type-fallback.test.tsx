@@ -68,6 +68,16 @@ describe("useUsageTypeFallback (#628)", () => {
     expect(result.current.usageType).toBe("materialbezug")
   })
 
+  it("keeps materialbezug for a pinned Keramik-Brennen item (issue #685)", () => {
+    // Pinned at the top of Keramik but billed as material.
+    const brennen: Item = { id: "i-brennen", type: "material" }
+    const { result } = renderHook(() => useHarness("materialbezug", []))
+    act(() => {
+      result.current.setItems([brennen])
+    })
+    expect(result.current.usageType).toBe("materialbezug")
+  })
+
   it("leaves every other usage type alone with machine items present", () => {
     for (const ut of [
       "regular",

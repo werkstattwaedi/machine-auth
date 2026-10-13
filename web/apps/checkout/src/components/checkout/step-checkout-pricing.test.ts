@@ -67,6 +67,36 @@ describe("computeCheckoutCosts", () => {
     expect(result.materialCostNet).toBe(12)
   })
 
+  // Issue #685: a kiln-firing pickup („Nur Materialbezug" + the pinned
+  // Keramik-Brennen at the CHF amount on the slip) bills just the firing.
+  it("bills only the firing under materialbezug (Brennen is material)", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "materialbezug",
+      items: [
+        { origin: "manual", type: "material", totalPrice: 22.2 },
+      ],
+      config,
+    })
+    expect(result.personFeesNet).toBe(0)
+    expect(result.machineCostNet).toBe(0)
+    expect(result.materialCostNet).toBe(22.2)
+    expect(
+      result.personFeesNet + result.machineCostNet + result.materialCostNet,
+    ).toBe(22.2)
+  })
+
+  // Issue #685: volunteers pay for kiln firings (material isn't waived).
+  it("bills the firing for volunteering", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "volunteering",
+      items: [{ origin: "manual", type: "material", totalPrice: 22.2 }],
+      config,
+    })
+    expect(result.materialCostNet).toBe(22.2)
+  })
+
   it("halves the entry fee for ermaessigt", () => {
     const result = computeCheckoutCosts({
       persons: [{ userType: "erwachsen" }],
