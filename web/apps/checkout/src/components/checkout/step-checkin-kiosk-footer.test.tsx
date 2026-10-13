@@ -42,7 +42,6 @@ function renderCheckin(opts: {
       signedInUserId={null}
       signedInEmail={null}
       isMember={false}
-      onSignOut={vi.fn()}
       onAdvance={opts.onAdvance}
       onStartVisit={opts.onStartVisit}
       hasOpenCheckout={opts.hasOpenCheckout}

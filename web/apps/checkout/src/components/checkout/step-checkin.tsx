@@ -3,6 +3,12 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@modules/components/ui/tooltip"
 import { PersonCard, RemovePersonButton } from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { CheckinSignin } from "./checkin-signin"
@@ -51,7 +57,6 @@ interface StepCheckinProps {
   /** True when the signed-in user has an active membership; toggles the
    *  "Vereinsmitglied" suffix on the identity strip. */
   isMember?: boolean
-  onSignOut: () => void
   /**
    * Called when the user advances past /checkin with a valid form. For the
    * truly-anonymous flow this signs the visitor into Firebase Anonymous
@@ -115,7 +120,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onSignOut, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId, accountActions }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId, accountActions }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -267,7 +272,6 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               index={i}
               email={isSignedInUser ? (signedInEmail ?? person.email) : person.email}
               suffix={isSignedInUser && isMember ? "Vereinsmitglied" : null}
-              onSignOut={isSignedInUser ? onSignOut : undefined}
               onRemove={
                 canRemovePerson(person)
                   ? () =>
@@ -311,55 +315,64 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
           primary "Person hinzufügen" CTA. `flex-wrap` lets the chips
           flow onto a second line on narrow viewports.
         */}
-        <div className="flex flex-wrap items-start gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
-            onClick={handleAddPerson}
-          >
-            <Plus className="h-4 w-4" />
-            Person hinzufügen
-          </button>
+        <TooltipProvider>
+          <div className="flex flex-wrap items-start gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
+              onClick={handleAddPerson}
+            >
+              <Plus className="h-4 w-4" />
+              Person hinzufügen
+            </button>
 
-          {familyCandidates &&
-            familyCandidates.map((candidate) =>
-              candidate.hasAccount ? (
-                // ADR-0029: account-holding family members check in on their
-                // own account. The chip stays visible but disabled so the
-                // rule is discoverable instead of the member silently
-                // missing from the picker.
-                <button
-                  key={candidate.userId}
-                  type="button"
-                  disabled
-                  title="Checkt mit dem eigenen Konto ein"
-                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-border bg-white px-4 py-2.5 text-sm font-semibold text-muted-foreground opacity-60"
-                >
-                  <Plus className="h-4 w-4" />
-                  {candidate.firstName} {candidate.lastName}
-                </button>
-              ) : (
-                <button
-                  key={candidate.userId}
-                  type="button"
-                  // Issue #246: chips animate in when they appear (e.g. when
-                  // the signed-in user is re-added to the picker after
-                  // removing themselves from the visit).
-                  className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light animate-in fade-in slide-in-from-top-2 duration-200"
-                  onClick={() => handleAddFamilyPerson(candidate)}
-                >
-                  <Plus className="h-4 w-4" />
-                  {candidate.firstName} {candidate.lastName}
-                </button>
-              ),
-            )}
-        </div>
-
-        {familyCandidates?.some((c) => c.hasAccount) && (
-          <p className="text-xs text-muted-foreground">
-            Familienmitglieder mit eigenem Konto checken separat ein.
-          </p>
-        )}
+            {familyCandidates &&
+              familyCandidates.map((candidate) =>
+                candidate.hasAccount ? (
+                  // ADR-0029: account-holding family members check in on their
+                  // own account. The chip stays visible but disabled so the
+                  // rule is discoverable instead of the member silently
+                  // missing from the picker. A disabled button emits no
+                  // pointer events, so the tooltip hangs off a focusable
+                  // wrapper span instead.
+                  <Tooltip key={candidate.userId}>
+                    <TooltipTrigger asChild>
+                      <span
+                        tabIndex={0}
+                        data-testid="family-chip-has-account"
+                        className="inline-flex rounded-md"
+                      >
+                        <button
+                          type="button"
+                          disabled
+                          className="pointer-events-none inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-border bg-white px-4 py-2.5 text-sm font-semibold text-muted-foreground opacity-60"
+                        >
+                          <Plus className="h-4 w-4" />
+                          {candidate.firstName} {candidate.lastName}
+                        </button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Familienmitglieder mit eigenem Konto checken separat ein.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <button
+                    key={candidate.userId}
+                    type="button"
+                    // Issue #246: chips animate in when they appear (e.g. when
+                    // the signed-in user is re-added to the picker after
+                    // removing themselves from the visit).
+                    className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light animate-in fade-in slide-in-from-top-2 duration-200"
+                    onClick={() => handleAddFamilyPerson(candidate)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {candidate.firstName} {candidate.lastName}
+                  </button>
+                ),
+              )}
+          </div>
+        </TooltipProvider>
 
         {rosterError && (
           <p className="text-sm text-[#cc2a24]">{rosterError}</p>
@@ -581,13 +594,13 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
  * case (the signed-in user manages their profile under
  * /account/profile; family members are pulled from their own user
  * docs), so we show just the name + a short subtitle + the
- * action affordances.
+ * remove affordance.
  *
  * Action slot, right side (shared RemovePersonButton so it lines up with
- * the guest PersonCard's remove):
- *   - Abmelden (only for the signed-in user — signs the whole session out)
- *   - X (when `onRemove` is supplied — the caller gates this so the last
- *     account-linked member can't be removed; see `canRemovePerson`)
+ * the guest PersonCard's remove): an X when `onRemove` is supplied — the
+ * caller gates this so the last account-linked member can't be removed;
+ * see `canRemovePerson`. Signing out lives in the header account menu
+ * (issue #710), not on the strip.
  *
  * Mike's "if I add my kid, I need to be able to remove myself" rule holds
  * once another family member is on the visit; with no family membership the
@@ -598,14 +611,12 @@ function IdentityStrip({
   index,
   email,
   suffix,
-  onSignOut,
   onRemove,
 }: {
   person: CheckoutPerson
   index: number
   email: string | null
   suffix: string | null
-  onSignOut?: () => void
   onRemove?: () => void
 }) {
   const name = `${person.firstName} ${person.lastName}`.trim() || "—"
@@ -625,15 +636,6 @@ function IdentityStrip({
           </div>
         )}
       </div>
-      {onSignOut && (
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="whitespace-nowrap text-sm text-foreground underline hover:no-underline"
-        >
-          Abmelden
-        </button>
-      )}
       {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}
     </div>
   )

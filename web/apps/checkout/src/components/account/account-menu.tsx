@@ -10,7 +10,7 @@
  *
  * Kiosk `actsAs` sessions (ADR-0041) route every destination through the
  * step-up dialog; "Abmelden" is the wizard's `startOver` for both session
- * kinds (the same wipe the person card's "Abmelden" performs).
+ * kinds (the same wipe the anon "Von vorne beginnen" performs).
  */
 
 import { Link, useNavigate } from "@tanstack/react-router"

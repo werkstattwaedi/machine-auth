@@ -37,7 +37,6 @@ function renderCheckin(isAnonymous: boolean) {
       signedInUserId={null}
       signedInEmail={null}
       isMember={false}
-      onSignOut={vi.fn()}
     />,
   )
 }

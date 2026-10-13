@@ -166,7 +166,7 @@ export interface WizardContextValue {
    * For an anonymous visitor this abandons the open checkout — orphaned for
    * the #318 cleanup job (clients can't delete checkouts) — and the next
    * /checkin mints a new anon principal. Shared primitive behind the
-   * signed-in "Abmelden" and the anon "Von vorne beginnen" affordances.
+   * account menu's "Abmelden" and the anon "Von vorne beginnen" affordances.
    * A hard reload (not a soft navigate) is required: a soft nav would let
    * the rehydrate effect immediately re-populate the roster from the
    * still-open checkout.

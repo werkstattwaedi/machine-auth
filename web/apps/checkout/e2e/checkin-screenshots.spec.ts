@@ -221,7 +221,7 @@ test.describe("Check-in step screenshots", () => {
 
     // Navigate to checkout
     await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
 
     await expect(page).toHaveScreenshot("checkin-logged-in.png")
   })
