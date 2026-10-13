@@ -52,7 +52,16 @@ afterEach(() => {
   mockNavigate.mockReset()
   mockEnsureElevated.mockReset()
   mockStartOver.mockClear()
+  delete window.Marker
+  delete window.__Marker
 })
+
+function installMarker() {
+  const capture = vi.fn()
+  window.__Marker = {}
+  window.Marker = { capture }
+  return capture
+}
 
 async function openMenu() {
   const user = userEvent.setup()
@@ -137,6 +146,31 @@ describe("AccountMenu", () => {
     await user.click(screen.getByRole("menuitem", { name: "Abmelden" }))
     expect(mockStartOver).toHaveBeenCalledTimes(1)
     expect(mockEnsureElevated).not.toHaveBeenCalled()
+  })
+
+  it("offers Problem melden when the feedback widget is loaded", async () => {
+    const capture = installMarker()
+    render(<AccountMenu name="Mike Schneider" email="mike@example.com" userId="u1" />)
+    const { user } = await openMenu()
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent)
+    expect(items).toEqual([
+      "Profil",
+      "Nutzungsverlauf",
+      "Mitgliedschaft",
+      "Problem melden",
+      "Abmelden",
+    ])
+    await user.click(screen.getByRole("menuitem", { name: "Problem melden" }))
+    expect(capture).toHaveBeenCalledWith("fullscreen")
+  })
+
+  it("does not offer Problem melden on a kiosk badge session", async () => {
+    installMarker()
+    render(
+      <AccountMenu name="Mike Schneider" email={null} userId="u1" kioskSession />,
+    )
+    await openMenu()
+    expect(screen.queryByRole("menuitem", { name: "Problem melden" })).toBeNull()
   })
 
   it("signs out through the wizard's startOver", async () => {

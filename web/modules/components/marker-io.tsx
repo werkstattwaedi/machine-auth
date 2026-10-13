@@ -2,24 +2,60 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect } from "react"
+import { useAuth } from "@modules/lib/auth"
+import { useBridge } from "@modules/lib/use-bridge"
+import {
+  isFeedbackShortcut,
+  openFeedback,
+  shouldShowMarkerLauncher,
+} from "@modules/lib/feedback-widget"
 
 const MARKERIO_PROJECT_ID = "69d16d8f1e2125e7567bff93"
 
+type MarkerMethod = (...args: unknown[]) => void
+
 declare global {
   interface Window {
-    markerConfig?: { project: string; source: string }
-    Marker?: Record<string, unknown>
+    markerConfig?: {
+      project: string
+      source: string
+      keyboardShortcuts?: boolean
+      customData?: Record<string, unknown>
+    }
+    Marker?: Record<string, unknown> & {
+      capture?: MarkerMethod
+      hide?: MarkerMethod
+      setReporter?: MarkerMethod
+      setCustomData?: MarkerMethod
+    }
     __Marker?: Record<string, unknown>
   }
 }
 
-export function MarkerIO() {
+export interface MarkerIOProps {
+  /** Which web app reports come from — lands in the report's custom data. */
+  app: "checkout" | "admin"
+}
+
+/**
+ * Loads the Marker.io widget for every visitor (issue #669). The floating
+ * launcher stays visible only on staging; elsewhere the capture is opened
+ * from the account menu / admin sidebar or with Ctrl+Shift+PrintScreen.
+ */
+export function MarkerIO({ app }: MarkerIOProps) {
+  const { user, userDoc, sessionKind } = useAuth()
+  const { available: kiosk } = useBridge()
+
   useEffect(() => {
     if (window.__Marker) return
 
     window.markerConfig = {
       project: MARKERIO_PROJECT_ID,
       source: "snippet",
+      // Marker's own shortcut (Alt+U / ⌘+U) stays as a fallback: the OS often
+      // swallows PrintScreen before the page sees it.
+      keyboardShortcuts: true,
+      customData: { app },
     }
 
     window.__Marker = {}
@@ -48,6 +84,16 @@ export function MarkerIO() {
     })
     window.Marker = stub
 
+    // Queued before the shim loads, so it replays before the launcher paints.
+    if (
+      !shouldShowMarkerLauncher({
+        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        dev: import.meta.env.DEV,
+      })
+    ) {
+      window.Marker.hide?.()
+    }
+
     const script = document.createElement("script")
     script.async = true
     script.src = "https://edge.marker.io/latest/shim.js"
@@ -56,6 +102,28 @@ export function MarkerIO() {
     return () => {
       script.remove()
     }
+  }, [app])
+
+  // Say where a report came from, and pre-fill the reporter for members.
+  const email = user?.email || userDoc?.email || null
+  const fullName = userDoc?.name || null
+  useEffect(() => {
+    window.Marker?.setCustomData?.({ app, sessionKind, kiosk })
+    if (sessionKind === "real" && email) {
+      window.Marker?.setReporter?.({ email, fullName: fullName ?? email })
+    }
+  }, [app, sessionKind, kiosk, email, fullName])
+
+  // Ctrl+Shift+PrintScreen. Listening on keyup: Windows browsers deliver
+  // PrintScreen as keyup only.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!isFeedbackShortcut(event)) return
+      event.preventDefault()
+      openFeedback()
+    }
+    window.addEventListener("keyup", onKey)
+    return () => window.removeEventListener("keyup", onKey)
   }, [])
 
   return null

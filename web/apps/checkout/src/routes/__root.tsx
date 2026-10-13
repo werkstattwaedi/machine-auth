@@ -29,7 +29,7 @@ function RootLayout() {
           <KioskStatusReporter />
           <Outlet />
           <Toaster />
-          <MarkerIO />
+          <MarkerIO app="checkout" />
         </KioskElevationProvider>
       </AuthProvider>
     </FirebaseProvider>
