@@ -58,7 +58,6 @@ function renderCheckin(persons: CheckoutPerson[]) {
       signedInUserId="u-self"
       signedInEmail="max@example.com"
       isMember={false}
-      onSignOut={vi.fn()}
     />,
   )
 }

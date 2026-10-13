@@ -51,7 +51,7 @@ async function goToSummaryWithItems(
     await signIn(page)
     // Logged-in user sees the pre-filled form; advance to workshops.
     await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
   } else {
@@ -113,7 +113,7 @@ async function submitAndWaitForPaymentResult(page: Page) {
 
   // Navigate to checkout — logged-in user sees pre-filled form
   await page.goto("/")
-  await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
 
   // Advance to workshops
   await page.getByRole("button", { name: "Weiter" }).click()
@@ -418,7 +418,7 @@ test.describe("Checkout step screenshots", () => {
   test("summary — Nutzungsart dropdown: Materialbezug disabled with machine usage", async ({ page }) => {
     await signIn(page)
     await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
@@ -557,7 +557,7 @@ test.describe("Checkout step screenshots", () => {
 
     // Navigate to checkout — logged-in user sees pre-filled form
     await page.goto("/")
-    await expect(page.getByText("Abmelden")).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
 
     // Advance to workshops
     await page.getByRole("button", { name: "Weiter" }).click()

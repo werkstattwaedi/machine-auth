@@ -52,7 +52,6 @@ interface CheckinOpts {
 
 function renderCheckin(opts: CheckinOpts = {}) {
   const dispatched: PersonsAction[] = []
-  const onSignOut = vi.fn()
 
   function Wrapper({
     isAnonymous = true,
@@ -93,7 +92,6 @@ function renderCheckin(opts: CheckinOpts = {}) {
         signedInUserId={effectiveSignedInUserId}
         signedInEmail={signedInEmail}
         isMember={isMember}
-        onSignOut={onSignOut}
         onAdvance={onAdvance}
         familyCandidates={familyCandidates}
         tagAuthLoading={tagAuthLoading}
@@ -108,7 +106,7 @@ function renderCheckin(opts: CheckinOpts = {}) {
   // component instance) — used to simulate e.g. a badge tap mid-flow.
   const rerenderWith = (patch: Partial<CheckinOpts>) =>
     rerender(<Wrapper {...opts} {...patch} />)
-  return { dispatched, onSignOut, rerenderWith }
+  return { dispatched, rerenderWith }
 }
 
 describe("StepCheckin validation", () => {
@@ -395,7 +393,7 @@ describe("Account/guest switcher", () => {
     expect(screen.queryByTestId("nfc-affordance")).toBeNull()
   })
 
-  it("renders the identity strip with name + Abmelden for logged-in users", () => {
+  it("renders the identity strip with name + email for logged-in users", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
@@ -417,7 +415,6 @@ describe("Account/guest switcher", () => {
     expect(screen.getByTestId("identity-strip")).toBeTruthy()
     expect(screen.getByText("Max Muster")).toBeTruthy()
     expect(screen.getByText(/max@test\.com/)).toBeTruthy()
-    expect(screen.getByText("Abmelden")).toBeTruthy()
   })
 
   it("appends · Vereinsmitglied when the signed-in user has an active membership", () => {
@@ -442,9 +439,10 @@ describe("Account/guest switcher", () => {
     expect(screen.getByText(/max@test\.com · Vereinsmitglied/)).toBeTruthy()
   })
 
-  it("calls onSignOut when Abmelden is clicked", async () => {
-    const user = userEvent.setup()
-    const { onSignOut } = renderCheckin({
+  // Issue #710: signing out lives in the header account menu — the strip
+  // carries no "Abmelden" of its own any more.
+  it("does not render Abmelden on the signed-in user's identity strip", () => {
+    renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
@@ -461,8 +459,8 @@ describe("Account/guest switcher", () => {
       }],
     })
 
-    await user.click(screen.getByText("Abmelden"))
-    expect(onSignOut).toHaveBeenCalledOnce()
+    expect(screen.getByTestId("identity-strip").textContent).not.toContain("Abmelden")
+    expect(screen.queryByRole("button", { name: "Abmelden" })).toBeNull()
   })
 
   it("hides identity hint when tag-identified (not anonymous, not account)", () => {
@@ -565,13 +563,47 @@ describe("Family-roster quick-add (#209)", () => {
 
     const yvonne = screen.getByRole("button", { name: /Yvonne Pfeiffer/ })
     expect((yvonne as HTMLButtonElement).disabled).toBe(true)
-    // The hint explains why the chip can't be added.
-    expect(
-      screen.getByText("Familienmitglieder mit eigenem Konto checken separat ein."),
-    ).toBeTruthy()
 
-    await user.click(yvonne)
+    // The disabled button swallows pointer events; the click lands on the
+    // tooltip-trigger wrapper and must still not add anyone.
+    await user.click(screen.getByTestId("family-chip-has-account"))
     expect(dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")).toBeUndefined()
+  })
+
+  // Issue #710: the "why is this disabled" hint is a tooltip on the chip,
+  // not a static line under the picker.
+  it("explains the disabled account-holder chip in a tooltip, not inline", async () => {
+    const user = userEvent.setup()
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [ownerPrimary],
+      familyCandidates: candidates,
+    })
+
+    const hint = "Familienmitglieder mit eigenem Konto checken separat ein."
+    expect(screen.queryByText(hint)).toBeNull()
+
+    await user.hover(screen.getByTestId("family-chip-has-account"))
+    expect((await screen.findByRole("tooltip")).textContent).toContain(hint)
+  })
+
+  it("opens the account-holder tooltip on keyboard focus", async () => {
+    const user = userEvent.setup()
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      personsOverride: [ownerPrimary],
+      familyCandidates: candidates,
+    })
+
+    const trigger = screen.getByTestId("family-chip-has-account")
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+    expect((await screen.findByRole("tooltip")).textContent).toContain(
+      "Familienmitglieder mit eigenem Konto checken separat ein.",
+    )
+    await user.keyboard("{Escape}")
   })
 
   it("only shows candidates not already on the visit (caller-side filter)", () => {
@@ -601,8 +633,8 @@ describe("Family-roster quick-add (#209)", () => {
 })
 
 // Pre-filled persons render as IdentityStrips. The signed-in user's
-// strip carries an Abmelden link AND — once a second person is on the
-// visit — an X to remove themselves (Mike's "I added my kid, now I
+// strip carries — once a second person is on the visit — an X to remove
+// themselves (Mike's "I added my kid, now I
 // want to drop myself" flow). Family-added strips just get the X.
 describe("Person removal", () => {
   const preFilled: CheckoutPerson = {
@@ -633,8 +665,6 @@ describe("Person removal", () => {
       personsOverride: [preFilled],
     })
     expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
-    // Abmelden is still reachable.
-    expect(screen.getByText("Abmelden")).toBeTruthy()
   })
 
   it("shows X on both strips when two persons are on the visit", () => {
@@ -679,7 +709,7 @@ describe("Person removal", () => {
 // Regression: the "signed-in user" decision used to key off the array
 // index (i === 0). Removing self and re-adding via a quick-add chip
 // shifted self to index 1 — at that point the kid (now at index 0)
-// inherited Abmelden + Vereinsmitglied + the parent's email, and self
+// inherited Vereinsmitglied + the parent's email, and self
 // lost their identity affordances.
 describe("Identity strip — keyed by userId, not index", () => {
   const familyMember: CheckoutPerson = {
@@ -703,7 +733,7 @@ describe("Identity strip — keyed by userId, not index", () => {
     userId: "u-self",
   }
 
-  it("does not show Abmelden / Vereinsmitglied on the kid's strip when self was removed", () => {
+  it("does not show Vereinsmitglied on the kid's strip when self was removed", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
@@ -717,13 +747,12 @@ describe("Identity strip — keyed by userId, not index", () => {
     expect(strip.textContent).toContain("Lia Pfeffer")
     expect(strip.textContent).toContain("lia@example.com")
     // Crucially: the kid's strip must NOT inherit the parent's email,
-    // membership tag, or sign-out affordance.
+    // or membership tag.
     expect(strip.textContent).not.toContain("max@example.com")
     expect(strip.textContent).not.toContain("Vereinsmitglied")
-    expect(strip.textContent).not.toContain("Abmelden")
   })
 
-  it("keeps Abmelden + Vereinsmitglied on self even when re-added at a higher index", () => {
+  it("keeps Vereinsmitglied on self even when re-added at a higher index", () => {
     // Persons array has self at index 1 (kid at 0) — the order the
     // user lands on after remove-then-quick-add-back.
     renderCheckin({
@@ -743,11 +772,9 @@ describe("Identity strip — keyed by userId, not index", () => {
 
     expect(kidStrip.textContent).toContain("Lia Pfeffer")
     expect(kidStrip.textContent).not.toContain("Vereinsmitglied")
-    expect(kidStrip.textContent).not.toContain("Abmelden")
 
     expect(selfStrip.textContent).toContain("Max Muster")
     expect(selfStrip.textContent).toContain("max@example.com")
     expect(selfStrip.textContent).toContain("Vereinsmitglied")
-    expect(selfStrip.textContent).toContain("Abmelden")
   })
 })

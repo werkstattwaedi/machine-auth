@@ -56,9 +56,6 @@ function CheckinRoute() {
       picc={ctx.picc}
       // Kiosk member-area entry points (ADR-0041); renders nothing elsewhere.
       accountActions={<KioskAccountActions />}
-      // Signed-in "Abmelden" and the anon "Von vorne beginnen" share one
-      // primitive: drop the session + hard-reload to a fresh /checkin.
-      onSignOut={ctx.startOver}
       onAdvance={async () => {
         // Issue #151: eager anonymous sign-in so /visit can write items.
         if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
