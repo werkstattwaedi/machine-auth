@@ -258,7 +258,9 @@ test.describe("visit corrections (ADR-0042)", () => {
     await expect(page.getByTestId("visit-replacement-banner")).toContainText(
       "Korrektur des Besuchs",
     )
-    await expect(page.getByText("RE-002050-1")).toBeVisible()
+    // exact: the success toast ("… neu ausgestellt als RE-002050-1") may
+    // still be up and would make a substring match ambiguous.
+    await expect(page.getByText("RE-002050-1", { exact: true })).toBeVisible()
     // Summe line + Abrechnung total both show the new amount.
     await expect(page.getByText("CHF 71.00").first()).toBeVisible()
 
