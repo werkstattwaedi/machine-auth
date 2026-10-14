@@ -81,6 +81,17 @@ firebase emulators:exec --config firebase.e2e.json \
   'cd web/apps/checkout && npx playwright test --update-snapshots'
 Re-run to confirm green; include updated snapshots in the commit.
 
+### UI changed? Refresh the screenshots
+
+If your fixup changes what a person sees, show the reviewer the new state
+the same way the original PR did (worker prompt, Step 5 "Before captures"
+and Step 6c): write a throwaway `web/apps/<app>/e2e/wq-issue-<N>.capture.ts`
+for the screens the review was about, run
+`scripts/wq-capture.sh <app> .wq-capture/pr-<PR>/after`, check the PNGs with
+Read, publish with `npx tsx scripts/wq-media.ts <N> .wq-capture/pr-<PR> --title "Nach Review"`
+and post the printed markdown as a PR comment in Step 6. Delete the spec
+and `.wq-capture/` afterwards. Emulator data only — the media branch is public.
+
 ## Step 5: Commit and push
 
 Stage only the files you changed. Never `git add -A`.

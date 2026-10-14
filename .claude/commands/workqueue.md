@@ -70,7 +70,7 @@ The verdict tells the wrapper what to do next:
 | Verdict | Wrapper behavior | Emit when |
 |---------|------------------|-----------|
 | `recheck` | Re-runs the cheap pre-check immediately and fires another `/workqueue` if work remains — drains a ready queue back-to-back. | This run did real, state-changing work that may have cascading follow-ups: processed an issue into a PR, merged or rebased a PR (Phase 1b), or pushed a baseline self-heal to main. |
-| `sleep` | Backs off for `$WORKQUEUE_IDLE_INTERVAL` (default 1h), then re-checks. | Nothing actionable was done, or everything left is blocked on a human: idle gate, every issue skipped (already has a PR / WIP / plan-review / unanswered question), PR awaiting approval, baseline-fix PR pending review, baseline escalated. |
+| `sleep` | Backs off for `$WORKQUEUE_IDLE_INTERVAL` (default 1h), then re-checks. | Nothing actionable was done, or everything left is blocked on a human: idle gate, every issue skipped (already has a PR / WIP / plan-review / design session pending / unanswered question), PR awaiting approval, baseline-fix PR pending review, baseline escalated. |
 
 Write it as the final tool call:
 
@@ -237,6 +237,7 @@ Set in `~/.config/workqueue-app/env` or your shell rc:
 | `claude-workqueue-wip` | Currently being worked by a `/workqueue` run |
 | `claude-workqueue-question` | Waiting for a human to answer a clarifying question |
 | `claude-workqueue-plan-review` | A plan has been posted; waiting for human to review and approve |
+| `claude-workqueue-design` | UI/flow decisions open; waiting for a human to run `/design-session <N>` |
 | `wq-baseline-fix` | PR that auto-heals a baseline failure (snapshot/lockfile/hermeticity) |
 | `wq-low-risk` | PR scored ≥8 by the confidence rubric (Phase 5) |
 | `wq-medium` | PR scored 5–7 |
@@ -248,6 +249,7 @@ Ensure all labels exist (idempotent):
 .claude/scripts/wq-gh.sh label create "claude-workqueue-wip" --color "FFA500" --description "Workqueue: in progress" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "claude-workqueue-question" --color "D93F0B" --description "Workqueue: needs human answer" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
+.claude/scripts/wq-gh.sh label create "claude-workqueue-design" --color "C5DEF5" --description "Workqueue: needs a /design-session" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "wq-baseline-fix" --color "5319E7" --description "Workqueue: baseline auto-fix (snapshot/lockfile/hermeticity)" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "wq-low-risk" --color "0E8A16" --description "Workqueue: confidence ≥8 (low risk)" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "wq-medium" --color "FBCA04" --description "Workqueue: confidence 5–7" --repo werkstattwaedi/machine-auth 2>/dev/null || true
@@ -272,7 +274,7 @@ don't waste the baseline run on nothing:
 ```
 
 Work exists if **any** of these is true:
-- An open `claude-workqueue` issue does NOT have `claude-workqueue-wip` or `claude-workqueue-plan-review`.
+- An open `claude-workqueue` issue does NOT have `claude-workqueue-wip`, `claude-workqueue-plan-review` or `claude-workqueue-design`.
 - An open `claude-workqueue-question` issue has a human comment after the last `<!-- claude-workqueue -->` comment.
 - An open `workqueue/issue-*` PR has review comments without `<!-- claude-workqueue-ack -->`.
 - An open `workqueue/issue-*` PR has `mergeStateStatus` of `BEHIND` (needs rebase) or `DIRTY` (conflicts).
@@ -646,6 +648,8 @@ issue and processes it normally.)
 
    **Skip** if the issue has label `claude-workqueue-plan-review` (plan posted, waiting for human). Include it in the summary under "Plans awaiting review."
 
+   **Skip** if the issue has label `claude-workqueue-design` (waiting for a human to run `/design-session <N>`; that session removes the label and posts an approved plan). Include it in the summary under "Design sessions pending."
+
    **Skip** if a PR already exists for this issue:
    ```bash
    .claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth --search "head:workqueue/issue-<N>" --json number --jq 'length'
@@ -756,7 +760,7 @@ clean; on `main`.
 
 **Exit contract:** worker outputs a single `WORKQUEUE_RESULT: <kind> | ...`
 line — one of `implemented | <summary> | <PR URL>`, `plan-posted | <summary>`,
-`question | <summary>`, or `error | <what went wrong>`.
+`question | <summary>`, `design | <summary>`, or `error | <what went wrong>`.
 
 ### 4c. Handle the result
 
@@ -765,6 +769,7 @@ Parse the `WORKQUEUE_RESULT` line and update labels:
 - **`implemented`** → remove `claude-workqueue-wip` and `claude-workqueue`. Record the PR URL and add it to the `reviewed_prs` list (Phase 4c will pick it up before Phase 5).
 - **`plan-posted`** → remove `claude-workqueue-wip` (the agent already added `claude-workqueue-plan-review`). Record under "Plans awaiting review."
 - **`question`** → remove `claude-workqueue-wip`, add `claude-workqueue-question`.
+- **`design`** → remove `claude-workqueue-wip`, add `claude-workqueue-design`. Record under "Design sessions pending."
 - **`error`** → remove `claude-workqueue-wip`. Record the error. Do NOT remove `claude-workqueue`.
 
 Also ensure the working tree is clean and the current branch is back on `main` (or the branch the user started on) before moving to the next issue:
@@ -1161,6 +1166,8 @@ the morning review is one URL, not a search across PRs.
      - #<N>: <one-line plan summary> (remove `claude-workqueue-plan-review` to approve)
    - Questions awaiting your answer:
      - #<N>: <question summary>
+   - Design sessions pending (run `/design-session <N>`):
+     - #<N>: <open decision>
    - Conflicts needing manual rebase:
      - #<PR>: <files>
    - Errors from this run:
