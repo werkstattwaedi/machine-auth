@@ -112,9 +112,9 @@ export function AccountMenu({
         {item("/account/profile", User, "Profil")}
         {item("/account/usage", History, "Nutzungsverlauf")}
         {item("/account/membership", BadgeCheck, "Mitgliedschaft")}
-        {/* Marker.io capture (issue #669). Kiosk badge sessions use the
-            Ctrl+Shift+PrintScreen shortcut instead. */}
-        {!kioskSession && isFeedbackAvailable() && (
+        {/* Marker.io capture (issue #669). Opens directly, without the
+            kiosk step-up: reporting a problem touches no account data. */}
+        {isFeedbackAvailable() && (
           <DropdownMenuItem className={ITEM_CLASS} onSelect={openFeedback}>
             <MessageSquareWarning aria-hidden />
             Problem melden
