@@ -84,8 +84,13 @@ export type DiscountLevel = "none" | "member"
  * follows the usage-type machine discount; `material` as "Materialbezug".
  * Stamped explicitly on every catalog and checkout item (issue #105); we
  * no longer infer machine-ness from `origin === "nfc"` or `pricingModel`.
+ *
+ * `service` (Dienstleistung, e.g. Keramik-Brennen, issue #685) is neither:
+ * it shows in the workshop's upper section next to the machines, but bills
+ * in the material bucket — allowed with „Nur Materialbezug“, not waived for
+ * volunteers. Only its labels differ (`materialSectionLabels`).
  */
-export type ItemType = "machine" | "material"
+export type ItemType = "machine" | "material" | "service"
 
 /**
  * True iff a line item is billed as machine usage. The explicit `type` is
@@ -94,6 +99,61 @@ export type ItemType = "machine" | "material"
  */
 export function isMachineItem(item: { type?: string | null }): boolean {
   return item.type === "machine"
+}
+
+/** True iff a line item is a Dienstleistung (billed as material). */
+export function isServiceItem(item: { type?: string | null }): boolean {
+  return item.type === "service"
+}
+
+/**
+ * Wording for the non-machine bucket, which holds material and services
+ * alike. Named after what the items actually are, so a firing-only cart
+ * doesn't read as „Materialbezug“.
+ */
+export interface MaterialSectionLabels {
+  /** Section heading, e.g. "Materialbezug". */
+  title: string
+  /** Column header of the position table. */
+  column: string
+  /** Subject of a waiver sentence, e.g. "Material" in "Material wird nicht verrechnet". */
+  waived: string
+  /** Verb agreeing with `waived` ("wird" / "werden"). */
+  waivedVerb: "wird" | "werden"
+  /** Bill discount row, completed by "verrechnet": "kein Materialbezug verrechnet". */
+  noneBilled: string
+}
+
+export function materialSectionLabels(
+  items: ReadonlyArray<{ type?: string | null }>,
+): MaterialSectionLabels {
+  const hasService = items.some(isServiceItem)
+  const hasMaterial = items.some((i) => !isServiceItem(i))
+  if (hasService && hasMaterial) {
+    return {
+      title: "Material & Dienstleistungen",
+      column: "Position",
+      waived: "Material und Dienstleistungen",
+      waivedVerb: "werden",
+      noneBilled: "kein Material und keine Dienstleistungen",
+    }
+  }
+  if (hasService) {
+    return {
+      title: "Dienstleistungen",
+      column: "Dienstleistung",
+      waived: "Dienstleistungen",
+      waivedVerb: "werden",
+      noneBilled: "keine Dienstleistungen",
+    }
+  }
+  return {
+    title: "Materialbezug",
+    column: "Bezogenes Material",
+    waived: "Material",
+    waivedVerb: "wird",
+    noneBilled: "kein Materialbezug",
+  }
 }
 
 /**

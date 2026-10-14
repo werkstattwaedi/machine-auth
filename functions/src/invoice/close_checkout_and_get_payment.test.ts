@@ -15,9 +15,11 @@ import {
   assertBadgeItemsBelongToOwner,
   entryFeeFor,
   isValidItem,
+  priceCheckoutItems,
   recomputeSummary,
 } from "./close_checkout_and_get_payment";
 import type {
+  CheckoutItemEntity,
   CheckoutPersonEntity,
   ItemOrigin,
 } from "../types/firestore_entities";
@@ -461,6 +463,61 @@ describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {
       hasMembershipItem: false,
       hasPaidBadgeItem: false,
     });
+  });
+});
+
+describe("priceCheckoutItems: Keramik-Brennen as a service (issue #685)", () => {
+  // A firing pickup is a pure Materialbezug, charged at the price on the slip.
+  function brennen(type: "service" | "machine"): CheckoutItemEntity {
+    return {
+      workshop: "keramik",
+      description: "Brennen",
+      origin: "manual",
+      type,
+      catalogId: null,
+      variantId: "pauschal",
+      created: null as unknown as CheckoutItemEntity["created"],
+      quantity: 1,
+      unitPrice: 22.2,
+      totalPrice: 22.2,
+      pricingModel: "direct",
+    } as CheckoutItemEntity;
+  }
+  const args = {
+    persons: [adultPerson],
+    configFees: { erwachsen: { regular: 15 } },
+    membershipCatalogId: null,
+    tip: 0,
+  };
+
+  it("allows materialbezug and bills only the firing (no entry fee)", () => {
+    const { summary } = priceCheckoutItems({
+      ...args,
+      usageType: "materialbezug",
+      items: [brennen("service")],
+    });
+    expect(summary.materialCost).to.equal(22.2);
+    expect(summary.machineCost).to.equal(0);
+    expect(summary.totalPrice).to.equal(22.2);
+  });
+
+  it("bills the firing for volunteering (not waived like machines)", () => {
+    const { summary } = priceCheckoutItems({
+      ...args,
+      usageType: "volunteering",
+      items: [brennen("service")],
+    });
+    expect(summary.totalPrice).to.equal(22.2);
+  });
+
+  it("still rejects materialbezug for a machine-typed item (issue #628 guard)", () => {
+    expect(() =>
+      priceCheckoutItems({
+        ...args,
+        usageType: "materialbezug",
+        items: [brennen("machine")],
+      }),
+    ).to.throw(/Materialbezug ist nicht möglich/);
   });
 });
 

@@ -15,6 +15,7 @@ import {
   partitionMembership,
   usageDiscount,
   isMachineItem,
+  materialSectionLabels,
   USAGE_DISCOUNT_LABELS,
   PAYMENT_METHOD_INFO,
   type CheckoutKind,
@@ -761,10 +762,13 @@ function renderCheckoutSection(
     }
     const materialWaived = round2(materialRaw * (1 - discount.material));
     if (materialWaived > 0 && discountLabel) {
+      // Services (Brennen, issue #685) share the material bucket; word the
+      // waiver after what this workshop actually holds.
+      const labels = materialSectionLabels(items.filter((i) => !isMachineItem(i)));
       y = renderDiscountRow(
         doc,
         y,
-        `${discountLabel}: kein Materialbezug verrechnet`,
+        `${discountLabel}: ${labels.noneBilled} verrechnet`,
         materialWaived,
       );
     }

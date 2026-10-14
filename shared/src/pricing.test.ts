@@ -14,6 +14,8 @@ import {
   resolveUsageType,
   usageDiscount,
   isMachineItem,
+  isServiceItem,
+  materialSectionLabels,
   type UsageType,
 } from "./pricing"
 
@@ -54,6 +56,35 @@ describe("isMachineItem (issue #105)", () => {
   it("treats a missing type as material", () => {
     expect(isMachineItem({})).toBe(false)
     expect(isMachineItem({ type: null })).toBe(false)
+  })
+})
+
+describe("service items (Dienstleistung, issue #685)", () => {
+  it("are not machine usage, so Materialbezug stays selectable", () => {
+    const brennen = { type: "service" }
+    expect(isServiceItem(brennen)).toBe(true)
+    const hasMachineUsage = [brennen].some(isMachineItem)
+    expect(hasMachineUsage).toBe(false)
+    expect(resolveUsageType("materialbezug", { hasMachineUsage })).toBe("materialbezug")
+  })
+
+  it("name the material bucket after what it holds", () => {
+    const material = { type: "material" }
+    const untyped = {}
+    const service = { type: "service" }
+    expect(materialSectionLabels([]).title).toBe("Materialbezug")
+    expect(materialSectionLabels([material, untyped])).toMatchObject({
+      title: "Materialbezug",
+      noneBilled: "kein Materialbezug",
+    })
+    expect(materialSectionLabels([service])).toMatchObject({
+      title: "Dienstleistungen",
+      waived: "Dienstleistungen",
+      waivedVerb: "werden",
+    })
+    expect(materialSectionLabels([material, service]).title).toBe(
+      "Material & Dienstleistungen",
+    )
   })
 })
 

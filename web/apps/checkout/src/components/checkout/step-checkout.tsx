@@ -43,6 +43,7 @@ import {
   partitionMembership,
   partitionBadge,
   isMachineItem,
+  materialSectionLabels,
   rawSections,
 } from "@oww/shared"
 
@@ -424,6 +425,9 @@ export function StepCheckout({
     () => partitionBadge(nonMembershipItems, { badgeCatalogId }),
     [nonMembershipItems, badgeCatalogId],
   )
+  // Material and services (Brennen, issue #685) share this bucket; name it
+  // after what it actually holds.
+  const materialLabels = materialSectionLabels(materialItems)
   // Membership-only checkout: the visitor bought just a membership (no entry
   // fee, no machine, no material). Hide the three regular buckets so the
   // summary shows a single, unambiguous Vereinsmitgliedschaft section
@@ -792,7 +796,7 @@ export function StepCheckout({
         <ExpandableSection
           id="material"
           icon={<Package className="h-4 w-4 text-cog-teal-dark" />}
-          title="Materialbezug"
+          title={materialLabels.title}
           summary={
             materialItems.length === 0
               ? "Kein Material bezogen"
@@ -811,13 +815,13 @@ export function StepCheckout({
           ) : (
             <>
               <PositionTable
-                firstColLabel="Bezogenes Material"
+                firstColLabel={materialLabels.column}
                 rows={materialItems.map(rowFromItem)}
               />
               {discount.material < 1 && discountLabel && (
                 <SectionDiscountNote
                   label={discountLabel}
-                  text="Material wird nicht verrechnet"
+                  text={`${materialLabels.waived} ${materialLabels.waivedVerb} nicht verrechnet`}
                 />
               )}
             </>

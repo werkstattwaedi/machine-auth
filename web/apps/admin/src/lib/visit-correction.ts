@@ -25,6 +25,7 @@ import {
   roundCents,
   type CheckoutSummary,
   type CorrectCheckoutEntry,
+  type CorrectCheckoutItemType,
   type UsageType,
 } from "@oww/shared"
 
@@ -44,7 +45,7 @@ export interface DraftItem {
   key: string
   workshop: string
   description: string
-  type: "machine" | "material"
+  type: CorrectCheckoutItemType
   catalogId: string | null
   variantId: string | null
   origin: "nfc" | "manual" | "qr"
@@ -136,7 +137,7 @@ export function draftFromCheckout(
       key: i.id,
       workshop: i.workshop,
       description: i.description,
-      type: i.type === "machine" ? "machine" : "material",
+      type: i.type === "machine" || i.type === "service" ? i.type : "material",
       catalogId: i.catalogId?.id ?? null,
       variantId: i.variantId ?? null,
       origin: i.origin,

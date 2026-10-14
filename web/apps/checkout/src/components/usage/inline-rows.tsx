@@ -24,7 +24,7 @@ import {
   type DiscountLevel,
   type PricingModel,
 } from "@modules/lib/workshop-config"
-import { isMachineItem, priceForTier, type ItemType } from "@oww/shared"
+import { isMachineItem, isServiceItem, priceForTier, type ItemType } from "@oww/shared"
 import {
   parseQuantity,
   formatQuantity,
@@ -332,10 +332,15 @@ export function WorkshopInlineSection({
   // material box also excludes NFC items defensively — production NFC usage
   // always carries type "machine", but this keeps a type-less NFC row out of
   // the material box rather than double-rendering it.
+  //
+  // Services (Dienstleistung, e.g. Keramik-Brennen, issue #685) bill as
+  // material but sit in the upper box next to the machines, where their
+  // pinned input row lives.
+  const isUpperItem = (i: CheckoutItemLocal) => isMachineItem(i) || isServiceItem(i)
   const nfcItems = items.filter((i) => i.origin === "nfc")
-  const machineItems = items.filter((i) => isMachineItem(i))
+  const upperItems = items.filter(isUpperItem)
   const materialItems = items.filter(
-    (i) => !isMachineItem(i) && i.origin !== "nfc",
+    (i) => !isUpperItem(i) && i.origin !== "nfc",
   )
   const materialTotal = materialItems.reduce((s, i) => s + i.totalPrice, 0)
 
@@ -345,7 +350,7 @@ export function WorkshopInlineSection({
   // bill as machine, so without rendering them here they'd vanish from the
   // workshop view; surface them as ordinary removable rows in the machine
   // table (issue #105 review).
-  const otherMachineRows: PositionRow[] = machineItems
+  const otherMachineRows: PositionRow[] = upperItems
     .filter((i) => i.origin !== "nfc" && !(i.catalogId && pinnedIds.has(i.catalogId)))
     .map(rowFromItem)
 
@@ -375,9 +380,9 @@ export function WorkshopInlineSection({
   // (SpendeCard pattern) and committed on blur.
   const pinnedItemByCatalog = useMemo(() => {
     const m = new Map<string, CheckoutItemLocal>()
-    for (const i of machineItems) if (i.catalogId) m.set(i.catalogId, i)
+    for (const i of upperItems) if (i.catalogId) m.set(i.catalogId, i)
     return m
-  }, [machineItems])
+  }, [upperItems])
   const [pinnedText, setPinnedText] = useState<Record<string, string>>({})
   // Fields whose current text failed to parse (unknown unit). We keep the
   // verbatim text and show an inline error rather than silently zeroing it.
@@ -470,7 +475,9 @@ export function WorkshopInlineSection({
         workshop: workshopId,
         description: cat.name,
         origin: "manual",
-        type: "machine",
+        // Pinning only controls placement; the catalog says what the entry
+        // bills as (Brennen is a service, issue #685).
+        type: cat.type ?? "machine",
         catalogId: cat.id,
         variantId: variant?.id ?? "default",
         pricingModel: variant?.pricingModel ?? "time",
@@ -522,13 +529,13 @@ export function WorkshopInlineSection({
 
   // Subtotal tracks pinned hours live (before blur/commit) so it never lags
   // the per-row Preis. Committed pinned items are excluded from the
-  // machineItems sum to avoid double-counting with `livePinnedTotal`.
+  // upperItems sum to avoid double-counting with `livePinnedTotal`.
   const livePinnedTotal = pinnedRows.reduce(
     (s, r) => s + (parseFloat(r.preis) || 0),
     0,
   )
   const machineTotal =
-    machineItems
+    upperItems
       .filter((i) => !(i.catalogId && pinnedIds.has(i.catalogId)))
       .reduce((s, i) => s + i.totalPrice, 0) + livePinnedTotal
   const wsTotal = machineTotal + materialTotal
