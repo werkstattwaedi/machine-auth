@@ -70,6 +70,8 @@ Determine if you have enough information to act.
 
 **Not enough info** — if the description is vague, contradictory, incomplete, leaves major design decisions open, or references files/APIs you can't locate. Go to Step 2a.
 
+**Needs a design session** — if the open points are about *how the UI should look or flow* (screen layout, which step comes first, what is the default, what a dialog says and offers) rather than facts you could look up or a yes/no from the human. Text questions are a poor tool for that; the human designs it interactively with `/design-session <N>`. Go to Step 2c.
+
 **Out of scope** — if the issue only affects firmware (`maco_firmware/`). The workqueue handles web + functions only. Go to Step 2b.
 
 **Enough info** — continue to Step 3.
@@ -102,6 +104,41 @@ COMMENT_EOF
 
 Output:
 WORKQUEUE_RESULT: question | Issue only affects firmware, out of workqueue scope
+
+### Step 2c: Hand off to a design session
+
+Capture the screens as they are today, so the design session (and the
+human) starts from the real thing. Write a throwaway capture spec as in
+Step 5 "Before captures", run it, and publish it after-only:
+
+scripts/wq-capture.sh <checkout|admin> .wq-capture/issue-<N>/after
+npx tsx scripts/wq-media.ts <N> .wq-capture/issue-<N> --title "Heute (vor dem Redesign)"
+
+Then comment (paste the markdown the media script printed):
+
+.claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+<!-- claude-workqueue -->
+## Needs a design session
+
+This issue leaves UI/flow decisions open that are better settled
+interactively than by text. Start one with `/design-session <N>`; it ends by
+posting an approved plan here, which the next `/workqueue` run implements.
+
+### Open design questions
+1. [the concrete decision, with the options you see]
+2. …
+
+### What I found
+<the relevant screens/components (file paths), constraints from ADRs or tests,
+and anything the issue already decided>
+
+<media markdown from scripts/wq-media.ts>
+COMMENT_EOF
+)"
+
+Remove the throwaway spec and output dir (`rm -rf .wq-capture`, the
+`*.capture.ts` file). Output EXACTLY:
+WORKQUEUE_RESULT: design | <one-line summary of the open decision>
 
 ## Step 3: Understand the codebase
 
@@ -171,6 +208,29 @@ WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
    git checkout -b workqueue/issue-<N>
    (If the branch already exists locally, use it.)
 
+   **Before captures (UI changes only).** If the change will alter anything a
+   person sees in `web/` (layout, copy, a dialog, a flow), capture the
+   affected screens *now*, before touching any source, so the reviewer gets
+   a before/after comparison on the issue:
+
+   - Write a throwaway spec `web/apps/<checkout|admin>/e2e/wq-issue-<N>.capture.ts`
+     (gitignored — it is never committed). Drive the app to each affected
+     screen with the same setup the e2e specs use (`./helpers`,
+     `./global-setup` users, seeding helpers) and call
+     `shot(page, "<NN>-<step>")` from `../../../../scripts/wq-capture/shot`
+     at every screen. For a flow, one shot per step reads as a storyboard.
+     It runs at desktop and mobile automatically. Keep the selectors
+     tolerant of your upcoming change (roles and visible text), since the
+     same spec runs again afterwards.
+   - Run it: `scripts/wq-capture.sh <checkout|admin> .wq-capture/issue-<N>/before`
+     (starts its own emulators; `timeout: 600000`). A screen that only
+     exists after your change may fail here — that is fine, its "before"
+     cell will show "—".
+   - Open two or three of the PNGs with Read to confirm they show what you
+     meant.
+
+   Skip this for changes nobody sees (functions-only, pure logic, tests).
+
 2. If an approved plan exists (Step 1 marker found), follow it. Deviate only if you discover the plan is wrong — in that case, STOP, post a comment describing the deviation, and output `WORKQUEUE_RESULT: question | <summary>` instead.
 
 3. Make focused, minimal changes following project conventions. No drive-by refactoring.
@@ -205,6 +265,26 @@ firebase emulators:exec --config firebase.e2e.json \
 
 Re-run `npm run test:web:e2e` to confirm. Include the updated snapshot files in the commit.
 
+### 6c. After captures + publish (if you took before captures)
+
+Run the same capture spec on your change, then publish both sets:
+
+scripts/wq-capture.sh <checkout|admin> .wq-capture/issue-<N>/after
+npx tsx scripts/wq-media.ts <N> .wq-capture/issue-<N> --title "Vorher / Nachher"
+
+Open the "after" PNGs with Read and check they show the change you made —
+if a screen looks wrong, that is a bug to fix before the PR, not something to
+post. Keep the markdown the media script prints for Step 8. The images go to
+the orphan `workqueue-media` branch of this **public** repo: emulator data
+only, never point a capture at staging or production.
+
+If capturing fails for a reason outside your change (emulator start, a
+selector your change made stale), fix the spec once; if it still fails,
+continue without screenshots and say so in the PR body — never block a PR on
+the captures.
+
+Afterwards delete the throwaway spec and `.wq-capture/` so the tree is clean.
+
 ## Step 7: Commit
 
 Stage only the files you changed. Never `git add -A`.
@@ -238,9 +318,22 @@ Closes #<N>
 ## Test results
 <pass/fail summary from Step 6>
 
+<media markdown from Step 6c, if any — renders the before/after screenshots>
+
 ---
 🤖 Automated by `/workqueue`
 PR_EOF
+)"
+
+If you published screenshots in Step 6c, post the same markdown on the issue
+too, so it is visible to whoever follows the issue rather than the PR:
+
+.claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
+<!-- claude-workqueue -->
+Fix in <PR URL> — so sieht es aus:
+
+<media markdown from Step 6c>
+COMMENT_EOF
 )"
 
 ## Step 9: Report

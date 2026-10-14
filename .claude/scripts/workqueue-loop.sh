@@ -90,7 +90,8 @@ has_actionable_work() {
   actionable_issues=$(printf '%s' "$issues_json" | jq -r '
     [.[]
      | select((.labels | map(.name) | contains(["claude-workqueue-wip"]) | not)
-              and (.labels | map(.name) | contains(["claude-workqueue-plan-review"]) | not))
+              and (.labels | map(.name) | contains(["claude-workqueue-plan-review"]) | not)
+              and (.labels | map(.name) | contains(["claude-workqueue-design"]) | not))
      | .number] | length
   ' 2>/dev/null || echo 0)
   if [[ "${actionable_issues:-0}" -gt 0 ]]; then

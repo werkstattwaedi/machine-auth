@@ -121,3 +121,7 @@ compile_commands.json
 docs/proprietary/
 # PDF visual-regression failure artifacts (mocha writes <name>-actual.png next to the baselines)
 functions/test/unit/*-snapshots/*-actual.png
+
+# Workqueue review captures (scripts/wq-capture.sh): throwaway specs + output
+web/apps/*/e2e/**/*.capture.ts
+.wq-capture/
