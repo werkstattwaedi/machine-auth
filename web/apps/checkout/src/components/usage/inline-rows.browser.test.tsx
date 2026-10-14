@@ -479,6 +479,17 @@ describe("WorkshopInlineSection v5", () => {
     expect(screen.getByText(/CHF\s*27\.20/)).toBeTruthy()
   })
 
+  it("heads an upper box holding only a service „Dienstleistungen“ (#685)", () => {
+    renderSection({ pinnedCatalog: [makeDirectMachine()] })
+    expect(screen.getByText("Dienstleistungen")).toBeTruthy()
+    expect(screen.queryByText("Maschinen / Werkzeuge")).toBeNull()
+  })
+
+  it("names both machines and services when the upper box mixes them (#685)", () => {
+    renderSection({ pinnedCatalog: [makeHourlyMachine(), makeDirectMachine()] })
+    expect(screen.getByText("Maschinen, Werkzeuge & Dienstleistungen")).toBeTruthy()
+  })
+
   it("clearing a pinned direct field removes the committed item", async () => {
     const user = userEvent.setup()
     const committed = makeItem({

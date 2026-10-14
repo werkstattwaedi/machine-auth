@@ -541,6 +541,17 @@ export function WorkshopInlineSection({
   const wsTotal = machineTotal + materialTotal
   const showMachineBox =
     nfcItems.length > 0 || otherMachineRows.length > 0 || pinnedCatalog.length > 0
+  // Name the upper box after what it holds: a Keramik section with only the
+  // pinned Brennen shows no machine (issue #685). Pinned rows count with the
+  // type they'll commit as, so the heading is right before any value is typed.
+  const upperTypes = [
+    ...upperItems,
+    ...pinnedCatalog.map((c) => ({ type: c.type ?? "machine" })),
+  ]
+  const upperHeading = upperBoxHeading(
+    nfcItems.length > 0 || upperTypes.some(isMachineItem),
+    upperTypes.some(isServiceItem),
+  )
 
   return (
     <section
@@ -578,7 +589,7 @@ export function WorkshopInlineSection({
                 rows opt out of the (×) via `removable: false`; only
                 picker-added machine rows are removable. */}
             <PositionTable
-              firstColLabel="Maschinen / Werkzeuge"
+              firstColLabel={upperHeading}
               rows={[...nfcRows, ...otherMachineRows, ...pinnedRows]}
               onToggle={nfcItems.length > 0 && checkoutId ? toggleNfc : undefined}
               // Only picker-added machine rows are removable; pinned/NFC rows
@@ -644,6 +655,13 @@ export function WorkshopInlineSection({
       </div>
     </section>
   )
+}
+
+/** Heading of a workshop's upper box (machines and/or services, issue #685). */
+function upperBoxHeading(hasMachine: boolean, hasService: boolean): string {
+  if (hasService && !hasMachine) return "Dienstleistungen"
+  if (hasService) return "Maschinen, Werkzeuge & Dienstleistungen"
+  return "Maschinen / Werkzeuge"
 }
 
 // ---------------------------------------------------------------------------
