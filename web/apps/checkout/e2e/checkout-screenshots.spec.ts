@@ -496,6 +496,10 @@ test.describe("Checkout step screenshots", () => {
 
     // Click a neutral spot so the screenshot is stable.
     await page.locator("h1").first().click()
+    // The popper dropdown sits at its flip threshold: opening below makes
+    // the option click scroll the page, opening above doesn't — so the
+    // scroll offset left behind is nondeterministic.
+    await page.evaluate(() => window.scrollTo(0, 0))
 
     await expect(page).toHaveScreenshot("checkout-summary-volunteering-discount.png")
   })
