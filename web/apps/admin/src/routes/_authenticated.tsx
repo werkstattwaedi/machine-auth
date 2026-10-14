@@ -7,6 +7,7 @@ import {
   type AuthenticatedLayoutNavItem,
 } from "@modules/components/authenticated-layout"
 import { BUILD_VERSION } from "@modules/lib/build-version"
+import { openFeedback } from "@modules/lib/feedback-widget"
 import { LookupProvider } from "@modules/lib/lookup"
 import {
   ClipboardList,
@@ -46,8 +47,27 @@ function AdminAuthenticatedLayout() {
       gate={{ kind: "admin" }}
       wrapper={LookupProvider}
       // Built bundles only: the dev server (and the e2e screenshots taken
-      // on it) says "dev" and shows nothing.
-      footerNote={BUILD_VERSION === "dev" ? null : `Version ${BUILD_VERSION}`}
+      // on it) says "dev" and shows nothing. Ctrl+Shift+PrintScreen still
+      // opens the Marker.io capture there.
+      footerNote={BUILD_VERSION === "dev" ? null : <VersionFooter />}
     />
+  )
+}
+
+// Release version plus the Marker.io "Problem melden" entry (issue #669) —
+// the launcher button is hidden in production, so this is the admin's way in.
+function VersionFooter() {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="truncate">Version {BUILD_VERSION}</span>
+      <span aria-hidden>·</span>
+      <button
+        type="button"
+        className="shrink-0 underline-offset-2 hover:text-foreground hover:underline"
+        onClick={openFeedback}
+      >
+        Problem melden
+      </button>
+    </span>
   )
 }

@@ -18,7 +18,7 @@ function RootLayout() {
       <AuthProvider>
         <Outlet />
         <Toaster />
-        <MarkerIO />
+        <MarkerIO app="admin" />
       </AuthProvider>
     </FirebaseProvider>
   )

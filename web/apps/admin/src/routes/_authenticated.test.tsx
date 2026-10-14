@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, cleanup, act } from "@testing-library/react"
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
 import { type ReactNode } from "react"
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -39,6 +39,9 @@ let mockAuthReturn: Record<string, unknown> = {
 vi.mock("@modules/lib/auth", () => ({
   useAuth: () => mockAuthReturn,
 }))
+
+// A built bundle's version — the dev value "dev" hides the footer.
+vi.mock("@modules/lib/build-version", () => ({ BUILD_VERSION: "2026.10.3" }))
 
 await import("./_authenticated")
 
@@ -107,5 +110,29 @@ describe("AdminAuthenticatedLayout", () => {
     expect(hookOrderError).toBeUndefined()
 
     errorSpy.mockRestore()
+  })
+
+  // Issue #669: the Marker.io launcher is hidden in production, so the
+  // sidebar offers the capture under the account row, next to the version.
+  it("offers Problem melden next to the version", () => {
+    const capture = vi.fn()
+    window.Marker = { capture }
+    mockAuthReturn = {
+      user: { uid: "admin1", email: "admin@test.com" },
+      userDoc: { name: "Admin User" },
+      userDocLoading: false,
+      loading: false,
+      isAdmin: true,
+      signOut: vi.fn(),
+    }
+    const Component = CapturedComponent!
+    render(<Component />)
+
+    const version = screen.getByText("Version 2026.10.3")
+    const button = screen.getByRole("button", { name: "Problem melden" })
+    expect(version.parentElement).toBe(button.parentElement)
+    fireEvent.click(button)
+    expect(capture).toHaveBeenCalledWith("fullscreen")
+    delete window.Marker
   })
 })

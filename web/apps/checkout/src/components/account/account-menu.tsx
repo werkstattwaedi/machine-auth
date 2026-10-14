@@ -14,7 +14,14 @@
  */
 
 import { Link, useNavigate } from "@tanstack/react-router"
-import { BadgeCheck, ChevronDown, History, LogOut, User } from "lucide-react"
+import {
+  BadgeCheck,
+  ChevronDown,
+  History,
+  LogOut,
+  MessageSquareWarning,
+  User,
+} from "lucide-react"
 import { Avatar } from "@modules/components/ui/avatar"
 import {
   DropdownMenu,
@@ -23,6 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@modules/components/ui/dropdown-menu"
+import { isFeedbackAvailable, openFeedback } from "@modules/lib/feedback-widget"
 import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
@@ -104,6 +112,14 @@ export function AccountMenu({
         {item("/account/profile", User, "Profil")}
         {item("/account/usage", History, "Nutzungsverlauf")}
         {item("/account/membership", BadgeCheck, "Mitgliedschaft")}
+        {/* Marker.io capture (issue #669). Kiosk badge sessions use the
+            Ctrl+Shift+PrintScreen shortcut instead. */}
+        {!kioskSession && isFeedbackAvailable() && (
+          <DropdownMenuItem className={ITEM_CLASS} onSelect={openFeedback}>
+            <MessageSquareWarning aria-hidden />
+            Problem melden
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator className="mx-2 my-1.5" />
         <DropdownMenuItem
           className={ITEM_CLASS}
