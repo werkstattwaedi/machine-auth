@@ -164,13 +164,15 @@ describe("AccountMenu", () => {
     expect(capture).toHaveBeenCalledWith("fullscreen")
   })
 
-  it("does not offer Problem melden on a kiosk badge session", async () => {
-    installMarker()
+  it("offers Problem melden on a kiosk session without stepping up", async () => {
+    const capture = installMarker()
     render(
       <AccountMenu name="Mike Schneider" email={null} userId="u1" kioskSession />,
     )
-    await openMenu()
-    expect(screen.queryByRole("menuitem", { name: "Problem melden" })).toBeNull()
+    const { user } = await openMenu()
+    await user.click(screen.getByRole("menuitem", { name: "Problem melden" }))
+    expect(capture).toHaveBeenCalledWith("fullscreen")
+    expect(mockEnsureElevated).not.toHaveBeenCalled()
   })
 
   it("signs out through the wizard's startOver", async () => {
