@@ -629,3 +629,20 @@ export async function waitForSmsCode(
   }
   return null
 }
+
+/**
+ * Opens the shared header menu (#729) and returns the entry named `name`:
+ * a dropdown `menuitem` on desktop, a row of the right-hand sheet on mobile.
+ */
+export async function openHeaderMenuEntry(
+  page: import("@playwright/test").Page,
+  name: string,
+) {
+  const trigger = page.getByTestId("app-menu-trigger")
+  await trigger.waitFor({ state: "visible", timeout: 10_000 })
+  await trigger.click()
+  return page
+    .getByRole("menuitem", { name, exact: true })
+    .or(page.getByTestId("app-menu-sheet").getByRole("link", { name, exact: true }))
+    .or(page.getByTestId("app-menu-sheet").getByRole("button", { name, exact: true }))
+}

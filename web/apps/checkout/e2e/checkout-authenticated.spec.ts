@@ -132,6 +132,7 @@ test.describe("Authenticated checkout", () => {
   // menu trigger whose entries name the member-area destinations.
   test("wizard header account menu names and reaches the member area", async ({
     page,
+    isMobile,
   }) => {
     // ── Sign in via email + code ──
     await page.goto("/login")
@@ -150,8 +151,28 @@ test.describe("Authenticated checkout", () => {
 
     // ── Land on the wizard header (checkin) where the account menu renders ──
     await page.goto("/checkin")
-    const trigger = page.getByRole("button", { name: "Konto-Menü" })
+    const trigger = page.getByTestId("app-menu-trigger")
     await expect(trigger).toBeVisible({ timeout: 10_000 })
+
+    if (isMobile) {
+      // Mobile (#729): one menu top right — a sheet in the sidebar's order.
+      await expect(trigger).toHaveAccessibleName("Menü")
+      await trigger.click()
+      const sheet = page.getByTestId("app-menu-sheet")
+      await expect(sheet).toBeVisible()
+      await expect(sheet).toContainText(AUTH_USER_EMAIL)
+      await expect(sheet.getByRole("link", { name: "Profil" })).toHaveAttribute(
+        "href",
+        "/account/profile",
+      )
+      await expect(sheet.getByRole("button", { name: "Abmelden" })).toBeVisible()
+      await sheet.getByRole("link", { name: "Nutzungsverlauf" }).click()
+      await page.waitForURL("**/account/usage", { timeout: 10_000 })
+      await expect(sheet).not.toBeVisible()
+      return
+    }
+
+    await expect(trigger).toHaveAccessibleName("Konto-Menü")
     await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
 
     // Open the menu: header shows who is signed in, entries name the targets.
@@ -180,6 +201,13 @@ test.describe("Authenticated checkout", () => {
     await usageItem.click()
     await page.waitForURL("**/account/usage", { timeout: 10_000 })
     expect(new URL(page.url()).pathname).toBe("/account/usage")
+
+    // The member area carries the same menu (#729): the destinations plus
+    // Abmelden, which signs out to the public check-in.
+    await trigger.click()
+    await expect(page.getByRole("menuitem", { name: "Mitgliedschaft" })).toBeVisible()
+    await page.getByRole("menuitem", { name: "Abmelden" }).click()
+    await page.waitForURL("**/checkin", { timeout: 10_000 })
   })
 
   // Regression for #387: visiting the root dispatcher while the signed-in

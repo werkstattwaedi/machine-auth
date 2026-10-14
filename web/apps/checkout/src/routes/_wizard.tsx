@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
@@ -14,7 +14,8 @@ import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider, useWizardContext } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
-import { StartOverButton } from "@/components/checkout/start-over-button"
+import { StartOverConfirm } from "@/components/checkout/start-over-confirm"
+import { useStartOverMenuEntry } from "@/components/checkout/start-over-menu-entry"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
 import { NoCheckoutGate } from "@/components/checkout/no-checkout-gate"
 import {
@@ -27,6 +28,8 @@ import { TagAuthOverlay } from "@/components/checkout/tag-auth-overlay"
 import { TagVisitRedirect } from "@/components/checkout/tag-visit-redirect"
 import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordinator"
 import { AccountMenu } from "@/components/account/account-menu"
+import { AppHeader } from "@modules/components/app-header/app-header"
+import { AppMenu } from "@modules/components/app-header/app-menu"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -216,29 +219,36 @@ function WizardChrome({
   const showGate =
     gateableRoute && !openCheckout && !pendingCheckout && !justSubmittedPayment
 
+  // "Von vorne beginnen" is a menu entry, but its confirm dialog lives here
+  // so it survives the menu closing (and answers the kiosk chrome).
+  const [confirmStartOver, setConfirmStartOver] = useState(false)
+  const openStartOverConfirm = useCallback(() => setConfirmStartOver(true), [])
+  const startOverEntry = useStartOverMenuEntry(openStartOverConfirm)
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">
-      <header className="w-full bg-background border-b border-border">
-        <div className="w-full max-w-[1000px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <img
-            src="/logo_oww.png"
-            alt="Offene Werkstatt Wädenswil"
-            className="h-[30px] shrink-0 sm:h-11"
-          />
-          {headerName && (
+      <AppHeader
+        width="centered"
+        menu={
+          headerName ? (
             <AccountMenu
               name={headerName}
               email={headerEmail}
               userId={userId}
               kioskSession={kioskSession}
             />
-          )}
-          {/* Anon escape hatch — self-gates to anon + open checkout, so it's
-              mutually exclusive with the signed-in identity above and absent
-              on a fresh /checkin and on /payment (closed checkout). */}
-          <StartOverButton />
-        </div>
-      </header>
+          ) : (
+            // Anonymous: "Problem melden", plus "Von vorne beginnen" while a
+            // visit is open (not under the kiosk bridge — its chrome has
+            // "Neuer Checkout"). Renders nothing when both are absent.
+            <AppMenu trailingItems={startOverEntry ? [startOverEntry] : []} />
+          )
+        }
+      />
+      <StartOverConfirm
+        open={confirmStartOver}
+        onOpenChange={setConfirmStartOver}
+      />
       {showGate ? (
         // Intentionally blank below the header — only the modal dialog
         // is meaningful when there's no checkout to act on.

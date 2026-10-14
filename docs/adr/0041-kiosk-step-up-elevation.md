@@ -151,6 +151,15 @@ interstitial collapses to a single *Code senden* button. Then the existing
   `/checkin?kiosk`); Google-link, e-mail, and phone-verification affordances
   are hidden (linking needs a real uid anyway); a header chip shows the
   remaining elevation time; "Zurück zum Checkout" returns to `/checkin?kiosk`.
+  *Amended (#729):* both apps now share one header bar and menu
+  (`AppHeader` / `AppMenu` in `web/modules/components/app-header/`), and the
+  member-area sidebar footer is gone. The remaining-time chip and the
+  "Zurück zum Checkout" row were removed with it: the visit CTA ("Mein
+  Besuch", keeps the `?kiosk` flag) is the way back, and "Abmelden" in the
+  header menu still runs the `runStartOver` wipe. A warning before the
+  elevation expires is designed in #732. The wizard's `AccountMenu` is now a
+  thin wrapper around `AppMenu` (same entries, same step-up routing; on
+  mobile they open in a right-hand sheet).
 - **Gotcha:** `_wizard.tsx` signs out on mount whenever `isKiosk && !picc && !cmac`
   (the "Neuer Checkout" fallback). Returning from `/account` would kill the
   session. `startOver` already signs out and wipes, so this effect is retired

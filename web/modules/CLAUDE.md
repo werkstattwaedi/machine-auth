@@ -17,6 +17,7 @@ See [ADR-0024](../../docs/adr/0024-shared-web-ui-in-web-modules.md).
 | `components/auth/`                  | Login, magic-link verify, link-account    |
 | `components/data-table/`            | TanStack-react-table wrapper              |
 | `components/authenticated-layout.tsx` | Sidebar+main shell with auth gates      |
+| `components/app-header/`            | Shared header bar + menu (both apps)      |
 | `components/icons/`                 | Brand icons not in lucide-react           |
 | `test/`                             | Test fixtures, fakes, emulator helpers    |
 
