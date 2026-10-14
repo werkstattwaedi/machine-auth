@@ -67,6 +67,20 @@ describe("computeCheckoutCosts", () => {
     expect(result.materialCostNet).toBe(12)
   })
 
+  // Issue #685: a kiln-firing pickup („Nur Materialbezug" + Keramik-Brennen,
+  // a service, at the CHF amount on the slip) bills just the firing.
+  it("bills a service under materialbezug without entry fee", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }],
+      usageType: "materialbezug",
+      items: [{ origin: "manual", type: "service", totalPrice: 22.2 }],
+      config,
+    })
+    expect(result.personFeesNet).toBe(0)
+    expect(result.machineCostNet).toBe(0)
+    expect(result.materialCostNet).toBe(22.2)
+  })
+
   it("halves the entry fee for ermaessigt", () => {
     const result = computeCheckoutCosts({
       persons: [{ userType: "erwachsen" }],

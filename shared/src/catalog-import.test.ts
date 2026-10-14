@@ -304,11 +304,13 @@ describe("diffCatalog", () => {
     expect(retired?.id).toBe("doc-3050")
   })
 
-  it("never retires a machine item, nor items in workshops absent from the import", () => {
+  it("never retires a machine or service item, nor items in workshops absent from the import", () => {
     const { entries } = normalizeRows([row({ code: "3001" })], DEFS) // holz only
     const preview = diffCatalog(entries, [
       current(),
       current({ id: "m1", code: "1001", name: "Fräse", type: "machine" }),
+      // Services are curated outside the workbook (Keramik-Brennen, #685).
+      current({ id: "s1", code: "0011", name: "Brennen", type: "service" }),
       current({ id: "k1", code: "4204", name: "Ton", workshops: ["keramik"] }),
     ])
     expect(preview.diff.some((d) => d.kind === "retire")).toBe(false)

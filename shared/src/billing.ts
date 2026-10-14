@@ -54,7 +54,7 @@ export const MAX_CANCELLATION_REASON_LENGTH = 500
 export const MAX_CORRECTIONS_PER_CALL = 50
 
 export type CorrectCheckoutUserType = "erwachsen" | "kind" | "firma"
-export type CorrectCheckoutItemType = "machine" | "material"
+export type CorrectCheckoutItemType = "machine" | "material" | "service"
 export type CorrectCheckoutItemOrigin = "nfc" | "manual" | "qr"
 
 export interface CorrectCheckoutPersonInput {

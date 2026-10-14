@@ -224,6 +224,7 @@ export function CorrectVisitEditor({
                     <SelectContent>
                       <SelectItem value="material">Material</SelectItem>
                       <SelectItem value="machine">Maschine</SelectItem>
+                      <SelectItem value="service">Dienstleistung</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>

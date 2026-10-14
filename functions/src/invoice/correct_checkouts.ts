@@ -74,7 +74,7 @@ export type {
 };
 
 const USER_TYPES = new Set(["erwachsen", "kind", "firma"]);
-const ITEM_TYPES = new Set(["machine", "material"]);
+const ITEM_TYPES = new Set(["machine", "material", "service"]);
 const ITEM_ORIGINS = new Set(["nfc", "manual", "qr"]);
 const MAX_MONEY = 1_000_000;
 const MAX_TEXT = 200;

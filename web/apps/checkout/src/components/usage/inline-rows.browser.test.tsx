@@ -201,6 +201,7 @@ function makeHourlyMachine(): CatalogItem {
     name: "Drechselbank",
     workshops: ["holz"],
     category: ["Maschinen"],
+    type: "machine",
     variants: [
       { id: "default", pricingModel: "time", unitPrice: { default: 10, member: 8 } },
     ],
@@ -209,7 +210,11 @@ function makeHourlyMachine(): CatalogItem {
   }
 }
 
-/** Direct-priced pinned machine (issue #555): user enters the CHF amount. */
+/**
+ * Direct-priced pinned entry (issue #555): user enters the CHF amount.
+ * Keramik-Brennen is a service (issue #685): pinned at the top, billed as
+ * material.
+ */
 function makeDirectMachine(): CatalogItem {
   return {
     id: "cat-brennen",
@@ -217,11 +222,12 @@ function makeDirectMachine(): CatalogItem {
     name: "Brennen",
     workshops: ["holz"],
     category: ["Maschinen"],
+    type: "service",
     variants: [
       { id: "pauschal", pricingModel: "direct", unitPrice: { default: 0 } },
     ],
     active: true,
-    userCanAdd: true,
+    userCanAdd: false,
   }
 }
 
@@ -432,7 +438,7 @@ describe("WorkshopInlineSection v5", () => {
     },
   )
 
-  it("pinned direct machine (Pauschal CHF) commits the typed amount (issue #555)", async () => {
+  it("pinned direct entry (Pauschal CHF) commits the typed amount as the catalog type (issues #555, #685)", async () => {
     const user = userEvent.setup()
     const { callbacks } = renderSection({ pinnedCatalog: [makeDirectMachine()] })
     // Direct rows show a CHF field and "Pauschal" instead of an hourly rate.
@@ -442,7 +448,7 @@ describe("WorkshopInlineSection v5", () => {
     await user.tab()
     expect(callbacks.addItem).toHaveBeenCalledTimes(1)
     expect(callbacks.addItem.mock.calls[0][0]).toMatchObject({
-      type: "machine",
+      type: "service",
       catalogId: "cat-brennen",
       pricingModel: "direct",
       quantity: 1,
@@ -451,11 +457,44 @@ describe("WorkshopInlineSection v5", () => {
     })
   })
 
+  it("renders a committed pinned service only in its pinned row, counted once (#685)", () => {
+    const committed = makeItem({
+      id: "i-brennen",
+      type: "service",
+      catalogId: "cat-brennen",
+      pricingModel: "direct",
+      quantity: 1,
+      unitPrice: 22.2,
+      totalPrice: 22.2,
+      description: "Brennen",
+    })
+    renderSection({
+      items: [committed, makeItem({ id: "i-ton", description: "Ton", totalPrice: 5 })],
+      pinnedCatalog: [makeDirectMachine()],
+    })
+    expect((screen.getByLabelText("Betrag Brennen") as HTMLInputElement).value).toBe("22.2")
+    // The material box lists only Ton, not Brennen a second time.
+    expect(screen.getAllByText("Brennen")).toHaveLength(1)
+    // 22.20 + 5.00, not 22.20 twice.
+    expect(screen.getByText(/CHF\s*27\.20/)).toBeTruthy()
+  })
+
+  it("heads an upper box holding only a service „Dienstleistungen“ (#685)", () => {
+    renderSection({ pinnedCatalog: [makeDirectMachine()] })
+    expect(screen.getByText("Dienstleistungen")).toBeTruthy()
+    expect(screen.queryByText("Maschinen / Werkzeuge")).toBeNull()
+  })
+
+  it("names both machines and services when the upper box mixes them (#685)", () => {
+    renderSection({ pinnedCatalog: [makeHourlyMachine(), makeDirectMachine()] })
+    expect(screen.getByText("Maschinen, Werkzeuge & Dienstleistungen")).toBeTruthy()
+  })
+
   it("clearing a pinned direct field removes the committed item", async () => {
     const user = userEvent.setup()
     const committed = makeItem({
       id: "i-brennen",
-      type: "machine",
+      type: "service",
       catalogId: "cat-brennen",
       pricingModel: "direct",
       quantity: 1,

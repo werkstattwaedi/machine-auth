@@ -22,6 +22,7 @@ import {
   membershipMixedInvoice,
   membershipRenewalInvoice,
   volunteeringDiscountInvoice,
+  internDiscountInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -153,6 +154,24 @@ describe("buildInvoicePdf — content", () => {
     const text = await pdfText(volunteeringDiscountInvoice());
     expect(text).to.include("Nutzungsgebühr wird nicht verrechnet");
     expect(text).to.not.include(": Eintritt ");
+  });
+
+  // Issue #685: services (Keramik-Brennen) share the material bucket; the
+  // waiver line names what the workshop actually holds.
+  it("material waiver wording follows material vs. service items (#685)", async () => {
+    const materialOnly = await pdfText(internDiscountInvoice());
+    expect(materialOnly).to.include("kein Materialbezug verrechnet");
+
+    const withService = internDiscountInvoice();
+    withService.checkouts[0].items[1] = {
+      ...withService.checkouts[0].items[1],
+      description: "Brennen",
+      type: "service",
+      pricingModel: "direct",
+    };
+    const serviceOnly = await pdfText(withService);
+    expect(serviceOnly).to.include("keine Dienstleistungen verrechnet");
+    expect(serviceOnly).to.not.include("kein Materialbezug");
   });
 
   it("long invoice: all pricing models present", async () => {

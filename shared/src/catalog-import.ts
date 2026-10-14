@@ -396,7 +396,9 @@ function sameSet(a: string[], b: string[]): boolean {
  * - unchanged: code matches and everything is identical.
  * - retire: a *material* current item in one of the imported workshops whose
  *   code is absent from the import — set inactive. Machine/NFC items
- *   (`type === "machine"`) are never retired by a material import.
+ *   (`type === "machine"`) and services (`type === "service"`, e.g.
+ *   Keramik-Brennen, curated outside the workbook) are never retired by a
+ *   material import.
  *
  * Retirement is scoped to the workshops actually present in the import, so a
  * Holz-only file never deactivates Metall items.
@@ -451,7 +453,7 @@ export function diffCatalog(entries: ImportEntry[], current: CurrentCatalogItem[
   }
 
   for (const cur of current) {
-    if (cur.type === "machine") continue
+    if ((cur.type ?? "material") !== "material") continue
     if (!cur.active) continue
     if (!cur.workshops.some((w) => importedWorkshops.has(w))) continue
     if (importedCodes.has(cur.code)) continue
