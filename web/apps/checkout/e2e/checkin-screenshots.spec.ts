@@ -2,13 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 import { test, expect, type Page } from "@playwright/test"
+import { FieldValue } from "firebase-admin/firestore"
+import { readFileSync } from "fs"
+import path from "path"
+import { fileURLToPath } from "url"
 import {
   clearCollections,
+  getAdminFirestore,
+  installFakeKioskBridge,
   openGuestSection,
   seedMembershipState,
   waitForLoginCode,
 } from "./helpers"
-import { AUTH_USER_EMAIL } from "./global-setup"
+import { AUTH_USER_EMAIL, NFC_TAG_UID } from "./global-setup"
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // No account exists for this address, so the identifier submit opens the
 // sign-up dialog (via "code"). Nothing ever signs it up.
@@ -288,5 +296,31 @@ test.describe("Check-in step screenshots", () => {
 
     // Capture viewport only — shows sticky buttons anchored to viewport bottom
     await expect(page).toHaveScreenshot("checkin-scrolled-sticky-nav.png")
+  })
+
+  // Issue #732: right after a badge tap at the kiosk, "Besuch starten" fills
+  // and starts the visit on its own. The fill is frozen part-way (test hook)
+  // so the baseline is deterministic and the visit never starts.
+  test("kiosk badge tap — Besuch starten countdown", async ({ page }) => {
+    await clearCollections("checkouts")
+    // The seeded picc encodes counter=0; reset the SDM replay defense.
+    await getAdminFirestore()
+      .collection("tokens")
+      .doc(NFC_TAG_UID)
+      .update({ lastSdmCounter: FieldValue.delete() })
+    const { picc, cmac } = JSON.parse(
+      readFileSync(path.resolve(__dirname, ".e2e-data.json"), "utf-8"),
+    ) as { picc: string; cmac: string }
+
+    await installFakeKioskBridge(page, { freezeAutoStart: true })
+    await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+    await expect(page.getByTestId("checkin-start-visit")).toHaveAttribute(
+      "data-countdown",
+      "running",
+      { timeout: 15_000 },
+    )
+
+    await settleLayout(page)
+    await expect(page).toHaveScreenshot("checkin-kiosk-countdown.png")
   })
 })

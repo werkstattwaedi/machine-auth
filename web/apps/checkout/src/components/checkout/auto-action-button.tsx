@@ -17,8 +17,9 @@ interface AutoActionButtonProps {
 /**
  * AlertDialog action button whose background fills while an auto-accept
  * timer drains — the MaCo terminal's "Beenden?" pattern. Shared by every
- * kiosk auto-dismiss flow (completion dialog, "Besuch gestartet", idle
- * watcher) so they all look and behave identically.
+ * kiosk auto-dismiss flow (completion dialog, idle watcher) so they all look
+ * and behave identically; the check-in "Besuch starten" countdown reuses the
+ * same fill technique (use-auto-start-countdown.ts).
  *
  * The fill is a single CSS width transition over the full duration. The
  * previous per-tick JS repaint rounded the width to whole percent, which

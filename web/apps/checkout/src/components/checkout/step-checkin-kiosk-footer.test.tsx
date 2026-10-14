@@ -7,14 +7,20 @@
  *     "Material erfassen" the outline secondary; no "Weiter"
  *   - without it (browser): the single "Weiter" stays
  *   - both kiosk actions run the same form validation path
+ *   - issue #732: with autoStartMs the primary fills and fires on its own;
+ *     any touch (pointerdown / keydown / scroll) or an opening dialog ends
+ *     the countdown for good; the filling button is the only cue (no text)
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react"
 import { StepCheckin } from "./step-checkin"
 import type { CheckoutPerson } from "./use-checkout-state"
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 const tagPerson: CheckoutPerson = {
   id: "p1",
@@ -30,7 +36,9 @@ const tagPerson: CheckoutPerson = {
 function renderCheckin(opts: {
   onStartVisit?: () => Promise<void>
   onAdvance?: () => Promise<void>
-  hasOpenCheckout?: boolean
+  visitStarted?: boolean
+  autoStartMs?: number
+  onCountdownCancel?: () => void
 }) {
   return render(
     <StepCheckin
@@ -44,7 +52,9 @@ function renderCheckin(opts: {
       isMember={false}
       onAdvance={opts.onAdvance}
       onStartVisit={opts.onStartVisit}
-      hasOpenCheckout={opts.hasOpenCheckout}
+      visitStarted={opts.visitStarted}
+      autoStartMs={opts.autoStartMs}
+      onCountdownCancel={opts.onCountdownCancel}
     />,
   )
 }
@@ -93,7 +103,7 @@ describe("StepCheckin kiosk footer", () => {
     renderCheckin({
       onStartVisit: vi.fn().mockResolvedValue(undefined),
       onAdvance: vi.fn().mockResolvedValue(undefined),
-      hasOpenCheckout: true,
+      visitStarted: true,
     })
     expect(
       screen.getByRole("button", { name: /Material erfassen/ }),
@@ -108,7 +118,7 @@ describe("StepCheckin kiosk footer", () => {
     renderCheckin({
       onStartVisit: vi.fn().mockResolvedValue(undefined),
       onAdvance: vi.fn().mockResolvedValue(undefined),
-      hasOpenCheckout: false,
+      visitStarted: false,
     })
     expect(
       screen.getByRole("button", { name: /Besuch starten/ }),
@@ -123,9 +133,104 @@ describe("StepCheckin kiosk footer", () => {
     renderCheckin({
       onStartVisit: vi.fn().mockResolvedValue(undefined),
       onAdvance,
-      hasOpenCheckout: true,
+      visitStarted: true,
     })
     fireEvent.click(screen.getByRole("button", { name: /Material erfassen/ }))
     await waitFor(() => expect(onAdvance).toHaveBeenCalledOnce())
+  })
+
+  describe("auto-start countdown (issue #732)", () => {
+    it("fires onStartVisit after the countdown", async () => {
+      vi.useFakeTimers()
+      const onStartVisit = vi.fn().mockResolvedValue(undefined)
+      renderCheckin({ onStartVisit, autoStartMs: 5_000 })
+      expect(
+        screen.getByTestId("checkin-start-visit").dataset.countdown,
+      ).toBe("running")
+      expect(screen.getByTestId("auto-start-progress")).toBeTruthy()
+      await act(async () => {
+        vi.advanceTimersByTime(4_999)
+      })
+      expect(onStartVisit).not.toHaveBeenCalled()
+      await act(async () => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(onStartVisit).toHaveBeenCalledOnce()
+    })
+
+    it("renders no countdown text — the filling button is the only cue", () => {
+      renderCheckin({
+        onStartVisit: vi.fn().mockResolvedValue(undefined),
+        autoStartMs: 5_000,
+      })
+      expect(screen.queryByText(/automatisch|startet in/i)).toBeNull()
+    })
+
+    it.each([
+      ["pointerdown", () => fireEvent.pointerDown(document.body)],
+      ["keydown", () => fireEvent.keyDown(document.body, { key: "a" })],
+      ["scroll", () => fireEvent.scroll(window)],
+    ])("a %s anywhere cancels it for good", async (_name, touch) => {
+      vi.useFakeTimers()
+      const onStartVisit = vi.fn().mockResolvedValue(undefined)
+      const onCountdownCancel = vi.fn()
+      renderCheckin({ onStartVisit, autoStartMs: 5_000, onCountdownCancel })
+      await act(async () => {
+        vi.advanceTimersByTime(1_000)
+        touch()
+      })
+      expect(onCountdownCancel).toHaveBeenCalledOnce()
+      expect(screen.queryByTestId("auto-start-progress")).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(onStartVisit).not.toHaveBeenCalled()
+      // "Besuch starten" stays the primary, without a timer.
+      expect(screen.getByRole("button", { name: /Besuch starten/ })).toBeTruthy()
+    })
+
+    it("a dialog opening over the screen cancels it", async () => {
+      vi.useFakeTimers()
+      const onStartVisit = vi.fn().mockResolvedValue(undefined)
+      const onCountdownCancel = vi.fn()
+      renderCheckin({ onStartVisit, autoStartMs: 5_000, onCountdownCancel })
+      const dialog = document.createElement("div")
+      dialog.setAttribute("role", "alertdialog")
+      await act(async () => {
+        document.body.appendChild(dialog)
+        // MutationObserver callbacks run as microtasks.
+        await Promise.resolve()
+      })
+      try {
+        expect(onCountdownCancel).toHaveBeenCalledOnce()
+        await act(async () => {
+          vi.advanceTimersByTime(10_000)
+        })
+        expect(onStartVisit).not.toHaveBeenCalled()
+      } finally {
+        dialog.remove()
+      }
+    })
+
+    it("runs no countdown without autoStartMs", async () => {
+      vi.useFakeTimers()
+      const onStartVisit = vi.fn().mockResolvedValue(undefined)
+      renderCheckin({ onStartVisit })
+      expect(screen.queryByTestId("auto-start-progress")).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(onStartVisit).not.toHaveBeenCalled()
+    })
+
+    it("runs no countdown once the visit is started", async () => {
+      vi.useFakeTimers()
+      const onStartVisit = vi.fn().mockResolvedValue(undefined)
+      renderCheckin({ onStartVisit, autoStartMs: 5_000, visitStarted: true })
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+      })
+      expect(onStartVisit).not.toHaveBeenCalled()
+    })
   })
 })

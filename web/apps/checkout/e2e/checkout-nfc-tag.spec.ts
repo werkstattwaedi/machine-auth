@@ -6,7 +6,13 @@ import { FieldValue } from "firebase-admin/firestore"
 import { readFileSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import { clearCollections, getAdminFirestore, getCheckoutDocs } from "./helpers"
+import {
+  clearCollections,
+  fakeNfcTap,
+  getAdminFirestore,
+  getCheckoutDocs,
+  installFakeKioskBridge,
+} from "./helpers"
 import { NFC_TAG_UID, NFC_TAG_UID_2, NFC_USER_ID } from "./global-setup"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -185,33 +191,7 @@ test.describe("NFC tag checkout", () => {
     await tokenRef.update({ userId: parentRef })
 
     try {
-      await page.addInitScript(() => {
-        const listeners: ((e: { physicalUid: string; url?: string }) => void)[] =
-          []
-        const w = window as unknown as Record<string, unknown>
-        w.__fakeNfcTap = (url: string) =>
-          listeners.forEach((cb) => cb({ physicalUid: "fake", url }))
-        w.bridge = {
-          mode: "kiosk",
-          features: ["nfc"],
-          bearer: async () => null,
-          // The real bridge wipes the Electron partition; counting the call
-          // (across the reload) is what this test needs.
-          resetSession: async () => {
-            const n = Number(sessionStorage.getItem("fakeBridgeResets") ?? 0)
-            sessionStorage.setItem("fakeBridgeResets", String(n + 1))
-          },
-          getUrl: async () => location.href,
-          onUrlChange: () => () => {},
-          onNfcTag: (cb: (e: { physicalUid: string; url?: string }) => void) => {
-            listeners.push(cb)
-            return () => {
-              const i = listeners.indexOf(cb)
-              if (i >= 0) listeners.splice(i, 1)
-            }
-          },
-        }
-      })
+      await installFakeKioskBridge(page)
 
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
       await expect(page.getByText("switch-parent@test.com")).toBeVisible({
@@ -219,14 +199,10 @@ test.describe("NFC tag checkout", () => {
       })
       await expect(page.getByRole("button", { name: "Fami Kind" })).toBeVisible()
 
-      // B taps without A having started anything — nothing to preserve, so
-      // no dialog, but the page must be wiped and reloaded.
-      await page.evaluate(
-        (url) =>
-          (window as unknown as { __fakeNfcTap: (u: string) => void })
-            .__fakeNfcTap(url),
-        `https://id.example.ch/?picc=${picc2}&cmac=${cmac2}`,
-      )
+      // B taps without A having touched anything — no dialog (A's
+      // "Besuch starten" countdown, if already running, starts A's visit
+      // first, issue #732), but the page must be wiped and reloaded.
+      await fakeNfcTap(page, picc2, cmac2)
 
       await expect(page.getByText("badge2@test.com")).toBeVisible({
         timeout: 15_000,
@@ -247,6 +223,132 @@ test.describe("NFC tag checkout", () => {
         kidRef.delete(),
       ])
     }
+  })
+
+  // Issue #732: after a badge tap at the kiosk "Besuch starten" fills over
+  // 5 s and starts the visit on its own; the start screen confirms it.
+  test.describe("kiosk auto-start (issue #732)", () => {
+    test("tap, wait 5 s: the visit starts and the start screen confirms it", async ({
+      page,
+    }) => {
+      const { picc, cmac } = readE2eData()
+      await installFakeKioskBridge(page)
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByText("nfc@test.com")).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(page.getByTestId("checkin-start-visit")).toHaveAttribute(
+        "data-countdown",
+        "running",
+      )
+
+      // No touch: the reset lands on the fresh start screen with the toast.
+      await expect(
+        page.getByText(
+          "Besuch von NFC gestartet. Viel Spass in der Werkstatt!",
+        ),
+      ).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByTestId("checkin-seg-account")).toBeVisible()
+      await expect(page).not.toHaveURL(/started=/)
+
+      const open = (await getCheckoutDocs()).filter(
+        (c) => (c as Record<string, unknown>).status === "open",
+      ) as Record<string, unknown>[]
+      expect(open).toHaveLength(1)
+      expect(open[0].usageType).toBe("regular")
+      expect((open[0].userId as { path: string }).path).toBe(
+        `users/${NFC_USER_ID}`,
+      )
+    })
+
+    test("tap, then 'Person hinzufügen': no auto-start", async ({ page }) => {
+      const { picc, cmac } = readE2eData()
+      await installFakeKioskBridge(page)
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByTestId("checkin-start-visit")).toHaveAttribute(
+        "data-countdown",
+        "running",
+        { timeout: 15_000 },
+      )
+      await page.getByRole("button", { name: "Person hinzufügen" }).click()
+      await expect(
+        page.getByTestId("checkin-start-visit"),
+      ).not.toHaveAttribute("data-countdown", "running")
+
+      await page.waitForTimeout(6_000)
+      await expect(page.getByText("nfc@test.com")).toBeVisible()
+      await expect(
+        page.getByRole("button", { name: /Besuch starten/ }),
+      ).toBeVisible()
+      expect(await getCheckoutDocs()).toHaveLength(0)
+    })
+
+    test("tap A, tap B during the countdown: A's visit starts, B sees the confirmation", async ({
+      page,
+    }) => {
+      const { picc, cmac, picc2, cmac2 } = readE2eData()
+      await installFakeKioskBridge(page)
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByTestId("checkin-start-visit")).toHaveAttribute(
+        "data-countdown",
+        "running",
+        { timeout: 15_000 },
+      )
+
+      await fakeNfcTap(page, picc2, cmac2)
+
+      await expect(page.getByText("badge2@test.com")).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(page.getByText("Besuch von NFC gestartet.")).toBeVisible()
+      await expect(page.getByRole("alertdialog")).not.toBeVisible()
+
+      const db = getAdminFirestore()
+      const a = await db
+        .collection("checkouts")
+        .where("userId", "==", db.doc(`users/${NFC_USER_ID}`))
+        .where("status", "==", "open")
+        .get()
+      expect(a.size).toBe(1)
+      expect(a.docs[0].get("usageType")).toBe("regular")
+    })
+
+    test("tap A, touch, tap B: asks before switching", async ({ page }) => {
+      const { picc, cmac, picc2, cmac2 } = readE2eData()
+      await installFakeKioskBridge(page)
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByTestId("checkin-start-visit")).toHaveAttribute(
+        "data-countdown",
+        "running",
+        { timeout: 15_000 },
+      )
+      await page.getByRole("heading", { name: "Deine Angaben" }).click()
+
+      await fakeNfcTap(page, picc2, cmac2)
+      const dialog = page.getByRole("alertdialog")
+      await expect(dialog).toBeVisible({ timeout: 15_000 })
+      await expect(dialog).toContainText("Benutzer wechseln?")
+      await expect(dialog).toContainText("NFC hat noch keinen Besuch gestartet.")
+      await dialog.getByRole("button", { name: "Abbrechen" }).click()
+      await expect(page.getByText("nfc@test.com")).toBeVisible()
+      expect(await getCheckoutDocs()).toHaveLength(0)
+    })
+
+    test("signed in without the bridge (browser): no countdown, no checkout", async ({
+      page,
+    }) => {
+      const { picc, cmac } = readE2eData()
+      await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
+      await expect(page.getByText("nfc@test.com")).toBeVisible({
+        timeout: 15_000,
+      })
+      const start = page.getByTestId("checkin-start-visit")
+      await expect(start).toBeVisible()
+      await page.waitForTimeout(6_000)
+      await expect(start).not.toHaveAttribute("data-countdown", "running")
+      await expect(page.getByText("nfc@test.com")).toBeVisible()
+      expect(await getCheckoutDocs()).toHaveLength(0)
+    })
   })
 
   test("kiosk mode — shows NFC hint inline in the account section", async ({ page }) => {
