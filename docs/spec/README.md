@@ -31,7 +31,9 @@ backfill a domain up front.
    German UI terms appear only as names of things (*Beleg*, *"Besuch
    starten"*). Exact copy belongs in the code.
 3. **Only rules someone would notice if broken.** Skip the obvious ("saving
-   saves"). If deleting the rule would change nothing, delete it.
+   saves"). If deleting the rule would change nothing, delete it. Migrations
+   and other one-off transitions aren't the product — a rule about one
+   exists only while it still matters to someone.
 4. **No rationale in the rule.** End it with its source — ADR, issue or PR —
    after an em dash: `— ADR-0042, #730`. The source is where the *why* lives.
    A rule with no recorded decision behind it carries no source; give it one

@@ -36,7 +36,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-16** A bill gets its number when the checkout closes; a Rechnung, Quittung or Sammelrechnung shows it as `RE-<number>` and a Beleg as `BL-<number>`. — ADR-0042
 - **BIL-17** A correction keeps the original number with a revision suffix (`RE-4200001-1` … `-9`), and its QR reference ends in that digit; a tenth correction is refused. — ADR-0042
-- **BIL-18** A payment made with a QR slip printed before the bill-number migration still matches its bill. — ADR-0042
 
 ## Monthly Sammelrechnung
 
@@ -80,3 +79,4 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 ## Retired
 
 <!-- `- BIL-n — <PR that retired it>` -->
+- BIL-18 — #743 (bill-number migration; a one-off transition, not the product)

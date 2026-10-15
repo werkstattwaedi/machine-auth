@@ -6,7 +6,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Purchase
 
-- **MEM-1** Only a signed-in account can buy a membership; a badge tap alone can't (kiosk: MEM-30). — ADR-0041
+- **MEM-1** A badge tap alone never opens the account area where a membership is bought; buying takes a signed-in account (at the kiosk an elevated session, MEM-30). — ADR-0041
 - **MEM-2** A person with an active membership can't buy a second one, only renew; a person whose membership expired can buy again.
 - **MEM-3** Buying adds the membership to the buyer's open checkout, or opens a purchase-only checkout without a usage fee, and goes straight to the checkout summary.
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
@@ -14,12 +14,12 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
 - **MEM-7** A membership becomes active when the buyer commits a payment method (or the overnight job commits it, BIL-7), not when the payment is booked (BIL-34). — #251
 - **MEM-8** A membership is valid for one year; a renewal or an admin's extension (MEM-32) adds a year to its end date, or starts the year today if that date has already passed.
-- **MEM-9** A first purchase costs the normal price and a renewal the member price.
+- **MEM-9** A membership has one price per type (single, family), the same for a first purchase and a renewal. — #743
 
 ## Benefits
 
 - **MEM-10** While a membership is active, every member of it pays the member price wherever the catalog sets one — machine time from the terminal and items in the checkout alike, signed in or by badge tap. — #358
-- **MEM-11** Machine time stops getting member prices as soon as the membership's end date has passed; checkout items keep them until the membership expires overnight (MEM-28).
+- **MEM-11** Whether an item gets the member price is decided once, when it is added to the visit — machine time when its session is uploaded, a checkout item when it is added — by whether the membership is active at that moment. — #743
 - **MEM-12** Wherever a membership is advertised, the only discount promised is cheaper machine use, never cheaper material. — #665
 - **MEM-13** A membership doesn't change the usage fee; member prices (MEM-10), paying by Sammelrechnung (BIL-4) and a free first badge (MEM-14) are its only benefits.
 - **MEM-14** A person's first badge is free if they are an active member or hold any permission; while they have an active badge, every further one costs the catalog price. — ADR-0030
@@ -57,7 +57,7 @@ renewal, cancellation and expiry. Terms: see the
 
 - **MEM-35** The renewal year is added when the renewal bill is committed, not when it is paid; an unpaid renewal is followed up at reconciliation (BIL-34). — #746
 - **MEM-26** Auto-renew is on until someone ends it; ending it keeps the membership active until its end date and only stops the next renewal bill.
-- **MEM-27** A cancelled membership ends member status for all its members at once and is never reactivated; only an admin can give the person a membership again, by creating a new one (MEM-32).
+- **MEM-27** Only an admin cancels a membership (MEM-32); cancelling ends member status for all its members at once, and the membership is never reactivated — an admin creates a new one instead.
 
 ## Expiry
 
@@ -90,7 +90,6 @@ renewal, cancellation and expiry. Terms: see the
 - [NEEDS CLARIFICATION] Should a family owner be able to cancel the membership? The server allows it; the checkout app offers no way to, and the cancelled view says only the club administration can act.
 - [NEEDS CLARIFICATION] A person whose membership was cancelled can't buy a new one themselves — the app offers no purchase (MEM-31), though the server would accept it. Intended, or should cancelled behave like expired (MEM-2)?
 - [NEEDS CLARIFICATION] After a badge is deactivated (lost), the next badge is free again for an eligible person (MEM-14 counts active badges only). Intended?
-- [NEEDS CLARIFICATION] On the day a membership ends, machine time already costs the normal price while checkout items still get the member price (MEM-11). Should both switch at the same moment?
 - [NEEDS CLARIFICATION] An invited member is offered "buy again" after the family membership expired, which makes them the owner of a new membership at the normal price. Intended?
 - [NEEDS CLARIFICATION] An expired invitation is refused when joining with a new account but can still be accepted by an existing account until it is cleaned up (MEM-16). Should both refuse it?
 - [NEEDS CLARIFICATION] A family has no member limit. A decision, or an omission?
