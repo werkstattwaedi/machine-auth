@@ -8,7 +8,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung or TWINT. — ADR-0044
 
-  | Method | Confirmed during checkout (BIL-6) | Collected monthly | Members only | Document |
+  | Method | Paid during checkout (BIL-6) | Collected monthly | Members only | Document |
   |---|---|---|---|---|
   | QR-Rechnung | no | no | no | Rechnung with QR slip |
   | Sammelrechnung | no | yes | yes | Beleg, later a Sammelrechnung |
@@ -34,7 +34,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Numbering & references
 
-- **BIL-16** A bill gets its number when the checkout closes; a Rechnung, Quittung or Sammelrechnung shows it as `RE-<number>` and a Beleg as `BL-<number>`. — ADR-0042
+- **BIL-16** A bill gets its number when it is issued — at checkout close, by the monthly run (BIL-19) or by the renewal invoicer (MEM-24); a Rechnung, Quittung or Sammelrechnung shows it as `RE-<number>` and a Beleg as `BL-<number>`. — ADR-0042
 - **BIL-17** A correction keeps the original number with a revision suffix (`RE-4200001-1` … `-9`), and its QR reference ends in that digit; a tenth correction is refused. — ADR-0042
 
 ## Monthly Sammelrechnung
@@ -58,7 +58,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Payment booking
 
-- **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement; booking skips bills already paid, so re-importing is safe.
+- **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement; booking skips bills already paid.
 - **BIL-30** A statement import matches payments by QR reference and lists unmatched, duplicate and cancelled-bill payments for manual handling; a payment with a different amount is booked with a warning.
 - **BIL-31** Booking a payment sends no mail and changes no document.
 - **BIL-34** Nothing waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked; unpaid bills are followed up at reconciliation. — #746

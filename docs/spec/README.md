@@ -144,3 +144,8 @@ still passes a different wrong promise.
   *Belege*.
 - **Account holder** — the person a checkout is billed to (the payer); other
   people on the same visit are not billed.
+- **Confirm** — the person's act of choosing a payment method for a bill at
+  the end of a checkout.
+- **Commit** — the moment a bill's payment method becomes final: when the
+  person confirms it, or when the overnight job does it for them (BIL-7).
+  What a bill grants, it grants from this moment (BIL-34).

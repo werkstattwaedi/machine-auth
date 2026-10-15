@@ -7,7 +7,7 @@ renewal, cancellation and expiry. Terms: see the
 ## Purchase
 
 - **MEM-1** A badge tap alone never opens the account area where a membership is bought; buying takes a signed-in account (at the kiosk an elevated session, MEM-30). — ADR-0041
-- **MEM-2** A person with an active membership can't buy a second one, only renew; a person whose membership expired can buy again.
+- **MEM-2** A person with an active membership can't buy another one — renewal is automatic (MEM-24); a person whose membership expired can buy again.
 - **MEM-3** Buying adds the membership to the buyer's open checkout, or opens a purchase-only checkout without a usage fee, and goes straight to the checkout summary.
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
 - **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile.
@@ -46,7 +46,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Renewal & cancellation
 
-- **MEM-24** About 30 days before the end date, an active membership with auto-renew gets one renewal bill (QR-Rechnung, member price). — #323
+- **MEM-24** About 30 days before the end date, an active membership with auto-renew gets one renewal bill (QR-Rechnung). — #323
 - **MEM-25** Only the family owner receives the renewal bill; invited members are told that the membership renews, never that they will be billed. — #730
 
   | Membership | Viewer | Told they receive the renewal bill |
