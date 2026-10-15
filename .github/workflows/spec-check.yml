@@ -80,16 +80,21 @@ jobs:
             > .spec-check/pr-body.md
 
       - name: Run spec check
+        id: claude
         if: steps.pr.outputs.skip != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           prompt: |
-            Follow .claude/spec-check.md for PR #${{ env.PR }}.
+            Follow .claude/spec-check.md for PR #${{ env.PR }}. You run the check
+            yourself — project agents aren't loaded here, so don't try to spawn one.
             Base: origin/${{ steps.pr.outputs.base }}. Head: the checked-out commit.
             PR description: .spec-check/pr-body.md
-            Report file: .spec-check/report.md
+            Report file: .spec-check/report.md — write it with the Write tool; the
+            next step posts it. Without the file nothing is posted.
+            Tools: Read, Grep, Glob, Write and read-only git (diff, log, show,
+            rev-parse, status). Nothing else is allowed — don't try.
           # Locally the check runs as the `spec-expert` agent; project agents
           # aren't loaded here (settings sources: user), so the top-level
           # agent gets that agent's model and effort directly.
@@ -98,6 +103,33 @@ jobs:
             --model fable
             --effort xhigh
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git status:*)"
+
+      # The action logs only the first and last event. When the agent ends
+      # without a report, this is the only way to see what it did: denied tool
+      # calls and its final message in the job log, the full transcript as an
+      # artifact for a week (nothing secret in it — the diff, the spec, the PR
+      # body and the agent's own words).
+      - name: Summarise the transcript
+        if: ${{ !cancelled() && steps.pr.outputs.skip != 'true' && steps.claude.outputs.execution_file != '' }}
+        env:
+          FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -s 'if length == 1 and (.[0] | type) == "array" then .[0] else . end' "$FILE" > "$RUNNER_TEMP/events.json"
+          echo "## Tool calls"
+          jq -r '.[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use")
+                 | "- \(.name) \((.input.command // .input.file_path // .input.pattern // .input.subagent_type // "") | tostring | .[0:160])"' \
+            "$RUNNER_TEMP/events.json"
+          echo "## Denied"
+          jq -r '.[] | select(.type == "result") | (.permission_denials // [])[]
+                 | "- \(.tool_name) \(.tool_input | tostring | .[0:200])"' "$RUNNER_TEMP/events.json"
+          echo "## Final message"
+          jq -r '.[] | select(.type == "result") | .result // ""' "$RUNNER_TEMP/events.json"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.pr.outputs.skip != 'true' && steps.claude.outputs.execution_file != '' }}
+        with:
+          name: spec-check-transcript
+          path: ${{ steps.claude.outputs.execution_file }}
+          retention-days: 7
 
       - name: Post report
         # Not after a cancel: the newer run for this PR is about to post.
