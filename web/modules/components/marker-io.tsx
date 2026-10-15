@@ -41,7 +41,7 @@ export interface MarkerIOProps {
  * Loads the Marker.io widget for every visitor (issue #669). The floating
  * launcher shows only where the operations config sets
  * web.markerLauncherVisible (staging); elsewhere the capture is opened
- * from the account menu / admin sidebar or with Ctrl+Shift+PrintScreen.
+ * from the header menu (`AppMenu`) or with Ctrl+Shift+PrintScreen.
  */
 export function MarkerIO({ app }: MarkerIOProps) {
   const { user, userDoc, sessionKind } = useAuth()

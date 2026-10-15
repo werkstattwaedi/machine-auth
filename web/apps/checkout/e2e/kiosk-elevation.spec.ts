@@ -7,8 +7,8 @@
  * own contact address elevates it. Code sign-ins are elevated at mint and
  * skip the second code. The kiosk UI works browser-side without
  * window.bridge; the emulator skips the bearer. Bridge-only chrome (the
- * remaining-time chip, "Zurück zum Checkout", the account idle watcher,
- * kiosk-flagged post-purchase routing) is covered by unit tests, not here.
+ * kiosk sign-out wipe, the account idle watcher, kiosk-flagged post-purchase
+ * routing) is covered by unit tests, not here.
  */
 
 import { test, expect } from "@playwright/test"
@@ -22,6 +22,7 @@ import {
   getAdminFirestore,
   getCheckoutItems,
   linkPhone,
+  openHeaderMenuEntry,
   waitForLoginCode,
   waitForSmsCode,
 } from "./helpers"
@@ -65,10 +66,7 @@ async function openAccountMenuItem(
   page: import("@playwright/test").Page,
   name: "Profil" | "Nutzungsverlauf" | "Mitgliedschaft",
 ) {
-  const trigger = page.getByRole("button", { name: "Konto-Menü" })
-  await expect(trigger).toBeVisible()
-  await trigger.click()
-  await page.getByRole("menuitem", { name }).click()
+  await (await openHeaderMenuEntry(page, name)).click()
 }
 
 async function tapBadge2(page: import("@playwright/test").Page) {
@@ -145,6 +143,7 @@ test.describe("Kiosk step-up elevation", () => {
     await openAccountMenuItem(page, "Mitgliedschaft")
 
     await expect(page.getByRole("menu")).not.toBeVisible()
+    await expect(page.getByTestId("app-menu-sheet")).not.toBeVisible()
     await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
     await page.getByTestId("kiosk-elevation-email").click()
 

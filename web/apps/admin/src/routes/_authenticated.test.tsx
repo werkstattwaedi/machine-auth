@@ -40,7 +40,7 @@ vi.mock("@modules/lib/auth", () => ({
   useAuth: () => mockAuthReturn,
 }))
 
-// A built bundle's version — the dev value "dev" hides the footer.
+// A built bundle's version — the chrome must not show it (#729).
 vi.mock("@modules/lib/build-version", () => ({ BUILD_VERSION: "2026.10.3" }))
 
 await import("./_authenticated")
@@ -112,10 +112,12 @@ describe("AdminAuthenticatedLayout", () => {
     errorSpy.mockRestore()
   })
 
-  // Issue #669: the Marker.io launcher is hidden in production, so the
-  // sidebar offers the capture under the account row, next to the version.
-  it("offers Problem melden next to the version", () => {
+  // Issue #669 / #729: the Marker.io launcher is hidden in production, so
+  // the header menu offers the capture; the sidebar footer with the
+  // (truncated) version is gone.
+  it("offers Problem melden in the header menu, without a version footer", async () => {
     const capture = vi.fn()
+    window.__Marker = {}
     window.Marker = { capture }
     mockAuthReturn = {
       user: { uid: "admin1", email: "admin@test.com" },
@@ -128,11 +130,21 @@ describe("AdminAuthenticatedLayout", () => {
     const Component = CapturedComponent!
     render(<Component />)
 
-    const version = screen.getByText("Version 2026.10.3")
-    const button = screen.getByRole("button", { name: "Problem melden" })
-    expect(version.parentElement).toBe(button.parentElement)
-    fireEvent.click(button)
+    expect(screen.queryByText(/2026\.10\.3/)).toBeNull()
+    expect(screen.queryByRole("button", { name: "Problem melden" })).toBeNull()
+
+    // Radix opens the dropdown on keyboard activation (no user-event here).
+    fireEvent.keyDown(screen.getByRole("button", { name: "Konto-Menü" }), {
+      key: "Enter",
+    })
+    await screen.findByRole("menu")
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Problem melden",
+      "Abmelden",
+    ])
+    fireEvent.click(screen.getByRole("menuitem", { name: "Problem melden" }))
     expect(capture).toHaveBeenCalledWith("fullscreen")
     delete window.Marker
+    delete window.__Marker
   })
 })

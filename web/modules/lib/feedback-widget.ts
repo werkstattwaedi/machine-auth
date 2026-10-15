@@ -5,8 +5,9 @@
 // every visitor — the kiosk is where most reports come from — but its
 // floating launcher overlapped the UI, so it only shows where the operations
 // config sets web.markerLauncherVisible (staging). Elsewhere the capture is
-// reached through the account menu, the admin sidebar and the
-// Ctrl+Shift+PrintScreen shortcut.
+// reached through the header menu (`AppMenu`, the same entry in the admin
+// app, the checkout member area and the wizard — anonymous visitors
+// included) and the Ctrl+Shift+PrintScreen shortcut.
 
 /**
  * Whether Marker.io's floating launcher button should be visible, given the

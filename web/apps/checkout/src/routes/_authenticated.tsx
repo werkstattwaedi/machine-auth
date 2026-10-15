@@ -15,6 +15,7 @@ import {
   AuthenticatedLayout,
   type AuthenticatedLayoutNavItem,
 } from "@modules/components/authenticated-layout"
+import type { AppMenuEntry } from "@modules/components/app-header/app-menu"
 import { useAuth } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import {
@@ -37,6 +38,14 @@ const navItems: AuthenticatedLayoutNavItem[] = [
   { to: "/account/profile", label: "Profil", icon: User },
 ]
 
+// The desktop header menu matches the wizard's account menu (#729): the
+// profile leads because it names the person shown in the header.
+const menuItems: AppMenuEntry[] = [
+  { to: "/account/profile", label: "Profil", icon: User },
+  { to: "/account/usage", label: "Nutzungsverlauf", icon: History },
+  { to: "/account/membership", label: "Mitgliedschaft", icon: BadgeCheck },
+]
+
 function CheckoutAuthenticatedLayout() {
   const bridge = useBridge()
   const { signOut } = useAuth()
@@ -45,14 +54,15 @@ function CheckoutAuthenticatedLayout() {
       navItems={navItems}
       gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       headerAction={<VisitCta />}
+      menuItems={menuItems}
       signOutRedirect="/checkin"
       // Inside the Electron kiosk (ADR-0041) the member area is reached by an
       // OTP-elevated session; leaving it must be the same strong wipe as the
-      // chrome's "Neuer Checkout".
+      // chrome's "Neuer Checkout". The way back to the checkout is the
+      // VisitCta, which keeps the kiosk flag.
       kiosk={
         bridge.available
           ? {
-              checkoutPath: "/checkin?kiosk",
               onSignOut: () =>
                 void runStartOver({
                   signOut,
@@ -69,7 +79,8 @@ function CheckoutAuthenticatedLayout() {
 }
 
 /**
- * State-aware sidebar CTA — sits above the account-nav items.
+ * State-aware sidebar CTA — sits above the account-nav items (in the
+ * sidebar on desktop, at the top of the menu sheet on mobile).
  *
  *   no open checkout                  → "Neuer Besuch starten" (teal)
  *   open checkout from today          → "Mein Besuch"          (teal)

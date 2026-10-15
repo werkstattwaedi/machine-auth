@@ -1,31 +1,25 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Shared sidebar+main shell used by both web apps' authenticated routes.
-// Each app supplies its own nav items and a redirect "gate" (admin-only
-// vs member-with-profile-completion). Hooks deliberately sit above the
+// Shared header + sidebar + main shell used by both web apps' authenticated
+// routes. Each app supplies its own nav items and a redirect "gate"
+// (admin-only vs member-with-profile-completion). The header and its menu
+// are the same `AppHeader` / `AppMenu` the checkout wizard uses (#729). Hooks deliberately sit above the
 // loading early-return — see regression test for React error #310.
 
 import type { ReactNode } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useIsMobile } from "@modules/hooks/use-mobile"
-import { Avatar } from "@modules/components/ui/avatar"
 import { Button } from "@modules/components/ui/button"
+import { AppHeader } from "@modules/components/app-header/app-header"
 import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@modules/components/ui/sheet"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@modules/components/ui/tooltip"
-import { ArrowLeft, Loader2, LogOut, Menu, ShieldCheck, type LucideIcon } from "lucide-react"
+  AppMenu,
+  navLinkClass,
+  type AppMenuEntry,
+} from "@modules/components/app-header/app-menu"
+import { Loader2, LogOut, type LucideIcon } from "lucide-react"
 
 export interface AuthenticatedLayoutNavItem {
   to: string
@@ -55,10 +49,17 @@ export interface AuthenticatedLayoutProps {
   wrapper?: (props: { children: ReactNode }) => ReactNode
   /**
    * Optional ReactNode rendered prominently above the sidebar nav items
-   * — used by the checkout app for the state-aware "Mein Besuch" /
-   * "Neuer Besuch" CTA. Pass null to hide.
+   * (and above them in the mobile menu sheet) — used by the checkout app
+   * for the state-aware "Mein Besuch" / "Neuer Besuch" CTA. Pass null to
+   * hide.
    */
   headerAction?: ReactNode
+  /**
+   * Desktop header-menu entries before "Problem melden" — the checkout
+   * passes Profil / Nutzungsverlauf / Mitgliedschaft so the member-area menu
+   * matches the wizard's. The admin menu has none.
+   */
+  menuItems?: AppMenuEntry[]
   /**
    * Where to send the user after an explicit "Abmelden". When set, the
    * logout button navigates here (a public page) instead of letting the
@@ -71,19 +72,13 @@ export interface AuthenticatedLayoutProps {
   /**
    * Kiosk mode (ADR-0041): the checkout app passes this when running inside
    * the Electron bridge. An OTP-elevated kiosk session may browse the
-   * member area; the shell then shows the remaining elevation time, a
-   * "Zurück zum Checkout" row, and "Abmelden" runs `onSignOut` (the strong
-   * start-over wipe) instead of a plain sign-out + redirect.
+   * member area; "Abmelden" then runs `onSignOut` (the strong start-over
+   * wipe) instead of a plain sign-out + redirect. The visit CTA in
+   * `headerAction` is the way back to the checkout.
    */
   kiosk?: {
-    checkoutPath: string
     onSignOut: () => void
   }
-  /**
-   * Small print under the account row — the admin app shows the release
-   * version there (ADR-0045).
-   */
-  footerNote?: ReactNode
 }
 
 export function AuthenticatedLayout({
@@ -91,9 +86,9 @@ export function AuthenticatedLayout({
   gate,
   wrapper: Wrapper,
   headerAction,
+  menuItems,
   signOutRedirect,
   kiosk,
-  footerNote,
 }: AuthenticatedLayoutProps) {
   const {
     user,
@@ -104,13 +99,11 @@ export function AuthenticatedLayout({
     signOut,
     sessionKind,
     isKioskElevated,
-    kioskElevatedUntil,
   } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   // Hooks must be called unconditionally before any early returns.
   const isMobile = useIsMobile()
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   // Redirect to login if not authenticated. Preserve the current pathname
   // through `?redirect=` so an unauthenticated visitor who clicked a deep
@@ -247,198 +240,75 @@ export function AuthenticatedLayout({
   }
   if (gate.kind === "member" && (tagBlocked || sessionKind === "anonymous")) return null
 
-  // A left accent border is reserved for the active item; inactive items
-  // carry a transparent border of the same width so the row geometry stays
-  // identical and the label doesn't shift on activation.
-  const navLink =
-    "flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2 rounded-[3px] text-sm transition-colors"
-  // Active = "you are here": a SUBTLE pale tint, dark-teal text and a left
-  // accent border — deliberately NOT the solid teal fill, which is reserved
-  // for the primary visit CTA (the `headerAction`). Solid-on-solid made the
-  // current page and the call-to-action indistinguishable (issue #363).
-  const navLinkActive =
-    "[&.active]:bg-cog-teal-light [&.active]:text-cog-teal-dark [&.active]:font-semibold [&.active]:border-cog-teal"
-  // Hover only tints inactive rows; the active row keeps its pale tint so a
-  // hover doesn't wash out the "current page" signal.
-  const navLinkHover = "hover:bg-cog-teal-light/60 [&.active]:hover:bg-cog-teal-light"
-  // Primary item = solid-teal CTA. Overrides the subtle active style so the
-  // call-to-action always reads as a button, never as the current page.
-  const navLinkPrimary =
-    "bg-cog-teal text-white font-bold hover:bg-cog-teal-dark [&.active]:bg-cog-teal [&.active]:text-white [&.active]:hover:bg-cog-teal-dark"
-
-  const navContent = (
-    <>
-      {headerAction && (
-        <div className="mb-3" onClick={() => setSheetOpen(false)}>
-          {headerAction}
-        </div>
-      )}
-      {kiosk && (
-        <Link
-          to={kiosk.checkoutPath}
-          className={`${navLink} ${navLinkHover}`}
-          onClick={() => setSheetOpen(false)}
-          data-testid="kiosk-back-to-checkout"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Zurück zum Checkout
-        </Link>
-      )}
-      {navItems.map(({ to, label, icon: Icon, primary }) => (
-        <Link
-          key={to}
-          to={to}
-          className={
-            primary
-              ? `${navLink} ${navLinkPrimary}`
-              : `${navLink} ${navLinkActive} ${navLinkHover}`
-          }
-          onClick={() => setSheetOpen(false)}
-        >
-          <Icon className="h-4 w-4" />
-          {label}
-        </Link>
-      ))}
-
-      <div className="mt-auto border-t border-sidebar-border pt-3 pb-2">
-        {kiosk && kioskElevatedUntil !== null && (
-          <KioskElevationChip until={kioskElevatedUntil} />
-        )}
-        <div className="flex items-center gap-2.5 px-3 py-1.5">
-          <Avatar
-            name={userDoc?.name || user.email || "?"}
-            seed={user.uid}
-            size="sm"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium truncate">
-              {userDoc?.name || user.email || userDoc?.email}
-            </div>
-            {userDoc?.name && (user.email || userDoc.email) ? (
-              <div className="text-xs text-muted-foreground truncate">
-                {user.email || userDoc.email}
-              </div>
-            ) : null}
-          </div>
-          {/* Icon-only sign-out button — collapses the previously full-width
-              "Abmelden" CTA into the avatar row so the leading edges line up
-              (issue #232). `aria-label` keeps screen readers happy when the
-              visible text disappears; the tooltip surfaces the label on
-              hover/focus for sighted users. */}
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Abmelden"
-                  className="text-muted-foreground hover:text-foreground hover:bg-cog-teal-light"
-                  onClick={() => {
-                    // Kiosk: the strong wipe (signOut + partition reset +
-                    // hard reload) — nothing of this visitor may survive
-                    // on the shared terminal.
-                    if (kiosk) {
-                      kiosk.onSignOut()
-                      return
-                    }
-                    // Navigate to the public landing FIRST (before signOut
-                    // flips `user` to null) so leaving the _authenticated
-                    // subtree unmounts the unauth gate — otherwise it bounces
-                    // to /login?redirect=<member-path> and strands the user.
-                    if (signOutRedirect) {
-                      ;(navigate as (opts: { to: string }) => void)({
-                        to: signOutRedirect,
-                      })
-                    }
-                    void signOut()
-                  }}
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Abmelden</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        {footerNote ? (
-          <div className="px-3 pt-1 text-[11px] text-muted-foreground truncate">
-            {footerNote}
-          </div>
-        ) : null}
-      </div>
-    </>
-  )
+  const handleSignOut = () => {
+    // Kiosk: the strong wipe (signOut + partition reset + hard reload) —
+    // nothing of this visitor may survive on the shared terminal.
+    if (kiosk) {
+      kiosk.onSignOut()
+      return
+    }
+    // Navigate to the public landing FIRST (before signOut flips `user` to
+    // null) so leaving the _authenticated subtree unmounts the unauth gate —
+    // otherwise it bounces to /login?redirect=<member-path> and strands the
+    // user.
+    if (signOutRedirect) {
+      ;(navigate as (opts: { to: string }) => void)({ to: signOutRedirect })
+    }
+    void signOut()
+  }
 
   const shell = (
-    // `data-app-shell` marks the authenticated sidebar+main shell so global
-    // CSS can disable the reserved document scrollbar gutter here: the page
-    // scroll lives inside `<main>`, not the document, so the viewport gutter
-    // (#568) would only inset empty strips beside the sidebar (issue #581).
+    // `data-app-shell` marks the authenticated header+sidebar+main shell so
+    // global CSS can disable the reserved document scrollbar gutter here: the
+    // page scroll lives inside `<main>`, not the document, so the viewport
+    // gutter (#568) would only inset empty strips beside the sidebar (#581).
     <div
       data-app-shell
-      className="min-h-screen flex flex-col md:h-screen md:flex-row md:overflow-hidden"
+      className="min-h-screen flex flex-col md:h-screen md:overflow-hidden"
     >
-      {/* Mobile header */}
-      {isMobile && (
-        <header className="flex items-center gap-3 px-4 py-3 border-b border-sidebar-border bg-sidebar">
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="p-1.5">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-60 p-0 bg-sidebar text-sidebar-foreground flex flex-col">
-              <SheetTitle className="p-4 pb-2">
-                <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-10" />
-              </SheetTitle>
-              <div className="px-3 py-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">{navContent}</div>
-            </SheetContent>
-          </Sheet>
-          <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-8" />
-        </header>
-      )}
+      <AppHeader
+        width="full"
+        menu={
+          <AppMenu
+            identity={{
+              name: userDoc?.name || user.email || userDoc?.email || "?",
+              // The doc's e-mail stands in for a kiosk principal's missing one.
+              email: user.email || userDoc?.email || null,
+              userId: user.uid,
+            }}
+            menuItems={menuItems}
+            navItems={navItems}
+            headerAction={headerAction}
+            onSignOut={handleSignOut}
+          />
+        }
+      />
 
-      {/* Desktop sidebar — pinned to viewport so footer stays visible
-          regardless of main-content length. */}
-      {!isMobile && (
-        <nav className="w-60 bg-sidebar text-sidebar-foreground flex flex-col border-r border-sidebar-border md:sticky md:top-0 md:h-screen md:shrink-0">
-          <div className="p-4 pb-2">
-            <img src="/logo_oww.png" alt="Offene Werkstatt Wädenswil" className="h-10" />
-          </div>
-          <div className="px-3 py-2 flex flex-col gap-0.5 flex-1 overflow-y-auto">{navContent}</div>
-        </nav>
-      )}
+      <div className="flex flex-1 flex-col md:min-h-0 md:flex-row">
+        {/* Desktop sidebar below the header; on mobile the menu sheet
+            carries the same navigation. */}
+        {!isMobile && (
+          <nav className="w-60 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-4 text-sidebar-foreground">
+            <div className="flex flex-col gap-0.5">
+              {headerAction && <div className="mb-3">{headerAction}</div>}
+              {navItems.map(({ to, label, icon: Icon, primary }) => (
+                <Link key={to} to={to} className={navLinkClass(primary)}>
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </nav>
+        )}
 
-      {/* Main content owns the page-level scroll on md+ so the sidebar stays put. */}
-      <main className="flex-1 p-4 md:p-8 bg-background md:h-screen md:overflow-auto">
-        <Outlet />
-      </main>
+        {/* Main content owns the page-level scroll on md+ so the header and
+            sidebar stay put. */}
+        <main className="flex-1 p-4 md:p-8 bg-background md:overflow-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 
   return Wrapper ? <Wrapper>{shell}</Wrapper> : shell
-}
-
-/**
- * Remaining time of the kiosk elevation (ADR-0041), refreshed each minute.
- * Purely informational — the guards bounce at the deadline regardless.
- */
-function KioskElevationChip({ until }: { until: number }) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 30_000)
-    return () => window.clearInterval(t)
-  }, [])
-  const minutes = Math.max(1, Math.ceil((until - now) / 60_000))
-  return (
-    <div
-      className="mx-3 mb-2 flex items-center gap-2 rounded-md bg-cog-teal-light px-2.5 py-1.5 text-xs text-cog-teal-dark"
-      data-testid="kiosk-elevation-chip"
-    >
-      <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span>
-        Kiosk-Sitzung — noch {minutes} Min
-      </span>
-    </div>
-  )
 }

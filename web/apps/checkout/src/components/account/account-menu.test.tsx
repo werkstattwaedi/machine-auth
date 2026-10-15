@@ -1,8 +1,8 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { cleanup, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { AccountMenu } from "./account-menu"
 
@@ -45,6 +45,20 @@ beforeAll(() => {
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = () => {}
   }
+})
+
+// useIsMobile (AppMenu): jsdom has no matchMedia; width picks the variant.
+function setViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width })
+}
+beforeEach(() => {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }))
+  setViewport(1280)
 })
 
 afterEach(() => {
@@ -180,5 +194,28 @@ describe("AccountMenu", () => {
     const { user } = await openMenu()
     await user.click(screen.getByRole("menuitem", { name: "Abmelden" }))
     expect(mockStartOver).toHaveBeenCalledTimes(1)
+  })
+
+  // Mobile (#729): the same entries in a right-hand sheet, in the sidebar's
+  // order; a kiosk session still steps up before navigating.
+  it("opens a sheet on mobile whose destinations step up a kiosk session", async () => {
+    setViewport(375)
+    render(
+      <AccountMenu name="Mike Schneider" email={null} userId="u1" kioskSession />,
+    )
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Menü" }))
+    const sheet = await screen.findByRole("dialog")
+    const rows = Array.from(sheet.querySelectorAll("nav a, nav button")).map(
+      (el) => el.textContent,
+    )
+    expect(rows).toEqual(["Nutzungsverlauf", "Mitgliedschaft", "Profil", "Abmelden"])
+
+    await user.click(within(sheet).getByRole("button", { name: "Mitgliedschaft" }))
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(mockEnsureElevated).toHaveBeenCalledTimes(1)
+    const next = mockEnsureElevated.mock.calls[0][0] as () => void
+    next()
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/account/membership" })
   })
 })

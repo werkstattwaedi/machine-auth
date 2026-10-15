@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 // Regression net for issue #212: the desktop sidebar must stay
-// viewport-bound (sticky) so the footer (avatar + sign-out) is visible
-// even when main content scrolls. The dual-viewport playwright config
+// viewport-bound while main content scrolls (since #729 it sits below the
+// shared header and has no footer — account and sign-out live in the header
+// menu). The dual-viewport playwright config
 // (`chromium` + `mobile-chrome`) covers both desktop and mobile in one
 // test file.
 //
@@ -37,18 +38,16 @@ async function signIn(page: Page) {
 }
 
 test.describe("Sidebar screenshots", () => {
-  test("profile page — sidebar with avatar footer", async ({ page }) => {
+  test("profile page — sidebar", async ({ page }) => {
     await signIn(page)
     await page.goto("/account/profile")
     await expect(
       page.getByRole("heading", { name: "Profil" }),
     ).toBeVisible({ timeout: 10_000 })
-    // Sanity: the seeded display name should be rendered in the sidebar
-    // footer (desktop only — mobile sheet is closed).
     await expect(page).toHaveScreenshot("sidebar-profile.png")
   })
 
-  test("membership page — sidebar with avatar footer", async ({ page }) => {
+  test("membership page — sidebar", async ({ page }) => {
     await signIn(page)
     await page.goto("/account/membership")
     await expect(

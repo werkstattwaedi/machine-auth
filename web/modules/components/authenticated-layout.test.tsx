@@ -3,6 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, cleanup, act, fireEvent } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { type ReactNode } from "react"
 import { Shield } from "lucide-react"
 
@@ -201,9 +202,10 @@ describe("AuthenticatedLayout", () => {
   })
 
   // ADR-0041: an OTP-elevated kiosk session IS allowed into the member area
-  // — the guard must not bounce it, and the kiosk chrome (remaining-time
-  // chip, back-to-checkout row) renders.
-  it("member gate admits an elevated kiosk session and renders the kiosk chrome", () => {
+  // — the guard must not bounce it. Since #729 the shell carries no kiosk
+  // extras (no remaining-time chip, no back-to-checkout row: the visit CTA
+  // is the way back); only "Abmelden" differs.
+  it("member gate admits an elevated kiosk session; Abmelden is the kiosk wipe", async () => {
     const onKioskSignOut = vi.fn()
     mockAuthReturn = {
       user: { uid: "tag:u1:s1", email: null },
@@ -228,19 +230,23 @@ describe("AuthenticatedLayout", () => {
       <AuthenticatedLayout
         navItems={navItems}
         gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
-        kiosk={{ checkoutPath: "/checkin?kiosk", onSignOut: onKioskSignOut }}
+        kiosk={{ onSignOut: onKioskSignOut }}
       />,
     )
 
     expect(navigateMock).not.toHaveBeenCalled()
     expect(screen.getByTestId("outlet")).toBeTruthy()
-    expect(screen.getByTestId("kiosk-elevation-chip").textContent).toContain("Min")
-    expect(screen.getByTestId("kiosk-back-to-checkout")).toBeTruthy()
+    expect(screen.queryByTestId("kiosk-elevation-chip")).toBeNull()
+    expect(screen.queryByTestId("kiosk-back-to-checkout")).toBeNull()
+    expect(screen.queryByText(/Kiosk-Sitzung|Zurück zum Checkout/)).toBeNull()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Konto-Menü" }))
     // The doc's e-mail stands in for the synthetic principal's missing one.
-    expect(screen.getByText("kiosk@test.com")).toBeTruthy()
+    expect((await screen.findByRole("menu")).textContent).toContain("kiosk@test.com")
 
     // "Abmelden" on the kiosk is the strong start-over, not a plain signOut.
-    fireEvent.click(screen.getByRole("button", { name: "Abmelden" }))
+    await user.click(screen.getByRole("menuitem", { name: "Abmelden" }))
     expect(onKioskSignOut).toHaveBeenCalledTimes(1)
     expect(mockAuthReturn.signOut).not.toHaveBeenCalled()
   })
@@ -337,16 +343,14 @@ describe("AuthenticatedLayout", () => {
     expect(screen.queryByRole("button", { name: "Abmelden" })).toBeNull()
   })
 
-  // Regression for issue #232: the "Abmelden" button is now icon-only,
-  // collapsed into the avatar row so the leading edges align. The visible
-  // text was removed, so screen readers and tests rely on `aria-label`.
-  // Verifies both that the accessible name is wired up and that clicking
-  // the icon-only button still calls signOut().
-  it("renders sign-out as an icon-only button with accessible name 'Abmelden'", () => {
+  // Issue #729: one header bar with the menu top right; the sidebar footer
+  // (avatar row, icon-only sign-out, version) is gone and "Abmelden" lives
+  // in the menu.
+  it("renders the header menu instead of a sidebar footer (admin)", async () => {
     const signOutMock = vi.fn()
     mockAuthReturn = {
-      user: { uid: "u1", email: "user@test.com" },
-      userDoc: { name: "User" },
+      user: { uid: "u1", email: "admin@test.com" },
+      userDoc: { name: "Admin User" },
       userDocLoading: false,
       loading: false,
       isAdmin: true,
@@ -356,12 +360,60 @@ describe("AuthenticatedLayout", () => {
 
     render(<AuthenticatedLayout navItems={navItems} gate={{ kind: "admin" }} />)
 
-    // Visible text label is gone — the icon button exposes its name via aria-label.
-    expect(screen.queryByText("Abmelden")).toBeNull()
-    const button = screen.getByRole("button", { name: "Abmelden" })
-    expect(button).toBeTruthy()
+    expect(screen.getByRole("banner")).toBeTruthy()
+    expect(screen.getAllByAltText("Offene Werkstatt Wädenswil")).toHaveLength(1)
+    expect(screen.queryByRole("button", { name: "Abmelden" })).toBeNull()
+    expect(screen.queryByText(/Version/)).toBeNull()
 
-    fireEvent.click(button)
+    const user = userEvent.setup()
+    const trigger = screen.getByRole("button", { name: "Konto-Menü" })
+    expect(trigger).toHaveTextContent("Admin User")
+    await user.click(trigger)
+    await screen.findByRole("menu")
+    // Admin: no account destinations, just sign-out (Problem melden only
+    // when the widget is loaded).
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Abmelden",
+    ])
+    await user.click(screen.getByRole("menuitem", { name: "Abmelden" }))
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("member menu lists the app's menu items and signs out to signOutRedirect", async () => {
+    const signOutMock = vi.fn()
+    mockAuthReturn = {
+      user: { uid: "u1", email: "member@test.com" },
+      userDoc: {
+        name: "Member",
+        firstName: "Mem",
+        lastName: "Ber",
+        termsAcceptedAt: new Date(),
+      },
+      userDocLoading: false,
+      loading: false,
+      isAdmin: false,
+      sessionKind: "real",
+      signOut: signOutMock,
+    }
+
+    render(
+      <AuthenticatedLayout
+        navItems={navItems}
+        menuItems={[{ to: "/account/profile", label: "Profil", icon: Shield }]}
+        gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
+        signOutRedirect="/checkin"
+      />,
+    )
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole("button", { name: "Konto-Menü" }))
+    await screen.findByRole("menu")
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Profil",
+      "Abmelden",
+    ])
+    await user.click(screen.getByRole("menuitem", { name: "Abmelden" }))
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/checkin" })
     expect(signOutMock).toHaveBeenCalledTimes(1)
   })
 

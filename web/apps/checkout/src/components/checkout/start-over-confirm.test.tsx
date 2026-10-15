@@ -2,19 +2,29 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * StartOverButton — the anon "Von vorne beginnen" escape hatch. Self-gates on
- * `isAnonymous && openCheckout`, confirms before discarding, and calls the
- * shared `startOver` primitive (drop session + hard reload). Lives in the
- * wizard chrome so it's reachable on steps 1–3.
+ * "Von vorne beginnen" — the anon escape hatch. Since #729 the trigger is an
+ * entry of the anonymous header menu (`useStartOverMenuEntry`) and the confirm
+ * dialog (`StartOverConfirm`) stays mounted in the wizard chrome. Both gate on
+ * `isAnonymous && openCheckout`; confirming calls the shared `startOver`
+ * primitive (drop session + hard reload).
  *
- * Kiosk mode (issue #415): the in-page trigger is hidden (the chrome "Neuer
- * Checkout" button is the affordance), but the component still subscribes to
- * the chrome's start-over request, acks it, and opens the same confirm dialog.
+ * Kiosk mode (issue #415): there is no in-page entry (the chrome "Neuer
+ * Checkout" button is the affordance), but the dialog still subscribes to the
+ * chrome's start-over request, acks it, and opens.
  */
 
+import { useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
-import { StartOverButton } from "./start-over-button"
+import {
+  render,
+  renderHook,
+  screen,
+  cleanup,
+  fireEvent,
+  act,
+} from "@testing-library/react"
+import { StartOverConfirm } from "./start-over-confirm"
+import { useStartOverMenuEntry } from "./start-over-menu-entry"
 
 const mockUseWizardContext = vi.fn()
 vi.mock("./wizard-context", () => ({
@@ -66,44 +76,64 @@ function setBridge(over: Record<string, unknown> = {}) {
   }
 }
 
+function entry(onRequest = vi.fn()) {
+  return renderHook(() => useStartOverMenuEntry(onRequest)).result.current
+}
+
+/** The chrome's wiring: menu entry opens the always-mounted dialog. */
+function Harness() {
+  const [open, setOpen] = useState(false)
+  const item = useStartOverMenuEntry(() => setOpen(true))
+  return (
+    <>
+      {item && (
+        <button type="button" onClick={item.onSelect}>
+          {item.label}
+        </button>
+      )}
+      <StartOverConfirm open={open} onOpenChange={setOpen} />
+    </>
+  )
+}
+
 const button = () =>
   screen.queryByRole("button", { name: /Von vorne beginnen/ })
 
-describe("StartOverButton — gating", () => {
-  it("renders nothing for a non-anonymous session", () => {
+describe("useStartOverMenuEntry — gating", () => {
+  it("is null for a non-anonymous session", () => {
     setCtx({ isAnonymous: false })
     setBridge()
-    render(<StartOverButton />)
-    expect(button()).toBeNull()
+    expect(entry()).toBeNull()
   })
 
-  it("renders nothing when there is no open checkout", () => {
+  it("is null when there is no open checkout", () => {
     setCtx({ openCheckout: null })
     setBridge()
-    render(<StartOverButton />)
-    expect(button()).toBeNull()
+    expect(entry()).toBeNull()
   })
 
-  it("renders for an anonymous session with an open checkout", () => {
+  it("offers the entry for an anonymous session with an open checkout", () => {
     setCtx()
     setBridge()
-    render(<StartOverButton />)
-    expect(button()).toBeTruthy()
+    const onRequest = vi.fn()
+    const item = entry(onRequest)
+    expect(item?.label).toBe("Von vorne beginnen")
+    item!.onSelect!()
+    expect(onRequest).toHaveBeenCalledTimes(1)
   })
 
-  it("hides the in-page trigger in kiosk mode (bridge available)", () => {
+  it("is null in kiosk mode (bridge available)", () => {
     setCtx()
     setBridge({ available: true })
-    render(<StartOverButton />)
-    expect(button()).toBeNull()
+    expect(entry()).toBeNull()
   })
 })
 
-describe("StartOverButton — confirm flow", () => {
+describe("StartOverConfirm — confirm flow", () => {
   it("confirming 'Verwerfen' calls startOver", () => {
     const startOver = setCtx()
     setBridge()
-    render(<StartOverButton />)
+    render(<Harness />)
     fireEvent.click(button()!)
     fireEvent.click(screen.getByRole("button", { name: "Verwerfen" }))
     expect(startOver).toHaveBeenCalledTimes(1)
@@ -112,23 +142,23 @@ describe("StartOverButton — confirm flow", () => {
   it("'Abbrechen' dismisses without calling startOver", () => {
     const startOver = setCtx()
     setBridge()
-    render(<StartOverButton />)
+    render(<Harness />)
     fireEvent.click(button()!)
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }))
     expect(startOver).not.toHaveBeenCalled()
+    expect(screen.queryByText("Besuch verwerfen?")).toBeNull()
   })
 })
 
-describe("StartOverButton — kiosk chrome request (issue #415)", () => {
+describe("StartOverConfirm — kiosk chrome request (issue #415)", () => {
   it("opens the confirm dialog and acks when the chrome requests start-over", () => {
     setCtx()
     const bridge = setBridge({ available: true })
-    render(<StartOverButton />)
+    render(<Harness />)
 
-    // No dialog yet, and the in-page trigger is hidden.
-    expect(
-      screen.queryByText("Besuch verwerfen?"),
-    ).toBeNull()
+    // No dialog yet, and no in-page entry.
+    expect(screen.queryByText("Besuch verwerfen?")).toBeNull()
+    expect(button()).toBeNull()
 
     bridge.fireRequest()
 
@@ -140,7 +170,7 @@ describe("StartOverButton — kiosk chrome request (issue #415)", () => {
   it("does not intercept the chrome request when there's nothing to discard", () => {
     setCtx({ openCheckout: null })
     const bridge = setBridge({ available: true })
-    render(<StartOverButton />)
+    render(<Harness />)
     // Subscription is skipped, so the chrome fallback (direct reset) handles it.
     expect(bridge.onStartOverRequest).not.toHaveBeenCalled()
   })

@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Header account menu (design handoff "Kontobereich sichtbar machen",
- * option 1a): name + avatar + chevron as a recognisable menu trigger that
- * opens a dropdown naming the member-area destinations. Before this the
+ * The wizard's header menu for a signed-in visitor — the shared `AppMenu`
+ * (#729) with the member-area destinations. Before the account menu the
  * identity in the wizard header was a bare text link that read as a status
  * label — nobody clicked it, so nobody found the membership page.
  *
@@ -13,31 +12,13 @@
  * kinds (the same wipe the anon "Von vorne beginnen" performs).
  */
 
-import { Link, useNavigate } from "@tanstack/react-router"
-import {
-  BadgeCheck,
-  ChevronDown,
-  History,
-  LogOut,
-  MessageSquareWarning,
-  User,
-} from "lucide-react"
-import { Avatar } from "@modules/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@modules/components/ui/dropdown-menu"
-import { isFeedbackAvailable, openFeedback } from "@modules/lib/feedback-widget"
+import { useNavigate } from "@tanstack/react-router"
+import { BadgeCheck, History, User } from "lucide-react"
+import { AppMenu, type AppMenuEntry } from "@modules/components/app-header/app-menu"
 import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 
 type AccountRoute = "/account/profile" | "/account/membership" | "/account/usage"
-
-const ITEM_CLASS =
-  "cursor-pointer gap-2.5 rounded-[6px] px-3 py-[9px] text-sm text-foreground focus:bg-cog-teal-light focus:text-foreground [&_svg:not([class*='text-'])]:text-foreground"
 
 export interface AccountMenuProps {
   /** Display name shown in the trigger and the menu header. */
@@ -60,75 +41,27 @@ export function AccountMenu({
   const { ensureElevated } = useKioskElevation()
   const { startOver } = useWizardContext()
 
-  const item = (to: AccountRoute, Icon: typeof User, label: string) =>
-    kioskSession ? (
-      <DropdownMenuItem
-        className={ITEM_CLASS}
-        onSelect={() => ensureElevated(() => navigate({ to }))}
-      >
-        <Icon aria-hidden />
-        {label}
-      </DropdownMenuItem>
-    ) : (
-      <DropdownMenuItem asChild className={ITEM_CLASS}>
-        <Link to={to}>
-          <Icon aria-hidden />
-          {label}
-        </Link>
-      </DropdownMenuItem>
-    )
+  const entry = (
+    to: AccountRoute,
+    icon: AppMenuEntry["icon"],
+    label: string,
+  ): AppMenuEntry =>
+    kioskSession
+      ? { label, icon, onSelect: () => ensureElevated(() => navigate({ to })) }
+      : { label, icon, to }
+
+  const profile = entry("/account/profile", User, "Profil")
+  const usage = entry("/account/usage", History, "Nutzungsverlauf")
+  const membership = entry("/account/membership", BadgeCheck, "Mitgliedschaft")
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="Konto-Menü"
-          data-testid="wizard-header-account"
-          className="inline-flex h-10 min-w-0 items-center gap-2.5 rounded-full border border-border bg-background pl-1.5 pr-2.5 text-sm font-medium text-foreground shadow-xs outline-none transition-[color,background-color,border-color,box-shadow] duration-150 hover:border-cog-teal hover:bg-cog-teal-light focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-cog-teal data-[state=open]:bg-cog-teal-light sm:h-11 sm:pl-3.5"
-        >
-          <span className="hidden truncate sm:inline">{name}</span>
-          <Avatar name={name} seed={userId} size="sm" className="size-[30px]" />
-          <ChevronDown
-            className="size-4 shrink-0 text-muted-foreground"
-            strokeWidth={2}
-            aria-hidden
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        sideOffset={8}
-        className="w-[264px] rounded-[10px] border-border bg-card p-1.5 shadow-lg"
-      >
-        <div className="mb-1.5 border-b border-border px-3 pb-2 pt-2.5">
-          <div className="truncate font-heading text-sm font-bold">{name}</div>
-          {email && (
-            <div className="truncate text-xs text-muted-foreground">{email}</div>
-          )}
-        </div>
-        {/* Same labels and icons as the member-area sidebar (order differs:
-            the profile leads here because it names the person in the header). */}
-        {item("/account/profile", User, "Profil")}
-        {item("/account/usage", History, "Nutzungsverlauf")}
-        {item("/account/membership", BadgeCheck, "Mitgliedschaft")}
-        {/* Marker.io capture (issue #669). Opens directly, without the
-            kiosk step-up: reporting a problem touches no account data. */}
-        {isFeedbackAvailable() && (
-          <DropdownMenuItem className={ITEM_CLASS} onSelect={openFeedback}>
-            <MessageSquareWarning aria-hidden />
-            Problem melden
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator className="mx-2 my-1.5" />
-        <DropdownMenuItem
-          className={ITEM_CLASS}
-          onSelect={() => void startOver()}
-        >
-          <LogOut aria-hidden />
-          Abmelden
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <AppMenu
+      identity={{ name, email, userId }}
+      // Desktop dropdown: the profile leads because it names the person in
+      // the header. The mobile sheet follows the member-area sidebar order.
+      menuItems={[profile, usage, membership]}
+      navItems={[usage, membership, profile]}
+      onSignOut={() => void startOver()}
+    />
   )
 }
