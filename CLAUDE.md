@@ -45,6 +45,7 @@ See [`docs/adr/0009-local-build-flash-tooling.md`](docs/adr/0009-local-build-fla
 ### Documentation Structure
 
 - **`docs/`**: Structured project documentation
+  - `docs/spec/`: Product spec — what the product does, as one-sentence rules with permanent ids (`MEM-3`). See below.
   - `docs/config.md`: Complete configuration guide for new environments
   - `docs/compile.md`: Firmware build instructions
   - `docs/adr/`: Architecture Decision Records
@@ -52,10 +53,13 @@ See [`docs/adr/0009-local-build-flash-tooling.md`](docs/adr/0009-local-build-fla
   - `docs/ideas/`: Exploration, brainstorming, future work
 
 **When to update docs:**
+- Update `docs/spec/` in the same PR whenever user-visible behaviour changes (rule added, changed or retired), and fill the PR's `Spec:` line
 - Create an ADR when making significant architectural decisions
 - Update `docs/ideas/backlog.md` when discovering future work
 - Update component CLAUDE.md files for development patterns
 - Don't over-document - focus on "why" for non-obvious decisions
+
+**Product spec** (ADR-0047, `docs/spec/README.md`): rules are one sentence, behaviour not wording, ending in their source (`— ADR-0042, #730`); ids are never renumbered or reused (retired ids go under `## Retired`). **Spec first:** when a change touches an area the spec doesn't cover yet, the branch's first commit writes down what the code does there today (`docs/spec/` only, no code; a bug is not a rule) — then the change follows and reads as a diff to the spec. The plan's *Spec* section has both parts (*As is*, *Change*). **All spec judgement goes to the `spec-expert` agent** (`.claude/agents/spec-expert.md`, strongest model at high effort): deriving rules from code, wording a change's rules, assessing behaviour, the check, audits — don't do it inline. Every PR description has exactly one `Spec:` line — `Spec: MEM-3 (added), BIL-7 (changed)` (ranges: `CHK-1..12 (added)`; a rule written down and then changed in one PR appears under both) or `Spec: none — <reason>` — enforced by `.github/workflows/spec-line.yml` (`scripts/check-spec-line.ts`). Run `/spec-check` before pushing a behaviour change; the Spec check workflow runs the same procedure (`.claude/spec-check.md`) when a PR opens or is pushed to and on a `/spec-check` comment, and is advisory (same-repo branches only — fork heads are never checked out with secrets). Don't lock product rules in with tests that string-match UI copy — the rule goes into the spec; tests cover logic and layout.
 
 ### How It Works
 
@@ -309,7 +313,7 @@ npm run block -- bash -c 'firebase emulators:exec --config "$FIREBASE_E2E_CONFIG
 
 New screenshot tests automatically run at both viewports — no extra configuration needed.
 
-**Staging smoke run (agent, by choice):** the emulator cannot show missing indexes, races hidden by instant commits, IAM/secrets/origin config, wrong-project bundles or real mail delivery — each has shipped a bug past the full suite — and no scripted check anticipates an uninvited dialog or an invoice without a recipient. So the smoke test is an **agent walking the deployed staging apps and judging what it sees**: `/smoke-staging` follows `../machine-auth-operations/smoke/RUNBOOK.md` (private ops repo — it carries the smoke mailbox's credential) through a persistent browser driver (`npm run agent -- …`), opens every screenshot, the rendered mails and the invoice PDF pages, and writes a report with a verdict. There is deliberately **no scripted smoke suite** — add scenarios to the runbook as *intent* ("who you are, what you try to get done, what good looks like"), never as selectors. Staging-only test hooks back it: `mintTestTap` (virtual badge taps) and `uploadTestUsage` (a machine session through the real usage handler). When a human answers one of its "is this intended?" questions, the answer goes into the runbook's "Known facts".
+**Staging smoke run (agent, by choice):** the emulator cannot show missing indexes, races hidden by instant commits, IAM/secrets/origin config, wrong-project bundles or real mail delivery — each has shipped a bug past the full suite — and no scripted check anticipates an uninvited dialog or an invoice without a recipient. So the smoke test is an **agent walking the deployed staging apps and judging what it sees**: `/smoke-staging` follows `../machine-auth-operations/smoke/RUNBOOK.md` (private ops repo — it carries the smoke mailbox's credential) through a persistent browser driver (`npm run agent -- …`), opens every screenshot, the rendered mails and the invoice PDF pages, and writes a report with a verdict. There is deliberately **no scripted smoke suite** — add scenarios to the runbook as *intent* ("who you are, what you try to get done, what good looks like"), never as selectors. Staging-only test hooks back it: `mintTestTap` (virtual badge taps) and `uploadTestUsage` (a machine session through the real usage handler). When a human answers one of its "is this intended?" questions, a product answer becomes a `docs/spec/` rule; only staging/tooling facts go into the runbook's "Known facts". The agent judges the screens against `docs/spec/` too.
 
 **Test locations:**
 - `web/apps/checkout/src/**/*.test.{ts,tsx}` — Checkout unit tests (Vitest)

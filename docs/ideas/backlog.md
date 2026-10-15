@@ -215,6 +215,23 @@ banner and offer it in the admin UI, keeping the original untouched.
 
 **Context:** The checkout derives the client type from `?kiosk` in the wizard but uses `window.bridge` elsewhere (account area, NFC, payment auto-confirm). Payment enablement follows the wizard's `?kiosk`. One `useClientType()` over a single signal would stop the two drifting apart. That matters once the Wallee terminal can only work where the bridge exists.
 
+### Periodic spec and conformance audit
+**Status:** 💡 Idea
+
+**Context:** Both spec checks (ADR-0047) look at a PR's diff. Whether the whole
+`docs/spec/` still matches the code — and itself — is nobody's job between PRs.
+A per-rule code lookup over the seed found 5 overstated rules out of 22 and one
+pair of rules contradicting each other (PR #743 review); the same drift will
+return.
+
+**Notes:**
+- Belongs in the workqueue as a scheduled pass, next to a security review and
+  a docs audit: the `spec-expert` agent's *audit* task per domain file
+  (consistency + conformance: each rule → implementing code → match /
+  partial / not found), findings as `claude-workqueue` issues.
+- Keep it read-only and advisory, like the PR check; the human decides which
+  rule or which code gives.
+
 ## Template
 
 Copy this for new ideas:

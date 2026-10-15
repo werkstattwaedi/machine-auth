@@ -8,6 +8,6 @@
  * the *marketing promise*, not a pricing-engine guarantee — every place
  * that advertises the membership must promise exactly this and nothing
  * more — the status hero, the purchase cards and the family invite page
- * all read from here (issue #665).
+ * all read from here (MEM-12).
  */
 export const MEMBER_DISCOUNT_BENEFIT = "Vergünstigungen bei der Maschinennutzung"
