@@ -44,6 +44,29 @@ describe("membership benefit copy", () => {
     expect(container.textContent).not.toContain("Material")
   })
 
+  // The renewal bill goes to the family's owner, never to an invited
+  // member (issue #730).
+  it("family member is not promised the renewal bill", () => {
+    const { container } = render(
+      <StatusHero {...heroProps} type="family" status="active" isOwner={false} />,
+    )
+    expect(container.textContent).not.toContain("erhältst du eine Rechnung")
+    expect(container.textContent).toContain(
+      "Die Rechnung erhält die Inhaber:in der Familie.",
+    )
+  })
+
+  it.each([
+    ["family owner", "family"],
+    ["single member", "single"],
+  ] as const)("%s is told they receive the renewal bill", (_, type) => {
+    const { container } = render(
+      <StatusHero {...heroProps} type={type} status="active" isOwner />,
+    )
+    expect(container.textContent).toContain("erhältst du eine Rechnung")
+    expect(container.textContent).not.toContain("Die Rechnung erhält")
+  })
+
   it("purchase cards list the same benefit", () => {
     const { container } = render(
       <NoMembership
