@@ -50,11 +50,16 @@ export function parseSpecLine(body: string): SpecLine | string {
 
   const refs: SpecRef[] = [];
   for (const part of value.split(",").map((p) => p.trim())) {
-    const m = /^([A-Z]{3}-\d+)\s*\((added|changed|retired)\)$/.exec(part);
-    if (!m || !RULE_ID.test(m[1])) {
-      return `cannot parse \`${part}\` — expected \`MEM-3 (added|changed|retired)\``;
+    // `MEM-3 (added)`, or a range `MEM-1..34 (added)` for a new domain file.
+    const m = /^([A-Z]{3})-(\d+)(?:\s*\.\.\s*(?:\1-)?(\d+))?\s*\((added|changed|retired)\)$/.exec(part);
+    const from = m ? Number(m[2]) : 0;
+    const to = m?.[3] ? Number(m[3]) : from;
+    if (!m || !RULE_ID.test(`${m[1]}-${m[2]}`) || to < from) {
+      return `cannot parse \`${part}\` — expected \`MEM-3 (added|changed|retired)\` or \`MEM-1..34 (added)\``;
     }
-    refs.push({ id: m[1], change: m[2] as Change });
+    for (let n = from; n <= to; n++) {
+      refs.push({ id: `${m[1]}-${n}`, change: m[4] as Change });
+    }
   }
   return { kind: "refs", refs };
 }

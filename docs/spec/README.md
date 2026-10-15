@@ -59,7 +59,8 @@ Use the [glossary](#glossary) terms; if you need a new one, add it here.
    says *none* and why. Rule wording is approved together with the plan.
 2. **Implementation**: the spec change lands in the same PR as the code.
 3. **PR description**: one line, checked by the `Spec line` workflow:
-   - `Spec: MEM-3 (added), BIL-7 (changed), BIL-2 (retired)`, or
+   - `Spec: MEM-3 (added), BIL-7 (changed), BIL-2 (retired)` — a new
+     domain file may name a range, `CHK-1..12 (added)` — or
    - `Spec: none — <why no rule is affected>`.
 4. **Check**: `/spec-check` before pushing; the Spec check workflow comments
    on the PR with contradictions, behaviour that should become a rule, and

@@ -66,6 +66,13 @@ test("retired rules must be gone and listed under Retired", () => {
   assert.match(check("Spec: MEM-8 (retired)").join(), /listed under Retired/);
 });
 
+test("a range names every rule in it", () => {
+  assert.deepEqual(check("Spec: MEM-1..2 (added)"), []);
+  assert.deepEqual(check("Spec: MEM-1..MEM-2 (changed)"), []);
+  assert.match(check("Spec: MEM-1..4 (added)").join(), /MEM-4 \(added\) is not a rule/);
+  assert.match(check("Spec: MEM-2..1 (added)")[0], /cannot parse/);
+});
+
 test("malformed entries fail with the offending part", () => {
   assert.match(check("Spec: MEM-1 added")[0], /cannot parse `MEM-1 added`/);
   assert.match(check("Spec: MEM-01 (added)")[0], /cannot parse/);

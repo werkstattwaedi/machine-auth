@@ -72,7 +72,7 @@ jobs:
             PR description: .spec-check/pr-body.md
             Report file: .spec-check/report.md
           claude_args: >-
-            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)"
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(git status:*)"
 
       - name: Post report
         if: always()
