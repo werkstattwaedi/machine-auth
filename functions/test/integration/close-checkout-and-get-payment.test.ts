@@ -1849,8 +1849,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         ],
       });
 
-      // The wire persons carry no userRefs (production shape) — the guard
-      // must trip on the STORED roster alone.
+      // The wire persons carry no userIds — the guard must trip on the
+      // STORED roster alone, whatever the client sends at close.
       await expectHttpsError(
         () =>
           call({
@@ -2029,6 +2029,50 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
       const checkout = await getCheckout("co-identity-2");
       expect(checkout.persons[1].userRef).to.not.exist;
+    });
+
+    it("keeps a repeated userId on its first line only — no waiver piggyback", async () => {
+      const uid = "identity-repeat";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      const owner = { ...ADULT, userRef: db.collection("users").doc(uid) };
+      // The owner already paid today, so their own line is waived.
+      // Clamped so a run straddling the 03:00 rollover stays same-day.
+      const minuteAgo = new Date(Date.now() - 60_000);
+      const priorAt = Timestamp.fromDate(
+        isSameBusinessDay(minuteAgo, new Date()) ? minuteAgo : new Date(),
+      );
+      await db.collection("checkouts").doc("co-repeat-prior").set({
+        userId: db.collection("users").doc(uid),
+        status: "closed",
+        usageType: "regular",
+        created: priorAt,
+        closedAt: priorAt,
+        workshopsVisited: ["holz"],
+        persons: [owner],
+        modifiedBy: uid,
+        modifiedAt: priorAt,
+        summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0, discountAmount: 0 },
+      });
+      await seedCheckout("co-repeat", { ownerUid: uid, persons: [owner] });
+
+      // Two extra guests posted under the owner's id.
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-repeat",
+          usageType: "regular" as UsageType,
+          persons: [wire(owner), { ...wire(owner), name: "Guest A" }, { ...wire(owner), name: "Guest B" }],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      // Owner waived; both guests charged as guests.
+      expect(result.amount).to.equal("30.00");
+      const checkout = await getCheckout("co-repeat");
+      expect(checkout.persons[0].userRef?.id).to.equal(uid);
+      expect(checkout.persons[1].userRef).to.not.exist;
+      expect(checkout.persons[2].userRef).to.not.exist;
     });
 
     it("never takes entryFeeWaivedToday from the client", async () => {

@@ -4,14 +4,15 @@
 /**
  * Recipient block resolution for the invoice PDF (issues #269, #658).
  *
- * The persons stored on a closed checkout are the *wire* persons the
- * client sent at close time, and the checkout wizard never sends a
- * `userRef` — so resolving the recipient via `persons[].userRef` (the
- * original #269 approach) silently found nothing in production and every
- * invoice shipped without a recipient block (#658). The account holder is
- * instead taken from `bill.userId` / `checkout.userId`, which the close
- * path always records, with `persons[0].userRef` kept as a last resort for
- * historical shapes.
+ * Until #741 the close path dropped every `persons[].userRef`, so resolving
+ * the recipient through it (the original #269 approach) silently found
+ * nothing and every invoice shipped without a recipient block (#658), and
+ * closed checkouts from before the fix still lack them. The account holder
+ * is taken from `bill.userId` / `checkout.userId`, which the close path
+ * always records — never from a roster line: on an ownerless (eager-anon)
+ * checkout the roster is writable by the anonymous session, so a
+ * `persons[0].userRef` would let it pull someone else's name and address
+ * onto its invoice.
  *
  * `pickRecipient` is pure so the resolution order is unit-testable;
  * `loadRecipient` wraps the single user-doc read around it.
@@ -105,7 +106,7 @@ export async function loadRecipient(
 ): Promise<ResolvedRecipient> {
   const persons = checkouts.flatMap((checkout) => checkout.persons ?? []);
   const holderRef: DocumentReference | null =
-    bill.userId ?? checkouts[0]?.userId ?? persons[0]?.userRef ?? null;
+    bill.userId ?? checkouts[0]?.userId ?? null;
 
   let holder: RecipientHolder | null = null;
   if (holderRef) {

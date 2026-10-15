@@ -604,9 +604,10 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
   const x = p as Record<string, unknown>;
   return (
     typeof x.name === "string" &&
-    (x.email === undefined || typeof x.email === "string") &&
+    (x.email == null || typeof x.email === "string") &&
     typeof x.userType === "string" &&
-    (x.billingAddress == null || typeof x.billingAddress === "object") &&
+    (x.billingAddress == null ||
+      (typeof x.billingAddress === "object" && !Array.isArray(x.billingAddress))) &&
     (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0))
   );
 }
@@ -626,6 +627,9 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
  *   (written by the client's `persistPersons` at check-in, under the
  *   owner-scoped rules). Anything else is dropped with a warning rather
  *   than failing the payment — the person is then billed as a guest.
+ * - Each identity is kept on its first line only. A repeated id would let
+ *   extra guest lines ride on one person's same-day waiver, and the
+ *   userType enforcement only corrects the first match.
  *
  * Exported for unit tests.
  */
@@ -635,6 +639,7 @@ export function resolveClosePersons(
   vouchedUserIds: ReadonlySet<string>,
   context: string,
 ): CheckoutPersonEntity[] {
+  const claimed = new Set<string>();
   return wire.map((p) => {
     const person: CheckoutPersonEntity = {
       name: p.name,
@@ -651,12 +656,17 @@ export function resolveClosePersons(
       };
     }
     if (p.userId) {
-      if (vouchedUserIds.has(p.userId)) {
-        person.userRef = db.collection("users").doc(p.userId);
-      } else {
+      if (!vouchedUserIds.has(p.userId)) {
         logger.warn(`${context}: dropped unvouched person userId`, {
           userId: p.userId,
         });
+      } else if (claimed.has(p.userId)) {
+        logger.warn(`${context}: dropped repeated person userId`, {
+          userId: p.userId,
+        });
+      } else {
+        claimed.add(p.userId);
+        person.userRef = db.collection("users").doc(p.userId);
       }
     }
     return person;
