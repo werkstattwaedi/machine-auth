@@ -12,7 +12,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
 - **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile. — runbook
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
-- **MEM-7** A membership becomes active when the buyer commits a payment method, not when the payment is booked. — #251, runbook
+- **MEM-7** A membership becomes active when the buyer commits a payment method (or the overnight job commits it, BIL-7), not when the payment is booked. — #251, runbook
 - **MEM-8** A membership is valid for one year; renewing before it ends adds a year to its end date, renewing after it ended starts the year today.
 - **MEM-9** A first purchase costs the normal price and a renewal the member price.
 
@@ -54,6 +54,7 @@ renewal, cancellation and expiry. Terms: see the
   | family | family owner | yes |
   | family | invited member | no — told that the family owner does |
 
+- **MEM-35** The renewal year is added when the renewal bill is committed, not when it is paid; an unpaid renewal is followed up at reconciliation (BIL-35). — #746
 - **MEM-26** Auto-renew is on until someone ends it; ending it keeps the membership active until its end date and only stops the next renewal bill.
 - **MEM-27** A cancelled membership ends member status for all its members at once, and only an admin can reactivate it.
 
@@ -85,8 +86,6 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Open questions
 
-- [NEEDS CLARIFICATION] A buyer who never commits a payment method is committed overnight, which activates the membership (MEM-7, BIL-7). Intended?
-- [NEEDS CLARIFICATION] The renewal year is added when the renewal bill is committed — in practice overnight, about a day after it is issued and whether or not it is ever paid. Nothing undoes it if the bill stays unpaid. Intended?
 - [NEEDS CLARIFICATION] Ending auto-renew after the renewal bill went out leaves the bill and the added year in place. Should ending auto-renew void a pending renewal bill?
 - [NEEDS CLARIFICATION] Should a family owner be able to cancel the membership? The server allows it; the checkout app offers no way to, and the cancelled view says only the club administration can act.
 - [NEEDS CLARIFICATION] An invited member is offered "buy again" after the family membership expired, which makes them the owner of a new membership at the normal price. Intended?

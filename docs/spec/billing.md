@@ -21,6 +21,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill left unconfirmed for at least an hour is committed overnight with the last method the person selected, or the QR-Rechnung if none was selected. — #251, #302
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail. — #237
+- **BIL-34** A checkout containing a membership is never paid by Sammelrechnung, since its buyer is not yet a member (BIL-4, MEM-2).
 
 ## Documents
 
@@ -62,6 +63,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement; booking skips bills already paid, so re-importing is safe.
 - **BIL-30** A statement import matches payments by QR reference and lists unmatched, duplicate and cancelled-bill payments for manual handling; a payment with a different amount is booked with a warning.
 - **BIL-31** Booking a payment sends no mail and changes no document. — runbook
+- **BIL-35** Nothing waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked; unpaid bills are followed up at reconciliation. — #746
 
 ## Retention
 
@@ -70,9 +72,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Open questions
 
-- [NEEDS CLARIFICATION] A person who looked at the TWINT tab and left without paying is committed overnight as TWINT and gets a Quittung without a QR slip, so nothing asks them to pay (BIL-7). Intended?
 - [NEEDS CLARIFICATION] The Sammelrechnung is *offered* only to members (BIL-4), but the server accepts it from anyone. Should it be *accepted* only for members?
-- [NEEDS CLARIFICATION] A membership bought via Sammelrechnung may never become active: activation happens when a bill is confirmed, and neither the Beleg nor the Sammelrechnung goes through that step. Verify before writing a rule.
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for TWINT bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
