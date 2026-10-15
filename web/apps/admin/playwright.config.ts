@@ -40,6 +40,14 @@ export default defineConfig({
     ignoreHTTPSErrors: true, // Vite self-signed cert
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Never load the real Marker.io shim (issue #669 widget): about a second
+    // after loading it unloads itself on localhost and deletes
+    // window.__Marker, so whether "Problem melden" (and the anonymous
+    // wizard's whole header menu) renders depended on network timing.
+    // Unresolvable, the shim never runs and the stub stays installed.
+    launchOptions: {
+      args: ["--host-resolver-rules=MAP edge.marker.io ~NOTFOUND"],
+    },
     viewport: { width: 1280, height: 720 },
   },
 
