@@ -18,12 +18,14 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 
 ## Files
 
-| Prefix | File | Covers |
-|--------|------|--------|
+| Prefix | File(s) | Covers |
+|--------|---------|--------|
 | `MEM` | [membership.md](membership.md) | buying, family, benefits, renewal, cancellation, expiry |
 | `BIL` | [billing.md](billing.md) | payment methods, documents, numbering, monthly run, corrections, payment booking |
 
-Other domains get a file when an issue first touches them — planned prefixes:
+A prefix is the domain; a file is a reading unit. Within a file, rules sit
+where they read best, not in id order (MEM-35 follows MEM-25) — search for
+an id to find it. Other domains get a file when an issue first touches them — planned prefixes:
 `CHK` (visit & checkout), `KIO` (kiosk), `ACC` (account & sign-in), `CAT`
 (catalog & materials), `MAC` (machine terminal), `ADM` (admin app). Don't
 backfill a domain up front.
@@ -54,8 +56,12 @@ backfill a domain up front.
    with the PR that retired it. A rule whose meaning changes keeps its id
    only if a reader of the old rule would not be misled — otherwise retire it
    and add a new one.
-8. **Keep a file readable in a few minutes.** Split it by sub-domain before
-   it grows past ~60 rules.
+8. **Keep a file readable in a few minutes.** When a domain outgrows one
+   file, split it by sub-domain into files that share the prefix
+   (`membership-family.md` holding MEM-15…23); the ids stay as they are, so
+   a file's numbers have gaps. An id is a handle, not a position — it says
+   when the rule was created, not where it sits. Find a rule by searching
+   for its id; never renumber to tidy a file (rule 7).
 9. **A rule is something the system does on purpose.** A client-side rule
    with a decision behind it counts (it has a source). Behaviour that merely
    falls out of how a screen is built — nothing decided it, nothing refuses

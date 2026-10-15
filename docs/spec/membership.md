@@ -61,7 +61,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Expiry
 
-- **MEM-28** A membership past its end date expires overnight, and all its members lose member status.
+- **MEM-28** A membership stays active through the whole of its end date and expires in the night after it, when all its members lose member status at once. — #743
 - **MEM-29** An expired membership is never renewed automatically; the membership page shows the expiry and offers a new purchase.
 
 ## Account page

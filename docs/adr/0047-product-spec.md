@@ -32,7 +32,10 @@ and backfilling a complete spec up front would cost weeks and go stale.
    verifiable, necessary) and borrows from EARS ("When …, …") and example
    mapping (a table for combinations, *Open questions* for undecided
    behaviour). Rationale stays in ADRs; wording stays in code. The
-   conventions are in `docs/spec/README.md`.
+   conventions are in `docs/spec/README.md`. A domain that outgrows one
+   file is split into files that share its prefix; ids never move, so a
+   split can't renumber — an id is a handle, found by search, not a
+   position.
 2. **The spec grows with the work.** A domain file is created when an issue
    first touches the domain. Membership and billing were seeded from the
    existing ADRs, the runbook's known facts and the code.
