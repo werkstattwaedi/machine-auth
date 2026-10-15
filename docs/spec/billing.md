@@ -66,7 +66,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Retention
 
-- **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive; a bill a membership renewal still waits on is never deleted. — ADR-0038
+- **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive; a renewal bill that is not yet committed (MEM-35) is never deleted. — ADR-0038
 - **BIL-33** A person's data can't be erased while they have an unpaid bill. — ADR-0038
 
 ## Open questions

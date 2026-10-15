@@ -30,7 +30,7 @@ renewal, cancellation and expiry. Terms: see the
 
   | Action | Family owner | Invited member | Admin |
   |---|---|---|---|
-  | Invite by e-mail, add a member without login | yes | no | yes, without an invitation mail (#622) |
+  | Invite by e-mail, add a member without login | yes | no | yes (MEM-33) |
   | Remove a member | anyone but the owner | only themselves | anyone but the owner |
   | End auto-renew | yes | no | yes |
 
@@ -71,10 +71,9 @@ renewal, cancellation and expiry. Terms: see the
   | Person | Membership | Sees |
   |---|---|---|
   | anyone | none | single and family offers with prices |
-  | member or family owner | active | type, end date, auto-renew state, a way to end auto-renew |
-  | invited member | active family | type, end date, who receives the renewal bill; no way to end auto-renew |
-  | family owner | active family | the members, open invitations (revocable), adding a member |
-  | invited member | active family | the members, and leaving as the only action |
+  | single member | active | type, end date, auto-renew state, a way to end auto-renew |
+  | family owner | active | the same, plus the members, open invitations (revocable) and adding a member |
+  | invited member | active | type, end date, the members, and leaving as the only action; no way to end auto-renew (who is billed: MEM-25) |
   | anyone | expired | the expiry date and a way to buy again |
   | anyone | cancelled | that only the club administration can reactivate it |
 
