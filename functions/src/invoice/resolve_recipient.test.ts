@@ -4,9 +4,9 @@
 /**
  * Unit tests for the invoice recipient resolution order (issue #658).
  *
- * Production persons never carry a `userRef` (the close path stores the
- * wire persons), so every case below seeds persons WITHOUT one — the
- * shape that made the #269 resolver silently return no address.
+ * Every case below seeds persons WITHOUT a `userRef` — the shape of every
+ * checkout closed before #741, which made the #269 resolver silently
+ * return no address. The resolver never reads roster identity.
  */
 
 import { expect } from "chai";

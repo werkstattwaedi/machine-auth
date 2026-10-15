@@ -581,13 +581,105 @@ interface NewCheckoutInput {
   items: NewCheckoutItemInput[];
 }
 
+/**
+ * Wire shape of one roster entry. Identity travels as a plain `userId`
+ * string — a DocumentReference does not survive callable serialization.
+ */
+export interface ClosePersonInput {
+  name: string;
+  email?: string;
+  userType: string;
+  billingAddress?: {
+    company?: string;
+    street?: string;
+    zip?: string;
+    city?: string;
+  } | null;
+  /** users/{id} the person was pre-filled from (owner, family roster). */
+  userId?: string | null;
+}
+
+function isClosePersonInput(p: unknown): p is ClosePersonInput {
+  if (!p || typeof p !== "object") return false;
+  const x = p as Record<string, unknown>;
+  return (
+    typeof x.name === "string" &&
+    (x.email == null || typeof x.email === "string") &&
+    typeof x.userType === "string" &&
+    (x.billingAddress == null ||
+      (typeof x.billingAddress === "object" && !Array.isArray(x.billingAddress))) &&
+    (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0))
+  );
+}
+
+/**
+ * Turn the wire roster into the persons that get persisted on the closed
+ * checkout (issue #741).
+ *
+ * The close overwrites the stored `persons[]`, so whatever this returns is
+ * the permanent record — and the input for the userType enforcement, the
+ * roster guard and the same-day dedup, all of which key on `userRef`.
+ *
+ * - Only allowlisted fields are kept: server-derived fields such as
+ *   `entryFeeWaivedToday` are never taken from the client.
+ * - A `userId` becomes a `userRef` only when it is vouched for: the
+ *   checkout owner, or a `userRef` already on the stored open roster
+ *   (written by the client's `persistPersons` at check-in, under the
+ *   owner-scoped rules). Anything else is dropped with a warning rather
+ *   than failing the payment — the person is then billed as a guest.
+ * - Each identity is kept on its first line only. A repeated id would let
+ *   extra guest lines ride on one person's same-day waiver, and the
+ *   userType enforcement only corrects the first match.
+ *
+ * Exported for unit tests.
+ */
+export function resolveClosePersons(
+  db: FirebaseFirestore.Firestore,
+  wire: ClosePersonInput[],
+  vouchedUserIds: ReadonlySet<string>,
+  context: string,
+): CheckoutPersonEntity[] {
+  const claimed = new Set<string>();
+  return wire.map((p) => {
+    const person: CheckoutPersonEntity = {
+      name: p.name,
+      email: p.email ?? "",
+      userType: p.userType as CheckoutPersonEntity["userType"],
+    };
+    if (p.billingAddress) {
+      const a = p.billingAddress;
+      person.billingAddress = {
+        company: String(a.company ?? ""),
+        street: String(a.street ?? ""),
+        zip: String(a.zip ?? ""),
+        city: String(a.city ?? ""),
+      };
+    }
+    if (p.userId) {
+      if (!vouchedUserIds.has(p.userId)) {
+        logger.warn(`${context}: dropped unvouched person userId`, {
+          userId: p.userId,
+        });
+      } else if (claimed.has(p.userId)) {
+        logger.warn(`${context}: dropped repeated person userId`, {
+          userId: p.userId,
+        });
+      } else {
+        claimed.add(p.userId);
+        person.userRef = db.collection("users").doc(p.userId);
+      }
+    }
+    return person;
+  });
+}
+
 interface CloseCheckoutRequest {
   /** Existing open checkout to close. Mutually exclusive with `newCheckout`. */
   checkoutId?: string;
   /** Data for the anonymous flow that creates a closed checkout in one shot. */
   newCheckout?: NewCheckoutInput;
   usageType: UsageType;
-  persons: CheckoutPersonEntity[];
+  persons: ClosePersonInput[];
   summary: CheckoutSummaryEntity;
 }
 
@@ -599,6 +691,9 @@ export const closeCheckoutAndGetPaymentHandler = async (
 
   if (!Array.isArray(persons) || persons.length === 0) {
     throw new HttpsError("invalid-argument", "persons is required");
+  }
+  if (!persons.every(isClosePersonInput)) {
+    throw new HttpsError("invalid-argument", "persons[] must be valid");
   }
   if (!usageType) {
     throw new HttpsError("invalid-argument", "usageType is required");
@@ -642,7 +737,7 @@ async function closeExistingCheckout(
   args: {
     checkoutId: string;
     usageType: UsageType;
-    persons: CheckoutPersonEntity[];
+    persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
   },
 ): Promise<PaymentData> {
@@ -682,20 +777,11 @@ async function closeExistingCheckout(
   // against and the wider system already trusts whoever is in front of
   // the screen for the truly-anonymous flow.
   const userRef = isAnonymous ? null : db.collection("users").doc(callerUid);
-  const enforcedPersons = await enforceAccountHolderUserType(
-    db,
-    args.persons,
-    userRef,
-    `closeExistingCheckout ${args.checkoutId}`,
-  );
 
-  // Roster guard (ADR-0029): reject account-holder roster entries before
-  // billing. The wire payload carries no userRefs, so the stored checkout
-  // doc (written client-side by persistPersons) is the authoritative
-  // carrier of roster identity; the wire persons are included too so a
-  // crafted payload can't smuggle one past the guard. Read outside the
-  // transaction like the other guards — the same principal is submitting,
-  // so the roster can't legitimately change underneath us.
+  // The stored open roster (written client-side by persistPersons) is what
+  // vouches for the wire persons' identities. Read outside the transaction
+  // like the other guards — the same principal is submitting, so the roster
+  // can't legitimately change underneath us.
   const preSnap = await checkoutRef.get();
   const stored = preSnap.exists ? (preSnap.data() as CheckoutEntity) : null;
   // Owner exemption: the owner's own line legitimately carries their userRef.
@@ -708,9 +794,31 @@ async function closeExistingCheckout(
   const ownerId = stored
     ? (stored.userId?.id ?? null)
     : (isAnonymous ? null : callerUid);
+  const vouched = new Set<string>();
+  if (ownerId) vouched.add(ownerId);
+  for (const p of stored?.persons ?? []) {
+    if (p.userRef?.id) vouched.add(p.userRef.id);
+  }
+  const persons = resolveClosePersons(
+    db,
+    args.persons,
+    vouched,
+    `closeExistingCheckout ${args.checkoutId}`,
+  );
+
+  const enforcedPersons = await enforceAccountHolderUserType(
+    db,
+    persons,
+    userRef,
+    `closeExistingCheckout ${args.checkoutId}`,
+  );
+
+  // Roster guard (ADR-0029): reject account-holder roster entries before
+  // billing. Resolved persons can only reference stored-roster ids, but the
+  // stored roster is checked as well — it is what the client wrote.
   await assertRosterAccountless(
     db,
-    [...(stored?.persons ?? []), ...args.persons],
+    [...(stored?.persons ?? []), ...persons],
     ownerId,
   );
 
@@ -844,7 +952,7 @@ async function createAnonymousCheckout(
   args: {
     newCheckout: NewCheckoutInput;
     usageType: UsageType;
-    persons: CheckoutPersonEntity[];
+    persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
   },
 ): Promise<PaymentData> {
@@ -895,10 +1003,16 @@ async function createAnonymousCheckout(
     ? db.collection("users").doc(effectiveUserId)
     : null;
 
-  // Roster guard (ADR-0029): the create-and-close path never has a stored
-  // roster, so only the wire persons can carry (crafted) userRefs. The web
-  // client doesn't send any — this is the backstop.
-  await assertRosterAccountless(db, args.persons, effectiveUserId);
+  // The create-and-close path has no stored roster to vouch for anyone, so
+  // only the owner's own line keeps its identity (issue #741). That also
+  // makes the ADR-0029 roster guard moot here: no non-owner userRef can
+  // survive resolution.
+  const persons = resolveClosePersons(
+    db,
+    args.persons,
+    new Set(effectiveUserId ? [effectiveUserId] : []),
+    "createAnonymousCheckout",
+  );
 
   // For registered users (tag-tap path falls through here when no open
   // checkout exists), cross-check the primary person's userType against
@@ -907,7 +1021,7 @@ async function createAnonymousCheckout(
   // record to compare against.
   const enforcedPersons = await enforceAccountHolderUserType(
     db,
-    args.persons,
+    persons,
     userIdRef,
     "createAnonymousCheckout",
   );

@@ -497,10 +497,9 @@ describe("bill processing triggers (Integration)", () => {
       ).to.be.greaterThan(1);
     });
 
-    // Issue #658: the close path stores the *wire* persons, which never
-    // carry a `userRef` — the shape every real checkout has. The recipient
-    // must therefore resolve from the account holder (`checkout.userId`,
-    // copied to `bill.userId`), not from `persons[].userRef`.
+    // Issue #658: persons without a `userRef` — the shape of every checkout
+    // closed before #741. The recipient resolves from the account holder
+    // (`checkout.userId`, copied to `bill.userId`), never from the roster.
     it("member address renders from checkout.userId when persons carry no userRef (#658)", async function () {
       this.timeout(15000);
       const db = getFirestore();

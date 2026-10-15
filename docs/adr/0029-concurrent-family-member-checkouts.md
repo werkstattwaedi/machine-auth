@@ -146,15 +146,16 @@ No cross-user query is ever needed to validate a roster.
 ### Enforcement placement
 
 - **Authoritative guard (server):** the local account-less validation (R1) in
-  both close paths of the `closeCheckoutAndGetPayment` callable. It rejects
-  with `failed-precondition`. The callable's wire payload does not carry
-  `userRef`s; the stored open-checkout doc (written client-side by
-  `persistPersons`) is the authoritative carrier of roster identity, so the
-  close-existing path validates the stored roster, with the wire persons
-  included as a backstop against a crafted payload. The create-and-close path
-  has no stored roster yet, so it validates the wire persons alone — the same
-  backstop, with nothing else to union. Implemented as a single `getAll` over
-  the referenced `/users/{userId}` docs.
+  the close-existing path of the `closeCheckoutAndGetPayment` callable. It
+  rejects with `failed-precondition`. The stored open-checkout doc (written
+  client-side by `persistPersons`) is the authoritative carrier of roster
+  identity: the wire persons carry a plain `userId`, and the server turns it
+  into a `userRef` only when the owner or the stored roster vouches for it
+  (`resolveClosePersons`, issue #741 — before that fix the close dropped every
+  `userRef`). The guard checks the stored roster plus the resolved persons.
+  The create-and-close path has no stored roster, so only the owner's own
+  identity survives resolution and the guard has nothing to check there.
+  Implemented as a single `getAll` over the referenced `/users/{userId}` docs.
 - **Client UX (advisory):**
   - `buildFamilyCandidates`
     (`web/apps/checkout/src/components/checkout/wizard-context.tsx`) marks
