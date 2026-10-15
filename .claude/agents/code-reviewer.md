@@ -29,7 +29,7 @@ Spawn experts with: `Task(subagent_type="<expert>", prompt="Review for <domain>.
 ## Your Checks
 
 - If a plan file exists (`.claude/plan.md`), compare changes against the plan and flag deviations
-- Product spec (ADR-0047): user-visible behaviour changes come with their `docs/spec/` rule change; flag tests that string-match UI copy to lock in a product rule (the rule belongs in the spec). For a full pass, follow `.claude/spec-check.md`
+- Product spec (ADR-0047): user-visible behaviour changes come with their `docs/spec/` rule change, after a first commit that writes the area down as it was; flag tests that string-match UI copy to lock in a product rule (the rule belongs in the spec). For a full pass, spawn `spec-expert` (task *check*)
 - Stale references from renames/moves
 - Compilation (use `./pw build` from CLAUDE.md)
 - Style (Google C++ for firmware, TS conventions for functions)

@@ -90,8 +90,13 @@ jobs:
             Base: origin/${{ steps.pr.outputs.base }}. Head: the checked-out commit.
             PR description: .spec-check/pr-body.md
             Report file: .spec-check/report.md
+          # Locally the check runs as the `spec-expert` agent; project agents
+          # aren't loaded here (settings sources: user), so the top-level
+          # agent gets that agent's model and effort directly.
           claude_args: >-
             --setting-sources user
+            --model fable
+            --effort xhigh
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git status:*)"
 
       - name: Post report

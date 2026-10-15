@@ -226,8 +226,9 @@ return.
 
 **Notes:**
 - Belongs in the workqueue as a scheduled pass, next to a security review and
-  a docs audit: one subagent per domain file, each rule → implementing code →
-  match / partial / not found, findings as `claude-workqueue` issues.
+  a docs audit: the `spec-expert` agent's *audit* task per domain file
+  (consistency + conformance: each rule → implementing code → match /
+  partial / not found), findings as `claude-workqueue` issues.
 - Keep it read-only and advisory, like the PR check; the human decides which
   rule or which code gives.
 

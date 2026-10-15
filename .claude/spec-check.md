@@ -1,9 +1,12 @@
 # Spec check
 
-Check a change against the product spec in `docs/spec/`. One prompt, two
-callers: `/spec-check` (local, before pushing) and
-`.github/workflows/spec-check.yml` (CI, comments on the PR). Keep them in
-sync by editing only this file.
+Check a change against the product spec in `docs/spec/`. One procedure,
+three callers: `/spec-check` and the workqueue worker run it through the
+`spec-expert` agent (`.claude/agents/spec-expert.md` — the strongest model at
+high effort); `.github/workflows/spec-check.yml` can't load project agents
+(settings sources are restricted to `user`), so it gives its top-level agent
+the same model and effort and has it follow this file directly. Keep the
+callers in sync by editing only this file.
 
 ## Inputs
 
@@ -23,6 +26,14 @@ sync by editing only this file.
    member, kiosk user or admin experiences — what they see, are told, can
    do, are charged, receive by mail? Refactors, tests, tooling and internal
    renames don't. Open the surrounding code when a hunk alone doesn't tell.
+   - **The as-is commit.** If the branch starts with commits that touch only
+     `docs/spec/` (`git log --reverse --name-only <base>..HEAD`), those
+     rules claim to describe the code *before* this PR (README "How a change
+     flows", step 2). Check them against the base — `git show <base>:<path>`
+     — not the head: a rule that is only true after the change, or that
+     nothing in the base code bears out, is an **As is** finding. The rest
+     of the PR's spec diff is then the change; check it against the code
+     diff.
 3. For each behaviour change, compare it with the rules:
    - **Contradicts**: the change makes a rule untrue and the PR doesn't
      update the rule.
@@ -85,6 +96,11 @@ sync by editing only this file.
 ### Rubric
 - **BIL-34** fails writing rule <n> (<its name>): <what to change, or
   "move to Open questions">
+
+### As is
+- **CHK-3** is in the as-is commit `<sha>`, but at the base
+  `path/to/file.ts:17` does <what>. <It belongs in the change commit | is an
+  open question | is wrong>.
 
 ### Spec line
 <ok | what it is missing or why it is wrong> (omit without a PR description)

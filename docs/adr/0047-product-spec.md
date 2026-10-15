@@ -66,6 +66,24 @@ and backfilling a complete spec up front would cost weeks and go stale.
    commands). The prompt and the tool allowlist still come from the PR head —
    anyone who can push here can change them, as they can change any
    workflow. Accepted for a project of this size.
+7. **The spec is written down before it is changed.** When a change touches
+   an area the spec doesn't cover yet, the branch's first commit adds the
+   rules for what the code does today there — only `docs/spec/`, no code. A
+   decided behaviour the issue is about to change goes in as it is; a bug
+   does not (it is not a rule). The plan carries both parts, *As is* and
+   *Change*, so both are approved together, and every later commit reads as
+   a diff to the spec. The PR's `Spec:` line lists the as-is rules as added
+   and a rule written down and then changed under both.
+8. **One agent does the spec's thinking.** `.claude/agents/spec-expert.md`
+   derives rules from code, words the rules of a change, assesses behaviour,
+   runs the check and audits a file — on the strongest generally available
+   model at high effort (`model: fable`, `effort: xhigh`). It delegates
+   discovery to Explore agents and keeps the judgement. The commands and
+   prompts that touch the spec call it instead of judging inline; the
+   workqueue's "no sub-agents inside workers" rule has this one exception.
+   The PR workflow can't load project agents (its settings sources are
+   restricted to `user`, decision 6), so it gives its top-level agent the
+   same model and effort.
 
 ## Consequences
 
@@ -75,8 +93,17 @@ and backfilling a complete spec up front would cost weeks and go stale.
 - Copy can be reworded freely; the rule behind it survives.
 - Plan review becomes the place where product behaviour is decided in
   writing.
+- A behaviour change is reviewable as a spec diff: the as-is commit is "is
+  this what it does today?", the rest is "is this what we want?".
+- An area's rules are derived once, when it is first touched, by the model
+  best at it; a wrong rule misleads every check downstream, so that is
+  where model strength pays.
 
 **Cons:**
+- Every first touch of an area costs a derivation on the strongest model,
+  and the plan comment grows by the as-is rules.
+- The as-is commit can be wrong. The check compares it with the code at the
+  base, but stays advisory.
 - The agent check uses subscription quota on every opened PR, every push to
   it and every `/spec-check`.
 - The spec stays honest only through review discipline: the deterministic
@@ -100,3 +127,8 @@ and backfilling a complete spec up front would cost weeks and go stale.
   show its false-positive rate.
 - *A full spec up front, or adopting Spec Kit's per-feature specs*, was
   rejected for the cost and staleness reasons above.
+- *Letting each worker derive and judge spec rules on its own model* was
+  rejected: a spot-check of the seed found 5 of 22 rules overstated — the
+  kind of error that then passes as "the rule" in every check. Spec
+  judgement is a small, high-leverage share of the work and gets the
+  strongest model; discovery can still be delegated.

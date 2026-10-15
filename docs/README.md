@@ -33,8 +33,9 @@ Captures important architectural and design decisions. Use ADRs for:
 
 What the product does, as short checkable rules with permanent ids
 (`MEM-3`), one file per domain. ADRs record *why*; the spec records *what*.
-Changes land in the same PR as the behaviour; `/spec-check` and the Spec
-check workflow compare code against it. Conventions and glossary:
+A branch first writes down the area as it is, then changes it in the same PR
+as the behaviour; `/spec-check` and the Spec check workflow compare code
+against it, and the `spec-expert` agent does the thinking. Conventions and glossary:
 [spec/README.md](spec/README.md); see [ADR-0047](adr/0047-product-spec.md).
 
 ### `requirements/` - Product Requirements

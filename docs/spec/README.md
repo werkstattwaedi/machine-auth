@@ -8,7 +8,12 @@ behaviour and links the ADR for the reasoning.
 The spec is checked by an agent, not by string-matching tests: `/spec-check`
 locally and the Spec check workflow when a PR opens or is pushed to (both follow
 [`.claude/spec-check.md`](../../.claude/spec-check.md)), and the staging
-smoke run judges the deployed apps against it. See
+smoke run judges the deployed apps against it. Every judgement about the
+spec — deriving rules from the code, deciding whether a behaviour is a rule
+or an open question, checking rules against each other and against the code
+— is the job of one agent, [`spec-expert`](../../.claude/agents/spec-expert.md),
+which runs on the strongest model at high effort; the commands and prompts
+that touch the spec hand that thinking to it instead of doing it inline. See
 [ADR-0047](../adr/0047-product-spec.md).
 
 ## Files
@@ -64,19 +69,33 @@ Use the [glossary](#glossary) terms; if you need a new one, add it here.
 
 ## How a change flows
 
-1. **Plan** (workqueue plan comment or `/design-session`): a *Spec* section
-   names the rules added, changed or retired, with their exact new text — or
-   says *none* and why. Rule wording is approved together with the plan.
-2. **Implementation**: the spec change lands in the same PR as the code.
-3. **PR description**: one line, checked by the `Spec line` workflow:
+1. **Plan** (workqueue plan comment or `/design-session`): the *Spec*
+   section has two parts. *As is*: the rules for what the code does today in
+   the area the change touches, if they aren't written down yet — derived
+   from the code by `spec-expert`, with undecided behaviour as *Open
+   questions*. *Change*: the rules the change adds, changes or retires, with
+   their exact new text — or *none* and why. Both are approved together with
+   the plan.
+2. **First commit: the spec as it is.** The branch starts with a commit that
+   adds only the *As is* rules — no code. It says what holds before the
+   change: a decided behaviour the issue is about to change goes in as it is
+   today, a bug does not (writing rule 9). Every later commit then reads as
+   a diff to the spec. When the area is already covered, there is no such
+   commit. A change that touches no rule (`Spec: none`) needs none either.
+3. **Implementation**: the code and its spec change land in the same PR,
+   after that commit.
+4. **PR description**: one line, checked by the `Spec line` workflow:
    - `Spec: MEM-3 (added), BIL-7 (changed), BIL-2 (retired)` — a new
-     domain file may name a range, `CHK-1..12 (added)` — or
+     domain file may name a range, `CHK-1..12 (added)`. The *As is* rules
+     count as added; a rule written down and then changed in the same PR is
+     listed under both: `CHK-1..8 (added), CHK-3 (changed)` — or
    - `Spec: none — <why no rule is affected>`.
-4. **Check**: `/spec-check` before pushing; the Spec check workflow comments
+5. **Check**: `/spec-check` before pushing; the Spec check workflow comments
    on the PR — when it opens, on every push, and on a `/spec-check` comment —
    with contradictions, behaviour that should become a rule, rules this PR
-   makes stale, and added rules that clash with the rest or fail the writing
-   rules. It is advisory — a human decides.
+   makes stale, added rules that clash with the rest or fail the writing
+   rules, and *As is* rules the code before the PR doesn't bear out. It is
+   advisory — a human decides.
 
 Code may cite a rule id in a comment where the reason for a branch isn't
 obvious (`// MEM-3`); that keeps the link greppable.

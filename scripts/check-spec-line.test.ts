@@ -82,6 +82,12 @@ test("retired rules must be gone and listed under Retired, in a changed file", (
   assert.match(check("Spec: MEM-3 (retired)", ["docs/spec/billing.md"])[0], /membership\.md is not changed/);
 });
 
+test("a rule written down and then changed in the same PR is listed under both", () => {
+  // The spec-first flow (docs/spec/README.md "How a change flows"): the
+  // as-is commit adds the area's rules, a later commit changes one of them.
+  assert.deepEqual(check("Spec: MEM-1..2 (added), MEM-2 (changed)"), []);
+});
+
 test("a range names every rule in it", () => {
   assert.deepEqual(check("Spec: MEM-1..2 (added)"), []);
   assert.deepEqual(check("Spec: MEM-1..MEM-2 (changed)"), []);

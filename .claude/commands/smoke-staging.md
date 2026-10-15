@@ -61,6 +61,7 @@ against staging without the runbook.
   With none, run all scenarios. A full run is long — say so up front and
   report scenario by scenario rather than going silent.
 - When the user answers one of your "is this intended?" questions, the
-  answer is a product rule: propose it for `docs/spec/` (and resolve the
-  matching *Open questions* entry there). Put it into the runbook's "Known
+  answer is a product rule: have the `spec-expert` agent word it for
+  `docs/spec/` (task *word*; it also resolves the matching *Open questions*
+  entry). Put it into the runbook's "Known
   facts" only if it is about staging or the tooling, not the product.

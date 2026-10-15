@@ -72,9 +72,10 @@ WORKQUEUE_RESULT: error | disagreed with fix approach on comment N — <why>
 ## Step 3b: Spec
 
 Update <rule id(s)> in docs/spec/<file>.md to <new text> (or add
-<new id>: <text>), following docs/spec/README.md, and update the PR's
-`Spec:` line: `.claude/scripts/wq-gh.sh pr view <PR> --json body` →
-edit the line → `.claude/scripts/wq-gh.sh pr edit <PR> --body-file <file>`.
+<new id>: <text>), following docs/spec/README.md — if the text above is
+only an intent, have the `spec-expert` agent word it (task *word*) — and
+update the PR's `Spec:` line: `.claude/scripts/wq-gh.sh pr view <PR> --json body`
+→ edit the line → `.claude/scripts/wq-gh.sh pr edit <PR> --body-file <file>`.
 
 ## Step 4: Run tests
 

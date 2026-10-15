@@ -146,6 +146,10 @@ WORKQUEUE_RESULT: design | <one-line summary of the open decision>
 2. Read the relevant source files to understand the existing patterns.
 3. Identify the specific files/functions that need changes and the specific test files where regression coverage should live.
 4. Read `docs/spec/README.md` and the spec file of every domain the issue touches. Note the rules that apply, the ones the change will add, change or retire (ADR-0047), and any *Open questions* entry the issue answers.
+5. **Hand the spec thinking to `spec-expert`** (Agent tool, `subagent_type: "spec-expert"` — the one sub-agent a worker may spawn). Give it the issue, the files and behaviour you found, and two tasks:
+   - **derive**, mode *propose* (you are on `main`; the tree must stay clean): the rules for what the code does *today* in the area the change touches, if they aren't written down yet — with ids, exact text, open questions and the `Spec:` fragment. This becomes the plan's *As is* part and the branch's first commit (Step 5). If the area is covered, it says so.
+   - **word**: the rules the change adds, changes or retires, with exact text and ids. This becomes the plan's *Change* part.
+   Keep both answers; a trivial fix (Step 4) uses them in Step 5 without a plan.
 
 ## Step 4: Classify triviality
 
@@ -182,7 +186,11 @@ WORKQUEUE_RESULT: design | <one-line summary of the open decision>
 <bulleted list of the concrete changes — name specific files, functions, and the nature of each change>
 
 ### Spec
-<The rules this change adds, changes or retires, each with its exact new text and id (next free number in its file), e.g. `- **MEM-35** <rule> — #<N>`. Or: "none — <why no rule is affected>". This is the `Spec:` line of the PR.>
+**As is** (first commit): <the rules for what the code does today in the touched area, if not yet written down — id and exact text each, plus the open questions, from `spec-expert`. Or: "already covered: MEM-7, MEM-27".>
+
+**Change:** <the rules this change adds, changes or retires, each with its exact new text and id (next free number in its file), e.g. `- **MEM-35** <rule> — #<N>`. Or: "none — <why no rule is affected>".>
+
+<Both parts together are the `Spec:` line of the PR: as-is rules count as added; a rule written down and then changed is listed under both.>
 
 ### Regression testing
 <Describe the test(s) that will lock in the fix. Name the test file and what it will assert. Prefer unit tests (Vitest) for logic; e2e screenshot tests (Playwright) for layout. Never a test that string-matches UI copy — that rule goes under Spec.>
@@ -235,18 +243,33 @@ WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
 
    Skip this for changes nobody sees (functions-only, pure logic, tests).
 
-2. If an approved plan exists (Step 1 marker found), follow it. Deviate only if you discover the plan is wrong — in that case, STOP, post a comment describing the deviation, and output `WORKQUEUE_RESULT: question | <summary>` instead.
+2. **First commit: the spec as it is.** If the plan's *As is* part lists rules (or, without a plan, `spec-expert` found the area unwritten in Step 3), have `spec-expert` write them now — task **derive**, mode *write*, with the approved text; it re-checks them against the current code and spec, since main may have moved — then commit them alone, before any code:
 
-3. Make focused, minimal changes following project conventions. No drive-by refactoring.
+   git add docs/spec/
+   git commit -m "$(cat <<'EOF'
+   docs(spec): <area> as it is before #<N>
 
-4. **Write the regression test.** This is non-negotiable unless the approved plan granted a testing exception.
+   What the code does today, written down so the change reads as a diff
+   to it. No behaviour change.
+
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   EOF
+   )"
+
+   `git show --stat HEAD` must list only `docs/spec/` files. The commit says what holds *before* the change — a decided behaviour the issue changes goes in as it is today, a bug does not. Skip the commit when the area is already covered or the plan's *Change* part is "none".
+
+3. If an approved plan exists (Step 1 marker found), follow it. Deviate only if you discover the plan is wrong — in that case, STOP, post a comment describing the deviation, and output `WORKQUEUE_RESULT: question | <summary>` instead.
+
+4. Make focused, minimal changes following project conventions. No drive-by refactoring.
+
+5. **Write the regression test.** This is non-negotiable unless the approved plan granted a testing exception.
    - **Logic changes** (bug fix, new behavior, state management): add or update **unit tests** (Vitest, `*.test.{ts,tsx}` next to the source).
    - **Layout / UI changes** (styling, visibility, positioning, new components): add or update **e2e screenshot tests** (Playwright, `web/apps/checkout/e2e/*.spec.ts`).
    - If the change affects both, add both.
-   - **What a person is told** (which promise, which notice, who is named): no string-matching test on copy. The spec rule from step 5 covers it; a screenshot test covers the screen.
+   - **What a person is told** (which promise, which notice, who is named): no string-matching test on copy. The spec rule from step 6 covers it; a screenshot test covers the screen.
    - Verify the test actually exercises the fix — a test that passes on the unfixed code is not a regression test.
 
-5. **Update the spec.** Add, change or retire the rules named in the plan's *Spec* section (or, for a trivial fix, the ones the change affects) in `docs/spec/`, following `docs/spec/README.md`: one sentence, behaviour not wording, ending in its source (`— #<N>`); retired ids move under `## Retired`. A product question the issue answered turns its *Open questions* entry into a rule. If no domain file exists yet for the area, create one only when a rule is actually added.
+6. **Update the spec — the change.** Apply the plan's *Change* part (or, for a trivial fix, the rules `spec-expert` worded in Step 3) in `docs/spec/`, following `docs/spec/README.md`: one sentence, behaviour not wording, ending in its source (`— #<N>`); retired ids move under `## Retired`. A product question the issue answered turns its *Open questions* entry into a rule. This lands in the same commit as the code, so the commit's `docs/spec/` diff is exactly the behaviour change.
 
 ## Step 6: Run tests
 
@@ -274,7 +297,7 @@ Re-run `npm run test:web:e2e` to confirm. Include the updated snapshot files in 
 
 ### 6c. Spec check
 
-Follow `.claude/spec-check.md` with base `origin/main` and no PR description. Fix every *Contradicts*, *Inconsistent* and *Rubric* finding (code or rule, whichever the issue intends), add the *Missing* rules that hold up under the README's writing rules — they are the rubric, not a quota — and fix *Stale* ones. Whatever you leave open goes into the PR body, right below the `Spec:` line. This is the same check the PR's Spec check workflow runs; doing it here keeps that comment clean.
+Spawn `spec-expert` with task **check**, base `origin/main` and no PR description (it follows `.claude/spec-check.md`). Fix every *Contradicts*, *Inconsistent*, *Rubric* and *As is* finding (code or rule, whichever the issue intends), add the *Missing* rules that hold up under the README's writing rules — they are the rubric, not a quota — and fix *Stale* ones. An *As is* finding is a fix to the as-is commit: amend it (`git commit --amend --no-edit`) when that fix is the only uncommitted change to the file, otherwise let it ride in the change commit and name it in the PR body. Whatever you leave open goes into the PR body, right below the `Spec:` line. This is the same check the PR's Spec check workflow runs; doing it here keeps that comment clean.
 
 ### 6d. After captures + publish (if you took before captures)
 
@@ -298,7 +321,7 @@ Afterwards delete the throwaway spec and `.wq-capture/` so the tree is clean.
 
 ## Step 7: Commit
 
-Stage only the files you changed. Never `git add -A`.
+The as-is commit (Step 5.2) is already on the branch; this commit is the change. Stage only the files you changed. Never `git add -A`.
 
 git add <specific files>
 git add web/apps/checkout/e2e/*.spec.ts-snapshots/*.png  # only if snapshots were updated
@@ -324,6 +347,7 @@ git push -u origin workqueue/issue-<N>
 Closes #<N>
 
 Spec: <none — <why no rule is affected> | MEM-3 (added), BIL-7 (changed), …>
+<if there is an as-is commit:> First commit `<sha>` writes the area down as it was (no behaviour change); the commits after it are the change — review them as a diff to the spec.
 
 ## Regression coverage
 <name the test file(s) added or updated and what they assert. If an exception was approved, cite it and explain the alternative verification.>
