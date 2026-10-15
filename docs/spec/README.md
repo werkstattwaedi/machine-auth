@@ -22,13 +22,15 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 |--------|---------|--------|
 | `MEM` | [membership.md](membership.md) | buying, family, benefits, renewal, cancellation, expiry |
 | `BIL` | [billing.md](billing.md) | payment methods, documents, numbering, monthly run, corrections, payment booking |
+| `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in |
+| `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, usage types — on any device |
+| `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, idle reset |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
 an id to find it. Other domains get a file when an issue first touches them — planned prefixes:
-`CHK` (visit & checkout), `KIO` (kiosk), `ACC` (account & sign-in), `CAT`
-(catalog & materials), `MAC` (machine terminal), `ADM` (admin app). Don't
-backfill a domain up front.
+`CAT` (catalog & materials), `MAC` (machine terminal), `ADM` (admin app).
+Don't backfill a domain up front.
 
 ## Writing rules
 
@@ -125,6 +127,10 @@ still passes a different wrong promise.
 - **Invited member** — a person who joined a family membership through an
   invitation.
 - **Admin** — a person with the `admin` claim; works in the admin app.
+- **Guest** — a person who continues without signing in or tapping a
+  badge; the app knows nothing about them.
+- **Identified person** — a person who signed in or tapped their badge;
+  the opposite of a guest.
 
 **Places**
 - **Own device** — the checkout app on the person's phone or computer.
@@ -132,13 +138,33 @@ still passes a different wrong promise.
 - **Machine terminal** — the device on a machine that enables it after a
   badge tap.
 
+**Screens**
+- **Check-in, Kosten, Check Out** — the steps of the checkout app, in this
+  order: who is there, what was used or bought, and paying.
+- **Start screen** — the check-in before anyone is identified: sign in or
+  continue as a guest; at the kiosk also the badge prompt.
+- **Account** (*Konto*) — the signed-in person's own pages: Profil,
+  Nutzungsverlauf and Mitgliedschaft (the membership page); at the kiosk
+  reached only by an elevated session (MEM-30).
+
 **Things**
 - **Badge** — a person's NFC tag.
-- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout.
+- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
+  it is *started* once its checkout exists (CHK-3).
 - **Checkout** — what a visit, purchase or membership costs, and how it was
   paid.
+- **Day** — a workshop day runs from 03:00 to 03:00 the next morning
+  (Europe/Zurich); a visit at 02:00 still belongs to the day before.
+  "Today" and "an earlier day" in the rules mean this day.
+- **Complete profile** — first and last name, accepted terms and, for a
+  company, its address (ACC-2).
+- **Purchase-only checkout** — a checkout opened by buying a membership,
+  renewal or badge without a visit; its usage type is *Nur Materialbezug*
+  and it carries no usage fee (CHK-5, MEM-3).
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
+- **Elevated session** — a kiosk session that entered a fresh e-mail or SMS
+  code; the only kind that reaches the account at the kiosk (ADR-0041).
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
