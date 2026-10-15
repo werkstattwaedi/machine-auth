@@ -51,8 +51,8 @@ Phase 7   stdout summary        → STOP
 ## Core rules
 
 1. **Never use git worktrees.** The operations repo setup requires working in the main checkout, and the Firebase emulators bind to fixed ports — parallel worktrees cause test hangs and port conflicts. Do NOT pass `isolation: "worktree"` to the Agent tool. Process issues sequentially on the primary working directory.
-2. **Plan-first for non-trivial issues.** For anything beyond a clearly trivial fix, post a short plan as an issue comment and wait for human approval before implementing. The human approves by removing the `claude-workqueue-plan-review` label.
-3. **Regression tests are mandatory.** Every fix must include a test that would have caught the bug or that locks in the new behavior. If a regression test is genuinely impractical, the plan must explicitly request an exception and explain why — the human decides during plan review.
+2. **Plan-first for non-trivial issues.** For anything beyond a clearly trivial fix, post a short plan as an issue comment and wait for human approval before implementing. The human approves by removing the `claude-workqueue-plan-review` label. The plan's *Spec* section names the `docs/spec/` rules the change adds, changes or retires, so approving the plan approves their wording (ADR-0047).
+3. **Regression tests are mandatory.** Every fix must include a test that would have caught the bug or that locks in the new behavior — for logic (unit) and layout (screenshots). A rule about *what a person is told* is locked in by its `docs/spec/` rule instead, never by a test that string-matches UI copy (ADR-0047). If a regression test is genuinely impractical, the plan must explicitly request an exception and explain why — the human decides during plan review.
 4. **All `gh` calls go through `.claude/scripts/wq-gh.sh`**, which authenticates as the workqueue GitHub App so comments, PRs, and review acks are attributed to the bot rather than the local user. `git push` and other `git` commands keep using the user's credentials — commits remain the user's.
 5. **Human approval is the merge gate; the bot handles the mechanics.** The human signal is a GitHub PR review with `APPROVED` state. Once a PR is approved, the workqueue is responsible for getting it merged: rebase onto main if behind, resolve trivial conflicts (lockfiles, snapshots), enable GitHub's native auto-merge so it lands as soon as CI is green. This applies to *any* approved PR in the repo (workqueue-produced or otherwise) — if you reviewed it and clicked Approve, the bot finishes the job. Confidence scoring (Phase 5) still runs on workqueue PRs to make the review itself fast. The one carve-out for skipping the PR entirely is **Phase 2 push-direct**: regenerated test artifacts (Playwright/Vitest snapshots, npm lockfiles) may be pushed straight to `main` without a PR, because there is no reviewable judgment in a snapshot diff.
 6. **Bounded self-heal only.** Baseline failures may be auto-fixed *only* when they are mechanical (snapshot drift, lockfile drift) or a clear test-side hermeticity issue with an obvious, small fix. Any prod-behavior change, ambiguity, or multi-file scope must be escalated as a `claude-workqueue` issue instead. Default to escalating.
@@ -561,6 +561,8 @@ The Phase 2 baseline run failed; this PR contains the auto-applied fix.
 - **Fix:** <one-line>
 - **Re-run after fix:** ✅ green
 - **Files touched outside safe paths:** <list> (this is why it's a PR, not a push)
+
+Spec: none — baseline test fix, no product behaviour changed
 
 ## Why this was eligible for auto-fix
 <one paragraph — name the specific evidence: e.g. "Single missing

@@ -23,6 +23,11 @@ operations repo**, a sibling of this one:
   smoke mailbox (`mail mark` / `mail show`), virtual badge taps (`tap`) and
   staging facts (`staging …`). `npm run agent -- help` lists everything.
 
+What *good* means beyond the runbook's scenarios is `docs/spec/` in this
+repo — the product rules, one sentence each (e.g. MEM-25: only the family
+owner is told about the renewal bill). Read the domains your scenarios
+touch, and cite a rule id in a finding when the app breaks one.
+
 If that directory does not exist, stop and say so — do not improvise a test
 against staging without the runbook.
 
@@ -55,5 +60,7 @@ against staging without the runbook.
 - Arguments: $ARGUMENTS (e.g. "only H and I", "include the mobile viewport").
   With none, run all scenarios. A full run is long — say so up front and
   report scenario by scenario rather than going silent.
-- When the user answers one of your "is this intended?" questions, put the
-  answer into the runbook's "Known facts" so no later run asks again.
+- When the user answers one of your "is this intended?" questions, the
+  answer is a product rule: propose it for `docs/spec/` (and resolve the
+  matching *Open questions* entry there). Put it into the runbook's "Known
+  facts" only if it is about staging or the tooling, not the product.

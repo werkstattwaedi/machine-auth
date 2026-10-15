@@ -578,7 +578,7 @@ export function StatusHero({
             {autoRenew ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
-                  {/* The renewal bill goes to the family's owner only (#730). */}
+                  {/* MEM-25: the renewal bill goes to the family owner only. */}
                   {type === "family" && !isOwner ? (
                     <>
                       Die Familienmitgliedschaft wird automatisch verlängert.

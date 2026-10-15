@@ -1,0 +1,100 @@
+name: Spec check
+
+# Agent review of a PR against the product spec (ADR-0047), following
+# .claude/spec-check.md — the same prompt /spec-check runs locally. Advisory:
+# it upserts one PR comment and never fails the PR on findings.
+#
+# Runs once when a PR opens (or leaves draft), and again on demand: comment
+# `/spec-check` on the PR. Not on every push — each run is an agent session
+# on the subscription quota.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    paths-ignore:
+      - "**/*-snapshots/**"
+      - "**/package-lock.json"
+  issue_comment:
+    types: [created]
+
+jobs:
+  spec-check:
+    if: |
+      (github.event_name == 'pull_request' &&
+        !github.event.pull_request.draft &&
+        github.event.pull_request.user.login != 'dependabot[bot]') ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/spec-check') &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    # Job-level, so an unrelated PR comment (skipped by `if`) never cancels
+    # a running check.
+    concurrency:
+      group: spec-check-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+    steps:
+      - name: Resolve PR
+        id: pr
+        run: |
+          gh pr view "$PR" --repo "${{ github.repository }}" \
+            --json headRefOid,baseRefName > "$RUNNER_TEMP/pr.json"
+          echo "head=$(jq -r .headRefOid "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+          echo "base=$(jq -r .baseRefName "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head }}
+          fetch-depth: 0
+
+      - name: Write PR description
+        run: |
+          mkdir -p .spec-check
+          gh pr view "$PR" --repo "${{ github.repository }}" --json body --jq .body \
+            > .spec-check/pr-body.md
+
+      - name: Run spec check
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Follow .claude/spec-check.md for PR #${{ env.PR }}.
+            Base: origin/${{ steps.pr.outputs.base }}. Head: the checked-out commit.
+            PR description: .spec-check/pr-body.md
+            Report file: .spec-check/report.md
+          claude_args: >-
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)"
+
+      - name: Post report
+        if: always()
+        run: |
+          MARKER="<!-- spec-check -->"
+          {
+            echo "$MARKER"
+            if [ -s .spec-check/report.md ]; then
+              cat .spec-check/report.md
+            else
+              echo "## Spec check"
+              echo
+              echo "The check did not produce a report — see the [run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+            fi
+            echo
+            echo "<sub>Advisory, per [ADR-0047](${{ github.server_url }}/${{ github.repository }}/blob/main/docs/adr/0047-product-spec.md). Re-run: comment \`/spec-check\`.</sub>"
+          } > "$RUNNER_TEMP/comment.md"
+          ID=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -n1)
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$ID" \
+              -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+          else
+            gh pr comment "$PR" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/comment.md"
+          fi

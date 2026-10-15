@@ -31,6 +31,12 @@ For `docs/requirements/`:
 - Are there orphaned requirements?
 - Are implemented features documented?
 
+For `docs/spec/` (ADR-0047, conventions in `docs/spec/README.md`):
+- Rule ids cited in code comments (`// MEM-3`) or other docs that no spec file defines
+- Rules without a source that an ADR or issue now covers
+- *Open questions* entries an issue or ADR has since decided
+- Rules the code no longer follows (spot-check a few per domain)
+
 ### 4. Documentation Completeness
 
 Check for:

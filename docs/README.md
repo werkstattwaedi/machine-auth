@@ -29,9 +29,18 @@ Captures important architectural and design decisions. Use ADRs for:
 - Obvious or standard practices
 - Temporary workarounds (use code comments + issues instead)
 
+### `spec/` - Product Spec
+
+What the product does, as short checkable rules with permanent ids
+(`MEM-3`), one file per domain. ADRs record *why*; the spec records *what*.
+Changes land in the same PR as the behaviour; `/spec-check` and the Spec
+check workflow compare code against it. Conventions and glossary:
+[spec/README.md](spec/README.md); see [ADR-0047](adr/0047-product-spec.md).
+
 ### `requirements/` - Product Requirements
 
-High-level product requirements, user stories, and functional specs. Use for:
+Longer requirement documents for a feature before it exists. Rules about how
+the product behaves today belong in `spec/`. Use for:
 - Feature requirements
 - User workflows
 - Business rules

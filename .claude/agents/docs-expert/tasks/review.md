@@ -8,6 +8,7 @@ Review code for consistency with documented architecture decisions and requireme
 
 First, gather context:
 - Read all ADRs in `docs/adr/`
+- Read the product spec files for the touched domains in `docs/spec/` (conventions in `docs/spec/README.md`)
 - Read relevant requirements in `docs/requirements/`
 - Note any design documents in `docs/ui-design/`
 
@@ -27,6 +28,11 @@ Compare code against documentation:
 - Does the code follow accepted ADRs?
 - Are there deviations that need justification?
 - Are there decisions in code not captured in ADRs?
+
+**Spec Alignment** (ADR-0047):
+- Does the change contradict a `docs/spec/` rule without updating it?
+- Is there new user-visible behaviour no rule covers that someone would notice if it broke?
+- Do added or edited rules follow `docs/spec/README.md` (one sentence, behaviour not wording, source, permanent id)?
 
 **Requirements Alignment:**
 - Does implementation match requirements?

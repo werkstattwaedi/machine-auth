@@ -71,6 +71,9 @@ are not):
 - edge cases the issue or the workqueue raised (second badge tap, open
   visit, missing data, …)
 - what is explicitly **out of scope** for this issue
+- the product rules this design establishes or changes, written as
+  `docs/spec/` rules (one sentence each, see `docs/spec/README.md`) — the
+  design's behaviour outlives its copy and mockups
 
 ## 4. Write it back to the issue
 
@@ -101,6 +104,10 @@ are not):
 
    ### Approach
    <concrete changes: files, components, functions>
+
+   ### Spec
+   <the rules added, changed or retired, with id and exact text — or
+   "none — <why>">
 
    ### Regression testing
    <unit tests for logic, e2e screenshot tests for the new screens, and

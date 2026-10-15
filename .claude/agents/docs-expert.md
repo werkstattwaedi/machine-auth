@@ -24,6 +24,7 @@ docs/
 ├── adr/                    # Architecture Decision Records
 │   ├── NNNN-title.md       # Individual decisions
 │   └── template.md         # ADR template
+├── spec/                   # Product spec: checkable rules per domain (ADR-0047)
 ├── requirements/           # Product requirements
 ├── design/                 # Technical designs
 ├── ideas/                  # Future work

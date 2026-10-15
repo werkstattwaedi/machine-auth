@@ -21,7 +21,7 @@ You are a workqueue worker for GitHub issue #<N>: "<TITLE>".
 CRITICAL RULES:
 - You are working in the primary checkout — do NOT create or use git worktrees.
 - Do NOT start a separate emulator — test scripts start their own. Never run `npm run dev` inside this agent.
-- Every fix must include a regression test (see Step 4).
+- Every fix must include a regression test (see Step 5) — for logic and layout. Rules about what a person is told belong in the product spec (`docs/spec/`), not in tests that string-match UI copy.
 - Do NOT force-push. Do NOT modify `main`.
 - **Both `npm run test:precommit` and `npm run test:web:e2e` were green on main before you started** (either originally, or after a Phase 2 push-direct self-heal). Any failure in Step 6 is caused by your changes — you may NOT explain it away as pre-existing.
 
@@ -145,6 +145,7 @@ WORKQUEUE_RESULT: design | <one-line summary of the open decision>
 1. Read CLAUDE.md for project conventions and build commands.
 2. Read the relevant source files to understand the existing patterns.
 3. Identify the specific files/functions that need changes and the specific test files where regression coverage should live.
+4. Read `docs/spec/README.md` and the spec file of every domain the issue touches. Note the rules that apply, the ones the change will add, change or retire (ADR-0047), and any *Open questions* entry the issue answers.
 
 ## Step 4: Classify triviality
 
@@ -180,8 +181,11 @@ WORKQUEUE_RESULT: design | <one-line summary of the open decision>
 ### Approach
 <bulleted list of the concrete changes — name specific files, functions, and the nature of each change>
 
+### Spec
+<The rules this change adds, changes or retires, each with its exact new text and id (next free number in its file), e.g. `- **MEM-35** <rule> — #<N>`. Or: "none — <why no rule is affected>". This is the `Spec:` line of the PR.>
+
 ### Regression testing
-<Describe the test(s) that will lock in the fix. Name the test file and what it will assert. Prefer unit tests (Vitest) for logic; e2e screenshot tests (Playwright) for layout.>
+<Describe the test(s) that will lock in the fix. Name the test file and what it will assert. Prefer unit tests (Vitest) for logic; e2e screenshot tests (Playwright) for layout. Never a test that string-matches UI copy — that rule goes under Spec.>
 
 <If a regression test is genuinely impractical, replace the above with:>
 **Testing exception requested.** <Why a regression test is impractical, what alternative verification will be done (manual steps, assertion in code, etc.), and what risk that leaves.>
@@ -239,7 +243,10 @@ WORKQUEUE_RESULT: plan-posted | <one-line summary of the approach>
    - **Logic changes** (bug fix, new behavior, state management): add or update **unit tests** (Vitest, `*.test.{ts,tsx}` next to the source).
    - **Layout / UI changes** (styling, visibility, positioning, new components): add or update **e2e screenshot tests** (Playwright, `web/apps/checkout/e2e/*.spec.ts`).
    - If the change affects both, add both.
+   - **What a person is told** (which promise, which notice, who is named): no string-matching test on copy. The spec rule from step 5 covers it; a screenshot test covers the screen.
    - Verify the test actually exercises the fix — a test that passes on the unfixed code is not a regression test.
+
+5. **Update the spec.** Add, change or retire the rules named in the plan's *Spec* section (or, for a trivial fix, the ones the change affects) in `docs/spec/`, following `docs/spec/README.md`: one sentence, behaviour not wording, ending in its source (`— #<N>`); retired ids move under `## Retired`. A product question the issue answered turns its *Open questions* entry into a rule. If no domain file exists yet for the area, create one only when a rule is actually added.
 
 ## Step 6: Run tests
 
@@ -265,7 +272,11 @@ firebase emulators:exec --config firebase.e2e.json \
 
 Re-run `npm run test:web:e2e` to confirm. Include the updated snapshot files in the commit.
 
-### 6c. After captures + publish (if you took before captures)
+### 6c. Spec check
+
+Follow `.claude/spec-check.md` with base `origin/main` and no PR description. Fix every *Contradicts* finding (code or rule, whichever the issue intends), add the *Missing* rules you agree with, and fix *Stale* ones. Whatever you leave open goes into the PR body, right below the `Spec:` line. This is the same check the PR's Spec check workflow runs; doing it here keeps that comment clean.
+
+### 6d. After captures + publish (if you took before captures)
 
 Run the same capture spec on your change, then publish both sets:
 
@@ -312,27 +323,29 @@ git push -u origin workqueue/issue-<N>
 
 Closes #<N>
 
+Spec: <none — <why no rule is affected> | MEM-3 (added), BIL-7 (changed), …>
+
 ## Regression coverage
 <name the test file(s) added or updated and what they assert. If an exception was approved, cite it and explain the alternative verification.>
 
 ## Test results
 <pass/fail summary from Step 6>
 
-<media markdown from Step 6c, if any — renders the before/after screenshots>
+<media markdown from Step 6d, if any — renders the before/after screenshots>
 
 ---
 🤖 Automated by `/workqueue`
 PR_EOF
 )"
 
-If you published screenshots in Step 6c, post the same markdown on the issue
+If you published screenshots in Step 6d, post the same markdown on the issue
 too, so it is visible to whoever follows the issue rather than the PR:
 
 .claude/scripts/wq-gh.sh issue comment <N> --repo werkstattwaedi/machine-auth --body "$(cat <<'COMMENT_EOF'
 <!-- claude-workqueue -->
 Fix in <PR URL> — so sieht es aus:
 
-<media markdown from Step 6c>
+<media markdown from Step 6d>
 COMMENT_EOF
 )"
 

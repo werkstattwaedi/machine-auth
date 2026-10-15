@@ -20,6 +20,7 @@ approaches in the agent's prompt. Focused prompts beat generic templates.
    - The exact review comments verbatim (file:line + body), as a numbered list.
    - The specific fix approach you've decided on per comment.
    - Whether regression coverage is needed (yes for behavior gaps; no for cosmetic/wording).
+   - Whether the feedback changes product behaviour that `docs/spec/` describes — then the fix updates the rule and the PR's `Spec:` line (ADR-0047).
 3. **Spawn the Agent** with no isolation, in background.
 
 ## Skeleton (substitute fields then pass to Agent)
@@ -66,6 +67,14 @@ WORKQUEUE_RESULT: error | disagreed with fix approach on comment N — <why>
   surfaced a behavior gap.>
 - **NOT REQUIRED:** review comments were cosmetic (wording/naming). No
   test changes.
+
+<if the feedback changes product behaviour:>
+## Step 3b: Spec
+
+Update <rule id(s)> in docs/spec/<file>.md to <new text> (or add
+<new id>: <text>), following docs/spec/README.md, and update the PR's
+`Spec:` line: `.claude/scripts/wq-gh.sh pr view <PR> --json body` →
+edit the line → `.claude/scripts/wq-gh.sh pr edit <PR> --body-file <file>`.
 
 ## Step 4: Run tests
 
