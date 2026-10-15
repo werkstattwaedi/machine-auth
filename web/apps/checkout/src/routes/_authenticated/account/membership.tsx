@@ -578,8 +578,18 @@ export function StatusHero({
             {autoRenew ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
-                  Deine Mitgliedschaft wird automatisch verlängert. Rund 30 Tage
-                  vor Ablauf erhältst du eine Rechnung per E-Mail.
+                  {/* The renewal bill goes to the family's owner only (#730). */}
+                  {type === "family" && !isOwner ? (
+                    <>
+                      Die Familienmitgliedschaft wird automatisch verlängert.
+                      Die Rechnung erhält die Inhaber:in der Familie.
+                    </>
+                  ) : (
+                    <>
+                      Deine Mitgliedschaft wird automatisch verlängert. Rund 30
+                      Tage vor Ablauf erhältst du eine Rechnung per E-Mail.
+                    </>
+                  )}
                 </p>
                 {onCancelAutoRenew && (
                   <Button
