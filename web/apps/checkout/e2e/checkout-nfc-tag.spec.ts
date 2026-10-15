@@ -12,6 +12,7 @@ import {
   getAdminFirestore,
   getCheckoutDocs,
   installFakeKioskBridge,
+  KIOSK_DESKTOP_ONLY,
 } from "./helpers"
 import { NFC_TAG_UID, NFC_TAG_UID_2, NFC_USER_ID } from "./global-setup"
 
@@ -147,7 +148,9 @@ test.describe("NFC tag checkout", () => {
   // bridge — the in-place path `page.goto` never takes.
   test("bridge tap over an identified session reloads — no roster leak (#689)", async ({
     page,
+    isMobile,
   }) => {
+    test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     const { picc, cmac, picc2, cmac2 } = readE2eData()
     const db = getAdminFirestore()
     // A is a throwaway family parent behind the first tag, NOT the seeded
@@ -230,7 +233,9 @@ test.describe("NFC tag checkout", () => {
   test.describe("kiosk auto-start (issue #732)", () => {
     test("tap, wait 5 s: the visit starts and the start screen confirms it", async ({
       page,
+      isMobile,
     }) => {
+      test.skip(isMobile, KIOSK_DESKTOP_ONLY)
       const { picc, cmac } = readE2eData()
       await installFakeKioskBridge(page)
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
@@ -261,7 +266,8 @@ test.describe("NFC tag checkout", () => {
       )
     })
 
-    test("tap, then 'Person hinzufügen': no auto-start", async ({ page }) => {
+    test("tap, then 'Person hinzufügen': no auto-start", async ({ page, isMobile }) => {
+      test.skip(isMobile, KIOSK_DESKTOP_ONLY)
       const { picc, cmac } = readE2eData()
       await installFakeKioskBridge(page)
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
@@ -285,7 +291,9 @@ test.describe("NFC tag checkout", () => {
 
     test("tap A, tap B during the countdown: A's visit starts, B sees the confirmation", async ({
       page,
+      isMobile,
     }) => {
+      test.skip(isMobile, KIOSK_DESKTOP_ONLY)
       const { picc, cmac, picc2, cmac2 } = readE2eData()
       await installFakeKioskBridge(page)
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
@@ -313,7 +321,8 @@ test.describe("NFC tag checkout", () => {
       expect(a.docs[0].get("usageType")).toBe("regular")
     })
 
-    test("tap A, touch, tap B: asks before switching", async ({ page }) => {
+    test("tap A, touch, tap B: asks before switching", async ({ page, isMobile }) => {
+      test.skip(isMobile, KIOSK_DESKTOP_ONLY)
       const { picc, cmac, picc2, cmac2 } = readE2eData()
       await installFakeKioskBridge(page)
       await page.goto(`/checkin?kiosk=&picc=${picc}&cmac=${cmac}`)
@@ -351,7 +360,8 @@ test.describe("NFC tag checkout", () => {
     })
   })
 
-  test("kiosk mode — shows NFC hint inline in the account section", async ({ page }) => {
+  test("kiosk mode — shows NFC hint inline in the account section", async ({ page, isMobile }) => {
+    test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     await page.goto("/?kiosk")
 
     // The account section is the default for an anonymous kiosk visitor:

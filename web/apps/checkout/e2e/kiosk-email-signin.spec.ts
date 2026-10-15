@@ -16,10 +16,13 @@ import {
   clearCollections,
   getAdminFirestore,
   waitForLoginCode,
+  KIOSK_DESKTOP_ONLY,
 } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
 test.describe("Kiosk email-code sign-in", () => {
+  test.skip(({ isMobile }) => isMobile, KIOSK_DESKTOP_ONLY)
+
   test.beforeEach(async () => {
     // The 60s per-email resend throttle would trip back-to-back tests.
     await clearCollections("loginCodes")

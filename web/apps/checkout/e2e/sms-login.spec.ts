@@ -18,6 +18,7 @@ import {
   linkPhone,
   waitForSmsCode,
   waitForLoginCode,
+  KIOSK_DESKTOP_ONLY,
 } from "./helpers"
 import { AUTH_USER_EMAIL } from "./global-setup"
 
@@ -79,7 +80,9 @@ test.describe("SMS login on the check-in page", () => {
 
   test("kiosk: verified number gets the ephemeral kiosk session", async ({
     page,
+    isMobile,
   }) => {
+    test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     await page.goto("/checkin?kiosk")
 
     await page.getByTestId("checkin-identifier").fill(SMS_PHONE)

@@ -701,3 +701,10 @@ export async function openHeaderMenuEntry(
     .or(page.getByTestId("app-menu-sheet").getByRole("link", { name, exact: true }))
     .or(page.getByTestId("app-menu-sheet").getByRole("button", { name, exact: true }))
 }
+
+/**
+ * Skip reason for kiosk flows in the mobile project: the kiosk is a
+ * desktop-sized terminal and no phone runs the Electron bridge, so a mobile
+ * run tests (and screenshots) a screen that cannot exist.
+ */
+export const KIOSK_DESKTOP_ONLY = "kiosk runs on a desktop-sized terminal only"

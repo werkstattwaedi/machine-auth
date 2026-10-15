@@ -13,6 +13,7 @@ import {
   openGuestSection,
   seedMembershipState,
   waitForLoginCode,
+  KIOSK_DESKTOP_ONLY,
 } from "./helpers"
 import { AUTH_USER_EMAIL, NFC_TAG_UID } from "./global-setup"
 
@@ -187,10 +188,7 @@ test.describe("Check-in step screenshots", () => {
   })
 
   test("kiosk mode — NFC hint visible", async ({ page, isMobile }) => {
-    // The kiosk is a desktop-sized terminal; a phone never runs the
-    // Electron bridge, so a mobile baseline would document a screen that
-    // cannot exist.
-    test.skip(isMobile, "kiosk runs on a desktop-sized terminal only")
+    test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     await page.goto("/?kiosk")
     await expect(page.getByTestId("checkin-seg-account")).toBeVisible({
       timeout: 10_000,
@@ -306,10 +304,7 @@ test.describe("Check-in step screenshots", () => {
   // and starts the visit on its own. The fill is frozen part-way (test hook)
   // so the baseline is deterministic and the visit never starts.
   test("kiosk badge tap — Besuch starten countdown", async ({ page, isMobile }) => {
-    // The kiosk is a desktop-sized terminal; a phone never runs the
-    // Electron bridge, so a mobile baseline would document a screen that
-    // cannot exist.
-    test.skip(isMobile, "kiosk runs on a desktop-sized terminal only")
+    test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     await clearCollections("checkouts")
     // The seeded picc encodes counter=0; reset the SDM replay defense.
     await getAdminFirestore()
