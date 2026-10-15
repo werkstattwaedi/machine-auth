@@ -16,9 +16,9 @@ sync by editing only this file.
 
 ## Steps
 
-1. Read `docs/spec/README.md` (conventions, glossary), then the spec files
-   for every domain the diff touches. Read all of them if unsure — they are
-   short.
+1. Read `docs/spec/README.md` (conventions, writing rules, glossary), then
+   the spec files for every domain the diff touches. Read all of them if
+   unsure — they are short.
 2. Read the diff. For each hunk decide: does it change what a visitor,
    member, kiosk user or admin experiences — what they see, are told, can
    do, are charged, receive by mail? Refactors, tests, tooling and internal
@@ -27,14 +27,20 @@ sync by editing only this file.
    - **Contradicts**: the change makes a rule untrue and the PR doesn't
      update the rule.
    - **Missing**: the behaviour is new or changed, someone would notice if
-     it broke, and no rule covers it.
+     it broke, the system enforces it, and no rule covers it.
    - **Stale**: the PR changes or retires a rule's behaviour but the rule
      text still says the old thing, or a rule's source (ADR, issue) no
      longer matches.
-   Also check rules the PR adds or edits against the README's writing
-   rules (one sentence, behaviour not wording, source present, no
-   rationale).
-4. If a PR description was given, check its `Spec:` line. Does it name
+4. For each rule the PR adds or edits, read the whole spec file it sits in
+   and the rules it cites:
+   - **Inconsistent**: it contradicts, duplicates or overlaps another rule
+     — two rules that say different things about the same case. This is
+     the one defect the deterministic check can never see; look for it on
+     purpose, and say which of the two the code follows.
+   - **Rubric**: it fails one of the README's writing rules. Name the rule
+     and the writing rule by number. The writing rules *are* the rubric —
+     apply them as written, don't paraphrase them into taste.
+5. If a PR description was given, check its `Spec:` line. Does it name
    every rule the diff adds, changes or retires? Is `none — <reason>` true
    for this diff? (The `Spec line` workflow checks the syntax; you check
    whether it is honest.)
@@ -44,10 +50,13 @@ sync by editing only this file.
 - Report only what a reviewer would act on. No findings is a good result —
   say so in one line.
 - Never report wording or copy choices; the spec doesn't fix them.
-- **Missing** proposals: at most 5, the most important first. Each is a
-  ready-to-paste rule in the spec's format, with the next free id of its
-  file and a source (this PR's issue if nothing better). If a change raises
-  a question rather than a rule, propose an *Open questions* entry instead.
+- A **Missing** proposal is a rule you would defend under the writing
+  rules — above all: someone would notice if it broke (3), and the system
+  enforces it (9). There is no count to reach; most changes need none. Each
+  is a ready-to-paste rule in the spec's format, with the next free id of
+  its file (for a domain without a file yet: the planned prefix and `-1`)
+  and a source (this PR's issue if nothing better). If a change raises a
+  question rather than a rule, propose an *Open questions* entry instead.
 - Cite evidence as `path:line` from the diff's new side, and rules by id.
 - Don't edit any file other than the report file.
 
@@ -68,6 +77,14 @@ sync by editing only this file.
 
 ### Stale
 - **BIL-4** <what is out of date, and the suggested new text>
+
+### Inconsistent
+- **MEM-2** vs **MEM-31** <the case they disagree on>; the code follows
+  <which>. <suggested resolution>
+
+### Rubric
+- **BIL-34** fails writing rule <n> (<its name>): <what to change, or
+  "move to Open questions">
 
 ### Spec line
 <ok | what it is missing or why it is wrong> (omit without a PR description)

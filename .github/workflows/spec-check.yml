@@ -4,13 +4,21 @@ name: Spec check
 # .claude/spec-check.md — the same prompt /spec-check runs locally. Advisory:
 # it upserts one PR comment and never fails the PR on findings.
 #
-# Runs once when a PR opens (or leaves draft), and again on demand: comment
-# `/spec-check` on the PR. Not on every push — each run is an agent session
-# on the subscription quota.
+# Runs when a PR opens (or leaves draft), on every push to it, and on demand:
+# comment `/spec-check` on the PR. Each run is an agent session on the
+# subscription quota; a newer push cancels a run that is still going.
+#
+# Trust: the agent reads the PR head — its prompt, the diff and the PR body —
+# with the repo's secrets in the environment, so the job runs only for heads
+# from this repository (anyone who can push here can change this workflow
+# anyway). Fork PRs are skipped on both triggers, project settings are not
+# loaded from the checked-out tree, and the agent's shell is limited to
+# read-only git commands — no `git fetch`, whose --upload-pack runs arbitrary
+# commands.
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
     paths-ignore:
       - "**/*-snapshots/**"
       - "**/package-lock.json"
@@ -22,6 +30,7 @@ jobs:
     if: |
       (github.event_name == 'pull_request' &&
         !github.event.pull_request.draft &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
         github.event.pull_request.user.login != 'dependabot[bot]') ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
@@ -29,10 +38,10 @@ jobs:
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     # Job-level, so an unrelated PR comment (skipped by `if`) never cancels
-    # a running check.
+    # a running check; a newer push or `/spec-check` on the same PR does.
     concurrency:
       group: spec-check-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     permissions:
       contents: read
       pull-requests: write
@@ -46,22 +55,32 @@ jobs:
         id: pr
         run: |
           gh pr view "$PR" --repo "${{ github.repository }}" \
-            --json headRefOid,baseRefName > "$RUNNER_TEMP/pr.json"
+            --json headRefOid,baseRefName,isCrossRepository > "$RUNNER_TEMP/pr.json"
           echo "head=$(jq -r .headRefOid "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
           echo "base=$(jq -r .baseRefName "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+          # The job `if` covers pull_request events; a `/spec-check` comment
+          # on a fork PR gets here and must not check out that head.
+          if [ "$(jq -r .isCrossRepository "$RUNNER_TEMP/pr.json")" = "true" ]; then
+            echo "::notice::PR #$PR comes from a fork — the spec check runs only for branches of this repository."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/checkout@v4
+        if: steps.pr.outputs.skip != 'true'
         with:
           ref: ${{ steps.pr.outputs.head }}
+          # Full history, so origin/<base> is present without a fetch.
           fetch-depth: 0
 
       - name: Write PR description
+        if: steps.pr.outputs.skip != 'true'
         run: |
           mkdir -p .spec-check
           gh pr view "$PR" --repo "${{ github.repository }}" --json body --jq .body \
             > .spec-check/pr-body.md
 
       - name: Run spec check
+        if: steps.pr.outputs.skip != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -72,10 +91,12 @@ jobs:
             PR description: .spec-check/pr-body.md
             Report file: .spec-check/report.md
           claude_args: >-
-            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git fetch:*),Bash(git status:*)"
+            --setting-sources user
+            --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git status:*)"
 
       - name: Post report
-        if: always()
+        # Not after a cancel: the newer run for this PR is about to post.
+        if: ${{ !cancelled() && steps.pr.outputs.skip != 'true' }}
         run: |
           MARKER="<!-- spec-check -->"
           {

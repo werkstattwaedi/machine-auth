@@ -11,6 +11,7 @@ or a PR number (then use its base branch, and write its body to a scratch
 file via `gh pr view <N> --json body --jq .body` as the PR description).
 
 Run `git fetch origin` first so the base is current. Print the report.
-When run by the workqueue before pushing, fix every *Contradicts* finding
-(code or rule, whichever the issue intends), add the *Missing* rules you
-agree with to `docs/spec/`, and mention the rest in the PR body.
+When run by the workqueue before pushing, fix every *Contradicts*,
+*Inconsistent* and *Rubric* finding (code or rule, whichever the issue
+intends), add the *Missing* rules that hold up under the README's writing
+rules to `docs/spec/`, and mention the rest in the PR body.

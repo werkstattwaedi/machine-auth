@@ -274,7 +274,7 @@ Re-run `npm run test:web:e2e` to confirm. Include the updated snapshot files in 
 
 ### 6c. Spec check
 
-Follow `.claude/spec-check.md` with base `origin/main` and no PR description. Fix every *Contradicts* finding (code or rule, whichever the issue intends), add the *Missing* rules you agree with, and fix *Stale* ones. Whatever you leave open goes into the PR body, right below the `Spec:` line. This is the same check the PR's Spec check workflow runs; doing it here keeps that comment clean.
+Follow `.claude/spec-check.md` with base `origin/main` and no PR description. Fix every *Contradicts*, *Inconsistent* and *Rubric* finding (code or rule, whichever the issue intends), add the *Missing* rules that hold up under the README's writing rules — they are the rubric, not a quota — and fix *Stale* ones. Whatever you leave open goes into the PR body, right below the `Spec:` line. This is the same check the PR's Spec check workflow runs; doing it here keeps that comment clean.
 
 ### 6d. After captures + publish (if you took before captures)
 

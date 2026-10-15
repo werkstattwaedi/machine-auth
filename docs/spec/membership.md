@@ -7,12 +7,12 @@ renewal, cancellation and expiry. Terms: see the
 ## Purchase
 
 - **MEM-1** Only a signed-in account can buy a membership; at the kiosk that takes an elevated session, never a badge tap alone. — ADR-0041
-- **MEM-2** A person with an active membership can't buy a second one, only renew; a person whose membership expired or was cancelled can buy again.
+- **MEM-2** A person with an active membership can't buy a second one, only renew; a person whose membership expired can buy again.
 - **MEM-3** Buying adds the membership to the buyer's open checkout, or opens a purchase-only checkout without a usage fee, and goes straight to the checkout summary.
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
-- **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile. — runbook
+- **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile.
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
-- **MEM-7** A membership becomes active when the buyer commits a payment method (or the overnight job commits it, BIL-7), not when the payment is booked. — #251, runbook
+- **MEM-7** A membership becomes active when the buyer commits a payment method (or the overnight job commits it, BIL-7), not when the payment is booked. — #251
 - **MEM-8** A membership is valid for one year; renewing before it ends adds a year to its end date, renewing after it ended starts the year today.
 - **MEM-9** A first purchase costs the normal price and a renewal the member price.
 
@@ -22,7 +22,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-11** Machine time stops getting member prices as soon as the membership's end date has passed.
 - **MEM-12** Wherever a membership is advertised, the only discount promised is cheaper machine use, never cheaper material. — #665
 - **MEM-13** A membership doesn't change the usage fee; paying by Sammelrechnung is the other member-only benefit (BIL-4).
-- **MEM-14** A person's first badge is free if they are an active member or hold any permission; every other badge costs the catalog price. — ADR-0030, runbook
+- **MEM-14** A person's first badge is free if they are an active member or hold any permission; while they have an active badge, every further one costs the catalog price. — ADR-0030
 
 ## Family
 
@@ -36,7 +36,7 @@ renewal, cancellation and expiry. Terms: see the
 
 - **MEM-16** An invitation goes to one e-mail address, names the family after the inviter, and expires after 30 days.
 - **MEM-17** Only the account with the invited e-mail can accept or decline an invitation; another signed-in account is told it is the wrong account and offered to sign out.
-- **MEM-18** A person without an account joins from the invitation link without a sign-in code; a person with an account signs in first. — runbook scenario H
+- **MEM-18** A person without an account joins from the invitation link without a sign-in code; a person with an account signs in first.
 - **MEM-19** A signed-in person sees the open invitations addressed to them on the membership page, and can accept or decline them there. — #569
 - **MEM-20** A person belongs to at most one active membership; inviting, accepting or adding someone already in another one is refused.
 - **MEM-21** A family owner can add members without a login (adults or children), who count as members. — ADR-0029
@@ -54,9 +54,9 @@ renewal, cancellation and expiry. Terms: see the
   | family | family owner | yes |
   | family | invited member | no — told that the family owner does |
 
-- **MEM-35** The renewal year is added when the renewal bill is committed, not when it is paid; an unpaid renewal is followed up at reconciliation (BIL-35). — #746
+- **MEM-35** The renewal year is added when the renewal bill is committed, not when it is paid; an unpaid renewal is followed up at reconciliation (BIL-34). — #746
 - **MEM-26** Auto-renew is on until someone ends it; ending it keeps the membership active until its end date and only stops the next renewal bill.
-- **MEM-27** A cancelled membership ends member status for all its members at once, and only an admin can reactivate it.
+- **MEM-27** A cancelled membership ends member status for all its members at once and is never reactivated; only an admin can give the person a membership again, by creating a new one (MEM-32).
 
 ## Expiry
 
@@ -88,6 +88,8 @@ renewal, cancellation and expiry. Terms: see the
 
 - [NEEDS CLARIFICATION] Ending auto-renew after the renewal bill went out leaves the bill and the added year in place. Should ending auto-renew void a pending renewal bill?
 - [NEEDS CLARIFICATION] Should a family owner be able to cancel the membership? The server allows it; the checkout app offers no way to, and the cancelled view says only the club administration can act.
+- [NEEDS CLARIFICATION] A person whose membership was cancelled can't buy a new one themselves — the app offers no purchase (MEM-31), though the server would accept it. Intended, or should cancelled behave like expired (MEM-2)?
+- [NEEDS CLARIFICATION] After a badge is deactivated (lost), the next badge is free again for an eligible person (MEM-14 counts active badges only). Intended?
 - [NEEDS CLARIFICATION] An invited member is offered "buy again" after the family membership expired, which makes them the owner of a new membership at the normal price. Intended?
 - [NEEDS CLARIFICATION] An expired invitation is refused when joining with a new account but can still be accepted by an existing account until it is cleaned up (MEM-16). Should both refuse it?
 - [NEEDS CLARIFICATION] A family has no member limit. A decision, or an omission?

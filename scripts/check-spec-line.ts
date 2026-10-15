@@ -3,9 +3,10 @@
 
 // Deterministic half of the product-spec check (ADR-0047): every PR names
 // the spec rules it adds, changes or retires — or says why none — in a
-// `Spec:` line, and the rules it names must match docs/spec/. Whether the
-// line is *honest* is the agent's job (.claude/spec-check.md); this only
-// keeps it present and consistent, so it can be a required check.
+// `Spec:` line, and each rule it names must exist in a spec file this PR
+// changes. Whether the line is *honest* is the agent's job
+// (.claude/spec-check.md); this only keeps it present and consistent, so it
+// can be a required check.
 //
 // CLI (CI): PR_BODY, PR_AUTHOR and CHANGED_FILES (newline-separated) in the
 // env, run from the repo root with plain `node` (type stripping, no deps).
@@ -30,20 +31,39 @@ const RULE_DEF = /^\s*-\s+\*\*([A-Z]{3}-[1-9]\d*)\*\*/;
 // PRs that carry no product change by construction.
 const EXEMPT_AUTHORS = new Set(["dependabot[bot]", "app/dependabot"]);
 
+// HTML comments are the template's hints and fenced code blocks quote
+// examples; neither is part of the description.
+function stripQuoted(body: string): string {
+  let text = body.replace(/```[\s\S]*?```/g, "");
+  for (let prev = ""; prev !== text; ) {
+    prev = text;
+    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  }
+  return text;
+}
+
 export function parseSpecLine(body: string): SpecLine | string {
-  // HTML comments are template hints, not part of the description.
-  const lines = body
-    .replace(/<!--[\s\S]*?-->/g, "")
+  const lines = stripQuoted(body)
     .split(/\r?\n/)
-    .filter((l) => /^\s*Spec:/.test(l));
+    .filter((l) => /^\s*spec:/i.test(l));
   if (lines.length === 0) {
     return "PR description has no `Spec:` line (see docs/spec/README.md)";
   }
   if (lines.length > 1) return "PR description has more than one `Spec:` line";
 
-  const value = lines[0].replace(/^\s*Spec:\s*/, "").trim();
+  // The line is prose to its author: a sentence-ending period is fine.
+  const value = lines[0]
+    .replace(/^\s*spec:\s*/i, "")
+    .replace(/\s*\.\s*$/, "")
+    .trim();
   const none = /^none\s*[—–-]+\s*(\S.*)$/i.exec(value);
-  if (none) return { kind: "none", reason: none[1].trim() };
+  if (none) {
+    const reason = none[1].trim();
+    if (/<[^>]*>/.test(reason)) {
+      return `\`Spec: none\` reason \`${reason}\` is the template's placeholder — say why no rule is affected`;
+    }
+    return { kind: "none", reason };
+  }
   if (/^none\b/i.test(value)) {
     return "`Spec: none` needs a reason: `Spec: none — <why no rule is affected>`";
   }
@@ -67,21 +87,21 @@ export function parseSpecLine(body: string): SpecLine | string {
 export interface SpecIndex {
   /** Active rule ids → file. */
   rules: Map<string, string>;
-  /** Ids listed under a file's `## Retired` heading. */
-  retired: Set<string>;
+  /** Ids listed under a file's `## Retired` heading → file. */
+  retired: Map<string, string>;
   duplicates: string[];
 }
 
 export function indexSpec(files: Map<string, string>): SpecIndex {
   const rules = new Map<string, string>();
-  const retired = new Set<string>();
+  const retired = new Map<string, string>();
   const duplicates: string[] = [];
   for (const [file, text] of files) {
     let inRetired = false;
     for (const line of text.split(/\r?\n/)) {
       if (/^#{1,6}\s/.test(line)) inRetired = /^#{1,6}\s+Retired\b/i.test(line);
       if (inRetired) {
-        for (const m of line.matchAll(/\b[A-Z]{3}-[1-9]\d*\b/g)) retired.add(m[0]);
+        for (const m of line.matchAll(/\b[A-Z]{3}-[1-9]\d*\b/g)) retired.set(m[0], file);
         continue;
       }
       const def = RULE_DEF.exec(line);
@@ -109,20 +129,22 @@ export function checkPr(input: {
   if (typeof line === "string") return [...errors, line];
   if (line.kind === "none") return errors;
 
-  if (!input.changedFiles.some((f) => /^docs\/spec\/.+\.md$/.test(f))) {
-    errors.push("the `Spec:` line names rules but the PR changes nothing under docs/spec/");
-  }
+  // A named rule must live in a file this PR touches — naming a rule while
+  // editing a different spec file (or none) is the mistake this catches.
+  const changed = new Set(input.changedFiles);
   for (const { id, change } of line.refs) {
-    const active = input.spec.rules.has(id);
-    if (change !== "retired" && !active) {
-      errors.push(`${id} (${change}) is not a rule in docs/spec/`);
+    const definedIn = input.spec.rules.get(id);
+    if (change !== "retired") {
+      if (!definedIn) errors.push(`${id} (${change}) is not a rule in docs/spec/`);
+      else if (!changed.has(definedIn)) errors.push(`${id} (${change}) but ${definedIn} is not changed in this PR`);
+      continue;
     }
-    if (change === "retired" && active) {
+    if (definedIn) {
       errors.push(`${id} (retired) is still defined as a rule — delete it and list it under Retired`);
     }
-    if (change === "retired" && !input.spec.retired.has(id)) {
-      errors.push(`${id} (retired) must be listed under Retired in its spec file`);
-    }
+    const retiredIn = input.spec.retired.get(id);
+    if (!retiredIn) errors.push(`${id} (retired) must be listed under Retired in its spec file`);
+    else if (!changed.has(retiredIn)) errors.push(`${id} (retired) but ${retiredIn} is not changed in this PR`);
   }
   return errors;
 }

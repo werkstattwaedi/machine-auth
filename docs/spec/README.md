@@ -6,7 +6,7 @@ kiosk user or admin experiences. When the two overlap, the rule states the
 behaviour and links the ADR for the reasoning.
 
 The spec is checked by an agent, not by string-matching tests: `/spec-check`
-locally and the Spec check workflow when a PR opens (both follow
+locally and the Spec check workflow when a PR opens or is pushed to (both follow
 [`.claude/spec-check.md`](../../.claude/spec-check.md)), and the staging
 smoke run judges the deployed apps against it. See
 [ADR-0047](../adr/0047-product-spec.md).
@@ -49,6 +49,13 @@ backfill a domain up front.
    and add a new one.
 8. **Keep a file readable in a few minutes.** Split it by sub-domain before
    it grows past ~60 rules.
+9. **A rule is something the system enforces.** If the other case is kept
+   out only by how one client happens to be built — the server would accept
+   it — that is an *Open questions* entry (or an issue), not a rule.
+
+These writing rules are the rubric: the spec check holds every rule a PR
+adds or edits against them, by number, and checks it against the other rules
+for consistency.
 
 Use the [glossary](#glossary) terms; if you need a new one, add it here.
 
@@ -63,8 +70,10 @@ Use the [glossary](#glossary) terms; if you need a new one, add it here.
      domain file may name a range, `CHK-1..12 (added)` — or
    - `Spec: none — <why no rule is affected>`.
 4. **Check**: `/spec-check` before pushing; the Spec check workflow comments
-   on the PR with contradictions, behaviour that should become a rule, and
-   rules this PR makes stale. It is advisory — a human decides.
+   on the PR — when it opens, on every push, and on a `/spec-check` comment —
+   with contradictions, behaviour that should become a rule, rules this PR
+   makes stale, and added rules that clash with the rest or fail the writing
+   rules. It is advisory — a human decides.
 
 Code may cite a rule id in a comment where the reason for a branch isn't
 obvious (`// MEM-3`); that keeps the link greppable.

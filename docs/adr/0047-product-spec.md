@@ -42,20 +42,30 @@ and backfilling a complete spec up front would cost weeks and go stale.
    `Spec: none — <reason>`).
 4. **Two checks, split by what they can be trusted with:**
    - `spec-line.yml` / `scripts/check-spec-line.ts` is deterministic: the
-     line exists and parses, the named rules exist (or are retired), the PR
-     touches `docs/spec/` when it names rules, and no rule id is defined
+     line exists and parses, each named rule exists (or is listed under
+     *Retired*) in a spec file this PR changes, and no rule id is defined
      twice. It is cheap and stable, so it can be a required check.
    - `spec-check.yml` is an agent following `.claude/spec-check.md`. It
      reports contradictions, behaviour that should become a rule (with a
-     ready-to-paste proposal) and stale rules, and whether the `Spec:` line
-     is honest. It is **advisory**: a run can vary, and a gate that fails at
-     random teaches people to ignore it. It runs when a PR opens and again
-     when someone comments `/spec-check`, not on every push. The same prompt
+     ready-to-paste proposal), stale rules, added rules that are
+     inconsistent with the rest of the spec or fail the README's writing
+     rules — those rules are the rubric, there is no proposal quota — and
+     whether the `Spec:` line is honest. It is **advisory**: a run can vary,
+     and a gate that fails at random teaches people to ignore it. It runs
+     when a PR opens, on every push to it, and when someone comments
+     `/spec-check`; a newer push cancels a run still going. The same prompt
      runs locally as `/spec-check`; the workqueue runs it before pushing.
 5. **No string-matching tests on UI copy.** Tests cover logic (unit) and
    layout (screenshots). A rule about what a person is told is covered by the
    spec rule and, where it matters, a smoke-runbook scenario. The staging
    smoke agent judges the deployed apps against `docs/spec/`.
+6. **The agent runs with the repo's secrets, so only on heads of this
+   repository.** Fork PRs are skipped on both triggers, project settings are
+   not loaded from the checked-out tree, and the agent's shell is limited to
+   read-only git commands (no `git fetch`: its `--upload-pack` runs arbitrary
+   commands). The prompt and the tool allowlist still come from the PR head —
+   anyone who can push here can change them, as they can change any
+   workflow. Accepted for a project of this size.
 
 ## Consequences
 
@@ -67,13 +77,21 @@ and backfilling a complete spec up front would cost weeks and go stale.
   writing.
 
 **Cons:**
-- The agent check uses subscription quota on every opened PR and every
-  `/spec-check`.
+- The agent check uses subscription quota on every opened PR, every push to
+  it and every `/spec-check`.
 - The spec stays honest only through review discipline: the deterministic
   check can't tell whether `Spec: none` is true; the advisory agent can only
   point it out.
 - Domains not yet written down are invisible to the check until an issue
   touches them.
+- Both checks look at a PR's diff. Whether the whole spec still matches the
+  code — and itself — is a periodic audit, not part of this ADR (backlog:
+  *Periodic spec and conformance audit*).
+- Two PRs that both take the next free id merge cleanly when they touch
+  different sections; afterwards the deterministic check fails every PR until
+  one id is changed. There is no branch protection to force a rebase first
+  (deliberately, for a project of this size); the workqueue rebases before it
+  merges, which covers its PRs.
 
 **Tradeoffs:**
 - *A self-attested "checked locally" tag* in the PR description was rejected:
