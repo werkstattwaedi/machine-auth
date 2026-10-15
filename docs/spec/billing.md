@@ -8,7 +8,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung or TWINT. — ADR-0044
 
-  | Method | Paid during checkout | Collected monthly | Members only | Document |
+  | Method | Confirmed during checkout (BIL-6) | Collected monthly | Members only | Document |
   |---|---|---|---|---|
   | QR-Rechnung | no | no | no | Rechnung with QR slip |
   | Sammelrechnung | no | yes | yes | Beleg, later a Sammelrechnung |

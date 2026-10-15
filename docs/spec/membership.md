@@ -21,7 +21,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-10** While a membership is active, every member of it pays the member price wherever the catalog sets one — machine time from the terminal and items in the checkout alike, signed in or by badge tap. — #358
 - **MEM-11** Machine time stops getting member prices as soon as the membership's end date has passed; checkout items keep them until the membership expires overnight (MEM-28).
 - **MEM-12** Wherever a membership is advertised, the only discount promised is cheaper machine use, never cheaper material. — #665
-- **MEM-13** A membership doesn't change the usage fee; member prices (MEM-10) and paying by Sammelrechnung (BIL-4) are its only benefits.
+- **MEM-13** A membership doesn't change the usage fee; member prices (MEM-10), paying by Sammelrechnung (BIL-4) and a free first badge (MEM-14) are its only benefits.
 - **MEM-14** A person's first badge is free if they are an active member or hold any permission; while they have an active badge, every further one costs the catalog price. — ADR-0030
 
 ## Family
@@ -71,7 +71,7 @@ renewal, cancellation and expiry. Terms: see the
 
   | Person | Membership | Sees |
   |---|---|---|
-  | anyone | none | single and family offers with prices |
+  | anyone | none | single and family offers with prices — unless one waits in their checkout (MEM-4) |
   | single member | active | type, end date, auto-renew state, a way to end auto-renew |
   | family owner | active | the same, plus the members, open invitations (revocable) and adding a member |
   | invited member | active | type, end date, the members, and leaving as the only action; no way to end auto-renew (who is billed: MEM-25) |

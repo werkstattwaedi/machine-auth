@@ -49,9 +49,10 @@ backfill a domain up front.
    and add a new one.
 8. **Keep a file readable in a few minutes.** Split it by sub-domain before
    it grows past ~60 rules.
-9. **A rule is something the system enforces.** If the other case is kept
-   out only by how one client happens to be built — the server would accept
-   it — that is an *Open questions* entry (or an issue), not a rule.
+9. **A rule is something the system does on purpose.** A client-side rule
+   with a decision behind it counts (it has a source). Behaviour that merely
+   falls out of how a screen is built — nothing decided it, nothing refuses
+   the other case — is an *Open questions* entry (or an issue), not a rule.
 
 These writing rules are the rubric: the spec check holds every rule a PR
 adds or edits against them, by number, and checks it against the other rules
