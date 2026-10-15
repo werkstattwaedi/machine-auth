@@ -47,7 +47,10 @@ import {
   teardownEmulator,
   getFirestore,
 } from "../emulator-helper";
-import { closeCheckoutAndGetPaymentHandler } from "../../src/invoice/close_checkout_and_get_payment";
+import {
+  closeCheckoutAndGetPaymentHandler,
+  type ClosePersonInput,
+} from "../../src/invoice/close_checkout_and_get_payment";
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
@@ -82,6 +85,22 @@ const CHILD: CheckoutPersonEntity = {
   email: "charlie@example.com",
   userType: "kind",
 };
+
+/**
+ * The shape the web client actually sends (`personsPayload` in
+ * wizard-context): identity as a plain `userId`, never a `userRef`, and no
+ * server-derived fields (issue #741). Tests must call with this shape — the
+ * dedup / userType tests once passed by sending refs the client never sends.
+ */
+function wire(p: CheckoutPersonEntity): ClosePersonInput {
+  return {
+    name: p.name,
+    email: p.email,
+    userType: p.userType,
+    ...(p.billingAddress ? { billingAddress: p.billingAddress } : {}),
+    userId: p.userRef?.id ?? null,
+  };
+}
 
 async function seedPricingConfig(): Promise<void> {
   const db = getFirestore();
@@ -1025,7 +1044,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
             // Account holder posts kid pricing for their OWN line, attempting
             // to pay the child entry fee. They carry their own userRef, so the
             // override fires.
-            persons: [holderPerson(uid, "kind")],
+            persons: [wire(holderPerson(uid, "kind"))],
             summary: {
               totalPrice: 0,
               entryFees: 0,
@@ -1107,7 +1126,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
           checkoutId,
           usageType: "regular" as UsageType,
           persons: [
-            holderPerson(uid, "kind"), // spoofed to kid; will be corrected
+            wire(holderPerson(uid, "kind")), // spoofed to kid; will be corrected
             { ...CHILD, name: "Kid A", email: "kida@example.com" },
           ],
           summary: {
@@ -1565,7 +1584,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: "co-second-sameday",
           usageType: "regular" as UsageType,
-          persons: [person],
+          persons: [wire(person)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
@@ -1598,7 +1617,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: "co-today",
           usageType: "regular" as UsageType,
-          persons: [person],
+          persons: [wire(person)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
@@ -1659,7 +1678,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: "co-after-boundary",
           usageType: "regular" as UsageType,
-          persons: [person],
+          persons: [wire(person)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
@@ -1740,7 +1759,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: "co-mixed",
           usageType: "regular" as UsageType,
-          persons: [adult, kid],
+          persons: [wire(adult), wire(kid)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
@@ -1775,7 +1794,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: "co-after-waived",
           usageType: "regular" as UsageType,
-          persons: [person],
+          persons: [wire(person)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
@@ -1910,75 +1929,146 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(result.amount).to.equal("15.00");
     });
 
-    it("rejects a crafted wire userRef on the create-and-close path", async () => {
+    it("drops a crafted wire userId on the create-and-close path", async () => {
       const memberUid = "roster-wire-acct";
       await seedUser(memberUid, "erwachsen");
 
-      // A malicious client could smuggle a plain-object userRef into the
-      // wire persons (the JSON shape a serialized ref would take). The
-      // create path has no stored roster, so the guard must catch it here.
-      const craftedPerson = {
-        ...ADULT,
-        name: "Bea Buddy",
-        userRef: { id: memberUid },
-      } as unknown as CheckoutPersonEntity;
+      // The create path has no stored roster to vouch for anyone, so a
+      // claimed identity is discarded (issue #741) — the person is billed
+      // as a guest and nothing links the visit to the claimed account.
+      const result = await call({
+        uid: "anon-roster-1",
+        anonymous: true,
+        data: {
+          newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
+          usageType: "regular" as UsageType,
+          persons: [{ ...wire(ADULT), name: "Bea Buddy", userId: memberUid }],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
 
-      await expectHttpsError(
-        () =>
-          call({
-            uid: "anon-roster-1",
-            anonymous: true,
-            data: {
-              newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
-              usageType: "regular" as UsageType,
-              persons: [craftedPerson],
-              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
-            },
-          }),
-        "failed-precondition",
-      );
-
-      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(result.checkoutId!);
+      expect(checkout.persons[0].userRef).to.not.exist;
     });
 
-    it("rejects a crafted wire userRef on the create-and-close path for a signed-in caller", async () => {
+    it("keeps only the caller's own identity on the create-and-close path", async () => {
       const callerUid = "roster-wire-caller";
       const memberUid = "roster-wire-acct-2";
       await seedUser(callerUid, "erwachsen");
       await seedUser(memberUid, "erwachsen");
 
-      // Same smuggle attempt as above but via the authenticated newCheckout
-      // path (caller stamps their own userId). The guard must still fire,
-      // and the caller's own line stays exempt.
-      const craftedPerson = {
-        ...ADULT,
-        name: "Bea Buddy",
-        userRef: { id: memberUid },
-      } as unknown as CheckoutPersonEntity;
-      const selfPerson = {
-        ...ADULT,
-        userRef: { id: callerUid },
-      } as unknown as CheckoutPersonEntity;
+      const result = await call({
+        uid: callerUid,
+        data: {
+          newCheckout: {
+            userId: callerUid,
+            workshopsVisited: ["holz"],
+            items: [],
+          },
+          usageType: "regular" as UsageType,
+          persons: [
+            { ...wire(ADULT), userId: callerUid },
+            { ...wire(ADULT), name: "Bea Buddy", userId: memberUid },
+          ],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      const checkout = await getCheckout(result.checkoutId!);
+      expect(checkout.persons[0].userRef?.id).to.equal(callerUid);
+      expect(checkout.persons[1].userRef).to.not.exist;
+    });
+  });
+
+  // Issue #741: the close overwrites the stored roster with the wire
+  // persons, which carried no identity — every closed checkout lost its
+  // person ↔ account links (and with them #268 and #466).
+  describe("person identity survives the close (issue #741)", () => {
+    it("persists the owner's and the stored roster member's userRef", async () => {
+      const uid = "identity-owner";
+      const kidUid = "identity-kid";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      await seedUser(kidUid, "kind", null);
+      const owner = { ...ADULT, userRef: db.collection("users").doc(uid) };
+      const kid = { ...CHILD, userRef: db.collection("users").doc(kidUid) };
+      await seedCheckout("co-identity", { ownerUid: uid, persons: [owner, kid] });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-identity",
+          usageType: "regular" as UsageType,
+          persons: [wire(owner), wire(kid)],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      const checkout = await getCheckout("co-identity");
+      expect(checkout.status).to.equal("closed");
+      expect(checkout.persons[0].userRef?.id).to.equal(uid);
+      expect(checkout.persons[1].userRef?.id).to.equal(kidUid);
+    });
+
+    it("drops a userId that neither the owner nor the stored roster vouches for", async () => {
+      const uid = "identity-owner-2";
+      const strangerUid = "identity-stranger";
+      await seedUser(uid, "erwachsen");
+      await seedUser(strangerUid, "kind", null);
+      await seedCheckout("co-identity-2", { ownerUid: uid, persons: [ADULT] });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-identity-2",
+          usageType: "regular" as UsageType,
+          persons: [wire(ADULT), { ...wire(CHILD), userId: strangerUid }],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      const checkout = await getCheckout("co-identity-2");
+      expect(checkout.persons[1].userRef).to.not.exist;
+    });
+
+    it("never takes entryFeeWaivedToday from the client", async () => {
+      const uid = "identity-waiver-spoof";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-waiver-spoof", { ownerUid: uid });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-waiver-spoof",
+          usageType: "regular" as UsageType,
+          persons: [{ ...wire(ADULT), entryFeeWaivedToday: true }],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-waiver-spoof");
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+    });
+
+    it("rejects a malformed person userId", async () => {
+      const uid = "identity-malformed";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-identity-malformed", { ownerUid: uid });
 
       await expectHttpsError(
         () =>
           call({
-            uid: callerUid,
+            uid,
             data: {
-              newCheckout: {
-                userId: callerUid,
-                workshopsVisited: ["holz"],
-                items: [],
-              },
+              checkoutId: "co-identity-malformed",
               usageType: "regular" as UsageType,
-              persons: [selfPerson, craftedPerson],
+              persons: [{ ...wire(ADULT), userId: { id: uid } }],
               summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
             },
           }),
-        "failed-precondition",
+        "invalid-argument",
       );
-
-      expect(await listBills()).to.have.length(0);
     });
   });
 });

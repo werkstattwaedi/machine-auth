@@ -830,10 +830,14 @@ export function WizardProvider({
     const rawTotal = entryFees + machineCost + billedMaterialCost + tip
     totalPriceRef.current = total
 
+    // The close overwrites the stored roster with this payload, so identity
+    // must ride along — the server keeps a `userId` only when the owner or
+    // the stored open roster vouches for it (issue #741).
     const personsPayload = persons.map((p) => ({
       name: `${p.firstName} ${p.lastName}`,
       email: p.email,
       userType: p.userType,
+      userId: p.userId ?? null,
       ...(hasBillingFields(p)
         ? {
             billingAddress: {
