@@ -89,7 +89,7 @@ interface CheckinScreenRegistration {
    * Start the pending visit now (create the checkout) without resetting the
    * terminal — the caller switches to the next badge. Resolves with the
    * first name for the "Besuch von … gestartet" toast; rejects when the
-   * start failed (already toasted).
+   * start failed or did not settle in time (already toasted).
    */
   startPendingVisit: () => Promise<string | null>
 }

@@ -24,6 +24,16 @@ export const Route = createFileRoute("/_wizard/checkin")({
 const AUTO_START_MS = 5_000
 /** How long the start screen confirms the visit that was just started. */
 const STARTED_TOAST_MS = 6_000
+/**
+ * How long a second badge's tap waits for the pending visit's write. A write
+ * that never settles (Firestore unreachable) must not swallow the tap: the
+ * kiosk would stay stuck until the idle reset.
+ */
+export const START_HANDOFF_TIMEOUT_MS = 8_000
+const START_STALLED_MESSAGE =
+  "Der Besuch konnte nicht gestartet werden – keine Verbindung zum Server."
+
+class StartStalledError extends Error {}
 
 function startedToastMessage(firstName: string): string {
   return `Besuch von ${firstName} gestartet. Viel Spass in der Werkstatt!`
@@ -113,6 +123,9 @@ function CheckinRoute() {
   const startRef = useRef<Promise<void> | null>(null)
   // Set once BridgeNfcRouter took over the reset (switch to the next badge).
   const handedOffRef = useRef(false)
+  // A start whose write outlived START_HANDOFF_TIMEOUT_MS. It may still land,
+  // but later taps must not join it again — they ask instead.
+  const stalledRef = useRef<Promise<void> | null>(null)
   const persistVisit = useCallback((): Promise<void> => {
     if (!startRef.current) {
       // "Besuch starten" also turns a purchase-only checkout into a visit.
@@ -176,11 +189,29 @@ function CheckinRoute() {
     startPendingRef.current = async () => {
       handedOffRef.current = true
       setCountdown("off")
+      const start = persistVisit()
+      let timer: ReturnType<typeof setTimeout> | undefined
       try {
-        await persistVisit()
+        await Promise.race([
+          start,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new StartStalledError()),
+              START_HANDOFF_TIMEOUT_MS,
+            )
+          }),
+        ])
       } catch (err) {
+        // Not handed off after all: should the write still land, the
+        // countdown/click path resets the kiosk as usual.
         handedOffRef.current = false
+        if (err instanceof StartStalledError) {
+          stalledRef.current = start
+          toast.error(START_STALLED_MESSAGE)
+        }
         throw err
+      } finally {
+        clearTimeout(timer)
       }
       return firstName
     }
@@ -192,8 +223,10 @@ function CheckinRoute() {
           const { countdownRunning, onCheckinScreen, holderFirstName } =
             screenRef.current
           // A start in flight still counts as pending: the tap then joins
-          // that write instead of asking.
-          const autoStartPending = countdownRunning || startRef.current !== null
+          // that write instead of asking — unless it already stalled.
+          const autoStartPending =
+            countdownRunning ||
+            (startRef.current !== null && startRef.current !== stalledRef.current)
           return {
             autoStartPending,
             onCheckinScreen: onCheckinScreen && !autoStartPending,

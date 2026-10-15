@@ -237,8 +237,8 @@ export function BridgeNfcRouter() {
           try {
             startedHint = await startPendingVisit()
           } catch {
-            // The start failed (already toasted): nothing was started, so
-            // ask like for any unstarted check-in.
+            // The start failed or timed out (already toasted): nothing is
+            // known to be started, so ask like for any unstarted check-in.
             setPendingTag({
               picc,
               cmac,

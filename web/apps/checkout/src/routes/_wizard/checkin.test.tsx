@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest"
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react"
 import {
   getKioskSessionState,
   startPendingVisit,
@@ -41,8 +41,12 @@ const mockNavigate = vi.fn()
 const mockSearch: { current: Record<string, string> } = { current: {} }
 
 const mockToastSuccess = vi.fn()
+const mockToastError = vi.fn()
 vi.mock("sonner", () => ({
-  toast: { success: (...args: unknown[]) => mockToastSuccess(...args) },
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
 }))
 
 const mockBridge = { available: false }
@@ -148,10 +152,12 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   mockUseWizardContext.mockReset()
   mockNavigate.mockReset()
   mockToastSuccess.mockReset()
+  mockToastError.mockReset()
   mockSearch.current = {}
   mockBridge.available = false
   mockProfile.current = COMPLETE_PROFILE
@@ -275,6 +281,25 @@ describe("CheckinRoute — kiosk auto-start gating (issue #732)", () => {
     const { ctx } = renderCheckin(badgeKiosk)
     await expect(startPendingVisit()).resolves.toBe("Andrea")
     expect(ctx.persistPersons).toHaveBeenCalledWith({ usageType: "regular" })
+    expect(ctx.startOver).not.toHaveBeenCalled()
+  })
+
+  it("a start that never settles releases the tap after the timeout", async () => {
+    const { START_HANDOFF_TIMEOUT_MS } = await import("./checkin")
+    vi.useFakeTimers()
+    mockBridge.available = true
+    // Firestore unreachable: the write neither resolves nor rejects.
+    const persistPersons = vi.fn(() => new Promise<void>(() => {}))
+    const { ctx } = renderCheckin({ ...badgeKiosk, persistPersons })
+    const tap = expect(startPendingVisit()).rejects.toThrow()
+    await act(() => vi.advanceTimersByTimeAsync(START_HANDOFF_TIMEOUT_MS))
+    await tap
+    expect(mockToastError).toHaveBeenCalledTimes(1)
+    // The next tap asks instead of joining the stalled write again.
+    expect(getKioskSessionState()).toMatchObject({
+      autoStartPending: false,
+      onCheckinScreen: true,
+    })
     expect(ctx.startOver).not.toHaveBeenCalled()
   })
 })
