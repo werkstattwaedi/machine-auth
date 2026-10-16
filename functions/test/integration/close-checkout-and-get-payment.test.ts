@@ -1990,4 +1990,202 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       );
     });
   });
+
+  // Issue #750: the method is confirmed on the same screen as the close, so
+  // the close commits it and mints the bill already committed.
+  describe("paymentMethod committed with the close (issue #750)", () => {
+    const UID = "user-commit";
+    const CHECKOUT_ID = "co-commit";
+    const ZERO_SUMMARY = {
+      totalPrice: 0,
+      entryFees: 0,
+      machineCost: 0,
+      materialCost: 0,
+      tip: 0,
+    };
+
+    async function seedMember(uid: string): Promise<void> {
+      await seedUser(uid);
+      await getFirestore()
+        .collection("users")
+        .doc(uid)
+        .update({ activeMembership: getFirestore().collection("memberships").doc(`m-${uid}`) });
+    }
+
+    function seedOpen(checkoutId = CHECKOUT_ID, ownerUid = UID): Promise<void> {
+      return seedCheckout(checkoutId, {
+        ownerUid,
+        items: [
+          { workshop: "holz", description: "Schraubensatz", origin: "manual", quantity: 1, unitPrice: 5, totalPrice: 5 },
+        ],
+      });
+    }
+
+    function closeWith(paymentMethod: string | undefined, opts: { uid?: string; checkoutId?: string; usageType?: UsageType } = {}) {
+      return call({
+        uid: opts.uid ?? UID,
+        data: {
+          checkoutId: opts.checkoutId ?? CHECKOUT_ID,
+          usageType: opts.usageType ?? ("regular" as UsageType),
+          persons: [ADULT],
+          summary: ZERO_SUMMARY,
+          ...(paymentMethod !== undefined ? { paymentMethod } : {}),
+        },
+      });
+    }
+
+    it("rechnung: the bill is minted acked by the user and the checkout carries the method", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      const result = await closeWith("rechnung");
+      expect(result.payerEmail).to.equal(ADULT.email);
+      expect(result.qrBillPayload).to.contain("SPC");
+
+      const [bill] = await listBills();
+      expect(bill.data.kind).to.equal("invoice");
+      expect(bill.data.paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
+      expect(bill.data.paymentMethodConfirmationSource).to.equal("user");
+      const checkout = await getCheckout(CHECKOUT_ID);
+      expect(checkout.status).to.equal("closed");
+      expect(checkout.paymentMethod).to.equal("rechnung");
+    });
+
+    it("monthly: a member's bill is minted as a Beleg without an ack stamp", async () => {
+      await seedMember(UID);
+      await seedOpen();
+
+      await closeWith("monthly");
+
+      const [bill] = await listBills();
+      expect(bill.data.kind).to.equal("beleg");
+      expect(bill.data.paymentMethodConfirmationTime).to.equal(null);
+      expect(bill.data.aggregatedIntoBillRef).to.equal(null);
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("monthly");
+    });
+
+    it("monthly: refused for a non-member — the checkout stays open and no bill is minted", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await expectHttpsError(() => closeWith("monthly"), "failed-precondition");
+
+      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(CHECKOUT_ID);
+      expect(checkout.status).to.equal("open");
+      expect(checkout.paymentMethod ?? null).to.equal(null);
+    });
+
+    it("monthly: refused on a guest's create-and-close", async () => {
+      await expectHttpsError(
+        () =>
+          call({
+            uid: "anon-commit",
+            anonymous: true,
+            data: {
+              newCheckout: {
+                userId: null,
+                workshopsVisited: ["holz"],
+                items: [
+                  { workshop: "holz", description: "Schraubensatz", origin: "manual", catalogId: null, quantity: 1, unitPrice: 5, totalPrice: 5 },
+                ],
+              },
+              usageType: "regular" as UsageType,
+              persons: [ADULT],
+              summary: ZERO_SUMMARY,
+              paymentMethod: "monthly",
+            },
+          }),
+        "failed-precondition",
+      );
+      expect(await listBills()).to.have.length(0);
+    });
+
+    it("rechnung on a guest's create-and-close: the new checkout and its bill are committed", async () => {
+      await call({
+        uid: "anon-commit",
+        anonymous: true,
+        data: {
+          newCheckout: {
+            userId: null,
+            workshopsVisited: ["holz"],
+            items: [
+              { workshop: "holz", description: "Schraubensatz", origin: "manual", catalogId: null, quantity: 1, unitPrice: 5, totalPrice: 5 },
+            ],
+          },
+          usageType: "regular" as UsageType,
+          persons: [ADULT],
+          summary: ZERO_SUMMARY,
+          paymentMethod: "rechnung",
+        },
+      });
+
+      const [bill] = await listBills();
+      expect(bill.data.paymentMethodConfirmationSource).to.equal("user");
+      const checkout = (await bill.data.checkouts[0].get()).data() as CheckoutEntity;
+      expect(checkout.paymentMethod).to.equal("rechnung");
+    });
+
+    it("raisenow: refused — TWINT confirms after its paylink, not at close", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await expectHttpsError(() => closeWith("raisenow"), "invalid-argument");
+      expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
+    });
+
+    it("rejects an unknown paymentMethod", async () => {
+      await seedUser(UID);
+      await seedOpen();
+      await expectHttpsError(() => closeWith("bitcoin"), "invalid-argument");
+    });
+
+    it("without a method the bill stays unconfirmed, as before", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await closeWith(undefined);
+
+      const [bill] = await listBills();
+      expect(bill.data.paymentMethodConfirmationTime).to.equal(null);
+      expect(bill.data.kind).to.equal("invoice");
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
+    });
+
+    it("a CHF 0 checkout ignores the method and closes as free (BIL-8)", async () => {
+      await seedUser(UID);
+      await seedCheckout(CHECKOUT_ID, { ownerUid: UID, items: [] });
+
+      await closeWith("rechnung", { usageType: "intern" as UsageType });
+
+      const [bill] = await listBills();
+      expect(bill.data.amount).to.equal(0);
+      expect(bill.data.paidVia).to.equal("free");
+      expect(bill.data.paymentMethodConfirmationSource).to.equal("auto");
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
+    });
+
+    it("a repeated close commits the method on the existing bill once, without a second bill", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await closeWith(undefined);
+      const [unconfirmed] = await listBills();
+      expect(unconfirmed.data.paymentMethodConfirmationTime).to.equal(null);
+
+      // The checkout is closed now; only the idempotency branch can answer.
+      await closeWith("rechnung");
+      let bills = await listBills();
+      expect(bills).to.have.length(1);
+      const firstAck = bills[0].data.paymentMethodConfirmationTime;
+      expect(firstAck).to.be.instanceOf(Timestamp);
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("rechnung");
+
+      // A third call (double tap) changes nothing.
+      await closeWith("rechnung");
+      bills = await listBills();
+      expect(bills).to.have.length(1);
+      expect(bills[0].data.paymentMethodConfirmationTime!.isEqual(firstAck!)).to.equal(true);
+    });
+  });
 });

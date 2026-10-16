@@ -47,6 +47,9 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import {
+  handleBillCreated,
+  handleBillUpdated,
+  isCommittedAtClose,
   isEmailRetryDue,
   tryGeneratePdf,
   trySendCancellationNotice,
@@ -1537,6 +1540,194 @@ describe("bill processing triggers (Integration)", () => {
       expect((await getBill("cancelled-fail")).cancellationNoticeSentAt).to.be.null;
       const ops = await db.collection("operations_log").where("operation", "==", "cancellation_notice").get();
       expect(ops.size).to.equal(1);
+    });
+  });
+
+  // Issue #750: the checkout close can mint a bill already committed, so the
+  // ack transition `onBillUpdate` watches never happens for it.
+  describe("bills committed at creation (issue #750, non-emulator path)", () => {
+    let savedEmulatorEnv: string | undefined;
+
+    beforeEach(() => {
+      savedEmulatorEnv = process.env.FUNCTIONS_EMULATOR;
+      delete process.env.FUNCTIONS_EMULATOR;
+    });
+
+    afterEach(() => {
+      if (savedEmulatorEnv === undefined) delete process.env.FUNCTIONS_EMULATOR;
+      else process.env.FUNCTIONS_EMULATOR = savedEmulatorEnv;
+    });
+
+    async function seedAlice(): Promise<void> {
+      await seedUser("u-bill-proc", { email: "alice@example.com", firstName: "Alice" });
+    }
+
+    it("isCommittedAtClose: only a close-committed checkout bill qualifies", async () => {
+      const db = getFirestore();
+      const base = await seedBill("b-pred", {});
+      const acked = {
+        ...base,
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "user" as const,
+      };
+      expect(isCommittedAtClose(base), "unconfirmed").to.equal(false);
+      expect(isCommittedAtClose(acked), "user-acked at close").to.equal(true);
+      expect(isCommittedAtClose({ ...base, kind: "beleg" }), "Beleg at close").to.equal(true);
+      expect(
+        isCommittedAtClose({ ...base, kind: "beleg", aggregatedIntoBillRef: db.doc("bills/agg") }),
+        "replacement Beleg already aggregated",
+      ).to.equal(false);
+      expect(
+        isCommittedAtClose({ ...acked, paymentMethodConfirmationSource: "auto" }),
+        "monthly-run Sammelrechnung (auto ack)",
+      ).to.equal(false);
+      expect(isCommittedAtClose({ ...acked, paidVia: "free" }), "CHF 0").to.equal(false);
+      expect(
+        isCommittedAtClose({ ...acked, supersedesBillRef: db.doc("bills/old") }),
+        "corrected re-issue",
+      ).to.equal(false);
+      expect(
+        isCommittedAtClose({ ...acked, source: "membership-renewal" }),
+        "renewal invoice",
+      ).to.equal(false);
+    });
+
+    it("a QR-Rechnung acked at close gets its PDF and exactly one mail", async () => {
+      await seedAlice();
+      await seedCheckout("co-default", { paymentMethod: "rechnung" });
+      const bill = await seedBill("b-acked-at-close", {
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "user",
+      });
+
+      await handleBillCreated("b-acked-at-close", bill);
+      // A redelivered trigger must not mail twice.
+      await handleBillCreated("b-acked-at-close", await getBill("b-acked-at-close"));
+
+      const after = await getBill("b-acked-at-close");
+      expect(after.storagePath).to.be.a("string");
+      expect(after.emailSentAt).to.be.instanceOf(Timestamp);
+      expect(resendSendStub.calledOnce).to.equal(true);
+      const [, entity] = resendSendStub.firstCall.args as [string, { template: { id: string } }];
+      expect(entity.template.id).to.equal("test-bill-invoice-visit");
+    });
+
+    it("a Beleg minted at close gets its PDF and the Beleg mail", async () => {
+      await seedAlice();
+      await seedCheckout("co-default", { paymentMethod: "monthly" });
+      const bill = await seedBill("b-beleg-at-close", { kind: "beleg" });
+
+      await handleBillCreated("b-beleg-at-close", bill);
+
+      const after = await getBill("b-beleg-at-close");
+      expect(after.storagePath).to.be.a("string");
+      expect(resendSendStub.calledOnce).to.equal(true);
+      const [, entity] = resendSendStub.firstCall.args as [string, { template: { id: string } }];
+      expect(entity.template.id).to.match(/^test-bill-beleg/);
+    });
+
+    it("an unconfirmed bill gets only its PDF", async () => {
+      await seedAlice();
+      await seedCheckout("co-default");
+      const bill = await seedBill("b-unconfirmed", {});
+
+      await handleBillCreated("b-unconfirmed", bill);
+
+      expect((await getBill("b-unconfirmed")).storagePath).to.be.a("string");
+      expect(resendSendStub.called).to.equal(false);
+    });
+
+    it("a CHF 0 bill gets no mail (BIL-8)", async () => {
+      await seedAlice();
+      await seedCheckout("co-default");
+      const bill = await seedBill("b-free", {
+        amount: 0,
+        paidVia: "free",
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+
+      await handleBillCreated("b-free", bill);
+
+      expect(resendSendStub.called).to.equal(false);
+    });
+
+    it("the monthly run's auto-acked Sammelrechnung is not mailed from the create trigger", async () => {
+      await seedAlice();
+      await seedCheckout("co-default");
+      const bill = await seedBill("b-monthly-run", {
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+
+      await handleBillCreated("b-monthly-run", bill);
+
+      expect(resendSendStub.called).to.equal(false);
+    });
+
+    it("a membership bought on a bill acked at close activates the membership", async () => {
+      const db = getFirestore();
+      await seedAlice();
+      await db.collection("catalog").doc("cat-membership").set({
+        code: "MEMBERSHIP",
+        name: "Mitgliedschaft",
+        workshops: ["diverses"],
+        category: ["Mitgliedschaft"],
+        active: true,
+        userCanAdd: false,
+        variants: [
+          { id: "single", label: "Einzel", pricingModel: "direct", unitPrice: { default: 50 } },
+        ],
+      });
+      await db
+        .doc("config/catalog-references")
+        .set({ membership: db.collection("catalog").doc("cat-membership") });
+      await seedCheckout("co-default", { paymentMethod: "rechnung", usageType: "materialbezug" });
+      await db.collection("checkouts").doc("co-default").collection("items").doc("m").set({
+        workshop: "diverses",
+        description: "Mitgliedschaft — Einzel",
+        origin: "manual",
+        catalogId: db.collection("catalog").doc("cat-membership"),
+        variantId: "single",
+        pricingModel: "direct",
+        created: Timestamp.now(),
+        quantity: 1,
+        unitPrice: 50,
+        totalPrice: 50,
+      });
+      const bill = await seedBill("b-membership-at-close", {
+        amount: 50,
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "user",
+      });
+
+      await handleBillCreated("b-membership-at-close", bill);
+
+      const user = (await db.doc("users/u-bill-proc").get()).data();
+      expect(user?.activeMembership, "membership activated").to.exist;
+    });
+
+    it("handleBillUpdated still runs the side effects on the later ack (TWINT path)", async () => {
+      await seedAlice();
+      await seedCheckout("co-default", { paymentMethod: "raisenow" });
+      const before = await seedBill("b-later-ack", {});
+      const after = {
+        ...before,
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "user" as const,
+      };
+      await getFirestore().doc("bills/b-later-ack").update({
+        paymentMethodConfirmationTime: after.paymentMethodConfirmationTime,
+        paymentMethodConfirmationSource: "user",
+      });
+
+      await handleBillUpdated("b-later-ack", before, after);
+      // An unrelated later update (e.g. the PDF lock) does nothing.
+      await handleBillUpdated("b-later-ack", after, await getBill("b-later-ack"));
+
+      expect(resendSendStub.calledOnce).to.equal(true);
+      const [, entity] = resendSendStub.firstCall.args as [string, { template: { id: string } }];
+      expect(entity.template.id).to.match(/^test-bill-receipt/);
     });
   });
 

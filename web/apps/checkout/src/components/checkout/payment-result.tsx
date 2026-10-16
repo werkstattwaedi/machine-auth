@@ -57,9 +57,9 @@ interface PaymentResultProps {
   /** Gates the monthly-bill (Sammelrechnung) tab — only Vereinsmitglieder
    *  see it. Derived from both identification modes upstream
    *  (`wizard-context` deriveIsMember), so tag-tapping members get it too
-   *  (issue #414). The backend `acknowledgeBill` does not re-check membership
-   *  — it authorizes `monthly` for any bill owner — so this is purely a UI
-   *  affordance over an already-permitted choice. */
+   *  (issue #414). The server refuses `monthly` for a non-member too
+   *  (`assertPaymentMethodAllowed`, #750), keyed on the same
+   *  `activeMembership`. */
   isMember: boolean
   /**
    * Where the checkout runs. Picks the configured method list, and on the

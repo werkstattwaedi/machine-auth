@@ -31,17 +31,25 @@ import type {
   CheckoutSummaryEntity,
   ItemOrigin,
   ItemType,
+  PaymentMethod,
   UsageType,
 } from "../types/firestore_entities";
 import {
+  PAYMENT_METHOD_INFO,
   computeCheckoutSummary,
   isMachineItem,
+  isPaymentMethod,
   isSameBusinessDay,
   usageDiscount,
 } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
 import { allocateBill } from "./create_bill";
+import {
+  assertPaymentMethodAllowed,
+  billCommitFields,
+  isBillCommitted,
+} from "./commit_payment_method";
 import {
   loadMembershipCatalogId,
   detectMembershipKindForItems,
@@ -631,6 +639,30 @@ interface CloseCheckoutRequest {
   usageType: UsageType;
   persons: ClosePersonInput[];
   summary: CheckoutSummaryEntity;
+  /**
+   * Commit this method together with the close (issue #750): the person
+   * confirmed it on the same screen, so the bill is minted committed. Only
+   * methods settled outside the checkout qualify — a method paid during the
+   * checkout (TWINT) needs the bill's reference for its paylink first, so
+   * it still closes without a method and confirms via `acknowledgeBill`.
+   * Omitted: the bill stays unconfirmed, as before.
+   */
+  paymentMethod?: PaymentMethod;
+}
+
+/**
+ * How a close mints its bill when it commits `method` at once. A CHF 0
+ * bill ignores the method: it is closed as `paidVia: "free"` either way
+ * and needs no payment (BIL-8).
+ */
+function mintCommitted(
+  method: PaymentMethod | null,
+  amount: number,
+): { method: PaymentMethod | null; kind?: "beleg"; preAck?: { source: "user" } } {
+  if (!method || amount === 0) return { method: null };
+  return PAYMENT_METHOD_INFO[method].isAggregated
+    ? { method, kind: "beleg" }
+    : { method, preAck: { source: "user" } };
 }
 
 export const closeCheckoutAndGetPaymentHandler = async (
@@ -638,6 +670,7 @@ export const closeCheckoutAndGetPaymentHandler = async (
 ) => {
   const data = request.data ?? ({} as CloseCheckoutRequest);
   const { checkoutId, newCheckout, usageType, persons, summary } = data;
+  const paymentMethod = data.paymentMethod ?? null;
 
   if (!Array.isArray(persons) || persons.length === 0) {
     throw new HttpsError("invalid-argument", "persons is required");
@@ -647,6 +680,17 @@ export const closeCheckoutAndGetPaymentHandler = async (
   }
   if (!usageType) {
     throw new HttpsError("invalid-argument", "usageType is required");
+  }
+  if (paymentMethod !== null) {
+    if (!isPaymentMethod(paymentMethod)) {
+      throw new HttpsError("invalid-argument", "invalid paymentMethod");
+    }
+    if (PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
+      throw new HttpsError(
+        "invalid-argument",
+        `paymentMethod ${paymentMethod} is confirmed after its payment, not at close`,
+      );
+    }
   }
 
   const callerUid = effectiveUid(request);
@@ -665,6 +709,7 @@ export const closeCheckoutAndGetPaymentHandler = async (
       usageType,
       persons,
       clientSummary: summary,
+      paymentMethod,
     });
   }
   if (newCheckout) {
@@ -673,6 +718,7 @@ export const closeCheckoutAndGetPaymentHandler = async (
       usageType,
       persons,
       clientSummary: summary,
+      paymentMethod,
     });
   }
   throw new HttpsError(
@@ -689,6 +735,7 @@ async function closeExistingCheckout(
     usageType: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
+    paymentMethod: PaymentMethod | null;
   },
 ): Promise<PaymentData> {
   if (!callerUid) {
@@ -747,6 +794,13 @@ async function closeExistingCheckout(
     ownerId,
     `closeExistingCheckout ${args.checkoutId}`,
   );
+
+  if (args.paymentMethod) {
+    await assertPaymentMethodAllowed(
+      args.paymentMethod,
+      ownerId ? db.collection("users").doc(ownerId) : null,
+    );
+  }
 
   const enforcedPersons = await enforceAccountHolderUserType(
     db,
@@ -817,6 +871,19 @@ async function closeExistingCheckout(
       const existingBillDoc = await tx.get(checkout.billRef);
       if (existingBillDoc.exists) {
         const existingBill = existingBillDoc.data() as BillEntity;
+        // A repeated close (double tap, retry after a lost response) that
+        // carries a method still commits it, unless something already did.
+        if (args.paymentMethod && !isBillCommitted(existingBill) && !existingBill.cancelledAt) {
+          tx.update(
+            checkout.billRef,
+            billCommitFields(args.paymentMethod, Timestamp.now()),
+          );
+          tx.update(checkoutRef, {
+            paymentMethod: args.paymentMethod,
+            modifiedBy: callerUid,
+            modifiedAt: FieldValue.serverTimestamp(),
+          });
+        }
         return {
           bill: existingBill,
           billId: checkout.billRef.id,
@@ -854,14 +921,18 @@ async function closeExistingCheckout(
     }
     logSummaryDivergence(`closeExistingCheckout ${args.checkoutId}`, args.clientSummary, summary);
 
+    const commit = mintCommitted(args.paymentMethod, summary.totalPrice);
     const bill = await allocateBill(tx, db, {
       userId: checkout.userId,
       checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
+      kind: commit.kind,
+      preAck: commit.preAck,
     });
 
     tx.update(checkoutRef, {
+      ...(commit.method ? { paymentMethod: commit.method } : {}),
       status: "closed",
       usageType: args.usageType,
       persons: dedupedPersons,
@@ -887,6 +958,7 @@ async function createAnonymousCheckout(
     usageType: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
+    paymentMethod: PaymentMethod | null;
   },
 ): Promise<PaymentData> {
   // Anti-spoofing: the caller may only stamp their own userId on a new
@@ -936,6 +1008,10 @@ async function createAnonymousCheckout(
     ? db.collection("users").doc(effectiveUserId)
     : null;
 
+  if (args.paymentMethod) {
+    await assertPaymentMethodAllowed(args.paymentMethod, userIdRef);
+  }
+
   // Only the owner's own line keeps its identity (issue #741, ADR-0048).
   const persons = resolveClosePersons(
     db,
@@ -982,12 +1058,15 @@ async function createAnonymousCheckout(
   // Pre-allocate item refs so they can be written inside the transaction.
   const itemRefs = validItems.map(() => checkoutRef.collection("items").doc());
 
+  const commit = mintCommitted(args.paymentMethod, summary.totalPrice);
   const result = await db.runTransaction(async (tx) => {
     const bill = await allocateBill(tx, db, {
       userId: userIdRef,
       checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
+      kind: commit.kind,
+      preAck: commit.preAck,
     });
 
     const now = Timestamp.now();
@@ -1011,6 +1090,7 @@ async function createAnonymousCheckout(
       notes: null,
       summary,
       billRef,
+      ...(commit.method ? { paymentMethod: commit.method } : {}),
     });
 
     validItems.forEach((item, idx) => {

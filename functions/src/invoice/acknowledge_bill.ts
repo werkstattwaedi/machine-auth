@@ -7,8 +7,10 @@
  * The invoice email and membership activation used to fire the moment a
  * checkout closed, before the user picked a payment method on the
  * Bezahlen step. Now both side-effects are gated on
- * `paymentMethodConfirmationTime` being written on the bill. This module
- * owns the two ways that field can land:
+ * `paymentMethodConfirmationTime` being written on the bill. A close that
+ * carries the method mints the bill with it already set
+ * (`closeCheckoutAndGetPayment`, issue #750); this module owns the two
+ * ways it lands on a bill minted unconfirmed:
  *
  *  - `acknowledgeBill` callable: the user clicked the commit button on
  *    Step 4. Source `"user"`.
@@ -35,7 +37,11 @@ import {
   type DocumentReference,
 } from "firebase-admin/firestore";
 import { PAYMENT_METHOD_INFO, isPaymentMethod } from "@oww/shared";
-import { isPaymentMethodEnabled } from "../payments/config";
+import {
+  assertPaymentMethodAllowed,
+  billCommitFields,
+  isBillCommitted,
+} from "./commit_payment_method";
 import type { BillEntity } from "./types";
 import type {
   CheckoutEntity,
@@ -95,12 +101,6 @@ export const acknowledgeBillHandler = async (
   if (!isPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "invalid paymentMethod");
   }
-  if (!isPaymentMethodEnabled(paymentMethod)) {
-    throw new HttpsError(
-      "failed-precondition",
-      `paymentMethod ${paymentMethod} is not enabled`,
-    );
-  }
   const isAggregated = PAYMENT_METHOD_INFO[paymentMethod].isAggregated;
 
   const db = getFirestore();
@@ -140,6 +140,8 @@ export const acknowledgeBillHandler = async (
     throw new HttpsError("permission-denied", "Access denied");
   }
 
+  await assertPaymentMethodAllowed(paymentMethod, bill.userId);
+
   // A cancelled bill (ADR-0042) is no longer payable; the corrected
   // re-issue (if any) is its own, pre-acked bill.
   if (bill.cancelledAt) {
@@ -150,7 +152,7 @@ export const acknowledgeBillHandler = async (
   // without rewriting. The frontend may double-fire under double-tap.
   // For monthly: the bill has already been flipped to kind "beleg" — same
   // short-circuit, since the kind transition is the commit-of-record.
-  if (bill.paymentMethodConfirmationTime || (bill.kind ?? "invoice") === "beleg") {
+  if (isBillCommitted(bill)) {
     return { ok: true };
   }
 
@@ -163,35 +165,20 @@ export const acknowledgeBillHandler = async (
       throw new HttpsError("not-found", "Bill not found");
     }
     const freshBill = fresh.data() as BillEntity;
-    if (freshBill.paymentMethodConfirmationTime) {
-      return;
-    }
-    if ((freshBill.kind ?? "invoice") === "beleg") {
+    if (isBillCommitted(freshBill)) {
       return;
     }
 
-    const now = Timestamp.now();
-    if (isAggregated) {
-      // Sammelrechnung path (issue #245): the per-visit bill becomes a
-      // "Beleg" — a non-payable record of what was used this visit. The
-      // monthlyBillRun cron aggregates Belege into a real Sammelrechnung
-      // QR-bill on the 1st of the following month. We deliberately do
-      // NOT stamp paymentMethodConfirmationTime — keeping it null means
-      // the email/membership triggers in `onBillUpdate` stay no-ops, and
-      // the auto-ack cron doesn't pick this back up (it skips Belege).
-      //
-      // We don't write `aggregatedIntoBillRef: null` here because the
-      // field is initialized by `allocateBill` at bill-creation time.
-      // For pre-deploy bills the field is absent, but Firestore's
-      // `== null` predicate on the cron query matches both absent and
-      // explicit null — so no backfill is needed.
-      tx.update(billRef, { kind: "beleg" });
-    } else {
-      tx.update(billRef, {
-        paymentMethodConfirmationTime: now,
-        paymentMethodConfirmationSource: "user",
-      });
-    }
+    // Sammelrechnung path (issue #245): the per-visit bill becomes a
+    // "Beleg" — a non-payable record of what was used this visit. The
+    // monthlyBillRun cron aggregates Belege into a real Sammelrechnung
+    // QR-bill on the 1st of the following month. A Beleg carries no
+    // paymentMethodConfirmationTime, so the ack-transition branch of
+    // `onBillUpdate` stays a no-op and the auto-ack cron skips it.
+    // `aggregatedIntoBillRef` needs no write: `allocateBill` initialises
+    // it, and the cron's `== null` predicate matches pre-deploy bills
+    // that lack the field.
+    tx.update(billRef, billCommitFields(paymentMethod, Timestamp.now()));
 
     if (linkedCheckoutRef) {
       tx.update(linkedCheckoutRef, {
