@@ -42,8 +42,8 @@ callers in sync by editing only this file.
    - **Stale**: the PR changes or retires a rule's behaviour but the rule
      text still says the old thing, or a rule's source (ADR, issue) no
      longer matches.
-4. For each rule the PR adds or edits, read the whole spec file it sits in
-   and the rules it cites:
+4. For each rule or glossary entry the PR adds or edits, read the whole
+   spec file it sits in and the rules it cites:
    - **Inconsistent**: it contradicts, duplicates or overlaps another rule
      — two rules that say different things about the same case. This is
      the one defect the deterministic check can never see; look for it on
