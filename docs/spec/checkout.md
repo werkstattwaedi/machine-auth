@@ -15,8 +15,9 @@ device; what differs at the kiosk is in [kiosk.md](kiosk.md). Terms: see the
   | today | Kosten |
   | an earlier day | Check Out |
 
-- **CHK-3** A visit begins when the person continues past the check-in: the checkout is created then, with everyone on the check-in as its persons. — #246
+- **CHK-3** A visit starts when the person continues past the check-in: its checkout is created then, with everyone on the check-in as its persons. — #246
 - **CHK-7** Continuing past the check-in with an open checkout puts the persons on that checkout; no second checkout is created. — #246
+- **CHK-9** An open checkout whose usage type is *Nur Materialbezug* is a purchase-only checkout (CHK-5), not a started visit. — #666, #732
 
 ## Usage type
 
@@ -38,7 +39,7 @@ device; what differs at the kiosk is in [kiosk.md](kiosk.md). Terms: see the
   | *Nur Materialbezug* | machine time; the option is shown greyed out with the reason (#628) |
   | *Interne Nutzung* | a paid badge (a membership: MEM-6) |
 
-- **CHK-5** A membership, renewal or badge bought without a visit opens a purchase-only checkout; it is a purchase, not a visit. — ADR-0030, #660
+- **CHK-5** A membership or badge bought without a visit opens a purchase-only checkout, whose usage type is *Nur Materialbezug* and which carries no usage fee (CHK-4). — ADR-0030, #660
 
 ## Open questions
 

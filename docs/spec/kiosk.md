@@ -92,6 +92,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
 - [NEEDS CLARIFICATION] After a touch stopped the countdown (KIO-11), tapping one's own badge again counts as a second badge (KIO-6): the person is asked whether to switch and told that no visit was started. Intended, or should the same badge start the visit or restart the countdown? — #732
 - [NEEDS CLARIFICATION] A badge tap that first runs the welcome onboarding (ACC-2) gets no countdown afterwards (KIO-10). Should the countdown start once the profile is complete? — #732
 - [NEEDS CLARIFICATION] A second badge over a check-in with a purchase-only checkout open tells the person that what is on the screen is lost (KIO-6), although that checkout is kept and comes back on their next tap (KIO-14). Should the dialog say so? — #732
+- [NEEDS CLARIFICATION] A start that stalled past 8 s (KIO-6) can still land while "Benutzer wechseln?" is open: after a countdown or a click the kiosk then resets under the dialog and hides (KIO-8); after a tap alone the visit exists although the dialog said none was started. Should a stalled start be abandoned, or should the dialog follow the late start? — #732
 
 ## Retired
 

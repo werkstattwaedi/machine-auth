@@ -1,8 +1,8 @@
 # Account & sign-in
 
 How a person signs in — e-mail code, SMS code, Google or badge — where each
-works, and what a first sign-in asks for. Terms: see the
-[glossary](README.md#glossary).
+works, what a first sign-in asks for, and what a badge tap reaches at the
+kiosk. Terms: see the [glossary](README.md#glossary).
 
 ## Ways to sign in
 
@@ -20,6 +20,11 @@ works, and what a first sign-in asks for. Terms: see the
 ## First sign-in
 
 - **ACC-2** A signed-in person without a complete profile completes the welcome onboarding before anything else, on an own device and at the kiosk alike. — ADR-0022, #595
+
+## At the kiosk
+
+- **ACC-4** A restricted session reaches the checkout but not the account. — ADR-0041
+- **ACC-5** At the kiosk, an e-mail or SMS code opens the account for 15 min, entered at sign-in (ACC-1) or when a restricted session opens an account page. — ADR-0041
 
 ## Open questions
 
