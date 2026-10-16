@@ -37,7 +37,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
 
 ## Second badge
 
-- **KIO-6** A registered badge tapped while someone is at the kiosk — #463, #468, #689, #732, ADR-0030:
+- **KIO-6** A registered badge tapped while someone is at the kiosk — #463, #468, #689, #732, #752, ADR-0030:
 
   | Situation at the kiosk | Reaction |
   |---|---|
@@ -47,7 +47,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
   | that start fails or takes longer than 8 s | the person is told that the start failed, then asked as in the next row |
   | an identified person is on the check-in, no visit started, no countdown running | asked "Benutzer wechseln?" and told that no visit was started and that what is on the screen is lost |
   | an identified person is on the check-in with a started visit, or on Kosten or Check Out | asked "Benutzer wechseln?" and told that the open checkout is kept and continues on their next badge tap (KIO-1) |
-  | an identified person is on the payment page, or on a page outside the checkout steps | the kiosk switches to the new badge without asking |
+  | an identified person is on Bezahlen, or on a page outside the checkout steps | the kiosk switches to the new badge without asking |
   | someone is in the account | the tap does nothing |
 
 - **KIO-13** An unregistered badge never switches the kiosk to another person — ADR-0030:
@@ -60,7 +60,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
 
 ## Idle & reset
 
-- **KIO-7** A kiosk left untouched for the idle time asks whether the person is still there; without an answer it resets 30 s later (KIO-8) — ADR-0022, ADR-0041, #378, #689:
+- **KIO-7** A kiosk left untouched for the idle time asks whether the person is still there; answering that they are not, or no answer within 30 s, resets the kiosk (KIO-8) — ADR-0022, ADR-0041, #378, #689:
 
   | Where | Idle time |
   |---|---|

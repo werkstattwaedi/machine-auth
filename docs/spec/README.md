@@ -141,8 +141,8 @@ still passes a different wrong promise.
 - **Machine terminal** — the device on a machine that unlocks it.
 
 **Screens**
-- **Check-in, Kosten, Check Out** — the three steps of the checkout app:
-  who is there, what was used or bought, paying.
+- **Check-in, Kosten, Check Out, Bezahlen** — the four steps of the checkout
+  app: who is there, what was used or bought, the summary, paying.
 - **Start screen** — the check-in while nobody is identified yet.
 - **Account** (*Konto*) — the signed-in person's own pages: Profil,
   Nutzungsverlauf and Mitgliedschaft (the membership page).
@@ -160,7 +160,8 @@ still passes a different wrong promise.
   bought without a visit.
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
-- **Restricted session** — a kiosk session started by a badge tap.
+- **Restricted session** — a kiosk session without a valid e-mail or SMS
+  code (ACC-5).
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.

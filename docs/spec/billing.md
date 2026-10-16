@@ -20,6 +20,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-5** TWINT can be confirmed only after the paylink was opened, and the TWINT option is hidden when no paylink could be built. — #537
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill left unconfirmed for at least an hour is committed overnight with the last method the person selected, or the QR-Rechnung if none was selected. — #251, #302
+- **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill nobody confirms is committed overnight (BIL-7). — #251, #302
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
 
 ## Documents
@@ -30,6 +31,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-12** On a document, line items are grouped by workshop with a subtotal each, a membership is listed first, and a donation is listed as such. — #262, #464
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
 - **BIL-14** A document is addressed to the company for a company account, else the account holder, else the name given at check-in, and shows the postal address only when it is complete. — #269, #658
+- **BIL-35** A checkout produces one bill, to its account holder; the other persons on the visit are lines on that bill (CHK-11) and are never billed themselves. — ADR-0048, #747
 - **BIL-15** The person can download a document's PDF on their own device, not at the kiosk. — #418
 
 ## Numbering & references
