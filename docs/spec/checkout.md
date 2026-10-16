@@ -9,6 +9,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 - **CHK-1** The check-in starts with a choice: sign in (ACC-1) or continue as a guest. — ADR-0031
 - **CHK-6** An identified person's own details are filled in on the check-in; further persons are added there. — ADR-0031
+- **CHK-28** Each person on the check-in is entered as an adult, a child or a company, which sets their standard usage fee; a company also gives its billing address (BIL-14).
 - **CHK-2** A person who opens the app with an open checkout is taken past the check-in:
 
   | The open checkout is from | Lands on |
@@ -42,11 +43,14 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | *Freiwilligengruppe* | a workshop supervisor working on their own project | none | none | full | no |
   | *Interne Nutzung* | work on a project for the OWW itself | none | none | none | no |
 
+- **CHK-29** A visit has one usage type for everyone on it: each person's usage fee and the machine and material items follow the same type (CHK-4).
+- **CHK-30** Choosing a discounted usage type shows on Check Out what the person confirms by closing the checkout; for *Ermässigte Nutzung (KulturLegi)* and *Hangenmoos AG* it also says that this may be spot-checked. — #570
+- **CHK-31** The Nutzungsgebühren section on Check Out lists each person with their usage fee after the discount, and starts open when the person comes from Kosten. — #570
 - **CHK-8** A checkout can't be closed with these usage types and items together — #284:
 
   | Usage type | Items in the checkout |
   |---|---|
-  | *Nur Materialbezug* | machine time; the option is shown greyed out with the reason (#628) |
+  | *Nur Materialbezug* | machine time; the option is shown greyed out with the reason, and a selection already made falls back to *Reguläre Nutzung* (#628) |
   | *Interne Nutzung* | a paid badge (a membership: MEM-6) |
 
 - **CHK-5** A membership or badge bought without a visit opens a purchase-only checkout, whose usage type is *Nur Materialbezug* and which carries no usage fee (CHK-4). — ADR-0030, #660
