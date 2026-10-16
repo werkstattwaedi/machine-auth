@@ -60,7 +60,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
 
 ## Idle & reset
 
-- **KIO-7** A kiosk left untouched for the idle time asks whether the person is still there; answering that they are not, or no answer within 30 s, resets the kiosk (KIO-8) — ADR-0022, ADR-0041, #378, #689:
+- **KIO-7** A kiosk left untouched for the idle time asks whether the person is still there; saying yes keeps the session, any other answer or none within 30 s resets the kiosk (KIO-8) — ADR-0022, ADR-0041, #378, #689:
 
   | Where | Idle time |
   |---|---|

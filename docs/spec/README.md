@@ -160,8 +160,7 @@ still passes a different wrong promise.
   bought without a visit.
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
-- **Restricted session** — a kiosk session without a valid e-mail or SMS
-  code (ACC-5).
+- **Restricted session** — a kiosk session started by a badge tap.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
