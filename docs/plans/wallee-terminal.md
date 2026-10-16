@@ -116,6 +116,7 @@ The client never tells the backend that a bill is paid; only Wallee does.
 - **Data protection**: store no masked PAN or card expiry, only the Wallee id. Add the field to the subject-data map (`functions/src/privacy/subject_data_map.ts`): it is a pseudonymous processor reference, kept with the bill.
 - `firestore/firestore.rules`: add `wallee_terminal` to both closed-checkout `paymentMethod` lists (~343/349), plus a `cross-user-rules` test case.
 - `build_invoice_pdf.ts`: add a `PAID_VIA_LABELS` entry "Karte/TWINT (Terminal)". With `paidAt` set, the Quittung prints "Bezahlt … am …" through the existing branch.
+- **Customer receipt on the Quittung** (Wallee requires the transaction details on the customer's document): Wallee provides the exact text. `GET /payment/transactions/{id}/terminal-receipts?format=TXT&width=40` returns a "Kunde" receipt (base64 `text/plain`, 40 columns: card brand, masked card number, date/time, Trm-Id, AID, Trx. Seq-Cnt, Trx. Ref-Nr, Auth. Code, Acq-Id, total), plus a "Händler" one. `settleTerminalPayment` fetches the customer receipt in the same step and stores it on the bill (`walleeReceiptText`); the Quittung prints it verbatim in a monospace block. It comes from the backend, never from the kiosk. It contains the last four card digits, so it goes into the subject-data map with the bill.
 - BigQuery: `stats.paid_via` gains the value `wallee_terminal`. No schema change.
 - Mail: no template work (ADR-0046). `billDocument()` already routes `paidDuringCheckout` to the receipt.
 
