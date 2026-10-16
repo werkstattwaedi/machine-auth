@@ -1,6 +1,6 @@
 # ADR-0048: Family Memberships Hold Account Holders Only
 
-**Status:** Accepted (supersedes [ADR-0029](0029-concurrent-family-member-checkouts.md))
+**Status:** Accepted (supersedes [ADR-0029](0029-concurrent-family-member-checkouts.md); its companion cons are resolved by [ADR-0050](0050-per-person-usage-type.md))
 
 **Date:** 2026-10-15
 

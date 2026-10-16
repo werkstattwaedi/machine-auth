@@ -219,6 +219,8 @@ export async function runRenewalInvoicer(
       userId: ownerRef,
       status: "closed",
       usageType: "materialbezug",
+      // No visit behind it (CHK-9, issue #605).
+      purchaseOnly: true,
       created: now2,
       closedAt: now2,
       workshopsVisited: [],
@@ -228,6 +230,7 @@ export async function runRenewalInvoicer(
           email: owner.email ?? "",
           userType: owner.userType ?? "erwachsen",
           userRef: ownerRef,
+          usageType: "materialbezug",
         },
       ],
       // The renewal is a real QR-Rechnung; mark the method up front so the

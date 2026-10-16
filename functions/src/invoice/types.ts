@@ -86,7 +86,15 @@ export interface BillEntity {
 export interface PersonEntryFee {
   name: string;
   userType: string;
+  /** Standard (RAW) fee before the usage-type discount; 0 when waived today. */
   fee: number;
+  /**
+   * The person's own usage type (issue #605) — `person.usageType ??
+   * checkout.usageType` for checkouts from before it.
+   */
+  usageType: UsageType;
+  /** What the person pays: `fee` × their usage type's entry-fee multiplier. */
+  netFee: number;
   /**
    * True when the entry fee was waived because the person already paid the
    * daily usage fee earlier the same Zurich business day (issue #268). The
@@ -98,7 +106,10 @@ export interface PersonEntryFee {
 /** Assembled data for a single checkout within an invoice */
 export interface InvoiceCheckout {
   date: Date;
+  /** The visit's type: decides machine time and material. */
   usageType: UsageType;
+  /** No visit behind it (CHK-9); absent on older docs (`isPurchaseOnly`). */
+  purchaseOnly?: boolean;
   persons: CheckoutPersonEntity[];
   personEntryFees: PersonEntryFee[];
   items: CheckoutItemEntity[];

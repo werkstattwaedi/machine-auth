@@ -154,7 +154,19 @@
       // closed checkout linked via supersededByCheckoutRef. Legacy docs
       // lack the cancellation fields — never filter on `== null`.
       "status": "open | closed | cancelled",
-      "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos",
+      // The visit's usage type (issue #605, ADR-0050): derived by the close
+      // from persons[].usageType — the owner's volunteering/intern, else
+      // materialbezug when every person has it, else regular. Decides machine
+      // time and material; each person's own type decides their usage fee.
+      // Checkouts closed before #605 carry only this one type
+      // (readers: `person.usageType ?? checkout.usageType`).
+      "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos | volunteering",
+      // Optional. True on a checkout with no visit behind it — a badge,
+      // membership or renewal the server bought on its own (CHK-9). Server
+      // purchases write true, client-created checkouts false; the client may
+      // clear it ("Besuch starten", KIO-18) but never set it. Absent on older
+      // docs: `isPurchaseOnly` then falls back to usageType == materialbezug.
+      "purchaseOnly": "boolean (optional)",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries
@@ -177,7 +189,14 @@
         // (issue #268). Derived at close-time from prior bills; only ever set
         // for persons carrying a userRef (anonymous/guest persons are always
         // charged).
-        "entryFeeWaivedToday": "boolean (optional)"
+        "entryFeeWaivedToday": "boolean (optional)",
+        // Optional (issue #605). The person's own usage type, chosen on the
+        // check-in; volunteering/intern only on the owner's line while alone.
+        "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos | volunteering (optional)",
+        // Optional (issue #605). users/{owner}/savedPersons/{id} the line was
+        // added from; kept at close only if that doc exists. Keys the
+        // same-day waiver for the saved person.
+        "savedPersonId": "string (optional)"
       }],
       "modifiedBy": "string | null", // Firebase Auth UID
       "modifiedAt": "timestamp",
@@ -550,7 +569,23 @@
         "street": "string",
         "zip": "string",
         "city": "string"
-      } // | null
+      }, // | null
+
+      // Companions the account holder saved on a check-in (issue #605,
+      // ADR-0050). Create + delete only (no update); the owner (login or
+      // kiosk badge session acting on them) reads/creates/deletes, admins
+      // read. Deleted with the account by the privacy engine; not trimmed.
+      // The usage type is never saved.
+      "savedPersons": {
+        "{savedPersonId}": { // Auto-generated
+          "firstName": "string",
+          "lastName": "string",
+          "userType": "erwachsen | kind",
+          "createdAt": "timestamp",
+          "modifiedBy": "string | null",
+          "modifiedAt": "timestamp"
+        }
+      }
     }
   },
   "memberships": {

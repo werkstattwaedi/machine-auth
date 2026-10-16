@@ -4,7 +4,12 @@
 /** User type affects base fee */
 export type UserType = "erwachsen" | "kind" | "firma"
 
-/** Usage type affects fee calculation — top-level on checkout */
+/**
+ * Usage type affects fee calculation. Chosen per person on the check-in
+ * (issue #605, ADR-0050): a person's type decides their usage fee; the
+ * visit's type, derived from its persons ({@link deriveVisitUsageType}),
+ * decides machine time and material.
+ */
 export type UsageType =
   | "regular"
   | "ermaessigt"
@@ -87,7 +92,7 @@ export type DiscountLevel = "none" | "member"
  *
  * `service` (Dienstleistung, e.g. Keramik-Brennen, issue #685) is neither:
  * it shows in the workshop's upper section next to the machines, but bills
- * in the material bucket — allowed with „Nur Materialbezug“, not waived for
+ * in the material bucket — allowed with „Begleitung / nur Materialbezug“, not waived for
  * volunteers. Only its labels differ (`materialSectionLabels`).
  */
 export type ItemType = "machine" | "material" | "service"
@@ -200,7 +205,7 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
 export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
   regular: "Reguläre Nutzung",
   ermaessigt: "Ermässigte Nutzung (KulturLegi)",
-  materialbezug: "Nur Materialbezug",
+  materialbezug: "Begleitung / nur Materialbezug",
   intern: "Interne Nutzung",
   hangenmoos: "Hangenmoos AG",
   volunteering: "Freiwilligengruppe",
@@ -218,23 +223,24 @@ export const USAGE_TYPE_LABELS: Record<UsageType, string> = {
  */
 export const USAGE_DISCOUNT_LABELS: Partial<Record<UsageType, string>> = {
   ermaessigt: "Ermässigung",
-  materialbezug: "Nur Materialbezug",
+  materialbezug: "Begleitung / nur Materialbezug",
   hangenmoos: "Hangenmoos AG",
   volunteering: "Freiwilligengruppe",
   intern: "Interne Nutzung",
 }
 
 /**
- * Display order of the usage types in the checkout's Nutzungsart control
- * (issue #570): the common case first, then the discounts roughly by how
- * often they apply. `Object.keys(USAGE_TYPE_LABELS)` order is *not* the
- * display order.
+ * Display order of the usage types in the per-person Nutzungsart control
+ * (issues #570, #605): the common case first, then Begleitung (the reason
+ * the choice moved to the check-in), the discounts, and the owner-only
+ * types last. `Object.keys(USAGE_TYPE_LABELS)` order is *not* the display
+ * order.
  */
 export const USAGE_TYPE_ORDER: readonly UsageType[] = [
   "regular",
+  "materialbezug",
   "ermaessigt",
   "hangenmoos",
-  "materialbezug",
   "volunteering",
   "intern",
 ]
@@ -253,95 +259,61 @@ export interface UsageTypeInfo {
    * `regular` type — the UI renders no effect line then.
    */
   effect: string
-  /** Who the type is for, as a full du-form sentence ("Falls du …"). */
+  /** Who the type is for, as a sentence about the person ("Arbeitet …"). */
   appliesTo: string
   /**
-   * What the visitor declares by choosing the type. Discounts are
-   * self-declared; only KulturLegi and Hangenmoos carry the spot-check
-   * sentence. Null for `regular`.
+   * Only on the identified person's own line, and only while they are alone
+   * on the visit (issues #570, #605): the club needs to know *who* claimed
+   * to be a volunteer / on an internal project, and the type waives
+   * machines (and material) for the whole visit.
    */
-  declaration: string | null
-  /**
-   * Only offered to identified visitors (issue #570): the club needs to
-   * know *who* claimed to be a volunteer / on an internal project.
-   */
-  accountOnly: boolean
+  ownerOnly: boolean
 }
-
-const AUDIT_NOTE = " Wir behalten uns vor, stichprobenweise nachzuprüfen."
 
 export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
   regular: {
     effect: "",
-    appliesTo: "Für alle, die die Werkstatt benutzen.",
-    declaration: null,
-    accountOnly: false,
+    appliesTo: "Arbeitet heute in der Werkstatt.",
+    ownerOnly: false,
   },
   ermaessigt: {
     effect: "50% Ermässigung auf Nutzungsgebühr",
-    appliesTo: "Falls du eine gültige KulturLegi hast.",
-    declaration:
-      "Du bestätigst, deine gültige KulturLegi dabei zu haben." + AUDIT_NOTE,
-    accountOnly: false,
+    appliesTo: "Mit gültiger KulturLegi.",
+    ownerOnly: false,
   },
   hangenmoos: {
     effect: "Nutzungsgebühr wird nicht verrechnet",
-    appliesTo: "Falls du in einer Wohnung der Hangenmoos AG wohnst.",
-    declaration:
-      "Du bestätigst, in einer Wohnung der Hangenmoos AG zu wohnen." +
-      AUDIT_NOTE,
-    accountOnly: false,
+    appliesTo: "Wohnt in einer Wohnung der Hangenmoos AG.",
+    ownerOnly: false,
   },
   materialbezug: {
     // Machine usage is impossible here (guarded server-side), so the
     // machine multiplier of 0 is not worth a word to the visitor.
     effect: "Nutzungsgebühr wird nicht verrechnet",
     appliesTo:
-      "Falls du nicht in der Werkstatt arbeitest, sondern nur Material kaufst oder einen fertigen 3D-Druck abholst.",
-    declaration:
-      "Du bestätigst, heute nicht in der Werkstatt gearbeitet, sondern nur Material bezogen zu haben.",
-    accountOnly: false,
+      "Begleitet jemanden oder holt nur Material bzw. einen fertigen 3D-Druck ab.",
+    ownerOnly: false,
   },
   volunteering: {
     effect: "Nutzungsgebühr und Maschinen werden nicht verrechnet",
-    appliesTo:
-      "Falls du heute eine Werkstatt betreust und dabei an deinem eigenen Projekt arbeitest.",
-    declaration:
-      "Du bestätigst, heute als Werkstattbetreuung im Einsatz gewesen zu sein.",
-    accountOnly: true,
+    appliesTo: "Betreut heute eine Werkstatt und arbeitet am eigenen Projekt.",
+    ownerOnly: true,
   },
   intern: {
     effect: "Nutzungsgebühr, Maschinen und Material werden nicht verrechnet",
-    appliesTo: "Falls du an einem Projekt für die OWW selbst arbeitest.",
-    declaration:
-      "Du bestätigst, an einem OWW-internen Projekt gearbeitet zu haben.",
-    accountOnly: true,
+    appliesTo: "Arbeitet an einem Projekt für die OWW.",
+    ownerOnly: true,
   },
 }
 
-/**
- * Usage types offered in the checkout, in display order. Anonymous
- * checkouts never see the account-only types (issue #570); `current` is
- * always kept so a rehydrated selection can still be displayed.
- */
-export function selectableUsageTypes(
-  opts: { anonymous: boolean; current?: UsageType },
-): UsageType[] {
-  return USAGE_TYPE_ORDER.filter(
-    (t) =>
-      t === opts.current || !opts.anonymous || !USAGE_TYPE_INFO[t].accountOnly,
-  )
+/** Freiwilligengruppe / Interne Nutzung: the identified person's alone (CHK-32). */
+export function isOwnerOnlyUsage(usageType: UsageType): boolean {
+  return USAGE_TYPE_INFO[usageType]?.ownerOnly ?? false
 }
 
-/**
- * Why „Nur Materialbezug" is not selectable once the cart holds machine
- * usage. The server rejects that combination outright
- * (`assertUsageTypeAllowed`, issue #284); showing the reason on the option
- * itself (issue #628) beats letting the visitor submit into a generic
- * „Bitte erneut versuchen" toast that can never succeed.
- */
-export const MATERIALBEZUG_MACHINE_REASON =
-  "Nicht möglich, da Maschinen genutzt wurden."
+/** Why an owner-only type can't be picked while others are on the visit. */
+export const OWNER_ONLY_OTHERS_REASON =
+  "Nicht wählbar, solange weitere Personen erfasst sind."
 
 export interface UsageTypeOption {
   type: UsageType
@@ -350,36 +322,118 @@ export interface UsageTypeOption {
 }
 
 /**
- * {@link selectableUsageTypes} plus the per-option disabled state the
- * checkout's Nutzungsart control renders (issue #628). `materialbezug`
- * stays visible but disabled while the cart contains a machine item — the
- * client-side mirror of the server guard, so the visitor learns *why*
- * instead of hitting a `failed-precondition` on submit.
+ * The Nutzungsart options of one person on the check-in (issue #605), in
+ * display order. The owner-only types appear only on the identified
+ * person's own line — never for a guest check-in — and are disabled while
+ * anyone else is on the visit; `current` is always kept so a rehydrated
+ * selection can still be displayed.
  */
-export function usageTypeOptions(opts: {
+export function personUsageOptions(opts: {
+  isOwner: boolean
   anonymous: boolean
+  othersPresent: boolean
   current?: UsageType
-  hasMachineUsage: boolean
 }): UsageTypeOption[] {
-  return selectableUsageTypes(opts).map((type) =>
-    type === "materialbezug" && opts.hasMachineUsage
-      ? { type, disabledReason: MATERIALBEZUG_MACHINE_REASON }
+  const ownerLine = opts.isOwner && !opts.anonymous
+  return USAGE_TYPE_ORDER.filter(
+    (t) => t === opts.current || !isOwnerOnlyUsage(t) || ownerLine,
+  ).map((type) =>
+    isOwnerOnlyUsage(type) && opts.othersPresent
+      ? { type, disabledReason: OWNER_ONLY_OTHERS_REASON }
       : { type },
   )
 }
 
+/** A checkout person as far as the usage type is concerned. */
+export interface UsagePerson {
+  usageType?: UsageType | null
+  /** The identified person's own line (the checkout owner). */
+  isOwner?: boolean
+}
+
 /**
- * The usage type the checkout may actually submit: `materialbezug` with
- * machine usage falls back to `regular` (the correct price for someone who
- * used a machine); every other combination is returned unchanged. Used by
- * the wizard to fall back a rehydrated or stale selection once machine
- * items appear (NFC session syncing in, manual hours added), so the
- * disabled option is never the submitted one.
+ * A person's usage type. Checkouts from before issue #605 carry a single
+ * top-level type; `fallback` (that type) stands in for persons without one.
  */
-export function resolveUsageType(
-  usageType: UsageType,
-  opts: { hasMachineUsage: boolean },
+export function personUsageType(
+  person: Pick<UsagePerson, "usageType">,
+  fallback: UsageType = "regular",
 ): UsageType {
-  if (usageType === "materialbezug" && opts.hasMachineUsage) return "regular"
-  return usageType
+  return person.usageType ?? fallback
+}
+
+/**
+ * The visit's usage type, derived from its persons (issue #605, CHK-29):
+ * the owner's Freiwilligengruppe / Interne Nutzung; otherwise Begleitung /
+ * nur Materialbezug when every person has it; otherwise Reguläre Nutzung.
+ * It decides machine time and material — each person's usage fee follows
+ * their own type. It does NOT mark a checkout as purchase-only; that is
+ * `purchaseOnly` (see `isPurchaseOnly`).
+ */
+export function deriveVisitUsageType(
+  persons: readonly UsagePerson[],
+  fallback: UsageType = "regular",
+): UsageType {
+  const owner = persons.find((p) => p.isOwner)
+  if (owner) {
+    const t = personUsageType(owner, fallback)
+    if (isOwnerOnlyUsage(t)) return t
+  }
+  if (
+    persons.length > 0 &&
+    persons.every((p) => personUsageType(p, fallback) === "materialbezug")
+  ) {
+    return "materialbezug"
+  }
+  return "regular"
+}
+
+/**
+ * Machine time can't be billed when every person only accompanies or buys
+ * material (CHK-8): the visit's type would waive it. Check Out shows the
+ * error and the server refuses the close.
+ */
+export function machineUsageBlocked(
+  persons: readonly UsagePerson[],
+  hasMachineUsage: boolean,
+  fallback: UsageType = "regular",
+): boolean {
+  return (
+    hasMachineUsage &&
+    persons.length > 0 &&
+    persons.every((p) => personUsageType(p, fallback) === "materialbezug")
+  )
+}
+
+/**
+ * What the person closing the checkout confirms about one person with a
+ * discounted usage type (CHK-30), in du-form for themselves and by first
+ * name for anyone else. Null for Reguläre Nutzung.
+ */
+export function usageDeclaration(
+  usageType: UsageType,
+  person: { firstName: string; isSelf: boolean },
+): string | null {
+  const name = person.firstName.trim() || "Diese Person"
+  const self = person.isSelf
+  switch (usageType) {
+    case "materialbezug":
+      return self
+        ? "Du arbeitest heute nicht selbst in der Werkstatt."
+        : `${name} arbeitet heute nicht selbst in der Werkstatt.`
+    case "ermaessigt":
+      return self
+        ? "Du hast eine gültige KulturLegi dabei."
+        : `${name} hat eine gültige KulturLegi dabei.`
+    case "hangenmoos":
+      return self
+        ? "Du wohnst in einer Wohnung der Hangenmoos AG."
+        : `${name} wohnt in einer Wohnung der Hangenmoos AG.`
+    case "volunteering":
+      return "Du bist heute als Werkstattbetreuung im Einsatz."
+    case "intern":
+      return "Du arbeitest an einem OWW-internen Projekt."
+    default:
+      return null
+  }
 }

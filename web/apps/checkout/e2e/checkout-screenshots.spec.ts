@@ -1,7 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect, type Locator, type Page } from "@playwright/test"
 import {
   clearCheckoutsDeep,
   clearCollections,
@@ -38,20 +38,34 @@ async function goToSummary(page: Page) {
 }
 
 /**
+ * Pick a Nutzungsart on the check-in (issue #605: chosen per person there,
+ * read-only on Check Out). `scope` is the person's strip or card.
+ */
+async function chooseUsageType(page: Page, scope: Locator, label: string) {
+  await scope.getByTestId("usage-type-trigger").click()
+  await page.getByRole("option", { name: label, exact: true }).click()
+  await expect(scope.getByTestId("usage-type-trigger")).toContainText(label)
+}
+
+/**
  * Navigate to checkout summary with a holz item added. `signedIn` runs the
  * flow as the E2E auth user instead of an anonymous guest — needed for the
- * account-only usage types (Freiwilligengruppe, Interne Nutzung), which an
- * anonymous checkout never offers (#570).
+ * owner-only usage types (Freiwilligengruppe, Interne Nutzung), which a
+ * guest check-in never offers (#570, #605); `usageType` is then picked on
+ * the owner's line before advancing.
  */
 async function goToSummaryWithItems(
   page: Page,
-  { signedIn = false }: { signedIn?: boolean } = {},
+  { signedIn = false, usageType }: { signedIn?: boolean; usageType?: string } = {},
 ) {
   if (signedIn) {
     await signIn(page)
     // Logged-in user sees the pre-filled form; advance to workshops.
     await page.goto("/")
     await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
+    if (usageType) {
+      await chooseUsageType(page, page.getByTestId("identity-strip").first(), usageType)
+    }
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
   } else {
@@ -107,12 +121,14 @@ async function signIn(page: Page) {
  * Uses a logged-in user so the commit closes an existing open doc
  * (open → closed). Logged-in users also have no auto-reset timer.
  */
-async function goToSignedInSummary(page: Page) {
+async function goToSignedInSummary(page: Page, usageType?: string) {
   await signIn(page)
 
   // Navigate to checkout — logged-in user sees pre-filled form
   await page.goto("/")
-  await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
+  const strip = page.getByTestId("identity-strip").first()
+  await expect(strip).toBeVisible({ timeout: 10_000 })
+  if (usageType) await chooseUsageType(page, strip, usageType)
 
   // Advance to workshops
   await page.getByRole("button", { name: "Weiter" }).click()
@@ -380,13 +396,16 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-tip.png")
   })
 
-  test("summary — Nutzungsgebühren expanded (Nutzungsart + Personen)", async ({ page }) => {
+  test("summary — Nutzungsgebühren expanded (per-person lines)", async ({ page }) => {
     await goToSummary(page)
 
-    // The first type-of-cost row opens by itself when arriving from the
-    // visit step (#570) — panel shows the Nutzungsart dropdown plus a
-    // "Personen" list with per-person fees.
-    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
+    // Everyone on Reguläre Nutzung: the section starts collapsed (CHK-31)
+    // and opens to read-only per-person lines (#605).
+    const section = page.getByRole("button", { name: /Nutzungsgebühren/ })
+    await expect(section).toHaveAttribute("aria-expanded", "false")
+    await section.click()
+    await expect(page.getByTestId("usage-fee-person")).toHaveCount(1)
+    await expect(page.getByTestId("usage-type-trigger")).toHaveCount(0)
 
     // Click a neutral spot so the screenshot is stable
     await page.locator("h1").first().click()
@@ -394,13 +413,15 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-nutzung-expanded.png")
   })
 
-  // Issue #570: the Nutzungsart dropdown explains every usage type (price
-  // effect + who it applies to). Anonymous guests never see the two
-  // account-only types; the open list is the state worth pixel-guarding.
-  test("summary — Nutzungsart dropdown open (anonymous: account-only types hidden)", async ({ page }) => {
-    await goToSummary(page)
+  // Issues #570, #605: the Nutzungsart dropdown on the check-in explains
+  // every usage type (price effect + who it applies to). A guest never sees
+  // the two owner-only types; the open list is worth pixel-guarding.
+  test("check-in — Nutzungsart dropdown open (guest: owner-only types hidden)", async ({ page }) => {
+    await page.goto("/")
+    await openGuestSection(page)
 
-    await page.getByLabel("Nutzungsart").click()
+    const card = page.getByTestId("person-card").first()
+    await card.getByTestId("usage-type-trigger").click()
     await expect(
       page.getByRole("option", { name: "Hangenmoos AG", exact: true }),
     ).toBeVisible()
@@ -411,23 +432,23 @@ test.describe("Checkout step screenshots", () => {
       page.getByRole("option", { name: "Interne Nutzung", exact: true }),
     ).toBeHidden()
 
-    await expect(page).toHaveScreenshot("checkout-summary-nutzungsart-open.png")
+    await expect(page).toHaveScreenshot("checkin-nutzungsart-open.png")
 
     // Escape closes without changing the selection.
     await page.keyboard.press("Escape")
     await expect(page.getByRole("option", { name: "Hangenmoos AG", exact: true })).toBeHidden()
-    await expect(page.getByLabel("Nutzungsart")).toContainText("Reguläre Nutzung")
+    await expect(card.getByTestId("usage-type-trigger")).toContainText("Reguläre Nutzung")
   })
 
-  // Issue #628: „Nur Materialbezug" is rejected by the server once the cart
-  // holds machine usage (#284). With a manual-hours machine line the option
-  // is rendered disabled with the reason, so the invalid combination can
-  // never reach the server guard (which used to surface as a generic
-  // „Bitte erneut versuchen" toast).
-  test("summary — Nutzungsart dropdown: Materialbezug disabled with machine usage", async ({ page }) => {
+  // CHK-8 (#605): machine time with every person on „Begleitung / nur
+  // Materialbezug" can't be billed — Check Out says so in Maschinen and
+  // withholds the payment button, instead of a server refusal on submit.
+  test("summary — machine usage with everyone on Begleitung is blocked", async ({ page }) => {
     await signIn(page)
     await page.goto("/")
-    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
+    const strip = page.getByTestId("identity-strip").first()
+    await expect(strip).toBeVisible({ timeout: 10_000 })
+    await chooseUsageType(page, strip, "Begleitung / nur Materialbezug")
     await page.getByRole("button", { name: "Weiter" }).click()
     await expect(page.getByText("Werkstätten wählen")).toBeVisible()
 
@@ -446,31 +467,12 @@ test.describe("Checkout step screenshots", () => {
     await checkoutBtn.click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").click()
-    const materialbezug = page.getByRole("option", {
-      name: "Nur Materialbezug",
-      exact: true,
-    })
-    await expect(materialbezug).toBeVisible()
-    await expect(materialbezug).toHaveAttribute("aria-disabled", "true")
-    await expect(page.getByTestId("usage-type-disabled-reason")).toHaveText(
-      "Nicht möglich, da Maschinen genutzt wurden.",
-    )
-    // The other discounts stay selectable.
-    await expect(
-      page.getByRole("option", { name: "Hangenmoos AG", exact: true }),
-    ).not.toHaveAttribute("aria-disabled", "true")
+    await expect(page.getByTestId("machine-usage-blocked")).toBeVisible()
+    await expect(page.getByTestId("payment-option-rechnung")).toBeDisabled()
 
-    await expect(page).toHaveScreenshot(
-      "checkout-summary-nutzungsart-machine-disabled.png",
-    )
-
-    // Clicking the disabled option changes nothing.
-    await materialbezug.click({ force: true })
-    await page.keyboard.press("Escape")
-    await expect(materialbezug).toBeHidden()
-    await expect(page.getByLabel("Nutzungsart")).toContainText("Reguläre Nutzung")
+    await page.locator("h1").first().click()
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(page).toHaveScreenshot("checkout-summary-machine-blocked.png")
   })
 
   test("summary — Materialbezug expanded with workshop items", async ({ page }) => {
@@ -490,24 +492,22 @@ test.describe("Checkout step screenshots", () => {
   // No existing fixture used a discounted usage type, so the new rendering
   // had no visual-regression coverage (PR #346 review feedback).
   test("summary — Freiwilligengruppe waives entry, bills material (discount note)", async ({ page }) => {
-    // Account-only usage type → identified visitor (#570).
-    await goToSummaryWithItems(page, { signedIn: true })
+    // Owner-only usage type → identified visitor, picked on the check-in
+    // (#570, #605).
+    await goToSummaryWithItems(page, {
+      signedIn: true,
+      usageType: "Freiwilligengruppe",
+    })
 
-    // Nutzungsgebühren is open on arrival (#570); pick Freiwilligengruppe
-    // from the rich dropdown.
-    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").click()
-    await page.getByRole("option", { name: "Freiwilligengruppe", exact: true }).click()
-
-    // The field now carries the effect line and the self-declaration note
-    // (#570) — the entry-fee waiver is explained there, not as a section note.
+    // A discounted type opens Nutzungsgebühren on arrival (CHK-31) with the
+    // confirmation box (CHK-30).
+    await expect(
+      page.getByRole("button", { name: /Nutzungsgebühren/ }),
+    ).toHaveAttribute("aria-expanded", "true")
     await expect(page.getByTestId("usage-type-declaration")).toBeVisible()
 
     // Click a neutral spot so the screenshot is stable.
     await page.locator("h1").first().click()
-    // The popper dropdown sits at its flip threshold: opening below makes
-    // the option click scroll the page, opening above doesn't — so the
-    // scroll offset left behind is nondeterministic.
     await page.evaluate(() => window.scrollTo(0, 0))
 
     await expect(page).toHaveScreenshot("checkout-summary-volunteering-discount.png")
@@ -518,12 +518,12 @@ test.describe("Checkout step screenshots", () => {
   // discount notes now spell out every waived section. Expand both
   // Nutzungsgebühren and Materialbezug so all notes are captured.
   test("summary — Interne Nutzung waives all sections (discount notes, CHF 0)", async ({ page }) => {
-    // Account-only usage type → identified visitor (#570).
-    await goToSummaryWithItems(page, { signedIn: true })
-
-    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").click()
-    await page.getByRole("option", { name: "Interne Nutzung", exact: true }).click()
+    // Owner-only usage type → identified visitor, picked on the check-in
+    // (#570, #605).
+    await goToSummaryWithItems(page, {
+      signedIn: true,
+      usageType: "Interne Nutzung",
+    })
 
     // Expand Materialbezug too so its waived note is visible.
     await page.getByRole("button", { name: /Materialbezug/ }).click()
@@ -569,25 +569,19 @@ test.describe("Checkout step screenshots", () => {
     })
   })
 
-  // Issue #237 / #750: a CHF 0 visit ("Interne Nutzung") offers the single
-  // "Kostenlos" card instead of the payment methods; it closes at once.
+  // Issue #237 / #750: a CHF 0 visit ("Interne Nutzung", chosen on the
+  // check-in, #605) offers the single "Kostenlos" card instead of the
+  // payment methods; it closes at once.
   test("Step 3 · zero amount (Interne Nutzung) — single 'Kostenlos' card, then done", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-    await goToSignedInSummary(page)
-
-    // Switch to "Interne Nutzung" (the section is open on arrival, #570).
-    // This zeros entry + machine + material costs both client- and
-    // server-side (issue #199), giving a CHF 0.00 bill.
-    await expect(page.getByLabel("Nutzungsart")).toBeVisible()
-    await page.getByLabel("Nutzungsart").click()
-    await page.getByRole("option", { name: "Interne Nutzung", exact: true }).click()
+    // "Interne Nutzung" zeros entry + machine + material costs both client-
+    // and server-side (issue #199), giving a CHF 0.00 bill.
+    await goToSignedInSummary(page, "Interne Nutzung")
 
     const free = page.getByTestId("payment-option-free")
     await expect(free).toBeVisible()
     await expect(page.getByTestId("payment-option-rechnung")).toHaveCount(0)
-    await page.locator("h1").first().click()
-    // Scroll to the bottom: the shot is of the card, and the select's
-    // close leaves the page at a position that varies between runs.
+    // Scroll to the bottom: the shot is of the card.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkout-payment-zero.png")
 

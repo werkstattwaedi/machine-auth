@@ -287,6 +287,7 @@ describe("Account/guest switcher", () => {
           userType: "erwachsen",
           termsAccepted: false,
           isPreFilled: false,
+          usageType: "regular",
           userId: null,
         },
       ],
@@ -382,6 +383,7 @@ describe("Account/guest switcher", () => {
           userType: "erwachsen",
           termsAccepted: true,
           isPreFilled: true,
+          usageType: "regular",
           userId: null,
         },
       ],
@@ -404,6 +406,7 @@ describe("Account/guest switcher", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        usageType: "regular",
         userId: "u-self",
       }],
     })
@@ -429,6 +432,7 @@ describe("Account/guest switcher", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        usageType: "regular",
         userId: "u-self",
       }],
     })
@@ -452,6 +456,7 @@ describe("Account/guest switcher", () => {
         userType: "erwachsen",
         termsAccepted: true,
         isPreFilled: true,
+        usageType: "regular",
         userId: "u-self",
       }],
     })
@@ -481,6 +486,7 @@ describe("Person removal", () => {
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: true,
+    usageType: "regular",
     userId: "u-self",
   }
   const legacyMember: CheckoutPerson = {
@@ -491,6 +497,7 @@ describe("Person removal", () => {
     userType: "kind",
     termsAccepted: true,
     isPreFilled: true,
+    usageType: "regular",
     userId: "u-lia",
   }
 
@@ -541,6 +548,7 @@ describe("Identity strip — keyed by userId, not index", () => {
     userType: "kind",
     termsAccepted: true,
     isPreFilled: true,
+    usageType: "regular",
     userId: "u-lia",
   }
   const selfPerson: CheckoutPerson = {
@@ -551,6 +559,7 @@ describe("Identity strip — keyed by userId, not index", () => {
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: true,
+    usageType: "regular",
     userId: "u-self",
   }
 

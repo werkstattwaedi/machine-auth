@@ -131,7 +131,11 @@ export async function buildPrivacyReport(
         persons: (checkout.persons ?? []).map((p) =>
           personMatches(p, subject)
             ? p
-            : { userType: p.userType, redacted: true }
+            : {
+                userType: p.userType,
+                ...(p.usageType ? { usageType: p.usageType } : {}),
+                redacted: true,
+              }
         ),
       };
       return {
@@ -227,6 +231,10 @@ export async function buildPrivacyReport(
   }
 
   const userDoc = subject.userRef ? await subject.userRef.get() : null;
+  // Companions the subject saved for the next check-in (issue #605).
+  const savedPersons = subject.userRef
+    ? await subject.userRef.collection("savedPersons").get()
+    : null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -254,6 +262,7 @@ export async function buildPrivacyReport(
         ? { id: userDoc.id, ...(serializeValue(userDoc.data()) as object) }
         : null,
     tokens: serializeDocs(tokens?.docs ?? []),
+    savedPersons: serializeDocs(savedPersons?.docs ?? []),
     checkouts: checkoutsWithItems,
     personsAppearances: appearances,
     bills: serializeDocs(bills?.docs ?? []),

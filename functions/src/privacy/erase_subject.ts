@@ -119,6 +119,8 @@ function redactPerson(p: CheckoutPersonEntity): CheckoutPersonEntity {
   if (p.entryFeeWaivedToday !== undefined) {
     redacted.entryFeeWaivedToday = p.entryFeeWaivedToday;
   }
+  // A stats dimension (issue #605), not identity.
+  if (p.usageType !== undefined) redacted.usageType = p.usageType;
   return redacted;
 }
 
@@ -340,6 +342,11 @@ export async function eraseSubject(
           .get()
       ).docs
     : [];
+  // Companions the subject saved (issue #605): third-party data that only
+  // exists for the subject's account, so it goes with it.
+  const savedPersons = subject.userRef
+    ? (await subject.userRef.collection("savedPersons").get()).docs
+    : [];
   const loginCodes = subject.email
     ? (
         await deps.db
@@ -466,6 +473,12 @@ export async function eraseSubject(
   record(state, "usage_machine", usages.length, `delete ${usages.length} usage record(s)`);
   record(state, "authentications", authDocs.length, `delete ${authDocs.length} authentication(s)`);
   record(state, "tokens", tokens.length, `delete ${tokens.length} token(s) atomically with the users doc`);
+  record(
+    state,
+    "users/savedPersons",
+    savedPersons.length,
+    `delete ${savedPersons.length} saved person(s)`
+  );
   record(state, "users", subject.userDocExists ? 1 : 0, "delete users doc");
   record(
     state,
@@ -628,6 +641,9 @@ export async function eraseSubject(
     }
     await batch.commit();
   }
+
+  // Before the users doc: a deleted parent doesn't delete its subcollection.
+  await batchedDelete(deps.db, savedPersons.map((d) => d.ref));
 
   // Tokens + users doc in ONE batch (invariant: never a token without its
   // user — a dangling token hard-rejects badge-in but must not linger).

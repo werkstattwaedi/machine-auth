@@ -1434,7 +1434,9 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId,
           usageType: "intern" as UsageType,
-          persons: [ADULT],
+          // Interne Nutzung is the owner's alone (CHK-32, issue #605): the
+          // owner line carries their id, as the client sends it (#741).
+          persons: [{ ...wire(ADULT), userId: uid }],
           summary: {
             totalPrice: 0,
             entryFees: 0,
@@ -2301,6 +2303,266 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         expect(await listBills()).to.have.length(0);
         expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
       });
+    });
+  });
+
+  // Issue #605 (ADR-0050): each person carries their own usage type; the
+  // server derives the visit's and validates the owner-only types.
+  describe("per-person usage types (issue #605)", () => {
+    const EMPTY_SUMMARY = { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 };
+
+    function sameDayInstant(): Date {
+      const minuteAgo = new Date(Date.now() - 60_000);
+      return isSameBusinessDay(minuteAgo, new Date()) ? minuteAgo : new Date();
+    }
+
+    async function seedSavedPerson(ownerUid: string, id: string): Promise<void> {
+      await getFirestore()
+        .collection("users").doc(ownerUid)
+        .collection("savedPersons").doc(id)
+        .set({
+          firstName: "Kim",
+          lastName: "Kind",
+          userType: "kind",
+          createdAt: Timestamp.now(),
+          modifiedBy: ownerUid,
+          modifiedAt: Timestamp.now(),
+        });
+    }
+
+    it("bills each person by their own type and persists it", async () => {
+      const uid = "ppu-mixed";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      const owner = { ...ADULT, userRef: db.collection("users").doc(uid) };
+      await seedCheckout("co-ppu-mixed", { ownerUid: uid, persons: [owner, CHILD] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-mixed",
+          persons: [
+            { ...wire(owner), usageType: "materialbezug" },
+            { ...wire(CHILD), usageType: "regular" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      // Accompanying adult free, child pays the regular child fee.
+      expect(result.amount).to.equal("7.50");
+      const checkout = await getCheckout("co-ppu-mixed");
+      expect(checkout.usageType).to.equal("regular");
+      expect(checkout.persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
+      expect(checkout.summary?.entryFees).to.equal(22.5);
+      expect(checkout.summary?.totalPrice).to.equal(7.5);
+    });
+
+    it("refuses machine time when every person is Begleitung", async () => {
+      const uid = "ppu-machine";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-machine", {
+        ownerUid: uid,
+        items: [{ origin: "nfc", type: "machine", quantity: 1, unitPrice: 25, totalPrice: 25 }],
+      });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-machine",
+              persons: [
+                { ...wire(ADULT), userId: uid, usageType: "materialbezug" },
+                { ...wire(CHILD), usageType: "materialbezug" },
+              ],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "failed-precondition",
+      );
+    });
+
+    it("refuses an owner-only type while others are on the visit", async () => {
+      const uid = "ppu-intern-group";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-intern-group", { ownerUid: uid });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-intern-group",
+              persons: [
+                { ...wire(ADULT), userId: uid, usageType: "intern" },
+                { ...wire(CHILD), usageType: "regular" },
+              ],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("refuses an owner-only type on a guest check-in", async () => {
+      await expectHttpsError(
+        () =>
+          call({
+            uid: null,
+            data: {
+              newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
+              persons: [{ ...wire(ADULT), usageType: "volunteering" }],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("rejects an unknown per-person usage type", async () => {
+      const uid = "ppu-unknown";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-unknown", { ownerUid: uid });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-unknown",
+              persons: [{ ...wire(ADULT), userId: uid, usageType: "gratis" }],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("legacy client: an owner-only top-level type goes to the owner line only", async () => {
+      const uid = "ppu-legacy-intern";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-legacy", { ownerUid: uid });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-legacy",
+          usageType: "intern" as UsageType,
+          persons: [{ ...wire(ADULT), userId: uid }, wire(CHILD)],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      expect(result.amount).to.equal("7.50");
+      const checkout = await getCheckout("co-ppu-legacy");
+      expect(checkout.usageType).to.equal("intern");
+      expect(checkout.persons.map((p) => p.usageType)).to.deep.equal(["intern", "regular"]);
+    });
+
+    it("keeps the stored purchaseOnly flag; a guest create writes false", async () => {
+      const uid = "ppu-purchase-only";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-po", { ownerUid: uid });
+      await db.collection("checkouts").doc("co-ppu-po").update({ purchaseOnly: true });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-po",
+          persons: [{ ...wire(ADULT), userId: uid, usageType: "materialbezug" }],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+      expect((await getCheckout("co-ppu-po")).purchaseOnly).to.equal(true);
+
+      await call({
+        uid: null,
+        data: {
+          newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
+          persons: [{ ...wire(ADULT), usageType: "regular" }],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+      const created = (await db.collection("checkouts").where("userId", "==", null).get()).docs;
+      expect(created).to.have.length(1);
+      expect((created[0].data() as CheckoutEntity).purchaseOnly).to.equal(false);
+    });
+
+    it("keeps a savedPersonId only when the owner's saved person exists", async () => {
+      const uid = "ppu-saved";
+      await seedUser(uid, "erwachsen");
+      await seedSavedPerson(uid, "kim");
+      await seedSavedPerson("someone-else", "theirs");
+      await seedCheckout("co-ppu-saved", { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-saved",
+          persons: [
+            { ...wire(ADULT), userId: uid, usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), name: "Repeat", usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), name: "Forged", usageType: "regular", savedPersonId: "theirs" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      const checkout = await getCheckout("co-ppu-saved");
+      // The owner's own line never carries one; repeats and other owners'
+      // ids are dropped.
+      expect(checkout.persons.map((p) => p.savedPersonId ?? null)).to.deep.equal([
+        null,
+        "kim",
+        null,
+        null,
+      ]);
+    });
+
+    it("waives a saved person's fee already paid earlier the same day", async () => {
+      const uid = "ppu-saved-waiver";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      await seedSavedPerson(uid, "kim");
+      const at = Timestamp.fromDate(sameDayInstant());
+      await db.collection("checkouts").doc("co-ppu-saved-prior").set({
+        userId: db.collection("users").doc(uid),
+        status: "closed",
+        usageType: "regular",
+        created: at,
+        closedAt: at,
+        workshopsVisited: ["holz"],
+        persons: [
+          // Owner only accompanied — their fee was NOT charged.
+          { ...ADULT, userRef: db.collection("users").doc(uid), usageType: "materialbezug" },
+          { ...CHILD, savedPersonId: "kim", usageType: "regular" },
+        ],
+        modifiedBy: uid,
+        modifiedAt: at,
+        summary: { totalPrice: 7.5, entryFees: 22.5, machineCost: 0, materialCost: 0, tip: 0, discountAmount: 15 },
+      });
+      await seedCheckout("co-ppu-saved-second", { ownerUid: uid });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-saved-second",
+          persons: [
+            { ...wire(ADULT), userId: uid, usageType: "regular" },
+            { ...wire(CHILD), usageType: "regular", savedPersonId: "kim" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      // Child already paid today; the owner didn't (Begleitung) and pays now.
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-ppu-saved-second");
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+      expect(checkout.persons[1].entryFeeWaivedToday).to.equal(true);
     });
   });
 });

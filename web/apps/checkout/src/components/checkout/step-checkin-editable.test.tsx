@@ -23,6 +23,7 @@ const prefilled: CheckoutPerson = {
   userType: "erwachsen",
   termsAccepted: true,
   isPreFilled: true,
+  usageType: "regular",
   userId: null,
 }
 

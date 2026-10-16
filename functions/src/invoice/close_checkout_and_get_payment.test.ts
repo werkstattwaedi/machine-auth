@@ -17,6 +17,7 @@ import {
   isValidItem,
   priceCheckoutItems,
   recomputeSummary,
+  resolvePersonUsageTypes,
 } from "./close_checkout_and_get_payment";
 import type {
   CheckoutItemEntity,
@@ -412,6 +413,24 @@ describe("assertUsageTypeAllowed (issue #284 loophole guards)", () => {
     );
   });
 
+  it("rejects machine usage when every person is Begleitung (issue #605)", () => {
+    expectThrows(() =>
+      assertUsageTypeAllowed("materialbezug", {
+        persons: [{ usageType: "materialbezug" }, { usageType: "materialbezug" }],
+        hasMachineUsage: true,
+        hasMembershipItem: false,
+      }),
+    );
+  });
+
+  it("allows machine usage when one person is not Begleitung (issue #605)", () => {
+    assertUsageTypeAllowed("regular", {
+      persons: [{ usageType: "materialbezug" }, { usageType: "regular" }],
+      hasMachineUsage: true,
+      hasMembershipItem: false,
+    });
+  });
+
   it("allows materialbezug without machine usage", () => {
     // No throw.
     assertUsageTypeAllowed("materialbezug", {
@@ -517,7 +536,7 @@ describe("priceCheckoutItems: Keramik-Brennen as a service (issue #685)", () => 
         usageType: "materialbezug",
         items: [brennen("machine")],
       }),
-    ).to.throw(/Materialbezug ist nicht möglich/);
+    ).to.throw(/alle Personen sind als „Begleitung \/ nur Materialbezug“ erfasst/);
   });
 });
 
@@ -540,5 +559,131 @@ describe("assertBadgeItemsBelongToOwner (badge needs an identified owner)", () =
     assertBadgeItemsBelongToOwner([{ tokenId: "04c339aa1e1890" }], userRef);
     assertBadgeItemsBelongToOwner([{}], null);
     assertBadgeItemsBelongToOwner([], null);
+  });
+});
+
+describe("resolvePersonUsageTypes (issue #605)", () => {
+  const ownerRef = { id: "owner" } as never;
+  const owner: CheckoutPersonEntity = { ...adultPerson, userRef: ownerRef };
+
+  function expectCode(fn: () => unknown, code: string, message?: RegExp) {
+    try {
+      fn();
+      throw new Error("expected throw, got success");
+    } catch (err: any) {
+      expect(err.code ?? "").to.contain(code);
+      if (message) expect(err.message).to.match(message);
+    }
+  }
+
+  it("keeps each person's own type and derives the visit's", () => {
+    const { persons, usageType } = resolvePersonUsageTypes(
+      [
+        { ...owner, usageType: "materialbezug" },
+        { ...childPerson, usageType: "regular" },
+      ],
+      "owner",
+      undefined,
+    );
+    expect(persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
+    expect(usageType).to.equal("regular");
+  });
+
+  it("derives Begleitung when every person has it", () => {
+    const { usageType } = resolvePersonUsageTypes(
+      [
+        { ...adultPerson, usageType: "materialbezug" },
+        { ...childPerson, usageType: "materialbezug" },
+      ],
+      null,
+      undefined,
+    );
+    expect(usageType).to.equal("materialbezug");
+  });
+
+  it("derives the owner's owner-only type while alone", () => {
+    const { usageType } = resolvePersonUsageTypes(
+      [{ ...owner, usageType: "volunteering" }],
+      "owner",
+      undefined,
+    );
+    expect(usageType).to.equal("volunteering");
+  });
+
+  it("legacy client: every person gets the top-level type", () => {
+    const { persons, usageType } = resolvePersonUsageTypes(
+      [owner, childPerson],
+      "owner",
+      "ermaessigt",
+    );
+    expect(persons.map((p) => p.usageType)).to.deep.equal(["ermaessigt", "ermaessigt"]);
+    expect(usageType).to.equal("regular");
+  });
+
+  it("legacy client: an owner-only type goes to the owner line only", () => {
+    const { persons, usageType } = resolvePersonUsageTypes(
+      [owner, childPerson],
+      "owner",
+      "intern",
+    );
+    expect(persons.map((p) => p.usageType)).to.deep.equal(["intern", "regular"]);
+    expect(usageType).to.equal("intern");
+  });
+
+  it("legacy client: an owner-only type without an owner line is refused", () => {
+    expectCode(
+      () => resolvePersonUsageTypes([adultPerson], null, "volunteering"),
+      "invalid-argument",
+      /nur für die angemeldete Person/,
+    );
+  });
+
+  it("requires a top-level type when no person carries one", () => {
+    expectCode(() => resolvePersonUsageTypes([adultPerson], null, undefined), "invalid-argument");
+  });
+
+  it("refuses an owner-only type on a non-owner line", () => {
+    expectCode(
+      () =>
+        resolvePersonUsageTypes(
+          [{ ...owner, usageType: "regular" }, { ...childPerson, usageType: "intern" }],
+          "owner",
+          undefined,
+        ),
+      "invalid-argument",
+      /nur für die angemeldete Person/,
+    );
+  });
+
+  it("refuses an owner-only type on the owner line while others are present", () => {
+    expectCode(
+      () =>
+        resolvePersonUsageTypes(
+          [{ ...owner, usageType: "intern" }, { ...childPerson, usageType: "regular" }],
+          "owner",
+          undefined,
+        ),
+      "invalid-argument",
+      /solange weitere Personen erfasst sind/,
+    );
+  });
+
+  it("refuses an owner-only type without an owner (guest check-in)", () => {
+    expectCode(
+      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "volunteering" }], null, undefined),
+      "invalid-argument",
+    );
+  });
+
+  it("does not treat a userRef of someone else as the owner", () => {
+    expectCode(
+      () =>
+        resolvePersonUsageTypes(
+          [{ ...adultPerson, userRef: { id: "other" } as never, usageType: "intern" }],
+          "owner",
+          undefined,
+        ),
+      "invalid-argument",
+    );
   });
 });

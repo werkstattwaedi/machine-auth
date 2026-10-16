@@ -1,13 +1,14 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// The lean correction editor (ADR-0042): persons (user type + waiver),
-// usage type, free-form line items, tip. Purely presentational — the page
+// The lean correction editor (ADR-0042): persons (user type, usage type
+// — per person since issue #605 — and waiver), free-form line items, tip. Purely presentational — the page
 // owns the draft (`lib/visit-correction.ts`) and the estimate.
 
 import { useRef } from "react"
 import {
   USAGE_TYPE_LABELS,
+  USAGE_TYPE_ORDER,
   USER_TYPE_LABELS,
   type UsageType,
   type UserType,
@@ -33,7 +34,6 @@ import {
   TableRow,
 } from "@modules/components/ui/table"
 import {
-  USAGE_TYPES,
   newItemRow,
   rowTotal,
   type CorrectionDraft,
@@ -81,6 +81,7 @@ export function CorrectVisitEditor({
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Typ</TableHead>
+              <TableHead>Nutzungsart</TableHead>
               <TableHead>Nutzungsgebühr heute bereits bezahlt</TableHead>
             </TableRow>
           </TableHeader>
@@ -107,6 +108,24 @@ export function CorrectVisitEditor({
                   </Select>
                 </TableCell>
                 <TableCell>
+                  <Select
+                    value={person.usageType}
+                    onValueChange={(v) => patchPerson(i, { usageType: v as UsageType })}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger className="w-56" aria-label={`Nutzungsart ${person.name}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {USAGE_TYPE_ORDER.map((ut) => (
+                        <SelectItem key={ut} value={ut}>
+                          {USAGE_TYPE_LABELS[ut] ?? ut}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
                   <Checkbox
                     checked={person.entryFeeWaivedToday}
                     onCheckedChange={(v) => patchPerson(i, { entryFeeWaivedToday: v === true })}
@@ -121,25 +140,6 @@ export function CorrectVisitEditor({
       </section>
 
       <section className="flex flex-wrap items-end gap-6">
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-usage`}>Nutzungsart</Label>
-          <Select
-            value={draft.usageType}
-            onValueChange={(v) => patch({ usageType: v as UsageType })}
-            disabled={disabled}
-          >
-            <SelectTrigger id={`${idPrefix}-usage`} className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {USAGE_TYPES.map((ut) => (
-                <SelectItem key={ut} value={ut}>
-                  {USAGE_TYPE_LABELS[ut] ?? ut}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         <div className="space-y-2">
           <Label htmlFor={`${idPrefix}-tip`}>Trinkgeld</Label>
           <Input

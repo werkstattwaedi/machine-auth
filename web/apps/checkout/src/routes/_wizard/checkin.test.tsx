@@ -94,8 +94,12 @@ const anonPerson: CheckoutPerson = {
   userType: "erwachsen",
   termsAccepted: true,
   isPreFilled: false,
+  usageType: "regular",
   userId: null,
 }
+
+// What saveCompanions hands on: the roster with a saved-person link.
+const linkedPersons: CheckoutPerson[] = [{ ...anonPerson, savedPersonId: "s-1" }]
 
 interface CtxOverrides {
   isAnonymous: boolean
@@ -103,6 +107,7 @@ interface CtxOverrides {
   identifiedByBadge?: boolean
   openCheckout?: { id: string; usageType: string } | null
   persistPersons?: ReturnType<typeof vi.fn>
+  saveCompanions?: ReturnType<typeof vi.fn>
 }
 
 function buildCtx({
@@ -111,6 +116,7 @@ function buildCtx({
   identifiedByBadge = false,
   openCheckout = null,
   persistPersons = vi.fn().mockResolvedValue(undefined),
+  saveCompanions = vi.fn().mockResolvedValue(linkedPersons),
 }: CtxOverrides) {
   return {
     persons: [anonPerson],
@@ -130,6 +136,10 @@ function buildCtx({
     tagAuthError: null,
     startOver: vi.fn().mockResolvedValue(undefined),
     persistPersons,
+    saveCompanions,
+    savedPersons: [],
+    deleteSavedPerson: vi.fn().mockResolvedValue(undefined),
+    pricingConfig: null,
     signInAnonymouslyIfNeeded: vi.fn().mockResolvedValue(undefined),
   }
 }
@@ -279,7 +289,9 @@ describe("CheckinRoute — kiosk auto-start gating (issue #732)", () => {
     mockBridge.available = true
     const { ctx } = renderCheckin(badgeKiosk)
     await expect(startPendingVisit()).resolves.toBe("Andrea")
-    expect(ctx.persistPersons).toHaveBeenCalledWith({ usageType: "regular" })
+    expect(ctx.persistPersons).toHaveBeenCalledWith({ startVisit: true, persons: linkedPersons })
+    // Issue #605: ticked companions are saved on the hand-off path too.
+    expect(ctx.saveCompanions).toHaveBeenCalledTimes(1)
     expect(ctx.startOver).not.toHaveBeenCalled()
   })
 
@@ -310,7 +322,13 @@ describe("CheckinRoute — Besuch starten (issue #732)", () => {
     await waitFor(() =>
       expect(ctx.startOver).toHaveBeenCalledWith({ startedHint: "Andrea" }),
     )
-    expect(ctx.persistPersons).toHaveBeenCalledWith({ usageType: "regular" })
+    expect(ctx.persistPersons).toHaveBeenCalledWith({ startVisit: true, persons: linkedPersons })
+    // Issue #605: companions are saved before the roster is persisted, so
+    // the persisted lines carry the link.
+    expect(ctx.saveCompanions).toHaveBeenCalledTimes(1)
+    expect(ctx.saveCompanions.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.persistPersons.mock.invocationCallOrder[0],
+    )
   })
 
   it("stays put when the start fails (no reset)", async () => {
@@ -342,6 +360,27 @@ describe("CheckinRoute — Besuch starten (issue #732)", () => {
     })
     expect(screen.queryByRole("button", { name: /Besuch starten/ })).toBeNull()
     expect(screen.getByRole("button", { name: /Material erfassen/ })).toBeTruthy()
+  })
+})
+
+describe("CheckinRoute — saved persons on advance (issue #605)", () => {
+  it("saves ticked companions first, persists the linked roster, then goes to /visit", async () => {
+    const { ctx } = renderCheckin({ isAnonymous: false, kiosk: false })
+    fireEvent.click(screen.getByRole("button", { name: /^Weiter$/ }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+    expect(ctx.saveCompanions).toHaveBeenCalledTimes(1)
+    expect(ctx.saveCompanions.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.persistPersons.mock.invocationCallOrder[0],
+    )
+    expect(ctx.persistPersons).toHaveBeenCalledWith({ persons: linkedPersons })
+  })
+
+  it("stays on /checkin when the roster could not be persisted", async () => {
+    const persistPersons = vi.fn().mockRejectedValue(new Error("boom"))
+    renderCheckin({ isAnonymous: false, kiosk: false, persistPersons })
+    fireEvent.click(screen.getByRole("button", { name: /^Weiter$/ }))
+    await waitFor(() => expect(persistPersons).toHaveBeenCalled())
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })
 

@@ -25,6 +25,7 @@ import {
   getAdminFirestore,
 } from "./emulator-helper"
 import {
+  collection,
   collectionGroup,
   doc,
   getDoc,
@@ -1805,6 +1806,230 @@ describe("cross-user: device status (admin read only, ADR-0045)", () => {
       setDoc(doc(adminDb(), "maco", "0a10aced202194944a042f04", "status", "current"), {
         online: false,
       }),
+    )
+  })
+})
+
+// Issue #605 (ADR-0050): companions the account holder saved for the next
+// check-in. Owner-scoped third-party data — the same matrix as every other
+// owner-scoped collection, plus the create allowlist and "no update".
+describe("cross-user: savedPersons", () => {
+  const RULE = "firestore.rules:users/{userId}/savedPersons"
+  const validPerson = (uid: string) => ({
+    firstName: "Kim",
+    lastName: "Muster",
+    userType: "kind",
+    createdAt: serverTimestamp(),
+    modifiedBy: uid,
+    modifiedAt: serverTimestamp(),
+  })
+
+  async function seedSavedPerson(ownerUid: string, id = "sp1") {
+    const db = getAdminFirestore()
+    await db.doc(`users/${ownerUid}/savedPersons/${id}`).set({
+      firstName: "Kim",
+      lastName: "Muster",
+      userType: "kind",
+      createdAt: FieldValue.serverTimestamp(),
+      modifiedBy: ownerUid,
+      modifiedAt: FieldValue.serverTimestamp(),
+    })
+  }
+
+  it("denies bob reading alice's saved person", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons read leaked to another user",
+      RULE,
+      () => getDoc(doc(authedDb("bob"), "users/alice/savedPersons/sp1")),
+    )
+  })
+
+  it("denies bob listing alice's saved persons", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons list leaked to another user",
+      RULE,
+      () => getDocs(collection(authedDb("bob"), "users/alice/savedPersons")),
+    )
+  })
+
+  it("denies bob creating a saved person under alice", async () => {
+    await assertCrossUserDenied(
+      "savedPersons create allowed for another user",
+      RULE,
+      () => setDoc(doc(authedDb("bob"), "users/alice/savedPersons/sp9"), validPerson("bob")),
+    )
+  })
+
+  it("denies bob deleting alice's saved person", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons delete allowed for another user",
+      RULE,
+      () => deleteDoc(doc(authedDb("bob"), "users/alice/savedPersons/sp1")),
+    )
+  })
+
+  it("denies tag-tap-as-bob reading alice's saved person", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons read leaked across tag-tap actsAs",
+      RULE,
+      () => getDoc(doc(tagSessionDb("bob"), "users/alice/savedPersons/sp1")),
+    )
+  })
+
+  it("denies anonymous-auth and unauthenticated reads", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons read leaked to anonymous-auth session",
+      RULE,
+      () => getDoc(doc(anonAuthDb("anon-x"), "users/alice/savedPersons/sp1")),
+    )
+    await assertCrossUserDenied(
+      "savedPersons read leaked to unauthenticated session",
+      RULE,
+      () => getDoc(doc(unauthDb(), "users/alice/savedPersons/sp1")),
+    )
+  })
+
+  // Positive carve-outs
+  it("allows alice reading, listing, creating and deleting her own", async () => {
+    await seedSavedPerson("alice")
+    const db = authedDb("alice")
+    await assertSucceeds(getDoc(doc(db, "users/alice/savedPersons/sp1")))
+    await assertSucceeds(getDocs(collection(db, "users/alice/savedPersons")))
+    await assertSucceeds(setDoc(doc(db, "users/alice/savedPersons/sp2"), validPerson("alice")))
+    await assertSucceeds(deleteDoc(doc(db, "users/alice/savedPersons/sp1")))
+  })
+
+  it("allows a plain badge session acting as alice to read, create and delete", async () => {
+    await seedSavedPerson("alice")
+    const db = tagSessionDb("alice")
+    await assertSucceeds(getDoc(doc(db, "users/alice/savedPersons/sp1")))
+    await assertSucceeds(getDocs(collection(db, "users/alice/savedPersons")))
+    await assertSucceeds(
+      setDoc(doc(db, "users/alice/savedPersons/sp2"), validPerson("tag:alice:s1")),
+    )
+    await assertSucceeds(deleteDoc(doc(db, "users/alice/savedPersons/sp1")))
+  })
+
+  it("allows admin reading", async () => {
+    await seedSavedPerson("alice")
+    await assertSucceeds(getDoc(doc(adminDb(), "users/alice/savedPersons/sp1")))
+  })
+
+  // Shape
+  it("denies updates, even by the owner", async () => {
+    await seedSavedPerson("alice")
+    await assertCrossUserDenied(
+      "savedPersons update allowed (create + delete only)",
+      RULE,
+      () => updateDoc(doc(authedDb("alice"), "users/alice/savedPersons/sp1"), { firstName: "Kai" }),
+    )
+  })
+
+  it("denies extra keys — the usage type is never saved", async () => {
+    await assertCrossUserDenied(
+      "savedPersons create accepted a key outside the allowlist",
+      RULE,
+      () =>
+        setDoc(doc(authedDb("alice"), "users/alice/savedPersons/sp2"), {
+          ...validPerson("alice"),
+          usageType: "materialbezug",
+        }),
+    )
+  })
+
+  it("denies a company or an empty name", async () => {
+    await assertCrossUserDenied(
+      "savedPersons create accepted userType firma",
+      RULE,
+      () =>
+        setDoc(doc(authedDb("alice"), "users/alice/savedPersons/sp2"), {
+          ...validPerson("alice"),
+          userType: "firma",
+        }),
+    )
+    await assertCrossUserDenied(
+      "savedPersons create accepted an empty first name",
+      RULE,
+      () =>
+        setDoc(doc(authedDb("alice"), "users/alice/savedPersons/sp3"), {
+          ...validPerson("alice"),
+          firstName: "",
+        }),
+    )
+  })
+})
+
+// Issue #605: `purchaseOnly` marks the server's own badge/membership
+// checkouts (CHK-9). A client may clear it on its open checkout ("Besuch
+// starten", KIO-18) but never set it — a self-set flag would reword its
+// visit's bill as a purchase.
+describe("checkouts: purchaseOnly marker", () => {
+  async function seedPurchaseOnly(checkoutId: string, ownerUid: string) {
+    await seedOpenCheckout(checkoutId, ownerUid)
+    await getAdminFirestore().doc(`checkouts/${checkoutId}`).update({ purchaseOnly: true })
+  }
+
+  function newCheckout(uid: string, extra: Record<string, unknown>) {
+    return {
+      userId: doc(authedDb(uid), `users/${uid}`),
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: uid,
+      modifiedAt: serverTimestamp(),
+      firebaseUid: uid,
+      ...extra,
+    }
+  }
+
+  it("allows a client create with purchaseOnly: false", async () => {
+    const data = newCheckout("alice", { purchaseOnly: false })
+    await assertSucceeds(setDoc(doc(authedDb("alice"), "checkouts/co-new"), data))
+  })
+
+  it("denies a client create with purchaseOnly: true", async () => {
+    const data = newCheckout("alice", { purchaseOnly: true })
+    await assertCrossUserDenied(
+      "client minted a purchase-only checkout",
+      "firestore.rules:checkouts create (purchaseOnly)",
+      () => setDoc(doc(authedDb("alice"), "checkouts/co-new"), data),
+    )
+  })
+
+  it("allows the owner (and a badge session) to clear it on an open checkout", async () => {
+    await seedPurchaseOnly("co-po", "alice")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("alice"), "checkouts/co-po"), { purchaseOnly: false }),
+    )
+    await seedPurchaseOnly("co-po-tag", "alice")
+    await assertSucceeds(
+      updateDoc(doc(tagSessionDb("alice"), "checkouts/co-po-tag"), {
+        purchaseOnly: false,
+        persons: [{ name: "Alice", email: "", userType: "erwachsen", usageType: "regular" }],
+      }),
+    )
+  })
+
+  it("lets an unrelated update leave it as stored", async () => {
+    await seedPurchaseOnly("co-po", "alice")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("alice"), "checkouts/co-po"), { workshopsVisited: ["holz"] }),
+    )
+  })
+
+  it("denies the owner setting it on a visit", async () => {
+    await seedOpenCheckout("co-visit", "alice")
+    await assertCrossUserDenied(
+      "client marked its visit purchase-only",
+      "firestore.rules:checkouts update (purchaseOnlyKeptOrCleared)",
+      () => updateDoc(doc(authedDb("alice"), "checkouts/co-visit"), { purchaseOnly: true }),
     )
   })
 })

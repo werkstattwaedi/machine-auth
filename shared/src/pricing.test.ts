@@ -8,10 +8,11 @@ import {
   USAGE_DISCOUNT_LABELS,
   USAGE_TYPE_INFO,
   USAGE_TYPE_ORDER,
-  MATERIALBEZUG_MACHINE_REASON,
-  selectableUsageTypes,
-  usageTypeOptions,
-  resolveUsageType,
+  OWNER_ONLY_OTHERS_REASON,
+  personUsageOptions,
+  deriveVisitUsageType,
+  machineUsageBlocked,
+  usageDeclaration,
   usageDiscount,
   isMachineItem,
   isServiceItem,
@@ -65,7 +66,9 @@ describe("service items (Dienstleistung, issue #685)", () => {
     expect(isServiceItem(brennen)).toBe(true)
     const hasMachineUsage = [brennen].some(isMachineItem)
     expect(hasMachineUsage).toBe(false)
-    expect(resolveUsageType("materialbezug", { hasMachineUsage })).toBe("materialbezug")
+    expect(
+      machineUsageBlocked([{ usageType: "materialbezug" }], hasMachineUsage),
+    ).toBe(false)
   })
 
   it("name the material bucket after what it holds", () => {
@@ -132,87 +135,140 @@ describe("USAGE_TYPE_INFO (issue #570)", () => {
     }
   })
 
-  it("only regular has no declaration; audits only on KulturLegi + Hangenmoos", () => {
+  it("marks exactly Freiwilligengruppe and Interne Nutzung as owner-only", () => {
     for (const ut of USAGE_TYPE_ORDER) {
-      const info = USAGE_TYPE_INFO[ut]
-      expect(info.declaration === null).toBe(ut === "regular")
-      expect(/stichprobenweise/.test(info.declaration ?? "")).toBe(
-        ut === "ermaessigt" || ut === "hangenmoos",
+      expect(USAGE_TYPE_INFO[ut].ownerOnly, ut).toBe(
+        ut === "volunteering" || ut === "intern",
+      )
+    }
+  })
+})
+
+// Issue #605: the Nutzungsart is chosen per person on the check-in.
+describe("personUsageOptions (issue #605)", () => {
+  it("offers the owner-only types on the identified person's line, last", () => {
+    const options = personUsageOptions({
+      isOwner: true,
+      anonymous: false,
+      othersPresent: false,
+    })
+    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
+    expect(options.every((o) => o.disabledReason === undefined)).toBe(true)
+    expect(USAGE_TYPE_ORDER.slice(-2)).toEqual(["volunteering", "intern"])
+  })
+
+  it("disables them, with the reason, while others are on the visit", () => {
+    const options = personUsageOptions({
+      isOwner: true,
+      anonymous: false,
+      othersPresent: true,
+    })
+    for (const o of options) {
+      expect(o.disabledReason, o.type).toBe(
+        o.type === "volunteering" || o.type === "intern"
+          ? OWNER_ONLY_OTHERS_REASON
+          : undefined,
       )
     }
   })
 
-  it("hides the account-only types from anonymous checkouts", () => {
-    expect(selectableUsageTypes({ anonymous: false })).toEqual(
-      USAGE_TYPE_ORDER,
-    )
-    expect(selectableUsageTypes({ anonymous: true })).toEqual([
-      "regular",
-      "ermaessigt",
-      "hangenmoos",
-      "materialbezug",
-    ])
-    // A rehydrated account-only selection stays displayable.
+  it("never offers them to a further person or a guest check-in", () => {
+    const common = ["regular", "materialbezug", "ermaessigt", "hangenmoos"]
     expect(
-      selectableUsageTypes({ anonymous: true, current: "intern" }),
+      personUsageOptions({ isOwner: false, anonymous: false, othersPresent: true }).map(
+        (o) => o.type,
+      ),
+    ).toEqual(common)
+    expect(
+      personUsageOptions({ isOwner: true, anonymous: true, othersPresent: false }).map(
+        (o) => o.type,
+      ),
+    ).toEqual(common)
+  })
+
+  it("keeps a rehydrated selection displayable", () => {
+    expect(
+      personUsageOptions({
+        isOwner: false,
+        anonymous: false,
+        othersPresent: true,
+        current: "intern",
+      }).map((o) => o.type),
     ).toContain("intern")
   })
 })
 
-// Issue #628: „Nur Materialbezug" + machine usage is rejected by the server
-// (`assertUsageTypeAllowed`), so the checkout must not offer it as
-// selectable — and must never submit it.
-describe("usageTypeOptions / resolveUsageType (issue #628)", () => {
-  it("disables only materialbezug, with the reason, when the cart has machine usage", () => {
-    const options = usageTypeOptions({ anonymous: false, hasMachineUsage: true })
-    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
-    for (const o of options) {
-      if (o.type === "materialbezug") {
-        expect(o.disabledReason).toBe(MATERIALBEZUG_MACHINE_REASON)
-      } else {
-        expect(o.disabledReason, o.type).toBeUndefined()
-      }
-    }
-  })
-
-  it("disables nothing without machine usage", () => {
-    const options = usageTypeOptions({ anonymous: false, hasMachineUsage: false })
-    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
-    expect(options.every((o) => o.disabledReason === undefined)).toBe(true)
-  })
-
-  it("keeps the anonymous filter and the rehydrated `current`", () => {
+describe("deriveVisitUsageType (issue #605)", () => {
+  it("takes the owner's Freiwilligengruppe / Interne Nutzung", () => {
     expect(
-      usageTypeOptions({ anonymous: true, hasMachineUsage: true }).map(
-        (o) => o.type,
-      ),
-    ).toEqual(selectableUsageTypes({ anonymous: true }))
-    const withCurrent = usageTypeOptions({
-      anonymous: true,
-      current: "intern",
-      hasMachineUsage: true,
-    })
-    expect(withCurrent.map((o) => o.type)).toContain("intern")
-    // A rehydrated materialbezug stays displayable but is still disabled.
-    const rehydrated = usageTypeOptions({
-      anonymous: true,
-      current: "materialbezug",
-      hasMachineUsage: true,
-    })
-    expect(rehydrated.find((o) => o.type === "materialbezug")?.disabledReason).toBe(
-      MATERIALBEZUG_MACHINE_REASON,
+      deriveVisitUsageType([{ isOwner: true, usageType: "volunteering" }]),
+    ).toBe("volunteering")
+    expect(deriveVisitUsageType([{ isOwner: true, usageType: "intern" }])).toBe(
+      "intern",
     )
   })
 
-  it("resolves materialbezug + machine usage to regular, everything else unchanged", () => {
-    expect(resolveUsageType("materialbezug", { hasMachineUsage: true })).toBe(
-      "regular",
-    )
+  it("is Begleitung only when every person has it", () => {
+    expect(
+      deriveVisitUsageType([
+        { isOwner: true, usageType: "materialbezug" },
+        { usageType: "materialbezug" },
+      ]),
+    ).toBe("materialbezug")
+    expect(
+      deriveVisitUsageType([
+        { isOwner: true, usageType: "materialbezug" },
+        { usageType: "regular" },
+      ]),
+    ).toBe("regular")
+  })
+
+  it("is regular for discounts that only touch the usage fee", () => {
+    expect(
+      deriveVisitUsageType([{ usageType: "ermaessigt" }, { usageType: "hangenmoos" }]),
+    ).toBe("regular")
+    expect(deriveVisitUsageType([])).toBe("regular")
+  })
+
+  it("an owner-only type on another line does not carry the visit", () => {
+    expect(
+      deriveVisitUsageType([{ isOwner: true }, { usageType: "intern" }]),
+    ).toBe("regular")
+  })
+
+  it("falls back to the legacy top-level type for persons without one", () => {
+    expect(deriveVisitUsageType([{ isOwner: true }], "intern")).toBe("intern")
+    expect(deriveVisitUsageType([{}, {}], "materialbezug")).toBe("materialbezug")
+  })
+})
+
+describe("machineUsageBlocked (issue #605)", () => {
+  it("blocks machine time only when every person is on Begleitung", () => {
+    const all = [{ usageType: "materialbezug" as const }, { usageType: "materialbezug" as const }]
+    expect(machineUsageBlocked(all, true)).toBe(true)
+    expect(machineUsageBlocked(all, false)).toBe(false)
+    expect(
+      machineUsageBlocked([...all, { usageType: "regular" as const }], true),
+    ).toBe(false)
+    expect(machineUsageBlocked([], true)).toBe(false)
+  })
+})
+
+describe("usageDeclaration (issue #605)", () => {
+  it("is null for regular and names the person otherwise", () => {
+    expect(usageDeclaration("regular", { firstName: "Mia", isSelf: false })).toBeNull()
+    expect(
+      usageDeclaration("materialbezug", { firstName: "Mia", isSelf: false }),
+    ).toBe("Mia arbeitet heute nicht selbst in der Werkstatt.")
+    expect(
+      usageDeclaration("materialbezug", { firstName: "Max", isSelf: true }),
+    ).toBe("Du arbeitest heute nicht selbst in der Werkstatt.")
+  })
+
+  it("has a sentence for every discounted type", () => {
     for (const ut of USAGE_TYPE_ORDER) {
-      expect(resolveUsageType(ut, { hasMachineUsage: false }), ut).toBe(ut)
-      if (ut !== "materialbezug") {
-        expect(resolveUsageType(ut, { hasMachineUsage: true }), ut).toBe(ut)
-      }
+      const d = usageDeclaration(ut, { firstName: "Mia", isSelf: false })
+      expect(d === null, ut).toBe(ut === "regular")
     }
   })
 })

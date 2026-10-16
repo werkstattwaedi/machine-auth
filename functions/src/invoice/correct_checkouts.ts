@@ -33,7 +33,6 @@ import {
   CANCEL_REASON_MIN_LENGTH,
   MAX_CANCELLATION_REASON_LENGTH,
   MAX_CORRECTIONS_PER_CALL,
-  USAGE_TYPE_DISCOUNTS,
   type CorrectCheckoutEntry,
   type CorrectCheckoutItemInput,
   type CorrectCheckoutPersonInput,
@@ -52,9 +51,11 @@ import { formatBillReference, type BillEntity } from "./types";
 import { allocateBillRevision, type BillAck } from "./create_bill";
 import { aggregateBelegeIntoInvoice } from "./monthly_bill_run";
 import {
+  isUsageType,
   isValidItem,
   markEntryFeeWaivedToday,
   priceCheckoutItems,
+  resolvePersonUsageTypes,
 } from "./close_checkout_and_get_payment";
 import {
   tryGeneratePdf,
@@ -114,6 +115,7 @@ function isValidPerson(p: unknown): p is CorrectCheckoutPersonInput {
     typeof x.userType === "string" && USER_TYPES.has(x.userType) &&
     (x.userId === null || (typeof x.userId === "string" && x.userId.length > 0)) &&
     typeof x.entryFeeWaivedToday === "boolean" &&
+    (x.usageType == null || isUsageType(x.usageType)) &&
     (addr == null ||
       (typeof addr === "object" &&
         ["company", "street", "zip", "city"].every((k) => typeof addr[k] === "string")))
@@ -125,11 +127,14 @@ function parseReplacement(r: unknown, checkoutId: string): CorrectCheckoutReplac
     throw new HttpsError("invalid-argument", `${checkoutId}: replacement must be an object`);
   }
   const x = r as Record<string, unknown>;
-  if (typeof x.usageType !== "string" || !(x.usageType in USAGE_TYPE_DISCOUNTS)) {
-    throw new HttpsError("invalid-argument", `${checkoutId}: invalid usageType`);
-  }
   if (!Array.isArray(x.persons) || x.persons.length === 0 || !x.persons.every(isValidPerson)) {
     throw new HttpsError("invalid-argument", `${checkoutId}: persons[] is required and must be valid`);
+  }
+  // The visit's type is derived from the persons (issue #605); a top-level
+  // one is only the fallback for an editor that sends no per-person types.
+  const perPerson = (x.persons as CorrectCheckoutPersonInput[]).some((p) => p.usageType != null);
+  if (x.usageType != null ? !isUsageType(x.usageType) : !perPerson) {
+    throw new HttpsError("invalid-argument", `${checkoutId}: invalid usageType`);
   }
   if (!Array.isArray(x.items) || !x.items.every(isValidAdminItem)) {
     throw new HttpsError("invalid-argument", `${checkoutId}: items[] must be valid`);
@@ -139,7 +144,7 @@ function parseReplacement(r: unknown, checkoutId: string): CorrectCheckoutReplac
     throw new HttpsError("invalid-argument", `${checkoutId}: invalid tip`);
   }
   return {
-    usageType: x.usageType as UsageType,
+    ...(x.usageType != null ? { usageType: x.usageType as UsageType } : {}),
     persons: x.persons as CorrectCheckoutPersonInput[],
     items: x.items as CorrectCheckoutItemInput[],
     tip,
@@ -197,6 +202,7 @@ function toPersonEntity(db: Firestore, p: CorrectCheckoutPersonInput): CheckoutP
   if (p.userId) person.userRef = db.collection("users").doc(p.userId);
   if (p.billingAddress) person.billingAddress = { ...p.billingAddress };
   if (p.entryFeeWaivedToday) person.entryFeeWaivedToday = true;
+  if (p.usageType) person.usageType = p.usageType;
   return person;
 }
 
@@ -290,9 +296,16 @@ export const correctCheckoutsHandler = async (
     }
     const r = entry.replacement;
     const visitDate = (original.closedAt ?? original.created).toDate();
+    // Same owner-only rules as the close (CHK-32); the owner is the
+    // original's account.
+    const typed = resolvePersonUsageTypes(
+      r.persons.map((p) => toPersonEntity(db, p)),
+      original.userId?.id ?? null,
+      r.usageType,
+    );
     const persons = await markEntryFeeWaivedToday(
       db,
-      r.persons.map((p) => toPersonEntity(db, p)),
+      typed.persons,
       original.userId ?? null,
       visitDate,
       entry.checkoutId,
@@ -300,7 +313,7 @@ export const correctCheckoutsHandler = async (
     );
     const { items, summary, membershipPresent } = priceCheckoutItems({
       persons,
-      usageType: r.usageType,
+      usageType: typed.usageType,
       items: r.items.map((i) => toItemEntity(db, i, now)),
       configFees,
       membershipCatalogId,
@@ -317,7 +330,7 @@ export const correctCheckoutsHandler = async (
       persons,
       items,
       summary,
-      usageType: r.usageType,
+      usageType: typed.usageType,
       workshopsVisited: workshops.length > 0 ? workshops : original.workshopsVisited ?? [],
     });
   }
@@ -459,6 +472,10 @@ export const correctCheckoutsHandler = async (
           userId: (l.checkout.userId ?? null) as DocumentReference,
           status: "closed",
           usageType: r.usageType,
+          // A correction re-issues the same visit (or purchase).
+          ...(l.checkout.purchaseOnly != null
+            ? { purchaseOnly: l.checkout.purchaseOnly }
+            : {}),
           created: l.checkout.created,
           closedAt: l.checkout.closedAt ?? l.checkout.created,
           workshopsVisited: r.workshopsVisited,

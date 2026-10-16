@@ -188,6 +188,35 @@ service cloud.firestore {
                         isValidUserProfile(request.resource.data)));
 
       allow delete: if isAdmin();
+
+      // Saved persons (issue #605, ADR-0050): companions the account holder
+      // saved on a check-in to pick again next time — name and user type
+      // only, never the usage type. The account holder (real login or kiosk
+      // badge session acting on them) creates, reads and deletes; nobody
+      // updates (a changed person is a new one). Admins read for support.
+      // Deleted with the account (privacy engine), not trimmed.
+      match /savedPersons/{savedPersonId} {
+        function isSavedPersonsOwner() {
+          return (isSignedIn() && request.auth.uid == userId) ||
+                 (actsAs() != '' && actsAs() == userId);
+        }
+
+        allow read: if isAdmin() || isSavedPersonsOwner();
+        allow create: if isSavedPersonsOwner() &&
+          request.resource.data.keys().hasOnly([
+            'firstName', 'lastName', 'userType', 'createdAt', 'modifiedBy', 'modifiedAt'
+          ]) &&
+          request.resource.data.keys().hasAll(['firstName', 'lastName', 'userType']) &&
+          request.resource.data.firstName is string &&
+          request.resource.data.firstName.size() > 0 &&
+          request.resource.data.firstName.size() <= 100 &&
+          request.resource.data.lastName is string &&
+          request.resource.data.lastName.size() > 0 &&
+          request.resource.data.lastName.size() <= 100 &&
+          request.resource.data.userType in ['erwachsen', 'kind'];
+        allow update: if false;
+        allow delete: if isSavedPersonsOwner();
+      }
     }
 
     // Permission collection
@@ -286,10 +315,13 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
              'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt',
-             'firebaseUid',
+             'firebaseUid', 'purchaseOnly',
              'closedAt', 'notes', 'summary'
            ])
         && request.resource.data.get('firebaseUid', null) == request.auth.uid
+        // Purchase-only (CHK-9, issue #605) is the server's marker for its
+        // own badge/membership checkouts; a client-created one is a visit.
+        && request.resource.data.get('purchaseOnly', false) == false
         && (
              (request.resource.data.userId == null && isAnonymousAuth()) ||
              isCheckoutPrincipalFor(request.resource.data.userId)
@@ -322,15 +354,26 @@ service cloud.firestore {
       // when the user doc has an active membership. Anonymous flow on a
       // null-userId checkout can't consult a membership doc, so monthly
       // is intentionally denied.
+      //
+      // `purchaseOnly` (CHK-9, issue #605): an open checkout's principal may
+      // clear it — "Besuch starten" on a server-created purchase (KIO-18) —
+      // but never set it; it stays as stored otherwise.
+      function purchaseOnlyKeptOrCleared() {
+        return request.resource.data.get('purchaseOnly', false) == false ||
+          request.resource.data.get('purchaseOnly', null) == resource.data.get('purchaseOnly', null);
+      }
+
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
+         purchaseOnlyKeptOrCleared() &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent'
          ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
+         purchaseOnlyKeptOrCleared() &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent'
          ])) ||

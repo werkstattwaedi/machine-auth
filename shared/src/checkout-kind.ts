@@ -8,8 +8,23 @@ import {
 import { isMachineItem } from "./pricing"
 import type { CheckoutKind } from "./email-contract"
 
+/**
+ * A checkout with no visit behind it: a badge, membership or renewal the
+ * server bought on its own (CHK-9). Marked by `purchaseOnly` since issue
+ * #605 — a visit whose persons all only accompany is `materialbezug` too.
+ * Older docs lack the flag; for them the `materialbezug` usage type is the
+ * marker.
+ */
+export function isPurchaseOnly(checkout: {
+  purchaseOnly?: boolean | null
+  usageType?: string | null
+}): boolean {
+  return checkout.purchaseOnly ?? checkout.usageType === "materialbezug"
+}
+
 export interface CheckoutKindInput {
   usageType: string
+  purchaseOnly?: boolean | null
   items: readonly (MembershipClassifiableItem & { type?: string | null })[]
   membershipCatalogId: string | null | undefined
 }
@@ -17,19 +32,20 @@ export interface CheckoutKindInput {
 /**
  * What a checkout was, for wording on bills and mails (issue #660) — see
  * `CHECKOUT_KINDS`. A membership or badge bought at the kiosk is a
- * `materialbezug` checkout with no visit behind it, so it must not read
- * "Danke für deinen Besuch".
+ * purchase-only checkout (`isPurchaseOnly`) with no visit behind it, so it
+ * must not read "Danke für deinen Besuch".
  *
- * Every usage type but `materialbezug` means the person was in the
- * workshop — even when the net entry fee is 0 (intern, a fee already paid
- * earlier that day). A machine item is a visit whatever the usage type.
+ * Every other checkout means the person was in the workshop — even when the
+ * net entry fee is 0 (intern, Begleitung, a fee already paid earlier that
+ * day). A machine item is a visit regardless.
  */
 export function classifyCheckoutKind({
   usageType,
+  purchaseOnly,
   items,
   membershipCatalogId,
 }: CheckoutKindInput): CheckoutKind {
-  if (usageType !== "materialbezug") return "visit"
+  if (!isPurchaseOnly({ purchaseOnly, usageType })) return "visit"
   if (items.some((item) => isMachineItem(item))) return "visit"
   if (
     items.length > 0 &&

@@ -465,6 +465,63 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       const nc = await checkout(result.replacementCheckoutIds[0]);
       expect(nc.persons[0].entryFeeWaivedToday).to.be.true;
     });
+
+    it("prices per-person usage types and derives the visit's (issue #605)", async () => {
+      await seedVisit();
+      const result = await correctCheckoutsHandler(
+        request({
+          reason: "Begleitung vergessen",
+          corrections: [{
+            checkoutId: "co-1",
+            replacement: {
+              persons: [
+                { ...replacement().persons[0], usageType: "materialbezug" },
+                { name: "Kim Kind", email: "", userType: "kind", userId: null, entryFeeWaivedToday: false, usageType: "regular" },
+              ],
+              items: [],
+              tip: 0,
+            },
+          }],
+        }),
+      );
+      const nc = await checkout(result.replacementCheckoutIds[0]);
+      expect(nc.usageType).to.equal("regular");
+      expect(nc.persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
+      expect(nc.summary?.entryFees).to.equal(22.5);
+      expect(nc.summary?.totalPrice).to.equal(7.5);
+    });
+
+    it("refuses an owner-only type on a companion line (issue #605)", async () => {
+      await seedVisit();
+      try {
+        await correctCheckoutsHandler(
+          request({
+            reason: "Falsch erfasst",
+            corrections: [{
+              checkoutId: "co-1",
+              replacement: {
+                persons: [
+                  { ...replacement().persons[0], userId: "u-alice", usageType: "regular" },
+                  { name: "Kim Kind", email: "", userType: "kind", userId: null, entryFeeWaivedToday: false, usageType: "volunteering" },
+                ],
+                items: [],
+                tip: 0,
+              },
+            }],
+          }),
+        );
+        expect.fail("expected invalid-argument");
+      } catch (err) {
+        expect((err as HttpsError).code).to.equal("invalid-argument");
+      }
+    });
+
+    it("rejects a replacement without any usage type", () => {
+      const { usageType: _omitted, ...noType } = replacement();
+      expect(() =>
+        parseCorrectCheckoutsRequest({ reason: "Falsch", corrections: [{ checkoutId: "x", replacement: noType }] }),
+      ).to.throw(HttpsError, /usageType/);
+    });
   });
 
   describe("Sammelrechnung revision (same transaction)", () => {

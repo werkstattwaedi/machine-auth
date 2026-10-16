@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "vitest"
-import { classifyBillKind, classifyCheckoutKind } from "./checkout-kind"
+import { classifyBillKind, classifyCheckoutKind, isPurchaseOnly } from "./checkout-kind"
 
 const membershipCatalogId = "membership-sku"
 const membership = { catalogId: "membership-sku" }
@@ -30,6 +30,30 @@ describe("classifyCheckoutKind", () => {
       ).toBe(kind)
     })
   }
+})
+
+// Issue #605: an all-Begleitung visit derives materialbezug too, so the
+// explicit flag decides; legacy docs without it keep the old reading.
+describe("isPurchaseOnly (issue #605)", () => {
+  it("follows the flag when present", () => {
+    expect(isPurchaseOnly({ purchaseOnly: false, usageType: "materialbezug" })).toBe(false)
+    expect(isPurchaseOnly({ purchaseOnly: true, usageType: "regular" })).toBe(true)
+  })
+  it("reads materialbezug as purchase-only on legacy docs", () => {
+    expect(isPurchaseOnly({ usageType: "materialbezug" })).toBe(true)
+    expect(isPurchaseOnly({ usageType: "regular" })).toBe(false)
+    expect(isPurchaseOnly({})).toBe(false)
+  })
+  it("a Begleitung visit with only material is a visit, not a purchase", () => {
+    expect(
+      classifyCheckoutKind({
+        usageType: "materialbezug",
+        purchaseOnly: false,
+        items: [material],
+        membershipCatalogId,
+      }),
+    ).toBe("visit")
+  })
 })
 
 describe("classifyBillKind", () => {

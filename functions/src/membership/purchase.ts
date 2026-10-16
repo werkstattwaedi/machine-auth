@@ -175,6 +175,9 @@ export async function handlePurchaseMembership(
       userId: callerRef as DocumentReference,
       status: "open",
       usageType: "materialbezug",
+      // No visit behind it (CHK-9, issue #605); the client clears it when
+      // a visit is started on this checkout (KIO-18).
+      purchaseOnly: true,
       created: now,
       workshopsVisited: [],
       persons: [
@@ -183,6 +186,7 @@ export async function handlePurchaseMembership(
           email: user.email ?? "",
           userType: user.userType ?? "erwachsen",
           userRef: callerRef as DocumentReference,
+          usageType: "materialbezug",
         },
       ],
       modifiedBy: callerRef.id,

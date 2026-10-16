@@ -128,8 +128,13 @@ function CheckinRoute() {
   const stalledRef = useRef<Promise<void> | null>(null)
   const persistVisit = useCallback((): Promise<void> => {
     if (!startRef.current) {
-      // "Besuch starten" also turns a purchase-only checkout into a visit.
-      const p = ctx.persistPersons({ usageType: "regular" })
+      // "Besuch starten" also turns a purchase-only checkout into a visit
+      // (KIO-18). Ticked companions are saved first, so the persisted lines
+      // carry their saved person (#605) — the countdown, a click and a
+      // second badge's tap all end up here.
+      const p = ctx
+        .saveCompanions()
+        .then((persons) => ctx.persistPersons({ startVisit: true, persons }))
       startRef.current = p
       p.catch(() => {
         // persistPersons already toasted (ADR-0025); allow a retry.
@@ -261,9 +266,12 @@ function CheckinRoute() {
         // checkout and always stays on the roster.
         ownerUserId={ctx.identifiedUserRef?.id ?? null}
         isMember={ctx.isMember}
+        config={ctx.pricingConfig}
+        savedPersons={ctx.savedPersons}
+        onDeleteSavedPerson={ctx.deleteSavedPerson}
         // Issue #465: a started visit flips the kiosk footer primary from
         // "Besuch starten" to "Material erfassen". A purchase-only
-        // (materialbezug) checkout keeps "Besuch starten".
+        // checkout keeps "Besuch starten".
         visitStarted={visitStarted}
         autoStartMs={countdown === "running" ? AUTO_START_MS : undefined}
         onCountdownCancel={() => setCountdown("off")}
@@ -275,9 +283,12 @@ function CheckinRoute() {
         onAdvance={async () => {
           // Issue #151: eager anonymous sign-in so /visit can write items.
           if (ctx.isAnonymous) await ctx.signInAnonymouslyIfNeeded()
+          // Issue #605: keep ticked companions first so the persisted lines
+          // link to them; never blocks the advance.
+          const persons = await ctx.saveCompanions()
           try {
             // Issue #246: persist the person roster onto the open checkout doc.
-            await ctx.persistPersons()
+            await ctx.persistPersons({ persons })
           } catch {
             // persistPersons already toasted (ADR-0025) and re-threw; stay on
             // /checkin so the user can retry instead of bouncing to the

@@ -12,11 +12,13 @@ import { generateScorReference } from "./scor_reference";
 import {
   classifyBillKind,
   classifyCheckoutKind,
+  isPurchaseOnly,
   partitionMembership,
   usageDiscount,
   isMachineItem,
   materialSectionLabels,
   USAGE_DISCOUNT_LABELS,
+  USAGE_TYPE_LABELS,
   PAYMENT_METHOD_INFO,
   type CheckoutKind,
   type PaidVia,
@@ -596,6 +598,7 @@ function renderVorstandSignoff(doc: PDFKit.PDFDocument, y: number): number {
 function checkoutKind(checkout: InvoiceCheckout, data: InvoiceData): CheckoutKind {
   return classifyCheckoutKind({
     usageType: checkout.usageType,
+    purchaseOnly: checkout.purchaseOnly,
     items: checkout.items,
     membershipCatalogId: data.membershipCatalogId,
   });
@@ -610,7 +613,9 @@ function renderCheckoutSection(
   // Per-usage-type discount multipliers (issue #284). Section amounts in
   // InvoiceCheckout are RAW (pre-discount); the multipliers say how much of
   // each section is actually billed. `regular` has all-1 multipliers, so
-  // no discount rows are rendered for it.
+  // no discount rows are rendered for it. This is the VISIT's type — it
+  // only drives the machine / material waivers; each person's usage fee is
+  // already net on their own row (issue #605).
   const discount = usageDiscount(checkout.usageType as UsageType);
   const discountLabel = USAGE_DISCOUNT_LABELS[checkout.usageType as UsageType];
 
@@ -653,12 +658,15 @@ function renderCheckoutSection(
   //
   // `checkout.entryFees` is the RAW (standard) fee under issue #284, so a
   // waived usage type (materialbezug, Freiwilligengruppe, intern) has a
-  // non-zero raw fee. Gate on the NET entry fee (raw × the discount
-  // multiplier) — that is what "no entry fee billed" actually means.
+  // non-zero raw fee. Gate on the NET entry fees (each person's own
+  // discount, issue #605) — that is what "no entry fee billed" means.
+  const netEntryFees = round2(
+    checkout.personEntryFees.reduce((sum, pf) => sum + pf.netFee, 0),
+  );
   const isMembershipOnly =
     membershipItems.length > 0 &&
     otherItems.length === 0 &&
-    round2(checkout.entryFees * discount.entryFee) === 0;
+    netEntryFees === 0;
 
   // Nutzungsgebühren (entry fees). Always rendered when persons are
   // present so the invoice shows who attended — even for usage types
@@ -667,6 +675,7 @@ function renderCheckoutSection(
   // was zero, leaving the recipient unclear. The membership-only carve-out
   // above is the one exception.
   if (checkout.personEntryFees.length > 0 && !isMembershipOnly) {
+    const purchaseOnly = isPurchaseOnly(checkout);
     y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);
@@ -675,29 +684,24 @@ function renderCheckoutSection(
     y = renderTableHeader(doc, y);
 
     for (const pf of checkout.personEntryFees) {
-      // Issue #268: a person who already paid the daily usage fee earlier
-      // the same business day is billed 0 here — spell out *why* so the
-      // zero doesn't read as an error.
-      const baseLabel = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
-      const label = pf.waivedToday
-        ? `${baseLabel} — heute bereits abgerechnet`
-        : baseLabel;
-      y = renderItemRow(doc, y, label, "", 1, pf.fee, pf.fee);
+      // Each row names the person's usage type unless regular and shows
+      // what they pay (BIL-38, issue #605). Issue #268: a person who already
+      // paid the daily usage fee earlier the same business day is billed 0
+      // here — spell out *why* so the zero doesn't read as an error.
+      let label = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
+      if (pf.usageType !== "regular") {
+        // A purchase-only checkout (badge, membership) had nobody to
+        // accompany; "Begleitung" would misdescribe the buyer.
+        const usageLabel =
+          pf.usageType === "materialbezug" && purchaseOnly
+            ? "Nur Materialbezug"
+            : USAGE_TYPE_LABELS[pf.usageType] ?? pf.usageType;
+        label += ` · ${usageLabel}`;
+      }
+      if (pf.waivedToday) label += " — heute bereits abgerechnet";
+      y = renderItemRow(doc, y, label, "", 1, pf.netFee, pf.netFee);
     }
-    y = renderSubtotalRow(doc, y, checkout.entryFees);
-    // Waive entry fees per the usage-type discount (e.g. Freiwilligengruppe,
-    // interne Nutzung, Hangenmoos). ermaessigt waives half.
-    const entryWaived = round2(checkout.entryFees * (1 - discount.entryFee));
-    if (entryWaived > 0 && discountLabel) {
-      y = renderDiscountRow(
-        doc,
-        y,
-        `${discountLabel}: Nutzungsgebühr ${
-          discount.entryFee === 0 ? "wird nicht verrechnet" : "ermässigt"
-        }`,
-        entryWaived,
-      );
-    }
+    y = renderSubtotalRow(doc, y, netEntryFees);
   }
 
   if (membershipItems.length > 0) {

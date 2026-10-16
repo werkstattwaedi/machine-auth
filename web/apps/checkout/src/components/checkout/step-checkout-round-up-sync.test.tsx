@@ -3,11 +3,13 @@
 
 /**
  * Regression for issue #236: when the user enables "Aufrunden" on a
- * billable subtotal, then switches `usageType` to "intern" (which zeroes
+ * billable subtotal, then the usage type becomes "intern" (which zeroes
  * personFees + machineCost + materialCost), the previously-dispatched
  * round-up tip MUST NOT linger in state. The displayed Spende/Aufrunden
  * card already hides itself when there are no round-up options for a
  * base of 0, but the `tip` value driving the Bezahlen step was stale.
+ * Since issue #605 the type is chosen on the check-in, so the harness
+ * changes the person's type from outside the step.
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest"
@@ -17,14 +19,15 @@ import userEvent from "@testing-library/user-event"
 import { StepCheckout } from "./step-checkout"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { PricingConfig } from "@modules/lib/workshop-config"
-import type { UsageType } from "@modules/lib/pricing"
+import { deriveVisitUsageType, type UsageType } from "@modules/lib/pricing"
+import { usagePersons } from "./wizard-context"
 
 afterEach(cleanup)
 
 // The step pulls the per-person entry fee from pricing; stub `standardFee`
 // (which `computeCheckoutCosts` uses for the subtotal) and `calculateFee`
-// (the per-person display) so the test config below stays small. usageType
-// is "regular" here, so the usage-type discount is a no-op (net = raw).
+// (the per-person display) so the test config below stays small. The usage
+// type starts "regular", so the usage-type discount is a no-op (net = raw).
 vi.mock("@modules/lib/pricing", async () => {
   const actual = await vi.importActual<typeof import("@modules/lib/pricing")>(
     "@modules/lib/pricing",
@@ -42,16 +45,13 @@ vi.mock("@modules/lib/pricing", async () => {
   }
 })
 
-/** Drop the Nutzungsart list down and pick the option labelled `label`. */
+/** Change the person's usage type (on the check-in, outside the step). */
 async function pickUsageType(
   user: ReturnType<typeof userEvent.setup>,
-  label: string,
+  type: UsageType,
 ) {
   await act(async () => {
-    await user.click(screen.getByLabelText("Nutzungsart"))
-  })
-  await act(async () => {
-    await user.click(screen.getByRole("option", { name: label }))
+    await user.click(screen.getByTestId(`set-usage-${type}`))
   })
 }
 
@@ -78,6 +78,8 @@ const PERSONS: CheckoutPerson[] = [
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    userId: "u1",
+    usageType: "regular",
   },
 ]
 
@@ -90,14 +92,23 @@ function Harness({
 }) {
   const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
+  const persons = PERSONS.map((p) => ({ ...p, usageType }))
   return (
+    <>
+    {(["regular", "intern"] as const).map((t) => (
+      <button
+        key={t}
+        type="button"
+        data-testid={`set-usage-${t}`}
+        onClick={() => {
+          onUsageChange?.(t)
+          setUsageType(t)
+        }}
+      />
+    ))}
     <StepCheckout
-      persons={PERSONS}
-      usageType={usageType}
-      setUsageType={(t) => {
-        onUsageChange?.(t)
-        setUsageType(t)
-      }}
+      persons={persons}
+      visitUsageType={deriveVisitUsageType(usagePersons(persons, "u1"))}
       tip={tip}
       setTip={(n) => {
         onTipChange?.(n)
@@ -113,6 +124,7 @@ function Harness({
       items={[]}
       config={config}
     />
+    </>
   )
 }
 
@@ -140,11 +152,8 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     })
     expect(lastTip).toBeGreaterThan(0)
 
-    // Open the Nutzungsgebühren section and switch to "intern".
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
-    })
-    await pickUsageType(user, "Intern")
+    // Switch to "intern".
+    await pickUsageType(user, "intern")
 
     // After the effect runs, the tip is back to 0 — nothing to round up
     // against a 0 CHF subtotal.
@@ -165,10 +174,7 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     expect(lastTip).toBe(5)
 
     // Switch to intern.
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
-    })
-    await pickUsageType(user, "Intern")
+    await pickUsageType(user, "intern")
 
     // Manual tip survives.
     expect(lastTip).toBe(5)
@@ -184,12 +190,9 @@ describe("StepCheckout — round-up tip stays in sync with the billed subtotal (
     })
     expect(aufrunden.checked).toBe(true)
 
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Nutzungsgebühren/ }))
-    })
-    await pickUsageType(user, "Intern")
+    await pickUsageType(user, "intern")
 
-    await pickUsageType(user, "Regulär")
+    await pickUsageType(user, "regular")
     const aufrundenAfter = screen.getByRole("checkbox", { name: /aufrunden/i }) as HTMLInputElement
     expect(aufrundenAfter.checked).toBe(false)
   })

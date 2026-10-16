@@ -44,6 +44,7 @@ function emptyPerson(overrides: Partial<CheckoutPerson> = {}): CheckoutPerson {
     userType: "erwachsen",
     termsAccepted: false,
     isPreFilled: false,
+    usageType: "regular",
     ...overrides,
   }
 }
@@ -61,6 +62,7 @@ function preFilledPerson(
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: true,
+    usageType: "regular",
     userId: "u1",
     ...overrides,
   }

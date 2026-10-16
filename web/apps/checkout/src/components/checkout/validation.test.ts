@@ -15,6 +15,7 @@ function makePerson(overrides: Partial<CheckoutPerson> = {}): CheckoutPerson {
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    usageType: "regular",
     ...overrides,
   }
 }

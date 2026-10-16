@@ -6,18 +6,26 @@
  * (`recomputeSummary`, authoritative), the checkout wizard (live receipt)
  * and the admin correction editor (estimate, ADR-0042) share ONE
  * implementation: RAW per-section amounts, the usage-type discount
- * multiplier applied per section, cents rounding, and the waived-today
+ * multipliers (each person's own type on their usage fee, the visit's
+ * type on machines and material — issue #605), cents rounding, and the waived-today
  * entry-fee rule. Callers supply the standard entry fee lookup so each
  * side keeps its own config-loading contract (fail-loud on the server,
  * `null`-tolerant in the web apps).
  */
 
-import { isMachineItem, usageDiscount, type UsageType } from "./pricing"
+import {
+  isMachineItem,
+  personUsageType,
+  usageDiscount,
+  type UsageType,
+} from "./pricing"
 
 export interface SummaryPerson {
   userType: string
   /** Already paid the daily usage fee earlier the same business day (issue #268). */
   entryFeeWaivedToday?: boolean | null
+  /** The person's own usage type (issue #605); absent on older checkouts. */
+  usageType?: UsageType | null
 }
 
 export interface SummaryItem {
@@ -69,8 +77,24 @@ export function rawSections(input: {
 }
 
 /**
+ * What one person pays as usage fee: their standard fee times their own
+ * usage type's entry-fee multiplier (the visit's type for checkouts from
+ * before issue #605), 0 when already paid that day.
+ */
+export function personEntryFee(
+  person: SummaryPerson,
+  visitUsageType: UsageType,
+  standardEntryFee: (userType: string) => number,
+): number {
+  if (person.entryFeeWaivedToday) return 0
+  const type = personUsageType(person, visitUsageType)
+  return roundCents(standardEntryFee(person.userType) * usageDiscount(type).entryFee)
+}
+
+/**
  * The stored summary: RAW sections (so the invoice can spell out what was
- * waived) plus the NET total after the per-section usage-type discount.
+ * waived) plus the NET total after the usage-type discounts. `usageType`
+ * is the visit's type (`deriveVisitUsageType`).
  */
 export function computeCheckoutSummary(input: {
   persons: SummaryPerson[]
@@ -81,8 +105,12 @@ export function computeCheckoutSummary(input: {
 }): CheckoutSummary {
   const raw = rawSections(input)
   const discount = usageDiscount(input.usageType)
+  const netEntryFees = input.persons.reduce(
+    (sum, p) => sum + personEntryFee(p, input.usageType, input.standardEntryFee),
+    0,
+  )
   const totalPrice = roundCents(
-    raw.entryFees * discount.entryFee +
+    netEntryFees +
       raw.machineCost * discount.machine +
       raw.materialCost * discount.material +
       raw.tip * discount.tip,

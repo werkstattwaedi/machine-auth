@@ -44,14 +44,18 @@ function CheckoutOpen() {
   const ctx = useWizardContext()
   const bridge = useBridge()
   // Set by /visit's "Zum Checkout" (see checkout-history-state.ts). Any
-  // other arrival — a stale checkout resumed from the start page, a
-  // membership purchase landing here — is about settling what is already
-  // in the checkout, so the Vereinsmitgliedschaft section (with its address
-  // form) opens instead when the checkout carries one; the id is harmless
-  // when no membership is present.
-  const expandUsageFees = useLocation({
-    select: (l) => l.state.expandUsageFees === true,
+  // other arrival opens the Vereinsmitgliedschaft section (with its address
+  // form); the id is harmless when no membership is present. CHK-31:
+  // Nutzungsgebühren starts open when anyone has a discounted usage type,
+  // so the confirmation box is in view. Decided once on arrival (the
+  // section state is initial-only anyway).
+  const fromVisit = useLocation({
+    select: (l) => l.state.fromVisit === true,
   })
+  const [initialOpenSections] = useState(() => [
+    ...(fromVisit ? [] : ["mitgliedschaft"]),
+    ...(ctx.persons.some((p) => p.usageType !== "regular") ? ["nutzung"] : []),
+  ])
 
   // The QR bill is the fallback of last resort: it needs nothing beyond the
   // bill itself, so even an empty configured list leaves a way to pay.
@@ -93,10 +97,9 @@ function CheckoutOpen() {
   return (
     <StepCheckout
       persons={ctx.persons}
-      initialOpenSections={expandUsageFees ? ["nutzung"] : ["mitgliedschaft"]}
-      anonymous={ctx.isAnonymous}
-      usageType={ctx.usageType}
-      setUsageType={ctx.setUsageType}
+      initialOpenSections={initialOpenSections}
+      visitUsageType={ctx.visitUsageType}
+      ownerUserId={ctx.identifiedUserRef?.id ?? null}
       tip={ctx.tip}
       setTip={ctx.setTip}
       items={ctx.items}

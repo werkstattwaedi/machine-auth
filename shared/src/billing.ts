@@ -65,6 +65,8 @@ export interface CorrectCheckoutPersonInput {
   userId: string | null
   /** Admin-set "Nutzungsgebühr heute bereits bezahlt". The server may add, never remove. */
   entryFeeWaivedToday: boolean
+  /** The person's usage type (issue #605); the server derives the visit's from these. */
+  usageType?: UsageType
   billingAddress?: { company: string; street: string; zip: string; city: string } | null
 }
 
@@ -82,7 +84,8 @@ export interface CorrectCheckoutItemInput {
 }
 
 export interface CorrectCheckoutReplacement {
-  usageType: UsageType
+  /** Legacy: the visit's type for persons without their own (issue #605). */
+  usageType?: UsageType
   persons: CorrectCheckoutPersonInput[]
   items: CorrectCheckoutItemInput[]
   tip: number

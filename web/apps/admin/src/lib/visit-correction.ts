@@ -19,7 +19,11 @@ import {
   CANCEL_REASON_MIN_LENGTH,
   MAX_CANCELLATION_REASON_LENGTH,
   USAGE_TYPE_DISCOUNTS,
+  USAGE_TYPE_LABELS,
   computeCheckoutSummary,
+  deriveVisitUsageType,
+  isOwnerOnlyUsage,
+  machineUsageBlocked,
   partitionBadge,
   partitionMembership,
   roundCents,
@@ -37,6 +41,8 @@ export interface DraftPerson {
   userType: DraftUserType
   userId: string | null
   entryFeeWaivedToday: boolean
+  /** The person's own usage type (issue #605). */
+  usageType: UsageType
   billingAddress: { company: string; street: string; zip: string; city: string } | null
 }
 
@@ -54,7 +60,11 @@ export interface DraftItem {
 }
 
 export interface CorrectionDraft {
-  usageType: UsageType
+  /**
+   * The checkout owner's user id: the only line that may carry an
+   * owner-only usage type (CHK-32). Null for a guest checkout.
+   */
+  ownerId: string | null
   persons: DraftPerson[]
   items: DraftItem[]
   tip: number
@@ -110,20 +120,36 @@ export function correctionBlockedReason(
 }
 
 
+function knownUsageType(t: unknown): UsageType | null {
+  return USAGE_TYPES.includes(t as UsageType) ? (t as UsageType) : null
+}
+
 export function draftFromCheckout(
-  checkout: Pick<CheckoutDoc, "usageType" | "persons" | "summary">,
+  checkout: Pick<CheckoutDoc, "usageType" | "persons" | "summary"> &
+    Partial<Pick<CheckoutDoc, "userId">>,
   items: Array<CheckoutItemDoc & { id: string }>,
 ): CorrectionDraft {
+  const ownerId = checkout.userId?.id ?? null
+  const persons = checkout.persons ?? []
+  // Checkouts from before issue #605 carry one top-level type; it stands in
+  // for every person — an owner-only one only on the owner alone (the
+  // server reads legacy checkouts the same way).
+  const legacy = knownUsageType(checkout.usageType) ?? "regular"
   return {
-    usageType: (USAGE_TYPES.includes(checkout.usageType as UsageType)
-      ? checkout.usageType
-      : "regular") as UsageType,
-    persons: (checkout.persons ?? []).map((p) => ({
+    ownerId,
+    persons: persons.map((p) => {
+      const isOwner = !!ownerId && p.userRef?.id === ownerId
+      const fallback =
+        isOwnerOnlyUsage(legacy) && !(isOwner && persons.length === 1)
+          ? "regular"
+          : legacy
+      return {
       name: p.name,
       email: p.email ?? "",
       userType: p.userType,
       userId: p.userRef?.id ?? null,
       entryFeeWaivedToday: p.entryFeeWaivedToday === true,
+      usageType: knownUsageType(p.usageType) ?? fallback,
       billingAddress: p.billingAddress
         ? {
             company: p.billingAddress.company ?? "",
@@ -132,7 +158,8 @@ export function draftFromCheckout(
             city: p.billingAddress.city ?? "",
           }
         : null,
-    })),
+      }
+    }),
     items: items.map((i) => ({
       key: i.id,
       workshop: i.workshop,
@@ -146,6 +173,24 @@ export function draftFromCheckout(
     })),
     tip: checkout.summary?.tip ?? 0,
   }
+}
+
+/** The roster as the shared usage-type helpers see it. */
+function usagePersons(draft: Pick<CorrectionDraft, "ownerId" | "persons">) {
+  return draft.persons.map((p) => ({
+    usageType: p.usageType,
+    isOwner: !!draft.ownerId && p.userId === draft.ownerId,
+  }))
+}
+
+/**
+ * The visit's usage type, derived from the persons' own (issue #605): it
+ * decides machine time and material. The server derives it the same way.
+ */
+export function draftVisitUsageType(
+  draft: Pick<CorrectionDraft, "ownerId" | "persons">,
+): UsageType {
+  return deriveVisitUsageType(usagePersons(draft))
 }
 
 export function newItemRow(workshop: string, key: string): DraftItem {
@@ -186,8 +231,23 @@ export function validateDraft(draft: CorrectionDraft): string[] {
       errors.push(`Position ${n}: Einzelpreis ist ungültig.`)
   })
   if (!(draft.tip >= 0) || !Number.isFinite(draft.tip)) errors.push("Trinkgeld darf nicht negativ sein.")
-  if (draft.usageType === "materialbezug" && draft.items.some((i) => i.type === "machine")) {
-    errors.push("Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden.")
+  // Mirrors the server (CHK-32): Freiwilligengruppe / Interne Nutzung only
+  // on the owner's line while they are alone.
+  const people = usagePersons(draft)
+  draft.persons.forEach((p, i) => {
+    if (!isOwnerOnlyUsage(p.usageType)) return
+    const label = USAGE_TYPE_LABELS[p.usageType]
+    if (!people[i].isOwner) {
+      errors.push(`${label} ist nur für die angemeldete Person möglich.`)
+    } else if (draft.persons.length > 1) {
+      errors.push(`${label} ist nicht möglich, solange weitere Personen erfasst sind.`)
+    }
+  })
+  // CHK-8: machine time can't be billed when everyone only accompanies.
+  if (machineUsageBlocked(people, draft.items.some((i) => i.type === "machine"))) {
+    errors.push(
+      `Maschinen wurden genutzt, aber alle Personen sind als „${USAGE_TYPE_LABELS.materialbezug}“ erfasst.`,
+    )
   }
   return errors
 }
@@ -201,9 +261,14 @@ export function validateReason(reason: string): string | null {
 
 function normalize(draft: CorrectionDraft): string {
   return JSON.stringify({
-    usageType: draft.usageType,
     tip: Math.round(draft.tip * 100),
-    persons: draft.persons.map((p) => [p.userType, p.entryFeeWaivedToday, p.userId, p.name]),
+    persons: draft.persons.map((p) => [
+      p.userType,
+      p.entryFeeWaivedToday,
+      p.userId,
+      p.name,
+      p.usageType,
+    ]),
     items: draft.items.map((i) => [
       i.workshop,
       i.description.trim(),
@@ -231,7 +296,7 @@ export function estimateSummary(
   let missing = false
   const summary = computeCheckoutSummary({
     persons: draft.persons,
-    usageType: draft.usageType,
+    usageType: draftVisitUsageType(draft),
     items: draft.items.map((i) => ({ type: i.type, totalPrice: rowTotal(i) })),
     standardEntryFee: (ut) => {
       const fee = standardEntryFee(ut)
@@ -247,13 +312,15 @@ export function toWireEntry(checkoutId: string, draft: CorrectionDraft): Correct
   return {
     checkoutId,
     replacement: {
-      usageType: draft.usageType,
+      // Derived; the server re-derives it from the persons (issue #605).
+      usageType: draftVisitUsageType(draft),
       persons: draft.persons.map((p) => ({
         name: p.name.trim(),
         email: p.email.trim(),
         userType: p.userType,
         userId: p.userId,
         entryFeeWaivedToday: p.entryFeeWaivedToday,
+        usageType: p.usageType,
         billingAddress: p.billingAddress,
       })),
       items: draft.items.map((i) => ({

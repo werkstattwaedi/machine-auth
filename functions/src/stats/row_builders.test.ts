@@ -126,6 +126,7 @@ describe("stats row builders", () => {
         workshops: ["holz", "metall"],
         person_count: 2,
         user_types: ["erwachsen", "kind"],
+        person_usage_types: ["regular", "regular"],
         is_member: true,
         total_price: 42.5,
         entry_fees: 10,
@@ -153,6 +154,24 @@ describe("stats row builders", () => {
       expect(row.cancelled_at).to.equal("2026-03-20T09:00:00.000Z");
       // The voided visit keeps its original partition date.
       expect(row.visit_date).to.equal("2026-03-14");
+    });
+
+    it("lists each person's own usage type, the visit's for older lines (issue #605)", () => {
+      const row = buildVisitRow(
+        "co-1",
+        {
+          ...closedCheckout,
+          persons: [
+            { ...closedCheckout.persons[0], usageType: "materialbezug" },
+            { ...closedCheckout.persons[1] },
+          ],
+        },
+        [],
+        null,
+        false,
+        ctx
+      );
+      expect(row.person_usage_types).to.deep.equal(["materialbezug", "regular"]);
     });
 
     it("never leaks person names or emails", () => {

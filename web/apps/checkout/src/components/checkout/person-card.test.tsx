@@ -17,6 +17,7 @@ function makePerson(overrides: Partial<CheckoutPerson> = {}): CheckoutPerson {
     userType: "firma",
     termsAccepted: false,
     isPreFilled: false,
+    usageType: "regular",
     billingCompany: "Muster AG",
     billingStreet: "Testweg 1",
     billingZip: "8000",

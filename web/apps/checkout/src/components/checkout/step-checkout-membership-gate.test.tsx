@@ -32,6 +32,7 @@ function person(): CheckoutPerson {
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    usageType: "regular",
   }
 }
 
@@ -67,8 +68,7 @@ function renderStep(items: CheckoutItemLocal[]) {
   return render(
     <StepCheckout
       persons={[person()]}
-      usageType="regular"
-      setUsageType={() => {}}
+      visitUsageType="regular"
       tip={0}
       setTip={() => {}}
       paymentMethods={["rechnung"]}

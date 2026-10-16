@@ -37,10 +37,16 @@ import type {
 import {
   PAYMENT_METHOD_INFO,
   computeCheckoutSummary,
+  deriveVisitUsageType,
   isMachineItem,
+  isOwnerOnlyUsage,
   isPaymentMethod,
   isSameBusinessDay,
+  machineUsageBlocked,
+  USAGE_TYPE_DISCOUNTS,
+  USAGE_TYPE_LABELS,
   usageDiscount,
+  type UsagePerson,
 } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
@@ -156,8 +162,10 @@ export function entryFeeFor(
  * amount is authoritative here — a client could otherwise post a usage
  * type that waives charges it shouldn't.
  *
- *  - `materialbezug` ("only picking up material") cannot coexist with
- *    machine usage: if you ran a machine, it's not a pure material pickup.
+ *  - Machine usage cannot be billed when every person is `materialbezug`
+ *    (Begleitung / nur Materialbezug, CHK-8): the visit's type would waive
+ *    it. `persons` carry their own types (issue #605); without them the
+ *    visit's `usageType` stands in for one person.
  *  - `intern` (everything on the house) cannot coexist with buying a
  *    membership: a paid membership must not be zeroed out.
  *  - `intern` cannot coexist with a PAID badge either (same zeroing
@@ -170,16 +178,14 @@ export function entryFeeFor(
 export function assertUsageTypeAllowed(
   usageType: UsageType,
   opts: {
+    persons?: readonly UsagePerson[];
     hasMachineUsage: boolean;
     hasMembershipItem: boolean;
     hasPaidBadgeItem?: boolean;
   },
 ): void {
-  if (usageType === "materialbezug" && opts.hasMachineUsage) {
-    throw new HttpsError(
-      "failed-precondition",
-      "Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden.",
-    );
+  if (machineUsageBlocked(opts.persons ?? [{}], opts.hasMachineUsage, usageType)) {
+    throw new HttpsError("failed-precondition", MACHINE_USAGE_BLOCKED_MESSAGE);
   }
   if (usageType === "intern" && opts.hasMembershipItem) {
     throw new HttpsError(
@@ -257,6 +263,7 @@ export function assertMembershipBillingAddress(
  */
 export function priceCheckoutItems(args: {
   persons: CheckoutPersonEntity[];
+  /** The visit's type (`resolvePersonUsageTypes`). */
   usageType: UsageType;
   items: CheckoutItemEntity[];
   configFees: Record<string, Record<string, number>> | null;
@@ -270,6 +277,7 @@ export function priceCheckoutItems(args: {
   const items = args.items.filter(isValidItem);
   const membershipPresent = hasMembershipItem(items, args.membershipCatalogId);
   assertUsageTypeAllowed(args.usageType, {
+    persons: args.persons,
     hasMachineUsage: hasMachineUsage(items),
     hasMembershipItem: membershipPresent,
     hasPaidBadgeItem: items.some((i) => isBadgeItem(i) && i.totalPrice > 0),
@@ -354,6 +362,124 @@ function logSummaryDivergence(
   }
 }
 
+/** The close's refusal when machine time meets an all-Begleitung visit (CHK-8). */
+export const MACHINE_USAGE_BLOCKED_MESSAGE =
+  "Maschinen wurden genutzt, aber alle Personen sind als „Begleitung / nur Materialbezug“ erfasst.";
+
+/** True iff `t` names a usage type. */
+export function isUsageType(t: unknown): t is UsageType {
+  return typeof t === "string" && Object.prototype.hasOwnProperty.call(USAGE_TYPE_DISCOUNTS, t);
+}
+
+/**
+ * Give every person a usage type and derive the visit's (issue #605,
+ * ADR-0050). Shared by the close and the admin correction.
+ *
+ * - A person who carries a `usageType` keeps it.
+ * - Legacy client (no person carries one): each person gets `fallback`,
+ *   the request's top-level type — except an owner-only type
+ *   (Freiwilligengruppe / Interne Nutzung), which only the owner's line
+ *   gets; everyone else is `regular`. Old clients offered those types to
+ *   an identified visitor with companions, so the "alone" check below is
+ *   not applied to them.
+ * - An owner-only type is refused (`invalid-argument`) on any line but the
+ *   owner's (`userRef.id === ownerId`), when there is no owner line at all,
+ *   and — for a client that sends per-person types — while anyone else is
+ *   on the visit (CHK-32).
+ *
+ * The visit's type is `deriveVisitUsageType` over the result. Pure.
+ */
+export function resolvePersonUsageTypes(
+  persons: CheckoutPersonEntity[],
+  ownerId: string | null,
+  fallback: UsageType | undefined,
+): { persons: CheckoutPersonEntity[]; usageType: UsageType } {
+  const explicit = persons.some((p) => p.usageType != null);
+  if (!explicit && !fallback) {
+    throw new HttpsError("invalid-argument", "usageType is required");
+  }
+  const isOwner = (p: CheckoutPersonEntity) =>
+    ownerId !== null && p.userRef?.id === ownerId;
+
+  const resolved = persons.map((p) => {
+    if (p.usageType != null) return p;
+    let t: UsageType = fallback ?? "regular";
+    if (isOwnerOnlyUsage(t) && !isOwner(p)) t = "regular";
+    return { ...p, usageType: t };
+  });
+
+  if (!explicit && fallback && isOwnerOnlyUsage(fallback) && !resolved.some(isOwner)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${USAGE_TYPE_LABELS[fallback]} ist nur für die angemeldete Person möglich.`,
+    );
+  }
+  for (const p of resolved) {
+    const t = p.usageType as UsageType;
+    if (!isOwnerOnlyUsage(t)) continue;
+    if (!isOwner(p)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${USAGE_TYPE_LABELS[t]} ist nur für die angemeldete Person möglich.`,
+      );
+    }
+    if (explicit && resolved.length > 1) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${USAGE_TYPE_LABELS[t]} ist nicht möglich, solange weitere Personen erfasst sind.`,
+      );
+    }
+  }
+
+  const usageType = deriveVisitUsageType(
+    resolved.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
+  );
+  return { persons: resolved, usageType };
+}
+
+/**
+ * Keep a line's `savedPersonId` only when it names one of the owner's saved
+ * persons (issue #605): it keys the same-day waiver, so a forged id must not
+ * ride on someone else's paid fee. Dropped with a warning — never failing the
+ * payment — when there is no owner, the doc doesn't exist, the line is the
+ * owner's own (it has a `userRef`), or the id repeats an earlier line. One
+ * `getAll` for all ids.
+ */
+export async function verifySavedPersonIds(
+  db: FirebaseFirestore.Firestore,
+  persons: CheckoutPersonEntity[],
+  ownerId: string | null,
+  context: string,
+): Promise<CheckoutPersonEntity[]> {
+  if (!persons.some((p) => p.savedPersonId)) return persons;
+
+  const drop = (p: CheckoutPersonEntity, why: string): CheckoutPersonEntity => {
+    logger.warn(`${context}: dropped savedPersonId (${why})`, {
+      savedPersonId: p.savedPersonId,
+    });
+    const { savedPersonId: _dropped, ...rest } = p;
+    return rest;
+  };
+
+  if (!ownerId) return persons.map((p) => (p.savedPersonId ? drop(p, "no owner") : p));
+
+  const ids = [...new Set(persons.map((p) => p.savedPersonId).filter((id): id is string => !!id))];
+  const collection = db.collection("users").doc(ownerId).collection("savedPersons");
+  const snaps = await db.getAll(...ids.map((id) => collection.doc(id)));
+  const existing = new Set(snaps.filter((s) => s.exists).map((s) => s.id));
+
+  const seen = new Set<string>();
+  return persons.map((p) => {
+    const id = p.savedPersonId;
+    if (!id) return p;
+    if (p.userRef) return drop(p, "owner line");
+    if (!existing.has(id)) return drop(p, "not found");
+    if (seen.has(id)) return drop(p, "repeated");
+    seen.add(id);
+    return p;
+  });
+}
+
 const ALLOWED_USER_TYPES = ["erwachsen", "kind", "firma"] as const;
 type CanonicalUserType = (typeof ALLOWED_USER_TYPES)[number];
 
@@ -424,8 +550,9 @@ async function enforceAccountHolderUserType(
  *
  * The entry ("Nutzungs-") fee is billed at most once per Zurich business
  * day (boundary 03:00) per *named* person. A named person is one carrying a
- * `userRef` — they map to a real account. Anonymous / guest persons (no
- * `userRef`) are always charged.
+ * `userRef` (a real account) or a `savedPersonId` (one of the owner's saved
+ * persons, issue #605) — keyed `userRef.id` resp. `saved:<id>`. Typed-in
+ * guests are always charged.
  *
  * For each named person we ask: did an *earlier* closed checkout on the same
  * business day already bill them the entry fee? "Earlier closed checkout"
@@ -456,7 +583,7 @@ export async function markEntryFeeWaivedToday(
   // Truly anonymous checkout (no owner) — nobody to dedup against.
   if (!ownerRef) return persons;
   // No named persons → nothing to waive.
-  if (!persons.some((p) => p.userRef)) return persons;
+  if (!persons.some((p) => waiverKey(p) !== null)) return persons;
 
   // All closed checkouts this account owns. Filtered to the same business
   // day in memory (Firestore can't express the 03:00 boundary in a range
@@ -467,9 +594,9 @@ export async function markEntryFeeWaivedToday(
     .where("status", "==", "closed")
     .get();
 
-  // Collect userRef ids that were billed a NON-ZERO entry fee on the same
-  // business day in any *other* closed checkout.
-  const chargedTodayUserIds = new Set<string>();
+  // Collect the waiver keys of persons billed a NON-ZERO entry fee on the
+  // same business day in any *other* closed checkout.
+  const chargedToday = new Set<string>();
   for (const doc of priorSnap.docs) {
     if (currentCheckoutId && doc.id === currentCheckoutId) continue;
     const prior = doc.data() as CheckoutEntity;
@@ -478,26 +605,33 @@ export async function markEntryFeeWaivedToday(
     if (!priorInstant) continue;
     if (!isSameBusinessDay(priorInstant, closeAt)) continue;
 
-    const priorDiscount = usageDiscount(prior.usageType);
     for (const person of prior.persons ?? []) {
-      if (!person.userRef) continue;
+      const key = waiverKey(person);
+      if (!key) continue;
       // The person was actually charged iff their fee was neither
-      // dedup-waived nor usage-type-waived (entryFee multiplier 0).
+      // dedup-waived nor usage-type-waived (entryFee multiplier 0). Their
+      // own type decides; checkouts from before #605 carry only the visit's.
       if (person.entryFeeWaivedToday) continue;
-      if (priorDiscount.entryFee === 0) continue;
+      if (usageDiscount(person.usageType ?? prior.usageType).entryFee === 0) continue;
       const standard = safeStandardEntryFee(person.userType, configFees);
       if (standard <= 0) continue;
-      chargedTodayUserIds.add(person.userRef.id);
+      chargedToday.add(key);
     }
   }
 
-  if (chargedTodayUserIds.size === 0) return persons;
+  if (chargedToday.size === 0) return persons;
 
-  return persons.map((p) =>
-    p.userRef && chargedTodayUserIds.has(p.userRef.id)
-      ? { ...p, entryFeeWaivedToday: true }
-      : p,
-  );
+  return persons.map((p) => {
+    const key = waiverKey(p);
+    return key && chargedToday.has(key) ? { ...p, entryFeeWaivedToday: true } : p;
+  });
+}
+
+/** The same-day waiver's key of a named person, null for a typed-in guest. */
+function waiverKey(p: CheckoutPersonEntity): string | null {
+  if (p.userRef) return p.userRef.id;
+  if (p.savedPersonId) return `saved:${p.savedPersonId}`;
+  return null;
 }
 
 /**
@@ -556,6 +690,10 @@ export interface ClosePersonInput {
   } | null;
   /** users/{id} the person was pre-filled from (owner, family roster). */
   userId?: string | null;
+  /** The person's own usage type (issue #605); absent from older clients. */
+  usageType?: string | null;
+  /** users/{owner}/savedPersons/{id} the line was added from (issue #605). */
+  savedPersonId?: string | null;
 }
 
 function isClosePersonInput(p: unknown): p is ClosePersonInput {
@@ -567,7 +705,10 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
     typeof x.userType === "string" &&
     (x.billingAddress == null ||
       (typeof x.billingAddress === "object" && !Array.isArray(x.billingAddress))) &&
-    (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0))
+    (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0)) &&
+    (x.usageType == null || isUsageType(x.usageType)) &&
+    (x.savedPersonId == null ||
+      (typeof x.savedPersonId === "string" && x.savedPersonId.length > 0))
   );
 }
 
@@ -580,7 +721,9 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
  * the same-day dedup, both of which key on `userRef`.
  *
  * - Only allowlisted fields are kept: server-derived fields such as
- *   `entryFeeWaivedToday` are never taken from the client.
+ *   `entryFeeWaivedToday` are never taken from the client. `usageType` and
+ *   `savedPersonId` are copied as sent; `resolvePersonUsageTypes` and
+ *   `verifySavedPersonIds` check them.
  * - A `userId` becomes a `userRef` only for the checkout owner: a roster
  *   holds the owner plus guests by name (ADR-0048) — anyone with an account
  *   of their own checks in on it. Anything else is dropped with a warning
@@ -613,6 +756,8 @@ export function resolveClosePersons(
         city: String(a.city ?? ""),
       };
     }
+    if (p.usageType) person.usageType = p.usageType as UsageType;
+    if (p.savedPersonId) person.savedPersonId = p.savedPersonId;
     if (p.userId) {
       if (p.userId !== ownerId) {
         logger.warn(`${context}: dropped non-owner person userId`, {
@@ -636,7 +781,12 @@ interface CloseCheckoutRequest {
   checkoutId?: string;
   /** Data for the anonymous flow that creates a closed checkout in one shot. */
   newCheckout?: NewCheckoutInput;
-  usageType: UsageType;
+  /**
+   * Legacy: the visit's single type, for clients that send no per-person
+   * `usageType` (issue #605). Ignored for persons that carry their own;
+   * the stored visit type is always derived.
+   */
+  usageType?: UsageType;
   persons: ClosePersonInput[];
   summary: CheckoutSummaryEntity;
   /**
@@ -685,8 +835,8 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (!persons.every(isClosePersonInput)) {
     throw new HttpsError("invalid-argument", "persons[] must be valid");
   }
-  if (!usageType) {
-    throw new HttpsError("invalid-argument", "usageType is required");
+  if (usageType != null && !isUsageType(usageType)) {
+    throw new HttpsError("invalid-argument", "usageType must be valid");
   }
   if (paymentMethod !== null) {
     if (!isPaymentMethod(paymentMethod)) {
@@ -733,7 +883,7 @@ async function closeExistingCheckout(
   isAnonymous: boolean,
   args: {
     checkoutId: string;
-    usageType: UsageType;
+    usageType?: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -789,12 +939,14 @@ async function closeExistingCheckout(
   const ownerId = stored
     ? (stored.userId?.id ?? null)
     : (isAnonymous ? null : callerUid);
-  const persons = resolveClosePersons(
-    db,
-    args.persons,
+  const context = `closeExistingCheckout ${args.checkoutId}`;
+  const typed = resolvePersonUsageTypes(
+    resolveClosePersons(db, args.persons, ownerId, context),
     ownerId,
-    `closeExistingCheckout ${args.checkoutId}`,
+    args.usageType,
   );
+  const visitUsageType = typed.usageType;
+  const persons = await verifySavedPersonIds(db, typed.persons, ownerId, context);
 
   if (args.paymentMethod) {
     await assertPaymentMethodAllowed(
@@ -807,7 +959,7 @@ async function closeExistingCheckout(
     db,
     persons,
     userRef,
-    `closeExistingCheckout ${args.checkoutId}`,
+    context,
   );
 
   // The buyer's billing address (used to backstop membership invoices below).
@@ -918,7 +1070,7 @@ async function closeExistingCheckout(
 
     const { items, summary, membershipPresent } = priceCheckoutItems({
       persons: dedupedPersons,
-      usageType: args.usageType,
+      usageType: visitUsageType,
       items: rawItems,
       configFees,
       membershipCatalogId,
@@ -943,10 +1095,12 @@ async function closeExistingCheckout(
       preAck: commit.preAck,
     });
 
+    // `purchaseOnly` stays as stored: the server set it on its purchase
+    // checkouts, the client clears it when a visit is started (KIO-18).
     tx.update(checkoutRef, {
       ...(commit.method ? { paymentMethod: commit.method } : {}),
       status: "closed",
-      usageType: args.usageType,
+      usageType: visitUsageType,
       persons: dedupedPersons,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
@@ -975,7 +1129,7 @@ async function createAnonymousCheckout(
   firebaseAuthUid: string | null,
   args: {
     newCheckout: NewCheckoutInput;
-    usageType: UsageType;
+    usageType?: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -1007,16 +1161,26 @@ async function createAnonymousCheckout(
     });
   }
 
-  // Loophole guard (issue #284): materialbezug cannot coexist with machine
-  // usage. The membership guard is a no-op on this path — the anonymous
-  // create input carries no variantId, and memberships are bought through
-  // purchaseMembership (which closes via closeExistingCheckout).
-  assertUsageTypeAllowed(args.usageType, {
+  const db = getFirestore();
+
+  // Only the owner's own line keeps its identity (issue #741, ADR-0048).
+  const typed = resolvePersonUsageTypes(
+    resolveClosePersons(db, args.persons, effectiveUserId ?? null, "createAnonymousCheckout"),
+    effectiveUserId ?? null,
+    args.usageType,
+  );
+  const visitUsageType = typed.usageType;
+
+  // Loophole guard (issue #284): machine usage needs someone who isn't only
+  // accompanying. The membership guard is a no-op on this path — the
+  // anonymous create input carries no variantId, and memberships are bought
+  // through purchaseMembership (which closes via closeExistingCheckout).
+  assertUsageTypeAllowed(visitUsageType, {
+    persons: typed.persons,
     hasMachineUsage: hasMachineUsage(validItems),
     hasMembershipItem: false,
   });
 
-  const db = getFirestore();
   const pricingDoc = await db.doc("config/pricing").get();
   const configFees =
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)
@@ -1032,10 +1196,9 @@ async function createAnonymousCheckout(
     await assertPaymentMethodAllowed(args.paymentMethod, userIdRef);
   }
 
-  // Only the owner's own line keeps its identity (issue #741, ADR-0048).
-  const persons = resolveClosePersons(
+  const persons = await verifySavedPersonIds(
     db,
-    args.persons,
+    typed.persons,
     effectiveUserId ?? null,
     "createAnonymousCheckout",
   );
@@ -1068,7 +1231,7 @@ async function createAnonymousCheckout(
 
   const summary = recomputeSummary(
     dedupedPersons,
-    args.usageType,
+    visitUsageType,
     validItems,
     configFees,
     args.clientSummary?.tip ?? 0,
@@ -1099,7 +1262,9 @@ async function createAnonymousCheckout(
     tx.set(checkoutRef, {
       userId: userIdRef,
       status: "closed",
-      usageType: args.usageType,
+      usageType: visitUsageType,
+      // Created by the client's check-out: a visit (CHK-9, issue #605).
+      purchaseOnly: false,
       created: now,
       workshopsVisited: args.newCheckout.workshopsVisited,
       persons: dedupedPersons,

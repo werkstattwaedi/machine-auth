@@ -231,6 +231,16 @@ export interface CheckoutPersonEntity {
   // record. The invoice PDF reads this flag so the per-person fee it
   // re-derives stays consistent with the billed total.
   entryFeeWaivedToday?: boolean;
+
+  // The person's own usage type (issue #605, ADR-0050): decides their usage
+  // fee. Absent on checkouts closed before #605 — readers fall back to the
+  // checkout's top-level `usageType` (`person.usageType ?? checkout.usageType`).
+  usageType?: UsageType;
+
+  // users/{owner}/savedPersons/{id} this line was added from (issue #605).
+  // Kept only when that doc exists at close; keys the same-day waiver for
+  // the saved person (`saved:<id>`).
+  savedPersonId?: string;
 }
 
 export interface CheckoutSummaryEntity {
@@ -257,7 +267,14 @@ export interface CheckoutSummaryEntity {
 export interface CheckoutEntity {
   userId: DocumentReference; // Reference to /users/{userId}
   status: CheckoutStatus;
+  // The visit's type (issue #605): derived from the persons at close
+  // (`deriveVisitUsageType`); decides machine time and material.
   usageType: UsageType;
+  // A checkout with no visit behind it — a badge, membership or renewal the
+  // server bought on its own (CHK-9). Server-created purchases write `true`,
+  // client-created checkouts `false`; older docs lack it (`isPurchaseOnly`
+  // falls back to `usageType == "materialbezug"`).
+  purchaseOnly?: boolean;
   created: Timestamp;
   workshopsVisited: string[];
   persons: CheckoutPersonEntity[];
@@ -385,4 +402,18 @@ export interface MembershipInviteEntity {
   resolvedAt: Timestamp | null;
   resolvedUserId?: DocumentReference | null;
   ttlAt: Timestamp;
+}
+
+/**
+ * users/{uid}/savedPersons/{id} (issue #605): a companion the account holder
+ * saved on a check-in to pick again next time. Name and user type only —
+ * never the usage type. Create and delete only; deleted with the owner.
+ */
+export interface SavedPersonEntity {
+  firstName: string;
+  lastName: string;
+  userType: "erwachsen" | "kind";
+  createdAt: Timestamp;
+  modifiedBy: string | null;
+  modifiedAt: Timestamp;
 }

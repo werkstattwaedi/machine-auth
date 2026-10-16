@@ -28,6 +28,7 @@ function person(overrides: Partial<CheckoutPerson> = {}): CheckoutPerson {
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    usageType: "regular",
     ...overrides,
   }
 }
@@ -63,8 +64,7 @@ function renderStep(
   return render(
     <StepCheckout
       persons={[p]}
-      usageType="regular"
-      setUsageType={() => {}}
+      visitUsageType="regular"
       tip={0}
       setTip={() => {}}
       paymentMethods={["rechnung"]}

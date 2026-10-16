@@ -70,13 +70,13 @@ test.describe("Authenticated checkout", () => {
     await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-    // The Nutzungsgebühren section opens by itself when arriving from the
-    // visit step (#570). The display name also renders in the page header
-    // (account-menu trigger), so scope the assertion to the section detail
-    // to avoid strict-mode dupes.
-    await expect(
-      page.getByRole("button", { name: /Nutzungsgebühren/ }),
-    ).toHaveAttribute("aria-expanded", "true")
+    // Everyone on Reguläre Nutzung: Nutzungsgebühren starts collapsed
+    // (CHK-31, #605); open it. The display name also renders in the page
+    // header (account-menu trigger), so scope the assertion to the section
+    // detail to avoid strict-mode dupes.
+    const usageFees = page.getByRole("button", { name: /Nutzungsgebühren/ })
+    await expect(usageFees).toHaveAttribute("aria-expanded", "false")
+    await usageFees.click()
     await expect(
       page.locator("#nutzung-detail").getByText("E2E Testuser", { exact: true }),
     ).toBeVisible()

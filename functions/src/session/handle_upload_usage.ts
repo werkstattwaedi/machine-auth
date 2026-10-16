@@ -320,6 +320,8 @@ async function accumulateForUser(
       userId: userRef,
       status: "open",
       usageType: "regular",
+      // A machine session is a visit (CHK-9, issue #605).
+      purchaseOnly: false,
       created: Timestamp.now(),
       workshopsVisited: [workshop],
       persons: [],
