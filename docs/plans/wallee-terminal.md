@@ -19,8 +19,11 @@ ADR-0044 prepared the method table and reserved the id `wallee_terminal`. RaiseN
 | Abort from the till | `abortCardEntryNotification` → `trxAbortNotification` + `errorNotification TRM.PT.0002` (echoes `merchantReference`) within 0.3 s. |
 | Live events | `trxInfo=AAA/` gives start/cardEntry/cardRemoval/end/abort plus CARDHOLDER/ATTENDANT `displayNotification` text (German). |
 | Timeouts | `toCardIn` 30 s, `toPosTrxRq` 45 s. Card tap → final response took about 13 s on a decline. |
-| Approval path | **Not yet tested.** The terminal's acquirer declines everything ("CHF 0.00 Höchstbetrag", `failureReason.category CONFIGURATION`). The space is `LIVE`. |
-| `reprintReceiptRequest` | `VCS.ERR.0017` (undocumented), possibly because there is no approved transaction yet. |
+| Test outcomes | The test acquirer **simulates the result from the amount** (Wallee, 2026-10-16): CHF 3.00–9.00 approve; 1.00, 2.00, 9.97 and ≥ 20.17 decline; 1.01/1.02/1.03/1.09 give card or system errors; 6.66/9.98/9.99 decline with auto-reversal; 1.28/11.30/20.16 need a PIN or cardholder ID; 20.15 asks to confirm the amount. Our early CHF 1.00 tests were declined on purpose. |
+| Approved payment | CHF 3.00: `trxResult 0`, `ep2AuthResponseCode 00`, `amountAuth 300`, `merchantReference` echoed. About 15 s from request to response, mostly waiting for the tap. Merchant and cardholder receipts arrive as `printerNotification` text (not needed: the Quittung is our own PDF). |
+| Backend state on approval | Webhooks PROCESSING → CONFIRMED → **AUTHORIZED** within about 1 s, out of order again. The transaction stays **`AUTHORIZED`** (`completedOn` empty). Completion presumably comes with the daily closing or after the connector's completion delay (5 days); being checked with a payment left un-reversed. |
+| Reversal | `reversalRequest` with `origTrxSeqCnt` works, but the terminal first sends a `confirmationRequest` ("Storno CHF 3.00 OK?") that the till must answer with `confirmationResponse result=1`. Then a **VOIDED** webhook, and the backend transaction is `VOIDED`. |
+| `reprintReceiptRequest` | Works once a transaction exists (`VCS.ERR.0017` just meant there wasn't one). `lastTrx` does **not** include our `merchantReference`. |
 
 **The key design consequence:** the Wallee backend is the source of truth, it can be found by our reference, and it tells us about changes by webhook. That makes LTI's weak points (no auth, an abort ignored after the card is read, a dropped connection mid-payment) recoverable on the server side, without `trxSyncNumber`.
 
@@ -82,7 +85,7 @@ The client never tells the backend that a bill is paid; only Wallee does.
   - It sits behind a small `WalleeApi` interface (`getTransaction`, `searchTransactions`, `isSignatureValid`) that tests replace with a fake.
 - `settleTerminalPayment(transactionId, source: "webhook" | "reconcile")` is **the only way a bill gets paid by the terminal**:
   1. Re-read the transaction through the SDK. **Never use the webhook payload's `state`**: deliveries arrive out of order and carry no entity data.
-  2. It must be in a **successful** state (decided once approvals work, see Open questions; provisionally `AUTHORIZED | COMPLETED | FULFILL`), with `userInterfaceType == TERMINAL` and `terminal.id == WALLEE_TERMINAL_ID`. Anything else (FAILED, PROCESSING, …) → no-op.
+  2. It must be in a **successful** state (**`AUTHORIZED`**, which is where an approved terminal payment lands, or a later `COMPLETED`/`FULFILL`), with `userInterfaceType == TERMINAL` and `terminal.id == WALLEE_TERMINAL_ID`. Anything else (FAILED, PROCESSING, …) → no-op.
   3. Map `merchantReference` to the bill. A reference outside our bill number range belongs to the other environment and is ignored (see Config). A reference inside our range with no matching bill → log `terminal_unmatched_payment`.
   4. Check `currency == CHF` and `|authorizationAmount − bill.amount| < 0.005`. A mismatch → error event; don't settle.
   5. In one Firestore transaction:
@@ -187,9 +190,9 @@ The client never tells the backend that a bill is paid; only Wallee does.
 - **Amount format**: bills are CHF floats. Send `Math.round(amount * 100)` Rappen and compare with a tolerance of 0.005.
 
 ## Open questions
-1. **Which Wallee state counts as paid** for terminal transactions: `AUTHORIZED`, `COMPLETED` or `FULFILL`? This needs one approved payment. Also, which timestamp to use for `paidAt`.
-2. Can Wallee **raise the acquirer limit** or switch to test mode? Or can the "Simulator Terminal" / "Bogus Processor" features give approved test payments?
-3. What does `VCS.ERR.0017` mean, and do approved payments send `printerNotification` receipts? We don't need them: the Quittung is our own PDF, and the terminal shows its own result screen.
+1. **When does a terminal transaction move from `AUTHORIZED` to `COMPLETED`?** Expected at the daily closing (about 02:08) or after the 5-day completion delay; being checked. Either way the bill is settled on `AUTHORIZED`, with `paidAt` = `authorizedOn`.
+2. **A `VOIDED` after settlement** (reversal at the terminal or in the portal) must not leave the bill "paid": un-settle it, or at least alert. To be decided with the implementation.
+3. **Double charges:** reverse automatically over LTI (the kiosk answers the confirmation prompt), or handle them by hand in the portal? An LTI reversal only reaches the terminal's recent transactions.
 4. *(resolved: staging uses a disjoint bill number range in the shared space)*
 5. Should a retry after a decline reuse the bill reference? (Proposal: yes. Settlement only looks at successful transactions, so earlier declines don't matter.)
 6. Do webhooks cost extra on our Wallee plan, now that the feature is switched on?
