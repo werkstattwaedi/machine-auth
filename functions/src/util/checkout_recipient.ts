@@ -28,11 +28,9 @@ import type {
  *
  * The mail always goes to the checkout's account holder (`checkout.userId`) —
  * the payer — and to no one else, regardless of who appears on the roster
- * (`persons`). Per ADR-0029 (#439), account-less family members exist only as
- * roster members of a family whose owner is the payer; they never have an
- * email of their own. So even when the owner has removed themselves from
- * `persons` and only an account-less child remains, the recipient is
- * unambiguous: the account holder's email.
+ * (`persons`). Per ADR-0048 every other roster line is a guest by name the
+ * owner brought along, so the recipient is unambiguous: the account
+ * holder's email.
  *
  * Returns `null` (caller logs + skips) when the checkout has no account holder
  * (anonymous checkout) or the account holder has no email (child account).
@@ -64,7 +62,7 @@ export async function resolveRecipientEmail(
  * A guest checkout has no account holder (`userId` null) and the only
  * e-mail we hold is the one on the roster. Picks the first `persons[]`
  * entry with a non-empty e-mail. Returns `null` when the checkout HAS an
- * account holder: per ADR-0029 / #471 a roster member is never mailed
+ * account holder: per ADR-0048 / #471 a roster member is never mailed
  * instead of the payer, so the fallback must not leak into that case.
  *
  * `CheckoutEntity.userId` is typed non-nullable but is `null` in practice

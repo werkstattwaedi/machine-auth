@@ -26,12 +26,11 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Family
 
-- **MEM-15** Only the family owner (or an admin) manages a family membership; an invited member can only leave.
+- **MEM-15** Only the family owner (or an admin) manages a family membership; an invited member can only leave. — ADR-0048, #747
 
   | Action | Family owner | Invited member | Admin |
   |---|---|---|---|
   | Invite by e-mail | yes | no | no — adds directly (MEM-33) |
-  | Add a member without login | yes | no | yes |
   | Remove a member | anyone but the owner | only themselves | anyone but the owner |
   | End auto-renew | yes | no | yes |
 
@@ -40,8 +39,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-18** A person without an account joins from the invitation link without a sign-in code; a person with an account signs in first.
 - **MEM-19** A signed-in person sees the open invitations addressed to them on the membership page, and can accept or decline them there. — #569
 - **MEM-20** A person belongs to at most one active membership; inviting, accepting or adding someone already in another one is refused.
-- **MEM-21** A family owner can add members without a login (adults or children), who count as members. — ADR-0029
-- **MEM-22** Any member of a family can add the family's members without a login to their own visit, but not members who have their own login. — ADR-0029, #432
+- **MEM-36** A family membership holds the people who visit the workshop on their own, each with their own login; whoever only comes along is a further person on a member's check-in (CHK-6), not a member. — ADR-0048, #747
 - **MEM-23** The family owner can't be removed and can't leave.
 
 ## Renewal & cancellation
@@ -67,13 +65,13 @@ renewal, cancellation and expiry. Terms: see the
 ## Account page
 
 - **MEM-30** At the kiosk, the membership page and every membership action need a code entered in the last 15 min (ACC-5). — ADR-0041
-- **MEM-31** The membership page shows each person their own situation:
+- **MEM-31** The membership page shows each person their own situation: — ADR-0048, #747
 
   | Person | Membership | Sees |
   |---|---|---|
   | anyone | none | single and family offers with prices — unless one waits in their checkout (MEM-4) |
   | single member | active | type, end date, auto-renew state, a way to end auto-renew |
-  | family owner | active | the same, plus the members, open invitations (revocable) and adding a member |
+  | family owner | active | the same, plus the members, open invitations (revocable) and inviting a member (MEM-16) |
   | invited member | active | type, end date, the members, and leaving as the only action; no way to end auto-renew (who is billed: MEM-25) |
   | anyone | expired | the expiry date and a way to buy again |
   | anyone | cancelled | that only the club administration can give them a membership again (MEM-27) |
@@ -81,7 +79,7 @@ renewal, cancellation and expiry. Terms: see the
 ## Admin
 
 - **MEM-32** An admin can create a membership without payment for a person who has none, extend one by a year, end auto-renew and cancel.
-- **MEM-33** An admin adds existing people or members without a login directly to a family; no invitation mail is sent. — #622
+- **MEM-33** An admin adds existing people directly to a family; no invitation mail is sent. — #622, ADR-0048, #747
 - **MEM-34** The admin app counts a membership as expiring in its last 30 days, and shows a pending renewal bill on it.
 
 ## Open questions
@@ -98,3 +96,5 @@ renewal, cancellation and expiry. Terms: see the
 ## Retired
 
 <!-- `- MEM-n — <PR that retired it>` -->
+- MEM-21 — #747 (members without a login are no longer added; ADR-0048)
+- MEM-22 — #747 (family members are no longer added to a visit from the roster; ADR-0048)

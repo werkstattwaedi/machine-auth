@@ -23,7 +23,6 @@ import { useCollection, useDocument } from "@modules/lib/firestore"
 import {
   where,
   orderBy,
-  documentId,
   serverTimestamp,
   arrayUnion,
   type DocumentReference,
@@ -37,8 +36,6 @@ import {
   checkoutsCollection,
   checkoutItemsCollection,
   checkoutItemRef,
-  membershipsCollection,
-  usersCollection,
 } from "@modules/lib/firestore-helpers"
 import {
   useDb,
@@ -72,7 +69,6 @@ import {
 } from "./use-checkout-state"
 import { hasPreservableState } from "./kiosk-inactivity-watcher"
 import { registerKioskSessionGuard } from "./kiosk-session-guard"
-import type { FamilyCandidate } from "./step-checkin"
 import type { PaymentData } from "./payment-result"
 import { computeCheckoutCosts } from "./step-checkout"
 import { runStartOver } from "./start-over"
@@ -152,7 +148,6 @@ export interface WizardContextValue {
   membershipCatalogId: string | null
   /** NFC-Badge catalog id (self-service badge purchase); null when unset. */
   badgeCatalogId: string | null
-  familyCandidates: FamilyCandidate[]
   // ----- mutable wizard state -----
   persons: CheckoutPerson[]
   personsDispatch: React.Dispatch<PersonsAction>
@@ -441,63 +436,6 @@ export function WizardProvider({
     isAccountLoggedIn ? null : tokenUser,
     personsDispatch,
     persons,
-  )
-
-  // Family-roster quick-add (issue #209, extended for tag-tap in #422).
-  // Source the self principal from `identifiedUserRef`, which is set for
-  // BOTH a logged-in account and a kiosk tag-tap session — the latter
-  // points at `users/${tokenUser.userId}`. The membership/co-member reads
-  // below are now permitted for tag sessions by the matching firestore.rules
-  // `actsAs()` carve-outs, so a tapped family member sees the same roster
-  // chips the logged-in owner does.
-  const selfUserId = identifiedUserRef?.id ?? null
-  const selfRef = identifiedUserRef
-  const { data: familyMemberships } = useCollection(
-    selfRef ? membershipsCollection(db) : null,
-    ...(selfRef
-      ? [
-          where("members", "array-contains", selfRef),
-          where("type", "==", "family"),
-          where("status", "==", "active"),
-        ]
-      : []),
-  )
-  const familyMembership = familyMemberships[0] ?? null
-  const otherMemberIds = useMemo(() => {
-    if (!familyMembership || !selfUserId) return [] as string[]
-    const ids = familyMembership.members
-      .map((m) => m.id)
-      .filter((id) => id !== selfUserId)
-    return ids.slice(0, 30)
-  }, [familyMembership, selfUserId])
-  const { data: familyMemberDocs } = useCollection(
-    otherMemberIds.length > 0 ? usersCollection(db) : null,
-    where(
-      documentId(),
-      "in",
-      otherMemberIds.length > 0 ? otherMemberIds : [""],
-    ),
-  )
-  const claimedUserIds = useMemo(
-    () => new Set(persons.map((p) => p.userId).filter(Boolean) as string[]),
-    [persons],
-  )
-  const familyCandidates: FamilyCandidate[] = useMemo(
-    () =>
-      buildFamilyCandidates({
-        familyMemberDocs,
-        claimedUserIds,
-        identifiedUserDoc,
-        tokenUser,
-        hasFamilyMembership: !!familyMembership,
-      }),
-    [
-      familyMemberDocs,
-      claimedUserIds,
-      identifiedUserDoc,
-      tokenUser,
-      familyMembership,
-    ],
   )
 
   // Rehydrate persons from open Firestore checkout doc (issue #246).
@@ -1016,7 +954,6 @@ export function WizardProvider({
     discountLevel,
     membershipCatalogId,
     badgeCatalogId,
-    familyCandidates,
     persons,
     personsDispatch,
     usageType,
@@ -1088,79 +1025,6 @@ export function deriveIsMember(
   return !!(
     identifiedUserDoc?.activeMembership || tokenUser?.activeMembership
   )
-}
-
-/**
- * Build the family quick-add chip list (issue #209, extended for tag-tap in
- * #422). The roster co-members come from `familyMemberDocs`; the identified
- * principal is prepended so they can re-add themselves after removing their
- * own chip.
- *
- * The self chip is sourced from the account user doc when logged in, or from
- * `tokenUser` for a kiosk tag-tap session — in the tag case
- * `identifiedUserDoc` is null but the synthetic session still identifies a
- * real family member, and the matching firestore.rules `actsAs()` carve-outs
- * now let that session read the roster docs (issue #422). Candidates already
- * on the visit (`claimedUserIds`) are filtered out.
- *
- * Exported (pure) for unit testing — see wizard-family-candidates.test.ts.
- */
-export function buildFamilyCandidates({
-  familyMemberDocs,
-  claimedUserIds,
-  identifiedUserDoc,
-  tokenUser,
-  hasFamilyMembership,
-}: {
-  familyMemberDocs: {
-    id: string
-    firstName: string
-    lastName: string
-    email?: string | null
-    userType?: string | null
-  }[]
-  claimedUserIds: Set<string>
-  identifiedUserDoc: UserDoc | null
-  tokenUser: TokenUser | null
-  hasFamilyMembership: boolean
-}): FamilyCandidate[] {
-  const candidates: FamilyCandidate[] = familyMemberDocs
-    .filter((m) => !claimedUserIds.has(m.id))
-    .map((m) => ({
-      userId: m.id,
-      firstName: m.firstName,
-      lastName: m.lastName,
-      email: m.email ?? "",
-      userType: (m.userType as UserType) ?? "erwachsen",
-      // ADR-0029: a co-member with their own login (non-empty email) can't
-      // be rostered — the chip renders disabled with a hint instead.
-      hasAccount: !!m.email?.trim(),
-    }))
-  const self: FamilyCandidate | null = identifiedUserDoc
-    ? {
-        userId: identifiedUserDoc.id,
-        firstName: identifiedUserDoc.firstName,
-        lastName: identifiedUserDoc.lastName,
-        email: identifiedUserDoc.email ?? "",
-        userType: (identifiedUserDoc.userType as UserType) ?? "erwachsen",
-        // The identified principal is the checkout owner — ADR-0029's
-        // allowed exception — so their chip is always addable.
-        hasAccount: false,
-      }
-    : tokenUser
-      ? {
-          userId: tokenUser.userId,
-          firstName: tokenUser.firstName ?? "",
-          lastName: tokenUser.lastName ?? "",
-          email: tokenUser.email ?? "",
-          userType: (tokenUser.userType as UserType) ?? "erwachsen",
-          hasAccount: false,
-        }
-      : null
-  if (self && hasFamilyMembership && !claimedUserIds.has(self.userId)) {
-    candidates.unshift(self)
-  }
-  return candidates
 }
 
 /**

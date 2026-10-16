@@ -51,7 +51,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Mail
 
-- **BIL-25** Bill mail goes only to the account holder, or for a guest without an account to the first e-mail given at check-in, and to nobody else on the visit. — ADR-0029, #471, #651
+- **BIL-25** Bill mail goes only to the account holder, or for a guest without an account to the first e-mail given at check-in, and to nobody else on the visit. — ADR-0048, #471, #651
 - **BIL-26** A Rechnung or Quittung is mailed once the payment method is committed, a Beleg when the checkout becomes a Beleg, and a Sammelrechnung by the monthly run. — #251, #405
 - **BIL-27** A Beleg and a Sammelrechnung are announced by different mails. — ADR-0046, #502
 - **BIL-28** A correction sends exactly one mail for the new top-level document, with corrected Belege attached; a cancellation without replacement sends a notice only if the original was mailed. — ADR-0042

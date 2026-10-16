@@ -15,7 +15,7 @@ vi.mock("./checkin-signin", () => ({
   ),
 }))
 
-import { StepCheckin, type FamilyCandidate } from "./step-checkin"
+import { StepCheckin } from "./step-checkin"
 import {
   personsReducer,
   initialPersons,
@@ -44,7 +44,6 @@ interface CheckinOpts {
   isMember?: boolean
   personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
-  familyCandidates?: FamilyCandidate[]
   tagAuthLoading?: boolean
   tagAuthError?: string | null
   picc?: string
@@ -62,7 +61,6 @@ function renderCheckin(opts: CheckinOpts = {}) {
     isMember = false,
     personsOverride,
     onAdvance,
-    familyCandidates,
     tagAuthLoading,
     tagAuthError,
     picc,
@@ -93,7 +91,6 @@ function renderCheckin(opts: CheckinOpts = {}) {
         signedInEmail={signedInEmail}
         isMember={isMember}
         onAdvance={onAdvance}
-        familyCandidates={familyCandidates}
         tagAuthLoading={tagAuthLoading}
         tagAuthError={tagAuthError}
         picc={picc}
@@ -471,171 +468,10 @@ describe("Account/guest switcher", () => {
   })
 })
 
-// Issue #209: family-roster quick-add buttons & first-card removal.
-describe("Family-roster quick-add (#209)", () => {
-  const ownerPrimary: CheckoutPerson = {
-    id: "p-self",
-    firstName: "Max",
-    lastName: "Muster",
-    email: "max@example.com",
-    userType: "erwachsen",
-    termsAccepted: true,
-    isPreFilled: true,
-    userId: "u-self",
-  }
-  const candidates: FamilyCandidate[] = [
-    // Account-less child (ADR-0029): no email / login — rosterable.
-    {
-      userId: "u-lia",
-      firstName: "Lia",
-      lastName: "Pfeffer",
-      email: "",
-      userType: "kind",
-      hasAccount: false,
-    },
-    // Adult co-member with their own account — chip renders disabled.
-    {
-      userId: "u-yvonne",
-      firstName: "Yvonne",
-      lastName: "Pfeiffer",
-      email: "yvonne@example.com",
-      userType: "erwachsen",
-      hasAccount: true,
-    },
-  ]
-
-  it("renders one quick-add button per family candidate", () => {
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: candidates,
-    })
-
-    expect(screen.getByRole("button", { name: /Lia Pfeffer/ })).toBeTruthy()
-    expect(screen.getByRole("button", { name: /Yvonne Pfeiffer/ })).toBeTruthy()
-  })
-
-  it("renders no quick-add buttons when familyCandidates is empty / undefined", () => {
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: [],
-    })
-    expect(screen.queryByRole("button", { name: /Pfeffer/ })).toBeNull()
-    expect(screen.queryByRole("button", { name: /Pfeiffer/ })).toBeNull()
-  })
-
-  it("dispatches ADD_FAMILY_PERSON when a quick-add button is clicked", async () => {
-    const user = userEvent.setup()
-    const { dispatched } = renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: candidates,
-    })
-
-    await user.click(screen.getByRole("button", { name: /Lia Pfeffer/ }))
-
-    const action = dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")
-    expect(action).toBeDefined()
-    expect(action).toMatchObject({
-      type: "ADD_FAMILY_PERSON",
-      person: {
-        userId: "u-lia",
-        firstName: "Lia",
-        lastName: "Pfeffer",
-        email: "",
-        userType: "kind",
-      },
-    })
-  })
-
-  it("renders an account-holding candidate disabled and never dispatches (ADR-0029)", async () => {
-    const user = userEvent.setup()
-    const { dispatched } = renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: candidates,
-    })
-
-    const yvonne = screen.getByRole("button", { name: /Yvonne Pfeiffer/ })
-    expect((yvonne as HTMLButtonElement).disabled).toBe(true)
-
-    // The disabled button swallows pointer events; the click lands on the
-    // tooltip-trigger wrapper and must still not add anyone.
-    await user.click(screen.getByTestId("family-chip-has-account"))
-    expect(dispatched.find((a) => a.type === "ADD_FAMILY_PERSON")).toBeUndefined()
-  })
-
-  // Issue #710: the "why is this disabled" hint is a tooltip on the chip,
-  // not a static line under the picker.
-  it("explains the disabled account-holder chip in a tooltip, not inline", async () => {
-    const user = userEvent.setup()
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: candidates,
-    })
-
-    const hint = "Familienmitglieder mit eigenem Konto checken separat ein."
-    expect(screen.queryByText(hint)).toBeNull()
-
-    await user.hover(screen.getByTestId("family-chip-has-account"))
-    expect((await screen.findByRole("tooltip")).textContent).toContain(hint)
-  })
-
-  it("opens the account-holder tooltip on keyboard focus", async () => {
-    const user = userEvent.setup()
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [ownerPrimary],
-      familyCandidates: candidates,
-    })
-
-    const trigger = screen.getByTestId("family-chip-has-account")
-    trigger.focus()
-    expect(document.activeElement).toBe(trigger)
-    expect((await screen.findByRole("tooltip")).textContent).toContain(
-      "Familienmitglieder mit eigenem Konto checken separat ein.",
-    )
-    await user.keyboard("{Escape}")
-  })
-
-  it("only shows candidates not already on the visit (caller-side filter)", () => {
-    const remaining = candidates.filter((c) => c.userId !== "u-yvonne")
-    renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [
-        ownerPrimary,
-        {
-          id: "p-yvonne",
-          firstName: "Yvonne",
-          lastName: "Pfeiffer",
-          email: "yvonne@example.com",
-          userType: "erwachsen",
-          termsAccepted: true,
-          isPreFilled: true,
-          userId: "u-yvonne",
-        },
-      ],
-      familyCandidates: remaining,
-    })
-
-    expect(screen.getByRole("button", { name: /Lia Pfeffer/ })).toBeTruthy()
-    expect(screen.queryByRole("button", { name: /\+ Yvonne Pfeiffer/ })).toBeNull()
-  })
-})
-
-// Pre-filled persons render as IdentityStrips. The signed-in user's
-// strip carries — once a second person is on the visit — an X to remove
-// themselves (Mike's "I added my kid, now I
-// want to drop myself" flow). Family-added strips just get the X.
+// Pre-filled persons render as IdentityStrips. The owner (signed-in user)
+// always stays on their own visit (ADR-0048); every other line — a guest,
+// or a family member rehydrated from an open checkout that predates the
+// ADR — carries an X once a second person is on the visit.
 describe("Person removal", () => {
   const preFilled: CheckoutPerson = {
     id: "p-self",
@@ -647,11 +483,11 @@ describe("Person removal", () => {
     isPreFilled: true,
     userId: "u-self",
   }
-  const familyMember: CheckoutPerson = {
+  const legacyMember: CheckoutPerson = {
     id: "p-lia",
     firstName: "Lia",
     lastName: "Pfeffer",
-    email: "lia@example.com",
+    email: "",
     userType: "kind",
     termsAccepted: true,
     isPreFilled: true,
@@ -667,36 +503,22 @@ describe("Person removal", () => {
     expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
   })
 
-  it("shows X on both strips when two persons are on the visit", () => {
+  it("never offers to remove the owner, even with a second person on the visit", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      personsOverride: [preFilled, familyMember],
+      personsOverride: [preFilled, legacyMember],
     })
-    expect(screen.getByRole("button", { name: /Person 1 entfernen/ })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Person 1 entfernen/ })).toBeNull()
     expect(screen.getByRole("button", { name: /Person 2 entfernen/ })).toBeTruthy()
   })
 
-  it("removes the signed-in user when their strip's X is clicked", async () => {
+  it("removes a non-owner strip when its X button is clicked", async () => {
     const user = userEvent.setup()
     const { dispatched } = renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
-      personsOverride: [preFilled, familyMember],
-    })
-
-    await user.click(screen.getByRole("button", { name: /Person 1 entfernen/ }))
-
-    const action = dispatched.find((a) => a.type === "REMOVE_PERSON")
-    expect(action).toMatchObject({ type: "REMOVE_PERSON", id: "p-self" })
-  })
-
-  it("removes a family-added strip when its X button is clicked", async () => {
-    const user = userEvent.setup()
-    const { dispatched } = renderCheckin({
-      isAnonymous: false,
-      isAccountLoggedIn: true,
-      personsOverride: [preFilled, familyMember],
+      personsOverride: [preFilled, legacyMember],
     })
 
     await user.click(screen.getByRole("button", { name: /Person 2 entfernen/ }))
@@ -707,10 +529,9 @@ describe("Person removal", () => {
 })
 
 // Regression: the "signed-in user" decision used to key off the array
-// index (i === 0). Removing self and re-adding via a quick-add chip
-// shifted self to index 1 — at that point the kid (now at index 0)
-// inherited Vereinsmitglied + the parent's email, and self
-// lost their identity affordances.
+// index (i === 0). A roster with self at index 1 (rehydrated from an open
+// checkout) made the kid at index 0 inherit Vereinsmitglied + the parent's
+// email, and self lost their identity affordances.
 describe("Identity strip — keyed by userId, not index", () => {
   const familyMember: CheckoutPerson = {
     id: "p-lia",
@@ -753,8 +574,8 @@ describe("Identity strip — keyed by userId, not index", () => {
   })
 
   it("keeps Vereinsmitglied on self even when re-added at a higher index", () => {
-    // Persons array has self at index 1 (kid at 0) — the order the
-    // user lands on after remove-then-quick-add-back.
+    // Persons array has self at index 1 (kid at 0), as a rehydrated
+    // open checkout can carry it.
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,

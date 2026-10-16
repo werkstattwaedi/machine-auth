@@ -446,8 +446,7 @@ sees, and before the production deploy that follows — or for single scenarios
 ("/smoke-staging only H and I"). Scenarios: sign-up and login by mailed code,
 visit → bill → invoice mail, a deleted Auth record healing (#633), guest
 checkout, account + membership at the kiosk, badge purchase / badge login / the
-badge price rule, family membership with both invitation flows and an
-account-less member, a cart filled via QR targets, a backend-uploaded laser
+badge price rule, family membership with both invitation flows, a cart filled via QR targets, a backend-uploaded laser
 session and every pricing unit, an admin e-mail change. It needs
 `gcloud auth login` + `gcloud auth application-default login` with staging
 access, and refuses the production project.

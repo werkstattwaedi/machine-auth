@@ -62,8 +62,8 @@ export interface BillingAddressDoc {
  * application-side `UserDoc` (with derived `name`, resolved
  * `permissions: string[]`) lives in `auth.tsx` and is built from this.
  *
- * Child accounts (`userType === "kind"`) created by a family owner have
- * `email: null` and a Firebase Auth user with no sign-in credentials.
+ * Legacy login-less family members (ADR-0029; no longer created, ADR-0048)
+ * have `email: null` and a Firebase Auth user with no sign-in credentials.
  */
 export interface UserDoc extends AuditFields {
   created?: Timestamp
@@ -264,8 +264,8 @@ export interface CheckoutPersonDoc {
   email: string
   userType: "erwachsen" | "kind" | "firma"
   billingAddress?: BillingAddressDoc
-  // Set when the person was picked from the signed-in user's family roster,
-  // so the visit is attributed to a real account (including child accounts).
+  // Only ever set on the checkout owner's own line (ADR-0048); older
+  // checkouts may link a login-less family member (ADR-0029).
   userRef?: DocumentReference<UserDoc> | null
   /** Already paid the daily usage fee earlier the same business day (issue #268). */
   entryFeeWaivedToday?: boolean

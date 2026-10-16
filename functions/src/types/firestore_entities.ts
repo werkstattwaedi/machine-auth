@@ -36,7 +36,8 @@ export interface UserEntity {
   firstName: string;
   lastName: string;
   // Login e-mail, normalized (trim + lowercase). Canonical: Firebase Auth
-  // follows it (ADR-0043). null for managed members (no login).
+  // follows it (ADR-0043). null for legacy login-less family members
+  // (ADR-0029; no longer created, ADR-0048).
   email?: string | null;
   // Contact number, E.164. The Auth-linked (SMS login) number must be null
   // or equal to this; a mismatch unlinks it (ADR-0043).
@@ -217,8 +218,8 @@ export interface CheckoutPersonEntity {
     zip: string;
     city: string;
   };
-  // Set when picked from the signed-in user's family roster — links the
-  // visit to a real account (incl. child accounts).
+  // Only ever set on the checkout owner's own line (ADR-0048); older
+  // checkouts may link a login-less family member (ADR-0029).
   userRef?: DocumentReference | null;
 
   // True when this (named) person already paid the daily usage fee on the

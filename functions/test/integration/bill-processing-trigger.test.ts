@@ -883,7 +883,7 @@ describe("bill processing triggers (Integration)", () => {
         // Reported scenario: an account-less child (Lia, no email) was
         // rostered via the kiosk, and the owner (Mum) removed themselves
         // from `persons` — only the child remains. checkout.userId still
-        // points at the family owner. Per ADR-0029 the receipt must always
+        // points at the family owner. Per ADR-0048 the receipt must always
         // go to the account holder, never the roster member.
         await seedUser("u-mum", { email: "mum@example.com", firstName: "Mum" });
 

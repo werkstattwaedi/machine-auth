@@ -257,8 +257,8 @@ function CheckinRoute() {
         isAccountLoggedIn={ctx.isAccountLoggedIn}
         signedInUserId={ctx.identifiedUserDoc?.id ?? null}
         signedInEmail={ctx.identifiedUserDoc?.email ?? null}
-        // ADR-0029: the identified principal (account OR tag-tap badge user)
-        // is exempt from the advisory account-holder roster check.
+        // The identified principal (account OR tag-tap badge user) owns the
+        // checkout and always stays on the roster.
         ownerUserId={ctx.identifiedUserRef?.id ?? null}
         isMember={ctx.isMember}
         // Issue #465: a started visit flips the kiosk footer primary from
@@ -267,7 +267,6 @@ function CheckinRoute() {
         visitStarted={visitStarted}
         autoStartMs={countdown === "running" ? AUTO_START_MS : undefined}
         onCountdownCancel={() => setCountdown("off")}
-        familyCandidates={ctx.familyCandidates}
         // Kiosk: badge-tap progress/errors render inside the NFC affordance
         // box on this page (TagAuthOverlay stays home for browser tag taps).
         tagAuthLoading={ctx.tagAuthLoading}

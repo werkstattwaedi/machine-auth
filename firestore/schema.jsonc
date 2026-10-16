@@ -167,9 +167,9 @@
           "zip": "string",
           "city": "string"
         },
-        // Optional link to a known user account. Set when the person was
-        // picked from the signed-in user's family roster (so the visit is
-        // attributed to a real account — including child accounts).
+        // Optional link to a known user account. Only ever the checkout
+        // owner's own line (ADR-0048) — every other person is a guest by
+        // name. Older checkouts may link a login-less family member (ADR-0029).
         "userRef": "DocumentReference | null",
         // Optional. True when this named person already paid the daily usage
         // fee on the same Zurich business day (boundary 03:00) via an earlier
@@ -349,7 +349,7 @@
       // account-holder e-mail, no guest e-mail — #651) so the hourly retry
       // stops re-trying and re-logging. Absent on legacy docs (= not
       // skipped). Clear it manually to re-arm the send, e.g. after an
-      // admin adds an e-mail to a child account.
+      // admin adds an e-mail to a login-less account.
       "emailSkippedReason": "no-recipient | null",
       // The customer-stated "I'll pay this" ack. Server-only — written by
       // the acknowledgeBill callable (source: "user") or the
@@ -515,14 +515,15 @@
     }
   },
   "users": {
-    "{userId}": { // Doc ID = Firebase Auth UID. For child accounts (userType == "kind"),
-                   // the auth user has no sign-in credentials and email is null.
+    "{userId}": { // Doc ID = Firebase Auth UID. Legacy login-less family members
+                   // (ADR-0029, no longer created — ADR-0048) have a credential-less
+                   // auth user and email null.
       "created": "timestamp",
       // Login e-mail, normalized (trim + lowercase). Canonical identity —
       // Firebase Auth follows it (ADR-0043). No client can set or change it,
       // admins included (rules pin it to the session's token e-mail on create,
       // to the prior value on update); admins change it via `updateUserEmail`.
-      "email": "string | null",       // null for child accounts created by a family owner
+      "email": "string | null",       // null for legacy login-less family members
       // Contact number, E.164. The Auth-linked SMS-login number must be null
       // or equal to this — a mismatch unlinks it until re-verified (ADR-0043).
       "phone": "string | null",

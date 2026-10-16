@@ -1,8 +1,8 @@
 # Visit & checkout
 
-Checking in, when a visit begins, and usage types — as it holds on any
-device; what differs at the kiosk is in [kiosk.md](kiosk.md). Terms: see the
-[glossary](README.md#glossary).
+Checking in, when a visit begins, the persons on it, usage types and the
+usage fee — as it holds on any device; what differs at the kiosk is in
+[kiosk.md](kiosk.md). Terms: see the [glossary](README.md#glossary).
 
 ## Check-in
 
@@ -18,6 +18,15 @@ device; what differs at the kiosk is in [kiosk.md](kiosk.md). Terms: see the
 - **CHK-3** A visit starts when the person continues past the check-in: its checkout is created then, with everyone on the check-in as its persons. — #246
 - **CHK-7** Continuing past the check-in with an open checkout puts the persons on that checkout; no second checkout is created. — #246
 - **CHK-9** An open checkout whose usage type is *Nur Materialbezug* is a purchase-only checkout (CHK-5), not a started visit. — #666, #732
+
+## Persons on a visit
+
+- **CHK-10** On the check-in, the identified person stays; any other person can be removed as long as someone stays. — ADR-0048, #747
+- **CHK-11** When a checkout is closed, only the account holder's own line stays linked to their account; every other person is recorded by name alone. — #741, ADR-0048, #747
+
+## Usage fee
+
+- **CHK-12** A second visit of the same account on one day charges no usage fee again for its account holder if they were already charged it that day; every other person pays it on every visit. — #268, ADR-0048, #747
 
 ## Usage type
 
@@ -46,6 +55,8 @@ device; what differs at the kiosk is in [kiosk.md](kiosk.md). Terms: see the
 - [NEEDS CLARIFICATION] A person who signs in on the check-in of their own device while a checkout of theirs is open stays on the check-in, its persons filled from that checkout, instead of landing on Kosten (CHK-2); the same sign-in at the kiosk lands on Kosten (KIO-1). Intended?
 - [NEEDS CLARIFICATION] Only the app keeps a person to one open checkout (CHK-7); nothing on the server refuses a second one when two devices check in at once. Intended?
 - [NEEDS CLARIFICATION] *Freiwilligengruppe* and *Interne Nutzung* are withheld from a guest by the app only (CHK-4); the server accepts them from anyone. Should the server refuse them too? — #570
+- [NEEDS CLARIFICATION] A person added by name who returns the same day pays the usage fee again (CHK-12): without an account link there is nothing to match them on. Intended, or should the same name on the same account count?
+- [NEEDS CLARIFICATION] An identified person who only accompanies someone (a parent with a child) pays the usage fee too, since they stay on the check-in (CHK-10). A per-person accompaniment option is #605.
 
 ## Retired
 

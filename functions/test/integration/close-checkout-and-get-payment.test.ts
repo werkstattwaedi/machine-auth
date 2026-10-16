@@ -120,8 +120,7 @@ async function seedPricingConfig(): Promise<void> {
 async function seedUser(
   uid: string,
   userType: "erwachsen" | "kind" | "firma" = "erwachsen",
-  // `null` seeds an account-less user (no login) — the only kind that may
-  // be rostered onto someone else's checkout per ADR-0029.
+  // `null` seeds a login-less user (a legacy family-roster member).
   email: string | null = "alice@example.com",
 ): Promise<void> {
   const db = getFirestore();
@@ -1732,13 +1731,10 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
     it("(e) mixed group: waives the already-charged member, charges the new one", async () => {
       const adultUid = "dedup-mixed-adult";
-      const kidUid = "dedup-mixed-kid";
       await seedUser(adultUid, "erwachsen");
-      // Account-less kid (ADR-0029): only account-less members may ride on
-      // the adult's roster.
-      await seedUser(kidUid, "kind", null);
       const adult = namedPerson(adultUid, ADULT);
-      const kid = namedPerson(kidUid, CHILD);
+      // A guest by name (ADR-0048): only the owner's line carries a userRef.
+      const kid = CHILD;
 
       // Earlier today the adult visited alone and paid.
       await seedPriorClosedCheckout({
@@ -1804,138 +1800,14 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
     });
   });
 
-  describe("roster guard (ADR-0029): only account-less members rosterable", () => {
-    function linkedPerson(
-      uid: string,
-      name: string,
-      userType: "erwachsen" | "kind" | "firma",
-      email = "",
-    ): CheckoutPersonEntity {
-      const db = getFirestore();
-      return {
-        name,
-        email,
-        userType,
-        userRef: db.collection("users").doc(uid),
-      };
-    }
-
-    /** Account-less family member: user doc with `email: null` (no login). */
-    async function seedAccountlessUser(uid: string): Promise<void> {
-      const db = getFirestore();
-      await db.collection("users").doc(uid).set({
-        created: Timestamp.now(),
-        firstName: "Charlie",
-        lastName: "Kid",
-        email: null,
-        permissions: [],
-        roles: [],
-        userType: "kind",
-      });
-    }
-
-    it("rejects close when the stored roster carries an account-holding member", async () => {
-      const uid = "roster-owner-1";
-      const memberUid = "roster-member-acct";
-      const checkoutId = "co-roster-acct";
-      await seedUser(uid, "erwachsen");
-      // The rostered family member has their own account (email set).
-      await seedUser(memberUid, "erwachsen");
-      await seedCheckout(checkoutId, {
-        ownerUid: uid,
-        persons: [
-          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
-          linkedPerson(memberUid, "Bea Buddy", "erwachsen"),
-        ],
-      });
-
-      // The wire persons carry no userIds — the guard must trip on the
-      // STORED roster alone, whatever the client sends at close.
-      await expectHttpsError(
-        () =>
-          call({
-            uid,
-            data: {
-              checkoutId,
-              usageType: "regular" as UsageType,
-              persons: [ADULT, { ...CHILD, name: "Bea Buddy" }],
-              summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
-            },
-          }),
-        "failed-precondition",
-      );
-
-      // The checkout stays open and unbilled.
-      const checkout = await getCheckout(checkoutId);
-      expect(checkout.status).to.equal("open");
-      expect(checkout.billRef).to.not.exist;
-      expect(await listBills()).to.have.length(0);
-    });
-
-    it("closes when the roster carries the owner plus account-less members", async () => {
-      const uid = "roster-owner-2";
-      const childUid = "roster-child";
-      const checkoutId = "co-roster-child";
-      // The owner has an account — their own userRef on the roster is the
-      // allowed exception.
-      await seedUser(uid, "erwachsen");
-      await seedAccountlessUser(childUid);
-      await seedCheckout(checkoutId, {
-        ownerUid: uid,
-        persons: [
-          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
-          linkedPerson(childUid, "Charlie Kid", "kind"),
-        ],
-      });
-
-      const result = await call({
-        uid,
-        data: {
-          checkoutId,
-          usageType: "regular" as UsageType,
-          persons: [ADULT, CHILD],
-          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
-        },
-      });
-
-      // 15 (adult entry) + 7.50 (child entry) — the guard let it through.
-      expect(result.amount).to.equal("22.50");
-      const checkout = await getCheckout(checkoutId);
-      expect(checkout.status).to.equal("closed");
-    });
-
-    it("ignores dangling userRefs (referenced user doc missing)", async () => {
-      const uid = "roster-owner-3";
-      const checkoutId = "co-roster-dangling";
-      await seedUser(uid, "erwachsen");
-      await seedCheckout(checkoutId, {
-        ownerUid: uid,
-        persons: [
-          linkedPerson(uid, "Alice Adult", "erwachsen", "alice@example.com"),
-          linkedPerson("no-such-user", "Ghost Guest", "erwachsen"),
-        ],
-      });
-
-      const result = await call({
-        uid,
-        data: {
-          checkoutId,
-          usageType: "regular" as UsageType,
-          persons: [ADULT],
-          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
-        },
-      });
-
-      expect(result.amount).to.equal("15.00");
-    });
-
+  describe("roster identity (ADR-0048): only the owner's line carries a userRef", () => {
     it("drops a crafted wire userId on the create-and-close path", async () => {
       const memberUid = "roster-wire-acct";
       await seedUser(memberUid, "erwachsen");
 
-      // The create path has no stored roster to vouch for anyone, so a
-      // claimed identity is discarded (issue #741) — the person is billed
-      // as a guest and nothing links the visit to the claimed account.
+      // An ownerless checkout vouches for no one, so a claimed identity is
+      // discarded (issue #741) — the person is billed as a guest and nothing
+      // links the visit to the claimed account.
       const result = await call({
         uid: "anon-roster-1",
         anonymous: true,
@@ -1984,17 +1856,19 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
   // persons, which carried no identity — every closed checkout lost its
   // person ↔ account links (and with them #268 and #466).
   describe("person identity survives the close (issue #741)", () => {
-    it("persists the owner's and the stored roster member's userRef", async () => {
+    it("persists the owner's userRef; a legacy family-roster line closes as a guest", async () => {
       const uid = "identity-owner";
       const kidUid = "identity-kid";
       const db = getFirestore();
       await seedUser(uid, "erwachsen");
       await seedUser(kidUid, "kind", null);
       const owner = { ...ADULT, userRef: db.collection("users").doc(uid) };
+      // An open checkout from before ADR-0048 may still roster a login-less
+      // family member — the stored roster no longer vouches for it.
       const kid = { ...CHILD, userRef: db.collection("users").doc(kidUid) };
       await seedCheckout("co-identity", { ownerUid: uid, persons: [owner, kid] });
 
-      await call({
+      const result = await call({
         uid,
         data: {
           checkoutId: "co-identity",
@@ -2004,13 +1878,14 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         },
       });
 
+      expect(result.amount).to.equal("22.50");
       const checkout = await getCheckout("co-identity");
       expect(checkout.status).to.equal("closed");
       expect(checkout.persons[0].userRef?.id).to.equal(uid);
-      expect(checkout.persons[1].userRef?.id).to.equal(kidUid);
+      expect(checkout.persons[1].userRef).to.not.exist;
     });
 
-    it("drops a userId that neither the owner nor the stored roster vouches for", async () => {
+    it("drops a non-owner userId", async () => {
       const uid = "identity-owner-2";
       const strangerUid = "identity-stranger";
       await seedUser(uid, "erwachsen");

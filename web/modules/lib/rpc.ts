@@ -67,7 +67,6 @@ export const RpcMethod = {
     "rejectFamilyInvite",
     "revokeFamilyInvite",
     "removeFamilyMember",
-    "createManagedMember",
     "cancelMembership",
     "cancelMembershipAutoRenew",
     "adminCreateMembership",

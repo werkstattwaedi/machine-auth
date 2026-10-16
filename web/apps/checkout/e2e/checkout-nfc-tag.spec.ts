@@ -143,7 +143,7 @@ test.describe("NFC tag checkout", () => {
 
   // Issue #689: a badge tap over an idle, identified kiosk screen switched
   // principal inside the live page. The wizard's listeners stayed bound to
-  // the first member, so the second one saw the first one's family roster.
+  // the first member, so the second one saw the first one's data.
   // Unlike the #420 test above this drives the tap through a fake Electron
   // bridge — the in-place path `page.goto` never takes.
   test("bridge tap over an identified session reloads — no roster leak (#689)", async ({
@@ -153,18 +153,11 @@ test.describe("NFC tag checkout", () => {
     test.skip(isMobile, KIOSK_DESKTOP_ONLY)
     const { picc, cmac, picc2, cmac2 } = readE2eData()
     const db = getAdminFirestore()
-    // A is a throwaway family parent behind the first tag, NOT the seeded
-    // NFC user. `onMembershipWritten` runs in the Functions emulator and
-    // nulls `users.activeMembership` of every member once their membership
-    // is deleted — asynchronously, up to seconds after this test's cleanup.
-    // Hanging the family on the seeded user stripped its membership for the
-    // rest of the run, and the #414 assertion above then failed on every
-    // later tap (issue #691). With throwaway members the trigger only ever
-    // finds docs that agree with it already, or are gone.
+    // A is a throwaway user behind the first tag, NOT the seeded NFC user,
+    // so nothing this test does can leak into the seeded user's state
+    // (issue #691).
     const tokenRef = db.doc(`tokens/${NFC_TAG_UID}`)
-    const membershipRef = db.doc("memberships/e2e-switch-family")
     const parentRef = db.doc("users/e2e-switch-family-parent")
-    const kidRef = db.doc("users/e2e-switch-family-kid")
     await parentRef.set({
       firstName: "Fami",
       lastName: "Eltern",
@@ -172,24 +165,8 @@ test.describe("NFC tag checkout", () => {
       userType: "erwachsen",
       roles: [],
       permissions: [],
-      // Sharing this pointer with the kid is what makes the roster readable
-      // for A's tag session (shareActiveMembershipActingAs).
-      activeMembership: membershipRef,
       termsAcceptedAt: FieldValue.serverTimestamp(),
       created: FieldValue.serverTimestamp(),
-    })
-    await kidRef.set({
-      firstName: "Fami",
-      lastName: "Kind",
-      userType: "kind",
-      roles: [],
-      permissions: [],
-      activeMembership: membershipRef,
-    })
-    await membershipRef.set({
-      type: "family",
-      status: "active",
-      members: [parentRef, kidRef],
     })
     await tokenRef.update({ userId: parentRef })
 
@@ -200,7 +177,6 @@ test.describe("NFC tag checkout", () => {
       await expect(page.getByText("switch-parent@test.com")).toBeVisible({
         timeout: 15_000,
       })
-      await expect(page.getByRole("button", { name: "Fami Kind" })).toBeVisible()
 
       // B taps without A having touched anything — no dialog (A's
       // "Besuch starten" countdown, if already running, starts A's visit
@@ -211,9 +187,6 @@ test.describe("NFC tag checkout", () => {
         timeout: 15_000,
       })
       await expect(page.getByText("switch-parent@test.com")).not.toBeVisible()
-      await expect(
-        page.getByRole("button", { name: "Fami Kind" }),
-      ).not.toBeVisible()
       await expect(page.getByRole("alertdialog")).not.toBeVisible()
       expect(
         await page.evaluate(() => sessionStorage.getItem("fakeBridgeResets")),
@@ -221,9 +194,7 @@ test.describe("NFC tag checkout", () => {
     } finally {
       await Promise.all([
         tokenRef.update({ userId: db.doc(`users/${NFC_USER_ID}`) }),
-        membershipRef.delete(),
         parentRef.delete(),
-        kidRef.delete(),
       ])
     }
   })
