@@ -7,10 +7,10 @@
 // kündigen. Family memberships show the roster + open invites.
 // An admin never invites by e-mail (#622): the invitation is signed with
 // the caller's name, so it would go out "from" the admin. Instead the
-// admin adds an existing person directly or creates a login-less one.
+// admin adds an existing person with a login directly (ADR-0048).
 // All mutations flow through membershipCall (client writes are denied).
 
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useFunctions, useDb } from "@modules/lib/firebase-context"
@@ -34,7 +34,6 @@ import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
 import { EmptyState } from "@modules/components/empty-state"
-import { Input } from "@modules/components/ui/input"
 import { Label } from "@modules/components/ui/label"
 import {
   Select,
@@ -52,10 +51,8 @@ import {
   UserPlus,
 } from "lucide-react"
 
-/** Managed members are login-less; firma always needs a real login. */
-type ManagedMemberType = "erwachsen" | "kind"
 /** `closed` = collapsed to the "Mitglied hinzufügen" button. */
-type AddMode = "closed" | "existing" | "no-login"
+type AddMode = "closed" | "existing"
 
 export function PersonMembershipTab({
   userId,
@@ -172,9 +169,6 @@ function ActiveMembershipView({
   } | null>(null)
   const [addMode, setAddMode] = useState<AddMode>("closed")
   const [pickedUserId, setPickedUserId] = useState("")
-  const [noLoginFirst, setNoLoginFirst] = useState("")
-  const [noLoginLast, setNoLoginLast] = useState("")
-  const [noLoginType, setNoLoginType] = useState<ManagedMemberType>("erwachsen")
 
   const { data: invites } = useCollection(
     membershipInvitesCollection(db, membership.id),
@@ -182,13 +176,14 @@ function ActiveMembershipView({
   const pendingInvites = invites.filter((i) => i.status === "pending")
 
   // Same query LookupProvider already streams, so this shares its watch.
-  // Eligibility mirrors the server invariant only (one active membership
-  // per person). Login-less people stay eligible: re-adding a previously
-  // removed managed member is a legitimate admin action.
+  // Eligibility mirrors the server invariants: one active membership per
+  // person, and a family holds account holders only (ADR-0048).
   const { data: allUsers } = useCollection(usersCollection(db))
   const memberIds = new Set(membership.members?.map((m) => m.id) ?? [])
   const eligibleUsers = allUsers
-    .filter((u) => !u.activeMembership && !memberIds.has(u.id))
+    .filter(
+      (u) => !u.activeMembership && !memberIds.has(u.id) && !!u.email?.trim(),
+    )
     .map((u) => ({ id: u.id, name: formatFullName(u, u.id) }))
     .sort((a, b) => a.name.localeCompare(b.name, "de"))
 
@@ -217,11 +212,6 @@ function ActiveMembershipView({
     successMessage: "Mitglied hinzugefügt",
     errorMessage: "Mitglied konnte nicht hinzugefügt werden",
   })
-  const createNoLogin = useAsyncMutation({
-    context: "admin.createManagedMember",
-    successMessage: "Mitglied hinzugefügt",
-    errorMessage: "Mitglied konnte nicht erstellt werden",
-  })
   const revokeInvite = useAsyncMutation({
     context: "admin.revokeFamilyInvite",
     successMessage: "Einladung zurückgezogen",
@@ -240,9 +230,6 @@ function ActiveMembershipView({
   const resetAdd = () => {
     setAddMode("closed")
     setPickedUserId("")
-    setNoLoginFirst("")
-    setNoLoginLast("")
-    setNoLoginType("erwachsen")
   }
 
   // On failure the hook toasts and re-throws (ADR-0025), so the form stays
@@ -254,22 +241,6 @@ function ActiveMembershipView({
         call("adminAddFamilyMember", {
           membershipId: membership.id,
           userId: pickedUserId,
-        }),
-      )
-      .then(resetAdd)
-      .catch(() => {})
-  }
-
-  const handleCreateNoLogin = (e: FormEvent) => {
-    e.preventDefault()
-    if (!noLoginFirst.trim() || !noLoginLast.trim()) return
-    createNoLogin
-      .mutate(() =>
-        call("createManagedMember", {
-          membershipId: membership.id,
-          firstName: noLoginFirst.trim(),
-          lastName: noLoginLast.trim(),
-          userType: noLoginType,
         }),
       )
       .then(resetAdd)
@@ -441,26 +412,6 @@ function ActiveMembershipView({
                 </Button>
               )}
 
-              {addMode !== "closed" && (
-                <div className="inline-flex gap-0.5 rounded-lg bg-muted p-1">
-                  {(["existing", "no-login"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setAddMode(m)}
-                      className={
-                        "rounded-md px-4 py-1.5 text-sm font-medium transition-colors " +
-                        (addMode === m
-                          ? "bg-background shadow-sm"
-                          : "text-muted-foreground")
-                      }
-                    >
-                      {m === "existing" ? "Bestehende Person" : "Ohne Login"}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {addMode === "existing" && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
@@ -492,74 +443,12 @@ function ActiveMembershipView({
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Nur Personen ohne aktive Mitgliedschaft. Es wird keine
-                    E-Mail versendet.
+                    Nur Personen mit eigenem Login und ohne aktive
+                    Mitgliedschaft. Es wird keine E-Mail versendet.
                   </p>
                 </div>
               )}
 
-              {addMode === "no-login" && (
-                <form className="space-y-3" onSubmit={handleCreateNoLogin}>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="no-login-first">Vorname</Label>
-                      <Input
-                        id="no-login-first"
-                        value={noLoginFirst}
-                        onChange={(e) => setNoLoginFirst(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="no-login-last">Nachname</Label>
-                      <Input
-                        id="no-login-last"
-                        value={noLoginLast}
-                        onChange={(e) => setNoLoginLast(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Typ</Label>
-                    <div className="inline-flex gap-0.5 rounded-lg bg-muted p-1">
-                      {(["erwachsen", "kind"] as const).map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setNoLoginType(t)}
-                          className={
-                            "rounded-md px-4 py-1.5 text-sm font-medium transition-colors " +
-                            (noLoginType === t
-                              ? "bg-background shadow-sm"
-                              : "text-muted-foreground")
-                          }
-                        >
-                          {t === "erwachsen" ? "Erwachsen" : "Kind"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="submit"
-                      disabled={
-                        createNoLogin.loading ||
-                        !noLoginFirst.trim() ||
-                        !noLoginLast.trim()
-                      }
-                    >
-                      {createNoLogin.loading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="mr-2 h-4 w-4" />
-                      )}
-                      Person erstellen
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={resetAdd}>
-                      Abbrechen
-                    </Button>
-                  </div>
-                </form>
-              )}
             </div>
           </CardContent>
         </Card>

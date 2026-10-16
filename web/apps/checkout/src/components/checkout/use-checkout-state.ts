@@ -9,8 +9,8 @@ import { type UserType } from "@modules/lib/pricing"
  * counter and other transient wizard state (tip, usageType, submission
  * status) now live in the URL or in `WizardProvider` local state — only
  * the persons array still needs a reducer, since it's edited from
- * multiple places (PersonCard fields, family-quick-add chips, rehydrate
- * from open Firestore checkout).
+ * multiple places (PersonCard fields, identity pre-fill, rehydrate from
+ * the open Firestore checkout).
  */
 export interface CheckoutPerson {
   id: string
@@ -29,16 +29,6 @@ export interface CheckoutPerson {
 
 export type PersonsAction =
   | { type: "ADD_PERSON" }
-  | {
-      type: "ADD_FAMILY_PERSON"
-      person: {
-        userId: string
-        firstName: string
-        lastName: string
-        email: string
-        userType: UserType
-      }
-    }
   | { type: "REMOVE_PERSON"; id: string }
   | { type: "UPDATE_PERSON"; id: string; updates: Partial<CheckoutPerson> }
   | { type: "REPLACE_PERSONS"; persons: CheckoutPerson[] }
@@ -65,21 +55,6 @@ function personsReducer(
   switch (action.type) {
     case "ADD_PERSON":
       return [...state, createEmptyPerson()]
-
-    case "ADD_FAMILY_PERSON":
-      return [
-        ...state,
-        {
-          id: crypto.randomUUID(),
-          firstName: action.person.firstName,
-          lastName: action.person.lastName,
-          email: action.person.email,
-          userType: action.person.userType,
-          termsAccepted: true,
-          isPreFilled: true,
-          userId: action.person.userId,
-        },
-      ]
 
     case "REMOVE_PERSON":
       return state.filter((p) => p.id !== action.id)

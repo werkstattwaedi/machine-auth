@@ -494,8 +494,8 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   const checkoutDoc = await bill.checkouts[0].get();
   if (!checkoutDoc.exists) return false;
   const checkout = checkoutDoc.data() as CheckoutEntity;
-  // Recipient is the account holder (checkout.userId) — per ADR-0029,
-  // account-less roster members have no email of their own (issue #471) —
+  // Recipient is the account holder (checkout.userId) — the other roster
+  // lines are guests by name and are never mailed (issue #471, ADR-0048) —
   // or, for a guest checkout without an account holder, the e-mail the
   // guest typed at check-in (issue #651).
   const recipientEmail = await resolveBillRecipientEmail(checkout);

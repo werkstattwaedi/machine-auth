@@ -124,7 +124,6 @@ function buildCtx({
     identifiedUserDoc: null,
     identifiedUserRef: isAnonymous ? null : { id: "u1" },
     isMember: false,
-    familyCandidates: [],
     openCheckout,
     openCheckoutLoading: false,
     tagAuthLoading: false,

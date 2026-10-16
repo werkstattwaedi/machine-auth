@@ -3,42 +3,14 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@modules/components/ui/tooltip"
 import { PersonCard, RemovePersonButton } from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { CheckinSignin } from "./checkin-signin"
 import { Plus, ArrowRight, Check, Info, User, Users } from "lucide-react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
-import type { UserType } from "@modules/lib/pricing"
-import { validatePerson, rosterAccountError } from "./validation"
+import { validatePerson } from "./validation"
 import { cn } from "@modules/lib/utils"
 import { useAutoStartCountdown } from "./use-auto-start-countdown"
-
-/**
- * Issue #209: a roster member of the signed-in family owner who is not
- * already on the visit. Rendered as a `[+ <FirstName> <LastName>]` quick-add
- * button.
- */
-export interface FamilyCandidate {
-  userId: string
-  firstName: string
-  lastName: string
-  email: string
-  userType: UserType
-  /**
-   * ADR-0029: the member has their own login account (non-empty email on
-   * their user doc). Rendered as a disabled chip — account-holders check
-   * in and out on their own account and are never rostered onto someone
-   * else's checkout. Always false for the identified principal themselves
-   * (the checkout owner is the allowed exception).
-   */
-  hasAccount: boolean
-}
 
 interface StepCheckinProps {
   persons: CheckoutPerson[]
@@ -95,12 +67,6 @@ interface StepCheckinProps {
   autoStartMs?: number
   /** Called once when the countdown ends without firing (touch / dialog). */
   onCountdownCancel?: () => void
-  /**
-   * Family roster members of the signed-in user that aren't on the visit
-   * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
-   * membership, or non-owner users.
-   */
-  familyCandidates?: FamilyCandidate[]
   /** True while a tapped badge is verified — the kiosk NFC affordance
    *  box shows the progress state instead of a blocking overlay. */
   tagAuthLoading?: boolean
@@ -112,8 +78,7 @@ interface StepCheckinProps {
   /**
    * User-doc id of the identified principal — the signed-in account OR the
    * tag-tapped badge user (unlike `signedInUserId`, which is account-login
-   * only). ADR-0029's advisory roster check exempts this id: the owner's
-   * own line legitimately carries their userId.
+   * only). This is the checkout owner, whose line can't be removed.
    */
   ownerUserId?: string | null
 }
@@ -125,7 +90,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -174,22 +139,10 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     [persons, isAnonymous],
   )
 
-  // ADR-0029 advisory roster check: an account-holding family member on the
-  // roster can't be fixed by editing fields — they must be removed — so the
-  // error renders as a standalone notice instead of a per-field message.
-  // The identified principal (the owner) is exempt; prefer `ownerUserId`
-  // (set for both account-login and tag-tap) and fall back to
-  // `signedInUserId` for callers that only supply the account-login id.
-  const rosterError = useMemo(
-    () => rosterAccountError(persons, ownerUserId ?? signedInUserId ?? null),
-    [persons, ownerUserId, signedInUserId],
-  )
-
   const allValid = useMemo(
     () =>
-      persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0) &&
-      !rosterError,
-    [persons, allErrors, rosterError],
+      persons.every((p) => Object.keys(allErrors[p.id] ?? {}).length === 0),
+    [persons, allErrors],
   )
 
   const termsError = useMemo(() => {
@@ -198,23 +151,17 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     return person ? allErrors[person.id].termsAccepted : null
   }, [persons, allErrors, isAnonymous])
 
-  // A checkout must stay anchored to at least one account-linked member —
-  // walk-in guests (no userId) can't stand alone. So an account-linked
-  // person (the signed-in user or a family quick-add member) may only be
-  // removed while another member remains. With no family membership the
-  // signed-in user is the only member and therefore can't remove themselves.
-  // Guests are always removable (down to "at least one person stays").
-  const memberCount = useMemo(
-    () => persons.filter((p) => !!p.userId).length,
-    [persons],
-  )
+  // The owner (identified principal) always stays on their own visit — a
+  // parent who only accompanies a child is still on the roster (ADR-0048).
+  // Everyone else is removable down to "at least one person stays".
+  const owner = ownerUserId ?? signedInUserId ?? null
   const canRemovePerson = useCallback(
     (person: CheckoutPerson) => {
       if (persons.length <= 1) return false
-      if (person.userId && memberCount <= 1) return false
+      if (person.userId && person.userId === owner) return false
       return true
     },
-    [persons.length, memberCount],
+    [persons.length, owner],
   )
 
   // Shared validate-then-act path for both footer actions. "Weiter" /
@@ -246,20 +193,6 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     personsDispatch({ type: "ADD_PERSON" })
   }
 
-  const handleAddFamilyPerson = (candidate: FamilyCandidate) => {
-    setSubmitted(false)
-    personsDispatch({
-      type: "ADD_FAMILY_PERSON",
-      person: {
-        userId: candidate.userId,
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        email: candidate.email,
-        userType: candidate.userType,
-      },
-    })
-  }
-
   // The person list renders in the guest section (anonymous) and in the
   // signed-in view (identified). Kept as one block: identity strips only
   // ever appear for identified sessions, editable guest cards for both.
@@ -267,15 +200,15 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     <>
       {persons.map((person, i) => {
         // The signed-in user is identified by userId match, NOT array
-        // index — a parent can remove themselves and re-add via a
-        // quick-add chip, ending up at any position in the array.
+        // index — a rehydrated roster need not list them first.
         const isSignedInUser =
           isAccountLoggedIn &&
           !!signedInUserId &&
           person.userId === signedInUserId
-        // Pre-filled persons with a known identity (signed-in user or a
-        // family quick-add member) render as the compact identity strip
-        // — there's nothing to edit. Anonymous / kiosk first-time
+        // Pre-filled persons with a known identity (the signed-in user, or
+        // a family member rehydrated from an open checkout that predates
+        // ADR-0048) render as the compact identity strip — there's nothing
+        // to edit. Anonymous / kiosk first-time
         // entries fall through to the full PersonCard form.
         if (isSignedInUser || (person.isPreFilled && person.userId)) {
           return (
@@ -323,73 +256,14 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 
   const addPersonBlock = (
     <div className="flex flex-col items-start gap-3">
-        {/*
-          Issue #209: family-roster quick-adds render inline with the
-          primary "Person hinzufügen" CTA. `flex-wrap` lets the chips
-          flow onto a second line on narrow viewports.
-        */}
-        <TooltipProvider>
-          <div className="flex flex-wrap items-start gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
-              onClick={handleAddPerson}
-            >
-              <Plus className="h-4 w-4" />
-              Person hinzufügen
-            </button>
-
-            {familyCandidates &&
-              familyCandidates.map((candidate) =>
-                candidate.hasAccount ? (
-                  // ADR-0029: account-holding family members check in on their
-                  // own account. The chip stays visible but disabled so the
-                  // rule is discoverable instead of the member silently
-                  // missing from the picker. A disabled button emits no
-                  // pointer events, so the tooltip hangs off a focusable
-                  // wrapper span instead.
-                  <Tooltip key={candidate.userId}>
-                    <TooltipTrigger asChild>
-                      <span
-                        tabIndex={0}
-                        data-testid="family-chip-has-account"
-                        className="inline-flex rounded-md"
-                      >
-                        <button
-                          type="button"
-                          disabled
-                          className="pointer-events-none inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-border bg-white px-4 py-2.5 text-sm font-semibold text-muted-foreground opacity-60"
-                        >
-                          <Plus className="h-4 w-4" />
-                          {candidate.firstName} {candidate.lastName}
-                        </button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Familienmitglieder mit eigenem Konto checken separat ein.
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <button
-                    key={candidate.userId}
-                    type="button"
-                    // Issue #246: chips animate in when they appear (e.g. when
-                    // the signed-in user is re-added to the picker after
-                    // removing themselves from the visit).
-                    className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light animate-in fade-in slide-in-from-top-2 duration-200"
-                    onClick={() => handleAddFamilyPerson(candidate)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    {candidate.firstName} {candidate.lastName}
-                  </button>
-                ),
-              )}
-          </div>
-        </TooltipProvider>
-
-        {rosterError && (
-          <p className="text-sm text-[#cc2a24]">{rosterError}</p>
-        )}
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
+          onClick={handleAddPerson}
+        >
+          <Plus className="h-4 w-4" />
+          Person hinzufügen
+        </button>
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">
@@ -618,23 +492,15 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 }
 
 /**
- * Compact identity strip rendered for any pre-filled person on
- * /checkin — the signed-in user themselves, and family-roster members
- * added via the quick-add chips. There's nothing to edit in either
- * case (the signed-in user manages their profile under
- * /account/profile; family members are pulled from their own user
- * docs), so we show just the name + a short subtitle + the
- * remove affordance.
+ * Compact identity strip rendered for any pre-filled person with a known
+ * identity on /checkin — the signed-in user themselves (who manages their
+ * profile under /account/profile), so we show just the name + a short
+ * subtitle + the remove affordance.
  *
  * Action slot, right side (shared RemovePersonButton so it lines up with
  * the guest PersonCard's remove): an X when `onRemove` is supplied — the
- * caller gates this so the last account-linked member can't be removed;
- * see `canRemovePerson`. Signing out lives in the header account menu
- * (issue #710), not on the strip.
- *
- * Mike's "if I add my kid, I need to be able to remove myself" rule holds
- * once another family member is on the visit; with no family membership the
- * signed-in user is the only member and the X is withheld.
+ * caller withholds it for the owner, see `canRemovePerson`. Signing out
+ * lives in the header account menu (issue #710), not on the strip.
  */
 function IdentityStrip({
   person,

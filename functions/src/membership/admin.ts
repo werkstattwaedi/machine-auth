@@ -213,7 +213,19 @@ export const adminAddFamilyMemberHandler = async (request: CallableRequest<Admin
     }
 
     // Also surfaces `not-found` for an unknown user doc.
-    await assertNoOtherActiveMembership(tx, targetRef, membershipId);
+    const target = await assertNoOtherActiveMembership(
+      tx,
+      targetRef,
+      membershipId,
+    );
+    // ADR-0048: a family roster holds account holders only — someone without
+    // a login can't check in on their own, so membership buys them nothing.
+    if (!target.email?.trim()) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Only users with their own login can join a family membership",
+      );
+    }
 
     tx.update(memRef, {
       members: FieldValue.arrayUnion(targetRef),

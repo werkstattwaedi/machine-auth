@@ -21,19 +21,12 @@ usage fee — as it holds on any device; what differs at the kiosk is in
 
 ## Persons on a visit
 
-- **CHK-10** On the check-in, a person can be removed only while someone else stays; the identified person and the family members they added (MEM-22) can each go only while another of them stays — #209:
-
-  | Removed | Allowed while |
-  |---|---|
-  | the identified person | a family member they added is on the check-in |
-  | a family member added from the roster | the identified person or another family member is on the check-in |
-  | any other person | anyone else is on the check-in |
-
-- **CHK-11** When a checkout is closed, a person on it stays linked to their account only as the account holder or as a family member added from the roster (MEM-22); every other person is recorded by name alone. — #741
+- **CHK-10** On the check-in, the identified person stays; any other person can be removed as long as someone stays. — ADR-0048, #747
+- **CHK-11** When a checkout is closed, only the account holder's own line stays linked to their account; every other person is recorded by name alone. — #741, ADR-0048, #747
 
 ## Usage fee
 
-- **CHK-12** A second visit of the same account on one day charges no usage fee again for its account holder, or for a family member added from the roster (MEM-22), who was already charged it that day; a person added by name pays it on every visit. — #268
+- **CHK-12** A second visit of the same account on one day charges no usage fee again for its account holder if they were already charged it that day; every other person pays it on every visit. — #268, ADR-0048, #747
 
 ## Usage type
 
@@ -63,6 +56,7 @@ usage fee — as it holds on any device; what differs at the kiosk is in
 - [NEEDS CLARIFICATION] Only the app keeps a person to one open checkout (CHK-7); nothing on the server refuses a second one when two devices check in at once. Intended?
 - [NEEDS CLARIFICATION] *Freiwilligengruppe* and *Interne Nutzung* are withheld from a guest by the app only (CHK-4); the server accepts them from anyone. Should the server refuse them too? — #570
 - [NEEDS CLARIFICATION] A person added by name who returns the same day pays the usage fee again (CHK-12): without an account link there is nothing to match them on. Intended, or should the same name on the same account count?
+- [NEEDS CLARIFICATION] An identified person who only accompanies someone (a parent with a child) pays the usage fee too, since they stay on the check-in (CHK-10). A per-person accompaniment option is #605.
 
 ## Retired
 

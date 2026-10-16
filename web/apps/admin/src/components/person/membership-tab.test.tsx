@@ -9,9 +9,9 @@
  * address must inherit the card's plain body font.
  *
  * Issue #622: the admin must not invite by e-mail (the invitation is
- * signed with the caller's name). The roster card offers two add paths
- * instead — an existing person (`adminAddFamilyMember`) or a login-less
- * one (`createManagedMember`) — and never calls `inviteFamilyMember`.
+ * signed with the caller's name). The roster card adds an existing person
+ * with their own login (`adminAddFamilyMember`, ADR-0048) and never calls
+ * `inviteFamilyMember`.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest"
@@ -55,12 +55,12 @@ const pendingInvite: MembershipInviteDoc & { id: string } = {
 
 const allUsers = [
   { id: "u1", firstName: "Svenja", lastName: "Obrist", activeMembership: { id: "m1" } },
-  { id: "u2", firstName: "Zora", lastName: "Frei", activeMembership: null },
+  { id: "u2", firstName: "Zora", lastName: "Frei", email: "zora@example.ch", activeMembership: null },
   // Legacy doc without the field at all — still eligible.
-  { id: "u3", firstName: "Anton", lastName: "Keller" },
+  { id: "u3", firstName: "Anton", lastName: "Keller", email: "anton@example.ch" },
   // Member elsewhere — the server would reject, so the picker hides them.
   { id: "u4", firstName: "Bea", lastName: "Anders", activeMembership: { id: "m9" } },
-  // Login-less people stay eligible (re-adding a removed managed member).
+  // Login-less — a family holds account holders only (ADR-0048).
   { id: "u5", firstName: "Mia", lastName: "Kind", email: null, activeMembership: null },
 ]
 
@@ -205,12 +205,11 @@ describe("PersonMembershipTab add member (issue #622)", () => {
 
     await user.click(screen.getByRole("button", { name: "Mitglied hinzufügen" }))
     expect(document.querySelector('input[type="email"]')).toBeNull()
-    await user.click(screen.getByRole("button", { name: "Ohne Login" }))
-    expect(document.querySelector('input[type="email"]')).toBeNull()
+    expect(screen.queryByRole("button", { name: "Ohne Login" })).toBeNull()
     expect(calledMethods()).not.toContain("inviteFamilyMember")
   })
 
-  it("lists only people without an active membership, sorted by name", async () => {
+  it("lists only people with a login and no active membership, sorted by name", async () => {
     const user = userEvent.setup()
     renderTab()
     await user.click(screen.getByRole("button", { name: "Mitglied hinzufügen" }))
@@ -220,7 +219,7 @@ describe("PersonMembershipTab add member (issue #622)", () => {
     )
       .map((o) => o.textContent)
       .filter(Boolean)
-    expect(options).toEqual(["Anton Keller", "Mia Kind", "Zora Frei"])
+    expect(options).toEqual(["Anton Keller", "Zora Frei"])
   })
 
   it("adds an existing person via adminAddFamilyMember and collapses", async () => {
@@ -259,34 +258,6 @@ describe("PersonMembershipTab add member (issue #622)", () => {
     await waitFor(() => expect(mockRpcFn).toHaveBeenCalled())
     expect(screen.queryByRole("button", { name: "Mitglied hinzufügen" })).toBeNull()
     expect((screen.getByLabelText("Person") as HTMLSelectElement).value).toBe("u2")
-  })
-
-  it("creates a login-less person via createManagedMember", async () => {
-    const user = userEvent.setup()
-    renderTab()
-    await user.click(screen.getByRole("button", { name: "Mitglied hinzufügen" }))
-    await user.click(screen.getByRole("button", { name: "Ohne Login" }))
-
-    const submit = screen.getByRole("button", { name: "Person erstellen" })
-    expect((submit as HTMLButtonElement).disabled).toBe(true)
-
-    await user.type(screen.getByLabelText("Vorname"), " Mia ")
-    await user.type(screen.getByLabelText("Nachname"), "Obrist")
-    await user.click(screen.getByRole("button", { name: "Kind" }))
-    await user.click(submit)
-
-    expect(mockRpcCallable).toHaveBeenCalledWith(
-      expect.anything(),
-      "membershipCall",
-      "createManagedMember",
-    )
-    expect(mockRpcFn).toHaveBeenCalledWith({
-      membershipId: "m1",
-      firstName: "Mia",
-      lastName: "Obrist",
-      userType: "kind",
-    })
-    expect(calledMethods()).not.toContain("inviteFamilyMember")
   })
 
   it("revokes a pending invite via revokeFamilyInvite", async () => {

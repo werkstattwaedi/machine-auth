@@ -143,15 +143,19 @@ describe("adminAddFamilyMember (Integration)", () => {
     expect(invites.empty).to.be.true;
   });
 
-  it("adds a login-less user (email null)", async () => {
+  it("rejects a login-less user (ADR-0048)", async () => {
     const { membershipId } = await seedMembership("owner-managed");
     const targetRef = await seedUser("target-managed");
     await targetRef.update({ email: null });
 
-    await adminAddFamilyMemberHandler(
-      callable("admin-uid", { membershipId, userId: "target-managed" }),
+    await expectHttpsError(
+      () =>
+        adminAddFamilyMemberHandler(
+          callable("admin-uid", { membershipId, userId: "target-managed" }),
+        ),
+      "failed-precondition",
     );
-    expect(await memberIds(membershipId)).to.include("target-managed");
+    expect(await memberIds(membershipId)).to.deep.equal(["owner-managed"]);
   });
 
   it("rejects a non-admin caller, including the membership owner", async () => {

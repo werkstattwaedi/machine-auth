@@ -84,32 +84,6 @@ test.describe("Membership page screenshots", () => {
     await expect(page).toHaveScreenshot("membership-active-family-owner.png")
   })
 
-  test("active family — add member: no-login form", async ({ page }) => {
-    await signIn(page)
-    const uid = process.env.E2E_AUTH_USER_UID!
-    await seedMembershipState(uid, {
-      kind: "active-family-owner",
-      coMembers: [{ firstName: "Lukas", lastName: "Müller" }],
-    })
-    await gotoMembership(page)
-    await page.getByRole("button", { name: "Mitglied hinzufügen" }).click()
-    await expect(
-      page.getByRole("heading", { name: "Wie möchtest du hinzufügen?" }),
-    ).toBeVisible()
-    await page.getByRole("button", { name: /Ohne Login/ }).click()
-    await expect(
-      page.getByRole("heading", { name: "Mitglied ohne Login" }),
-    ).toBeVisible()
-    // The Vorname input is autoFocus'd, which scrolls it into view. On the
-    // taller owner view (issue #323 added the auto-renewal block) that scroll
-    // races the viewport screenshot; anchor at the top so the captured frame
-    // is deterministic.
-    await page.evaluate(() => window.scrollTo(0, 0))
-    await expect(page).toHaveScreenshot(
-      "membership-active-family-owner-no-login-form.png",
-    )
-  })
-
   test("active family — non-owner sees roster and can leave", async ({ page }) => {
     await signIn(page)
     const uid = process.env.E2E_AUTH_USER_UID!
