@@ -23,7 +23,8 @@ import { Clock } from "lucide-react"
 import { AutoActionButton } from "./auto-action-button"
 
 export const IDLE_POPUP_AUTO_CLOSE_SECONDS = 30
-const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
+// Also the touches that end the kiosk "Besuch starten" countdown (#732).
+export const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
   "pointerdown",
   "keydown",
   "scroll",

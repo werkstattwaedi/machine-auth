@@ -631,6 +631,61 @@ export async function waitForSmsCode(
 }
 
 /**
+ * Installs a fake Electron kiosk bridge (`window.bridge`) before any page
+ * script runs: NFC taps are injected with `fakeNfcTap(page, url)`, and
+ * `resetSession` only counts its calls (sessionStorage `fakeBridgeResets`,
+ * which survives the reload) instead of wiping the partition.
+ */
+export async function installFakeKioskBridge(
+  page: import("@playwright/test").Page,
+  opts: { freezeAutoStart?: boolean } = {},
+) {
+  await page.addInitScript((freeze: boolean) => {
+    const listeners: ((e: { physicalUid: string; url?: string }) => void)[] =
+      []
+    const w = window as unknown as Record<string, unknown>
+    // Screenshot hook: the "Besuch starten" countdown renders a fixed fill
+    // and never fires (use-auto-start-countdown.ts).
+    if (freeze) w.__OWW_FREEZE_AUTO_START__ = true
+    w.__fakeNfcTap = (url: string) =>
+      listeners.forEach((cb) => cb({ physicalUid: "fake", url }))
+    w.bridge = {
+      mode: "kiosk",
+      features: ["nfc"],
+      bearer: async () => null,
+      resetSession: async () => {
+        const n = Number(sessionStorage.getItem("fakeBridgeResets") ?? 0)
+        sessionStorage.setItem("fakeBridgeResets", String(n + 1))
+      },
+      getUrl: async () => location.href,
+      onUrlChange: () => () => {},
+      onNfcTag: (cb: (e: { physicalUid: string; url?: string }) => void) => {
+        listeners.push(cb)
+        return () => {
+          const i = listeners.indexOf(cb)
+          if (i >= 0) listeners.splice(i, 1)
+        }
+      },
+    }
+  }, opts.freezeAutoStart ?? false)
+}
+
+/** Delivers a badge tap to the fake kiosk bridge (installFakeKioskBridge). */
+export async function fakeNfcTap(
+  page: import("@playwright/test").Page,
+  picc: string,
+  cmac: string,
+) {
+  await page.evaluate(
+    (url) =>
+      (window as unknown as { __fakeNfcTap: (u: string) => void }).__fakeNfcTap(
+        url,
+      ),
+    `https://id.example.ch/?picc=${picc}&cmac=${cmac}`,
+  )
+}
+
+/**
  * Opens the shared header menu (#729) and returns the entry named `name`:
  * a dropdown `menuitem` on desktop, a row of the right-hand sheet on mobile.
  */
@@ -646,3 +701,10 @@ export async function openHeaderMenuEntry(
     .or(page.getByTestId("app-menu-sheet").getByRole("link", { name, exact: true }))
     .or(page.getByTestId("app-menu-sheet").getByRole("button", { name, exact: true }))
 }
+
+/**
+ * Skip reason for kiosk flows in the mobile project: the kiosk is a
+ * desktop-sized terminal and no phone runs the Electron bridge, so a mobile
+ * run tests (and screenshots) a screen that cannot exist.
+ */
+export const KIOSK_DESKTOP_ONLY = "kiosk runs on a desktop-sized terminal only"

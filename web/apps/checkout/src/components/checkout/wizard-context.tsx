@@ -92,6 +92,14 @@ export interface WizardContextValue {
   // ----- identification -----
   isAccountLoggedIn: boolean
   isTagIdentified: boolean
+  /**
+   * Kiosk session established by a badge tap — as opposed to an e-mail/SMS
+   * code sign-in, which also yields a kiosk (`isTagIdentified`) session but
+   * carries no token. Only a badge tap auto-starts the visit (issue #732).
+   */
+  identifiedByBadge: boolean
+  /** First name of the identified principal, when on record. */
+  identifiedFirstName: string | null
   isAnonymous: boolean
   identifiedUserDoc: UserDoc | null
   identifiedUserRef: DocumentReference | null
@@ -171,7 +179,7 @@ export interface WizardContextValue {
    * the rehydrate effect immediately re-populate the roster from the
    * still-open checkout.
    */
-  startOver: () => Promise<void>
+  startOver: (opts?: { startedHint?: string | null }) => Promise<void>
   /**
    * Sign in anonymously if not already signed in. Used by /checkin's
    * onAdvance so subsequent Firestore writes have a stable Firebase UID.
@@ -179,9 +187,11 @@ export interface WizardContextValue {
   signInAnonymouslyIfNeeded: () => Promise<void>
   /**
    * Persist the current `persons` array to the open checkout doc, creating
-   * the doc if none exists. Called from /checkin's onAdvance.
+   * the doc if none exists. Called from /checkin's onAdvance. `usageType`
+   * (kiosk "Besuch starten") also turns an existing purchase-only
+   * `materialbezug` checkout into a visit.
    */
-  persistPersons: () => Promise<void>
+  persistPersons: (opts?: { usageType?: UsageType }) => Promise<void>
   /**
    * Close the open checkout and return payment data. Called from /checkout's
    * submit. Sets paymentData on success; the wizard navigates to /payment.
@@ -570,12 +580,16 @@ export function WizardProvider({
   )
 
   // Persist the current persons array to the open checkout doc.
-  const persistPersons = useCallback(async () => {
+  const persistPersons = useCallback(async (opts?: { usageType?: UsageType }) => {
     const personDocs = persons.map((p) => personLocalToDoc(p, db))
     try {
       if (openCheckout) {
         await fsMutation.update(checkoutRef(db, openCheckout.id), {
           persons: personDocs,
+          ...(opts?.usageType &&
+          openCheckout.usageType !== opts.usageType
+            ? { usageType: opts.usageType }
+            : {}),
         })
       } else {
         setPendingCheckout(true)
@@ -584,7 +598,7 @@ export function WizardProvider({
           fsMutation.add(checkoutsCollection(db), {
             userId: identifiedUserRef ?? null,
             status: "open",
-            usageType,
+            usageType: opts?.usageType ?? usageType,
             created: serverTimestamp() as unknown as CheckoutDoc["created"],
             workshopsVisited: [],
             persons: personDocs,
@@ -776,15 +790,19 @@ export function WizardProvider({
   // direct reset: clear the volatile Electron partition (IndexedDB + the
   // previous user's Firebase Auth) via `bridge.resetSession()` before the
   // reload. The flow lives in `runStartOver` so it's unit-testable.
-  const startOver = useCallback(async () => {
-    await runStartOver({
-      signOut,
-      bridgeAvailable: bridge.available,
-      resetSession: bridge.resetSession,
-      reload: (target) => window.location.replace(target),
-      kiosk,
-    })
-  }, [signOut, bridge, kiosk])
+  const startOver = useCallback(
+    async (opts?: { startedHint?: string | null }) => {
+      await runStartOver({
+        signOut,
+        bridgeAvailable: bridge.available,
+        resetSession: bridge.resetSession,
+        reload: (target) => window.location.replace(target),
+        kiosk,
+        startedHint: opts?.startedHint,
+      })
+    },
+    [signOut, bridge, kiosk],
+  )
 
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
@@ -976,6 +994,12 @@ export function WizardProvider({
   const value: WizardContextValue = {
     isAccountLoggedIn,
     isTagIdentified,
+    identifiedByBadge: isTagIdentified && !!tokenUser?.tokenId,
+    identifiedFirstName: isAccountLoggedIn
+      ? identifiedUserDoc?.firstName?.trim() || null
+      : isTagIdentified
+        ? tokenUser?.firstName?.trim() || null
+        : null,
     isAnonymous,
     identifiedUserDoc,
     identifiedUserRef,

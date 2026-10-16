@@ -38,6 +38,9 @@ const wizardSearchSchema = z.object({
   /** Set by `/visit/add/*` redirects when a QR is scanned cold (no
    * open checkout). /checkin shows a "re-scan after check-in" banner. */
   rescan: z.optional(z.string()),
+  /** First name of the visitor whose kiosk visit was just started — the
+   * start screen confirms it with a toast (issue #732). */
+  started: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_wizard")({

@@ -6,7 +6,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Purchase
 
-- **MEM-1** A badge tap alone never opens the account area where a membership is bought; buying takes a signed-in account (at the kiosk an elevated session, MEM-30). — ADR-0041
+- **MEM-1** A badge tap alone never buys a membership (ACC-4); buying takes a signed-in account, at the kiosk a code entered in the last 15 min (ACC-5). — ADR-0041
 - **MEM-2** A person with an active membership can't buy another one — renewal is automatic (MEM-24); a person whose membership expired can buy again.
 - **MEM-3** Buying adds the membership to the buyer's open checkout, or opens a purchase-only checkout without a usage fee, and goes straight to the checkout summary.
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
@@ -66,7 +66,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Account page
 
-- **MEM-30** At the kiosk, the membership page and every membership action need an elevated session. — ADR-0041
+- **MEM-30** At the kiosk, the membership page and every membership action need a code entered in the last 15 min (ACC-5). — ADR-0041
 - **MEM-31** The membership page shows each person their own situation:
 
   | Person | Membership | Sees |

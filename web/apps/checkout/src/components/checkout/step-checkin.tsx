@@ -17,6 +17,7 @@ import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import type { UserType } from "@modules/lib/pricing"
 import { validatePerson, rosterAccountError } from "./validation"
 import { cn } from "@modules/lib/utils"
+import { useAutoStartCountdown } from "./use-auto-start-countdown"
 
 /**
  * Issue #209: a roster member of the signed-in family owner who is not
@@ -76,15 +77,24 @@ interface StepCheckinProps {
    */
   onStartVisit?: () => Promise<void>
   /**
-   * Issue #465: true when an open checkout already exists for this principal
-   * (e.g. the visitor tapped their badge with a checkout still running, then
-   * navigated back to /checkin). The kiosk footer then drops "Besuch starten"
-   * — the visit is already started — and promotes "Material erfassen" to the
+   * Issue #465: true when the principal's open checkout is a started visit
+   * (`isStartedVisit`: any open checkout except a purchase-only
+   * `materialbezug` one). The kiosk footer then drops "Besuch starten" — the
+   * visit is already started — and promotes "Material erfassen" to the
    * filled primary, since adding material is the natural next action. No
    * effect outside the kiosk (`onStartVisit` undefined) where the single
    * "Weiter" already advances to /visit.
    */
-  hasOpenCheckout?: boolean
+  visitStarted?: boolean
+  /**
+   * Issue #732: kiosk badge tap — "Besuch starten" fills over this many ms
+   * and then fires on its own (same validation path as a click). Any touch,
+   * or a dialog opening, ends the countdown for good (`onCountdownCancel`).
+   * Undefined = no countdown; turning it undefined stops a running one.
+   */
+  autoStartMs?: number
+  /** Called once when the countdown ends without firing (touch / dialog). */
+  onCountdownCancel?: () => void
   /**
    * Family roster members of the signed-in user that aren't on the visit
    * yet (issue #209). Empty / omitted for anonymous, tag-tap, single-
@@ -115,7 +125,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, hasOpenCheckout, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, familyCandidates, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -222,6 +232,14 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       setAdvancing(false)
     }
   }
+
+  // Issue #732: the kiosk's default action after a badge tap. Fires the
+  // same validated "Besuch starten" path as a click.
+  const countdown = useAutoStartCountdown({
+    durationMs: onStartVisit && !visitStarted ? autoStartMs : undefined,
+    onFire: () => void handleAction(onStartVisit),
+    onCancel: onCountdownCancel,
+  })
 
   const handleAddPerson = () => {
     setSubmitted(false)
@@ -520,15 +538,16 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 
       {/* Sticky bottom navigation. With onStartVisit (kiosk) the primary
           action is checking in; the /visit detour is the outline secondary.
-          Issue #465: once a checkout is already open (hasOpenCheckout) the
-          visit is started, so "Besuch starten" is dropped and "Material
-          erfassen" becomes the filled primary. */}
+          Issue #465: once the visit is started (visitStarted) "Besuch
+          starten" is dropped and "Material erfassen" becomes the filled
+          primary. Issue #732: on a kiosk badge tap the primary fills and
+          fires on its own — the filling button is the only cue. */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex items-center gap-3">
         {/* The mock's mono URL in this corner was browser-frame dressing,
             not UI — just a spacer keeping the actions right-aligned. */}
         <span className="flex-1" />
         {onStartVisit ? (
-          hasOpenCheckout ? (
+          visitStarted ? (
             <button
               type="button"
               className={FOOTER_PRIMARY}
@@ -551,12 +570,29 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               </button>
               <button
                 type="button"
-                className={FOOTER_PRIMARY}
+                className={cn(FOOTER_PRIMARY, "relative overflow-hidden")}
                 onClick={() => handleAction(onStartVisit)}
                 disabled={advancing}
+                data-testid="checkin-start-visit"
+                data-countdown={countdown.running ? "running" : undefined}
               >
-                <Check className="h-4 w-4" />
-                Besuch starten
+                {countdown.running && (
+                  <span
+                    aria-hidden
+                    data-testid="auto-start-progress"
+                    className="absolute inset-y-0 left-0 bg-cog-teal-dark"
+                    style={{
+                      width: `${countdown.fillPercent}%`,
+                      transitionProperty: "width",
+                      transitionTimingFunction: "linear",
+                      transitionDuration: `${countdown.fillDurationMs}ms`,
+                    }}
+                  />
+                )}
+                <span className="relative z-10 inline-flex items-center gap-2">
+                  <Check className="h-4 w-4" />
+                  Besuch starten
+                </span>
               </button>
             </>
           )

@@ -19,6 +19,23 @@ export interface StartOverDeps {
   /** Hard navigation (window.location.replace) to the fresh /checkin target. */
   reload: (target: string) => void
   kiosk: boolean
+  /**
+   * First name of the visitor whose visit was just started (issue #732). The
+   * bridge reset wipes storage, so the start-screen toast ("Besuch von …
+   * gestartet") can only ride through the reload in the URL.
+   */
+  startedHint?: string | null
+}
+
+/** The fresh /checkin target of a reset, with the optional started hint. */
+export function startOverTarget(
+  kiosk: boolean,
+  startedHint?: string | null,
+): string {
+  const parts: string[] = []
+  if (kiosk) parts.push("kiosk")
+  if (startedHint) parts.push(`started=${encodeURIComponent(startedHint)}`)
+  return parts.length ? `/checkin?${parts.join("&")}` : "/checkin"
 }
 
 export async function runStartOver(deps: StartOverDeps): Promise<void> {
@@ -37,5 +54,5 @@ export async function runStartOver(deps: StartOverDeps): Promise<void> {
       console.error("startOver: bridge.resetSession failed", err)
     }
   }
-  deps.reload(deps.kiosk ? "/checkin?kiosk" : "/checkin")
+  deps.reload(startOverTarget(deps.kiosk, deps.startedHint))
 }

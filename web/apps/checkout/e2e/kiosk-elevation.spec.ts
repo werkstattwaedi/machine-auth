@@ -25,6 +25,7 @@ import {
   openHeaderMenuEntry,
   waitForLoginCode,
   waitForSmsCode,
+  KIOSK_DESKTOP_ONLY,
 } from "./helpers"
 import {
   AUTH_USER_EMAIL,
@@ -79,6 +80,8 @@ async function tapBadge2(page: import("@playwright/test").Page) {
 }
 
 test.describe("Kiosk step-up elevation", () => {
+  test.skip(({ isMobile }) => isMobile, KIOSK_DESKTOP_ONLY)
+
   test("badge tap → e-mail code → membership purchase lands in the kiosk cart", async ({
     page,
   }) => {

@@ -43,23 +43,84 @@ export interface KioskSessionState {
    * offering works again.
    */
   badgeTokenIds: string[]
+  /**
+   * Issue #732: the /checkin "Besuch starten" countdown is running (or its
+   * start is in flight). A badge tap then starts this visit first
+   * (`startPendingVisit`) and switches without asking.
+   */
+  autoStartPending: boolean
+  /**
+   * Issue #732: an identified visitor is on /checkin without a started
+   * visit and without a running countdown (they touched the screen, or
+   * signed in with a code). A badge tap must ask before switching even when
+   * nothing is `preservable` — the visitor may believe their visit started.
+   */
+  onCheckinScreen: boolean
+  /** First name of the identified visitor, for the switch copy. */
+  holderFirstName: string | null
 }
 
-const NO_SESSION: KioskSessionState = {
+/** The part of the session snapshot the /checkin screen contributes. */
+export type CheckinScreenState = Pick<
+  KioskSessionState,
+  "autoStartPending" | "onCheckinScreen" | "holderFirstName"
+>
+
+type WizardSessionState = Omit<KioskSessionState, keyof CheckinScreenState>
+
+const NO_SESSION: WizardSessionState = {
   preservable: false,
   identified: false,
   holderName: null,
   badgeTokenIds: [],
 }
 
-let activeGuard: (() => KioskSessionState) | null = null
+const NO_CHECKIN_SCREEN: CheckinScreenState = {
+  autoStartPending: false,
+  onCheckinScreen: false,
+  holderFirstName: null,
+}
+
+let activeGuard: (() => WizardSessionState) | null = null
+
+interface CheckinScreenRegistration {
+  getState: () => CheckinScreenState
+  /**
+   * Start the pending visit now (create the checkout) without resetting the
+   * terminal — the caller switches to the next badge. Resolves with the
+   * first name for the "Besuch von … gestartet" toast; rejects when the
+   * start failed or did not settle in time (already toasted).
+   */
+  startPendingVisit: () => Promise<string | null>
+}
+
+let activeCheckinScreen: CheckinScreenRegistration | null = null
+
+/**
+ * Register the /checkin route's screen state (countdown, unstarted visit).
+ * Returns an unregister function for the route's unmount cleanup.
+ */
+export function registerCheckinScreen(
+  registration: CheckinScreenRegistration,
+): () => void {
+  activeCheckinScreen = registration
+  return () => {
+    if (activeCheckinScreen === registration) activeCheckinScreen = null
+  }
+}
+
+/** Start the visit whose countdown is running; see CheckinScreenRegistration. */
+export async function startPendingVisit(): Promise<string | null> {
+  if (!activeCheckinScreen) throw new Error("No check-in screen mounted")
+  return activeCheckinScreen.startPendingVisit()
+}
 
 /**
  * Register the wizard's session-state getter. Returns an unregister function
  * for the provider's unmount cleanup.
  */
 export function registerKioskSessionGuard(
-  guard: () => KioskSessionState,
+  guard: () => WizardSessionState,
 ): () => void {
   activeGuard = guard
   return () => {
@@ -72,7 +133,10 @@ export function registerKioskSessionGuard(
  * no wizard is mounted (nothing to protect, not identified).
  */
 export function getKioskSessionState(): KioskSessionState {
-  return activeGuard?.() ?? NO_SESSION
+  return {
+    ...(activeGuard?.() ?? NO_SESSION),
+    ...(activeCheckinScreen?.getState() ?? NO_CHECKIN_SCREEN),
+  }
 }
 
 /**

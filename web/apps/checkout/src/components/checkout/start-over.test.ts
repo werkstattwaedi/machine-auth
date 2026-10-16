@@ -75,4 +75,20 @@ describe("runStartOver", () => {
     await runStartOver(deps)
     expect(deps.reload).toHaveBeenCalledWith("/checkin")
   })
+
+  // Issue #732: the start-screen toast's first name survives the wipe only
+  // in the URL.
+  it("carries the started hint into the kiosk reload target", async () => {
+    const deps = makeDeps({ bridgeAvailable: true, kiosk: true })
+    await runStartOver({ ...deps, startedHint: "Zoë Müller" })
+    expect(deps.reload).toHaveBeenCalledWith(
+      "/checkin?kiosk&started=Zo%C3%AB%20M%C3%BCller",
+    )
+  })
+
+  it("omits the hint param when there is no name", async () => {
+    const deps = makeDeps({ kiosk: true })
+    await runStartOver({ ...deps, startedHint: null })
+    expect(deps.reload).toHaveBeenCalledWith("/checkin?kiosk")
+  })
 })

@@ -22,6 +22,10 @@
  *   - identified preservable session: title frames the badge switch, the
  *     confirm keeps the benign default "Benutzer wechseln" variant, and the body
  *     names whose visit is parked when the holder name is known (#468)
+ *   - issue #732: tap during the "Besuch starten" countdown starts that visit,
+ *     then switches with the start-screen toast param and no dialog; a tap on
+ *     an unstarted check-in without a countdown asks (notStarted copy) even
+ *     with nothing to keep; a failed start falls back to that dialog
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -109,12 +113,17 @@ import { BridgeNfcRouter, confirmTagSwitch } from "./bridge-nfc-router"
 const PRISTINE = {
   preservable: false,
   identified: false,
-  holderName: null,
+  holderName: null as string | null,
   badgeTokenIds: [] as string[],
+  autoStartPending: false,
+  onCheckinScreen: false,
+  holderFirstName: null as string | null,
 }
 const mockSessionState = vi.fn().mockReturnValue(PRISTINE)
+const mockStartPendingVisit = vi.fn()
 vi.mock("./checkout/kiosk-session-guard", () => ({
   getKioskSessionState: () => mockSessionState(),
+  startPendingVisit: () => mockStartPendingVisit(),
 }))
 
 beforeEach(() => {
@@ -132,6 +141,7 @@ afterEach(() => {
   mockSessionState.mockReset()
   mockSessionState.mockReturnValue(PRISTINE)
   mockProbeTag.mockReset()
+  mockStartPendingVisit.mockReset()
   quoteEffectVouchers.length = 0
   tagCallback = null
   mockAuth.currentUser = null
@@ -511,7 +521,108 @@ describe("BridgeNfcRouter", () => {
   })
 })
 
+describe("BridgeNfcRouter — kiosk check-in switch rules (issue #732)", () => {
+  const replace = vi.fn()
+  beforeEach(() => {
+    vi.stubGlobal("location", { ...window.location, replace })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    replace.mockReset()
+  })
+
+  it("tap during the countdown: starts the visit, then switches with the toast param, no dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Andrea Muster",
+      holderFirstName: "Andrea",
+      autoStartPending: true,
+    })
+    mockStartPendingVisit.mockResolvedValue("Andrea")
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(
+        "/checkin?kiosk=&picc=PICC1&cmac=CMAC1&started=Andrea",
+      ),
+    )
+    expect(mockStartPendingVisit).toHaveBeenCalledOnce()
+    // The start comes first, then the wipe.
+    expect(mockStartPendingVisit.mock.invocationCallOrder[0]).toBeLessThan(
+      mockResetSession.mock.invocationCallOrder[0],
+    )
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("tap on an untouched-but-timerless check-in: asks with the notStarted copy", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Andrea Muster",
+      holderFirstName: "Andrea",
+      onCheckinScreen: true,
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(await screen.findByText("Benutzer wechseln?")).toBeTruthy()
+    expect(
+      screen.getByText(/Andrea hat noch keinen Besuch gestartet/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/zwischengespeichert/)).toBeNull()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(mockStartPendingVisit).not.toHaveBeenCalled()
+  })
+
+  it("notStarted copy also applies with family added (preservable)", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      preservable: true,
+      identified: true,
+      holderName: "Andrea Muster",
+      holderFirstName: "Andrea",
+      onCheckinScreen: true,
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(
+      await screen.findByText(/Andrea hat noch keinen Besuch gestartet/),
+    ).toBeTruthy()
+  })
+
+  it("a failed start falls back to the switch dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      holderName: "Andrea Muster",
+      holderFirstName: "Andrea",
+      autoStartPending: true,
+    })
+    mockStartPendingVisit.mockRejectedValue(new Error("write failed"))
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    expect(
+      await screen.findByText(/Andrea hat noch keinen Besuch gestartet/),
+    ).toBeTruthy()
+    expect(mockResetSession).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+  })
+})
+
 describe("confirmTagSwitch", () => {
+  it("carries the started hint into the reload target", async () => {
+    const reload = vi.fn()
+    await confirmTagSwitch({
+      tag: { picc: "P2", cmac: "C2" },
+      resetSession: vi.fn().mockResolvedValue(undefined),
+      reload,
+      startedHint: "Zoë",
+    })
+    expect(reload).toHaveBeenCalledWith(
+      "/checkin?kiosk=&picc=P2&cmac=C2&started=Zo%C3%AB",
+    )
+  })
+
   it("wipes the bridge session then reloads into /checkin with the new params", async () => {
     const resetSession = vi.fn().mockResolvedValue(undefined)
     const reload = vi.fn()

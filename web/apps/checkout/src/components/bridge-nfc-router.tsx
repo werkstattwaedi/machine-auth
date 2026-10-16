@@ -20,7 +20,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
-import { getKioskSessionState } from "./checkout/kiosk-session-guard"
+import {
+  getKioskSessionState,
+  startPendingVisit,
+} from "./checkout/kiosk-session-guard"
 import {
   BadgePurchaseDialog,
   type BadgePurchaseOffer,
@@ -59,6 +62,12 @@ interface PendingTag {
   // counter, see the routing note above), so we can only name the visitor
   // being interrupted, not the one tapping in.
   holderName: string | null
+  // Issue #732: the interrupted visitor is on /checkin and has NOT started a
+  // visit (they touched the screen, or signed in with a code). Switching
+  // loses what is on the screen, and they may think their visit started —
+  // so ask with copy that says so, even when nothing is "preservable".
+  notStarted?: boolean
+  holderFirstName?: string | null
 }
 
 /**
@@ -76,6 +85,9 @@ export async function confirmTagSwitch(deps: {
   tag: Pick<PendingTag, "picc" | "cmac">
   resetSession: (opts?: ResetSessionOptions) => Promise<void>
   reload: (target: string) => void
+  /** First name of the visitor whose visit was just started — the next
+   * badge's screen confirms it with a toast (issue #732). */
+  startedHint?: string | null
 }): Promise<void> {
   try {
     // keepWindowOpen: the user who just tapped is standing at the kiosk —
@@ -90,6 +102,7 @@ export async function confirmTagSwitch(deps: {
     picc: deps.tag.picc,
     cmac: deps.tag.cmac,
   })
+  if (deps.startedHint) params.set("started", deps.startedHint)
   deps.reload(`/checkin?${params.toString()}`)
 }
 
@@ -134,6 +147,12 @@ export async function confirmTagSwitch(deps: {
  * through an elevated sign-in, the badge flows (switch, purchase) belong to
  * the wizard, and a tap must not silently wipe what the member is editing.
  * The member area's own idle watcher still ends the session.
+ *
+ * Issue #732, kiosk check-in after a badge tap: while "Besuch starten" is
+ * still counting down, a registered badge starts that visit first and then
+ * switches without asking (the next screen confirms the start). Once the
+ * countdown is over without a start (touched, or a code sign-in), a tap asks
+ * — "Benutzer wechseln?" — even with nothing entered.
  */
 export function BridgeNfcRouter() {
   const bridge = useBridge()
@@ -210,9 +229,37 @@ export function BridgeNfcRouter() {
           }
           return
         }
+        // Issue #732: the previous visitor's "Besuch starten" countdown is
+        // running — they walked off trusting it. Start their visit now, then
+        // switch without asking; the next screen confirms the start.
+        if (session.autoStartPending) {
+          let startedHint: string | null
+          try {
+            startedHint = await startPendingVisit()
+          } catch {
+            // The start failed or timed out (already toasted): nothing is
+            // known to be started, so ask like for any unstarted check-in.
+            setPendingTag({
+              picc,
+              cmac,
+              identified: session.identified,
+              holderName: session.holderName,
+              notStarted: true,
+              holderFirstName: session.holderFirstName,
+            })
+            return
+          }
+          await confirmTagSwitch({
+            tag: { picc, cmac },
+            resetSession: bridge.resetSession,
+            reload: (target) => window.location.replace(target),
+            startedHint,
+          })
+          return
+        }
         // Registered badge over an identified session with nothing to keep:
         // no question to ask, but never switch principal in place.
-        if (!session.preservable) {
+        if (!session.preservable && !session.onCheckinScreen) {
           await confirmTagSwitch({
             tag: { picc, cmac },
             resetSession: bridge.resetSession,
@@ -226,6 +273,8 @@ export function BridgeNfcRouter() {
           cmac,
           identified: session.identified,
           holderName: session.holderName,
+          notStarted: session.onCheckinScreen,
+          holderFirstName: session.holderFirstName,
         })
       } catch (err) {
         console.error("probeTag failed:", err)
@@ -329,6 +378,7 @@ export function BridgeNfcRouter() {
   // the open visit survives and reappears when its own badge is tapped, so
   // the benign black confirm and reassuring copy are correct.
   const anonymous = !pendingTag.identified
+  const notStarted = !anonymous && !!pendingTag.notStarted
 
   return (
     <>
@@ -346,6 +396,14 @@ export function BridgeNfcRouter() {
               <>
                 Der neue Badge beginnt eine neue Sitzung. Der bisherige
                 Checkout wird verworfen.
+              </>
+            ) : notStarted ? (
+              <>
+                {pendingTag.holderFirstName
+                  ? `${pendingTag.holderFirstName} hat noch keinen Besuch gestartet.`
+                  : "Es wurde noch kein Besuch gestartet."}{" "}
+                Wenn du wechselst, gehen die Angaben auf diesem Bildschirm
+                verloren.
               </>
             ) : pendingTag.holderName ? (
               <>

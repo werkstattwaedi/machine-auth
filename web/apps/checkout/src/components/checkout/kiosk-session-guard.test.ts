@@ -15,8 +15,16 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   getKioskSessionState,
   isKioskSessionPreservable,
+  registerCheckinScreen,
   registerKioskSessionGuard,
+  startPendingVisit,
 } from "./kiosk-session-guard"
+
+const NO_CHECKIN = {
+  autoStartPending: false,
+  onCheckinScreen: false,
+  holderFirstName: null,
+}
 
 let cleanup: (() => void) | null = null
 afterEach(() => {
@@ -31,6 +39,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      ...NO_CHECKIN,
     })
     expect(isKioskSessionPreservable()).toBe(false)
   })
@@ -65,6 +74,7 @@ describe("kiosk-session-guard", () => {
       identified: true,
       holderName: "Michael Schneider",
       badgeTokenIds: ["04aabbccddeeff"],
+      ...NO_CHECKIN,
     })
   })
 
@@ -82,6 +92,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      ...NO_CHECKIN,
     })
   })
 
@@ -100,5 +111,37 @@ describe("kiosk-session-guard", () => {
     }))
     unregisterOld()
     expect(isKioskSessionPreservable()).toBe(true)
+  })
+
+  // Issue #732: /checkin contributes the countdown / unstarted-visit state.
+  it("merges the registered check-in screen state and delegates startPendingVisit", async () => {
+    const unregisterGuard = registerKioskSessionGuard(() => ({
+      preservable: false,
+      identified: true,
+      holderName: "Andrea Muster",
+      badgeTokenIds: [],
+    }))
+    const start = async () => "Andrea"
+    const unregisterScreen = registerCheckinScreen({
+      getState: () => ({
+        autoStartPending: true,
+        onCheckinScreen: false,
+        holderFirstName: "Andrea",
+      }),
+      startPendingVisit: start,
+    })
+    cleanup = () => {
+      unregisterGuard()
+      unregisterScreen()
+    }
+    expect(getKioskSessionState()).toMatchObject({
+      identified: true,
+      autoStartPending: true,
+      holderFirstName: "Andrea",
+    })
+    await expect(startPendingVisit()).resolves.toBe("Andrea")
+    unregisterScreen()
+    expect(getKioskSessionState()).toMatchObject(NO_CHECKIN)
+    await expect(startPendingVisit()).rejects.toThrow()
   })
 })
