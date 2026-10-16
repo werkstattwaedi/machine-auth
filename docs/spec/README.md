@@ -68,10 +68,15 @@ Don't backfill a domain up front.
    with a decision behind it counts (it has a source). Behaviour that merely
    falls out of how a screen is built — nothing decided it, nothing refuses
    the other case — is an *Open questions* entry (or an issue), not a rule.
+10. **A glossary entry defines a term** — what the thing is, never when it
+    appears, where it leads, what it does or which rule governs it; that is
+    a rule's job. A scope such as "(kiosk only)" is allowed only when it
+    makes the term clearer, and an entry names a rule id only when it would
+    otherwise be ambiguous.
 
-These writing rules are the rubric: the spec check holds every rule a PR
-adds or edits against them, by number, and checks it against the other rules
-for consistency.
+These writing rules are the rubric: the spec check holds every rule and
+every glossary entry a PR adds or edits against them, by number, and checks
+it against the other rules for consistency.
 
 Use the [glossary](#glossary) terms; if you need a new one, add it here.
 
@@ -123,26 +128,22 @@ still passes a different wrong promise.
 - **Member** — a person with an active membership (single, or as part of a
   family).
 - **Family owner** (*Inhaber:in*) — the member who bought a family
-  membership and invites the others.
+  membership.
 - **Invited member** — a person who joined a family membership through an
   invitation.
-- **Admin** — a person with the `admin` claim; works in the admin app.
-- **Guest** — a person who continues without signing in or tapping a
-  badge; the app knows nothing about them.
-- **Identified person** — a person who signed in or tapped their badge;
-  the opposite of a guest.
+- **Admin** — a person with the `admin` claim.
+- **Guest** — a person using the app without signing in or tapping a badge.
+- **Identified person** — a person who signed in or tapped their badge.
 
 **Places**
 - **Own device** — the checkout app on the person's phone or computer.
 - **Kiosk** — the shared terminal in the workshop (badge reader, printer).
-- **Machine terminal** — the device on a machine that enables it after a
-  badge tap.
+- **Machine terminal** — the device on a machine that unlocks it.
 
 **Screens**
-- **Check-in, Kosten, Check Out** — the steps of the checkout app, in this
-  order: who is there, what was used or bought, and paying.
-- **Start screen** — the check-in before anyone is identified: sign in or
-  continue as a guest; at the kiosk also the badge prompt.
+- **Check-in, Kosten, Check Out, Bezahlen** — the four steps of the checkout
+  app: who is there, what was used or bought, the summary, paying.
+- **Start screen** — the check-in while nobody is identified yet.
 - **Account** (*Konto*) — the signed-in person's own pages: Profil,
   Nutzungsverlauf and Mitgliedschaft (the membership page).
 
@@ -151,29 +152,24 @@ still passes a different wrong promise.
 - **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout.
 - **Checkout** — what a visit, purchase or membership costs, and how it was
   paid.
-- **Day** — a workshop day runs from 03:00 to 03:00 the next morning
-  (Europe/Zurich); a visit at 02:00 still belongs to the day before.
-  "Today" and "an earlier day" in the rules mean this day.
-- **Complete profile** — first and last name, accepted terms and, for a
-  company, its address (ACC-2).
+- **Day** (today, an earlier day) — the workshop day: 03:00 to 03:00 the
+  next morning, Swiss time.
+- **Complete profile** — a profile with first and last name, accepted terms
+  and, for a company, its address.
 - **Purchase-only checkout** — a checkout opened for a membership or badge
-  bought without a visit (CHK-5).
+  bought without a visit.
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
-- **Restricted session** — a kiosk session started by a badge tap (ACC-4).
+- **Restricted session** — a kiosk session started by a badge tap.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
-- **Quittung** — a receipt for a method paid during checkout (TWINT); no QR
-  slip.
-- **Beleg** — the per-checkout document of a member paying by Sammelrechnung;
-  billed later.
+- **Quittung** — a receipt for a payment made during checkout, such as
+  TWINT.
+- **Beleg** — the per-checkout document of a member paying by
+  Sammelrechnung.
 - **Sammelrechnung** — the monthly invoice that collects an account holder's
   *Belege*.
-- **Account holder** — the person a checkout is billed to (the payer); other
-  people on the same visit are not billed.
-- **Confirm** — the person's act of choosing a payment method for a bill at
-  the end of a checkout.
-- **Commit** — the moment a bill's payment method becomes final: when the
-  person confirms it, or when the overnight job does it for them (BIL-7).
-  What a bill grants, it grants from this moment (BIL-34).
+- **Account holder** — the person a checkout is billed to (the payer).
+- **Confirm** — the person's choice of a payment method for a bill.
+- **Commit** — the moment a bill's payment method becomes final.

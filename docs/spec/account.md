@@ -6,12 +6,12 @@ kiosk. Terms: see the [glossary](README.md#glossary).
 
 ## Ways to sign in
 
-- **ACC-1** A person signs in with an e-mail code, an SMS code, Google or a badge; which of them a device offers is fixed — ADR-0022, ADR-0031:
+- **ACC-1** A person signs in with an e-mail code, an SMS code, Google or a badge; each device offers a fixed set of them — ADR-0022, ADR-0031:
 
   | Way | Own device | Kiosk | Needs |
   |---|---|---|---|
   | e-mail code | yes | yes | an account; a new e-mail address can create one |
-  | SMS code | yes | yes | a mobile number verified on the profile; no account is created by phone |
+  | SMS code | yes | yes | a mobile number verified on the profile; a phone number alone creates no account |
   | Google | yes | no | — |
   | badge tap | no | yes | a registered badge (unregistered: KIO-13) |
 
