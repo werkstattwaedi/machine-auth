@@ -77,6 +77,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for TWINT bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
+- [NEEDS CLARIFICATION] A guest on their own device is offered the PDF download (BIL-15), but the request fails on the server, which matches the caller against an account holder the bill doesn't have; the mail (BIL-25) is their only copy. Hide the download for guests, or allow it? — #750
 
 ## Retired
 
