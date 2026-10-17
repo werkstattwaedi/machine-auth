@@ -6,9 +6,9 @@
 #    session running `/workqueue` with Remote Control enabled. Permission
 #    prompts and worker `SendUserMessage` calls forward to your phone /
 #    browser via Remote Control, so you can answer remotely.
-#  - Phase 7 of /workqueue runs `tmux send-keys "/exit" Enter` as its final
+#  - Phase 5 of /workqueue runs `tmux send-keys "/exit" Enter` as its final
 #    step. Because claude owns the pane during the run, the keystrokes land
-#    in claude's input buffer; once Phase 7 returns and claude is back at
+#    in claude's input buffer; once Phase 5 returns and claude is back at
 #    its prompt, it processes /exit and shuts down. This loop's `while`
 #    body unblocks and the next iteration starts.
 #  - After claude exits, read its next-cadence verdict from the signal
@@ -22,10 +22,10 @@
 # Wire it up: open a tmux pane you can leave running, then:
 #   ./.claude/scripts/workqueue-loop.sh
 # Ctrl-C to stop the loop. The in-flight claude session (if any) is left
-# alone — it exits on its own via Phase 7.
+# alone — it exits on its own via Phase 5.
 set -uo pipefail
 
-# Refuse to run outside tmux — the Phase 7 self-exit relies on
+# Refuse to run outside tmux — the Phase 5 self-exit relies on
 # `tmux send-keys` reaching the pane that claude inherited.
 if [[ -z "${TMUX:-}" ]]; then
   echo "workqueue-loop must run inside a tmux session." >&2
@@ -201,7 +201,7 @@ while true; do
   run_start=$(date +%s)
 
   # Background watchdog: /workqueue touches WORKQUEUE_SIGNAL_FILE at every
-  # exit path (normal Phase 7 completion or any abort — idle, dirty tree,
+  # exit path (normal Phase 5 completion or any abort — idle, dirty tree,
   # baseline-red, baseline-escalated, etc.). The watchdog polls for the
   # file and sends /exit to this tmux pane (where claude is now running),
   # so claude shuts down regardless of which exit branch /workqueue took.
