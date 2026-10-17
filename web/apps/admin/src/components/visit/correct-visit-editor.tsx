@@ -82,7 +82,7 @@ export function CorrectVisitEditor({
               <TableHead>Name</TableHead>
               <TableHead>Typ</TableHead>
               <TableHead>Nutzungsart</TableHead>
-              <TableHead>Nutzungsgebühr heute bereits erfasst</TableHead>
+              <TableHead>Nutzungsgebühr heute bereits abgerechnet</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -130,7 +130,7 @@ export function CorrectVisitEditor({
                     checked={person.entryFeeWaivedToday}
                     onCheckedChange={(v) => patchPerson(i, { entryFeeWaivedToday: v === true })}
                     disabled={disabled}
-                    aria-label={`Nutzungsgebühr heute bereits erfasst: ${person.name}`}
+                    aria-label={`Nutzungsgebühr heute bereits abgerechnet: ${person.name}`}
                   />
                 </TableCell>
               </TableRow>

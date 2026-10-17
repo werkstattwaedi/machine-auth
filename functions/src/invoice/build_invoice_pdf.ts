@@ -698,7 +698,7 @@ function renderCheckoutSection(
             : USAGE_TYPE_LABELS[pf.usageType] ?? pf.usageType;
         label += ` · ${usageLabel}`;
       }
-      if (pf.waivedToday) label += " — heute bereits erfasst";
+      if (pf.waivedToday) label += " — heute bereits abgerechnet";
       y = renderItemRow(doc, y, label, "", 1, pf.netFee, pf.netFee);
     }
     y = renderSubtotalRow(doc, y, netEntryFees);
