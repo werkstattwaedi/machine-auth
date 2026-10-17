@@ -1,9 +1,10 @@
 # Kiosk
 
 What differs at the shared terminal: where a badge tap lands, "Besuch
-starten" next to "Material erfassen", what a second badge does, and when
-the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
-(CHK), the ways to sign in [account.md](account.md) (ACC). Terms: see the
+starten" next to "Material erfassen", what a second badge does, paying by
+TWINT, and when the kiosk resets. The check-in itself follows
+[checkout.md](checkout.md) (CHK), the ways to sign in
+[account.md](account.md) (ACC). Terms: see the
 [glossary](README.md#glossary).
 
 ## Check-in
@@ -58,6 +59,10 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
   | an identified person is at the kiosk | they are offered to buy the badge |
   | a guest has entered persons or items | the guest is told to finish the checkout and sign in first |
 
+## Paying
+
+- **KIO-19** At the kiosk the TWINT paylink opens in an overlay on the kiosk itself, and a payment completed there confirms TWINT without the button (BIL-5, BIL-6). — #416
+
 ## Idle & reset
 
 - **KIO-7** A kiosk left untouched for the idle time asks whether the person is still there; saying yes keeps the session, any other answer or none within 30 s resets the kiosk (KIO-8) — ADR-0022, ADR-0041, #378, #689:
@@ -74,7 +79,7 @@ the kiosk resets. The check-in itself follows [checkout.md](checkout.md)
   | Trigger | Asked first |
   |---|---|
   | "Besuch starten" | no |
-  | "Fertig" after paying, or 8 s without it | no |
+  | "Fertig" after paying, or 8 s without it (CHK-17) | no |
   | the idle time ran out (KIO-7) | yes: whether the person is still there |
   | a switch to another badge | see KIO-6 |
   | "Abmelden" in the header menu | no |
