@@ -75,7 +75,7 @@ ipcRenderer.on(
   }
 )
 
-// Payment terminal progress (ADR-0048). Main sends these only to the
+// Payment terminal progress (ADR-0051). Main sends these only to the
 // webContents that started the payment, i.e. the checkout webview.
 const terminalEventCallbacks = new Set<(event: TerminalPaymentEvent) => void>()
 

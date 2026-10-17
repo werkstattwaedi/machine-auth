@@ -37,7 +37,7 @@ import type { NfcTagEvent, ResetSessionOptions } from "./types"
 
 const config = resolveConfig()
 
-// Wallee A35 over LTI (ADR-0048). Null when the build has no terminal host:
+// Wallee A35 over LTI (ADR-0051). Null when the build has no terminal host:
 // the bridge then doesn't advertise the feature and refuses payments.
 const terminal = config.terminal
   ? new WalleeTerminal({
@@ -481,7 +481,7 @@ ipcMain.handle(
     )
 )
 
-// Payment terminal (ADR-0048). Only the checkout web app may start or abort
+// Payment terminal (ADR-0051). Only the checkout web app may start or abort
 // a payment: the preload also runs in the chrome renderer (file://), and an
 // off-origin page must never drive the terminal even if it ever got a
 // preload. So the sender's top frame has to be on the checkout origin.

@@ -48,7 +48,7 @@ interface BridgeApi {
   // RaiseNow TWINT payment completed (#416). Optional so the web app keeps
   // working against older kiosk builds without this channel.
   onPaymentConfirmed?: (cb: (paymentUuid: string) => void) => () => void
-  // Wallee payment terminal (ADR-0048), on kiosk builds whose `features`
+  // Wallee payment terminal (ADR-0051), on kiosk builds whose `features`
   // include PAYMENT_TERMINAL_FEATURE. Optional: older kiosk builds lack them.
   // `terminalPay` never rejects; a second call while one runs resolves
   // `busy`. Subscribe to `onTerminalEvent` before calling it. Display only —
