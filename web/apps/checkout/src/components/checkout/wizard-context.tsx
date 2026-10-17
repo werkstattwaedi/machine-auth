@@ -79,6 +79,11 @@ import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
 import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
 import { runStartOver } from "./start-over"
+import {
+  TERMINAL_BUSY_PHASES,
+  useTerminalPayment,
+  type TerminalPaymentState,
+} from "./use-terminal-payment"
 
 /**
  * `closeCheckoutAndGetPayment` throws `failed-precondition` with a
@@ -238,6 +243,13 @@ export interface WizardContextValue {
    */
   submitCheckout: (paymentMethod?: PaymentMethod) => Promise<PaymentData | null>
   submitting: boolean
+  // ----- payment terminal (ADR-0051) -----
+  /** The running or finished terminal payment; null when none was started. */
+  terminal: TerminalPaymentState | null
+  /** Prices an attempt and arms the terminal; a retry is another start. */
+  startTerminalPayment: () => Promise<void>
+  /** Stops a terminal still waiting for a card and forgets the attempt. */
+  abortTerminalPayment: () => Promise<void>
   submitError: string | null
   // ----- item callbacks (shared with picker sub-routes) -----
   addItem: (item: CheckoutItemLocal) => Promise<void>
@@ -286,6 +298,7 @@ export function kioskSessionSnapshot(
     committed: boolean
     holderName: string | null
     badgeTokenIds: string[]
+    paymentInProgress: boolean
   },
 ) {
   return {
@@ -294,6 +307,7 @@ export function kioskSessionSnapshot(
     committed: state.committed,
     holderName: state.holderName,
     badgeTokenIds: state.badgeTokenIds,
+    paymentInProgress: state.paymentInProgress,
   }
 }
 
@@ -588,6 +602,7 @@ export function WizardProvider({
     committed: false,
     holderName: null as string | null,
     badgeTokenIds: [] as string[],
+    paymentInProgress: false,
   })
 
   // Bridge the "we just wrote a checkout, listener hasn't surfaced it
@@ -625,6 +640,8 @@ export function WizardProvider({
     committed: paymentData != null,
     holderName,
     badgeTokenIds,
+    // Set below, once the terminal hook ran this render.
+    paymentInProgress: guardStateRef.current.paymentInProgress,
   }
   useEffect(
     () =>
@@ -898,9 +915,11 @@ export function WizardProvider({
 
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
-  const submitCheckout = useCallback(async (
-    paymentMethod?: PaymentMethod,
-  ): Promise<PaymentData | null> => {
+  // The close's input — roster and summary — shared by the close and the
+  // terminal's prepare step (ADR-0051), which prices exactly what the close
+  // would. Persists a membership's billing address first; null when that
+  // write failed (already toasted).
+  const buildClosePayload = useCallback(async () => {
     // Compute the cost breakdown locally for the receipt (the server
     // recomputes authoritatively in closeCheckoutAndGetPayment). The
     // usage-type discount (issue #284) waives sections per
@@ -1002,6 +1021,40 @@ export function WizardProvider({
       tip,
       discountAmount: Math.round((rawTotal - total) * 100) / 100,
     }
+    return { personsPayload, summary }
+  }, [
+    identifiedUserRef,
+    items,
+    persons,
+    feePersons,
+    pricingConfig,
+    membershipCatalogId,
+    badgeCatalogId,
+    tip,
+    visitUsageType,
+    update,
+    db,
+  ])
+
+  const terminalPayment = useTerminalPayment({ checkoutId, bridge, buildClosePayload })
+  const { clear: clearTerminal } = terminalPayment
+  guardStateRef.current.paymentInProgress =
+    !!terminalPayment.terminal && TERMINAL_BUSY_PHASES.has(terminalPayment.terminal.phase)
+  // The terminal's approval shows the confirmation like a commit does
+  // (CHK-23), though Wallee closes the checkout only afterwards.
+  if (terminalPayment.terminal?.phase === "approved") guardStateRef.current.committed = true
+  // Forgetting a finished checkout forgets its terminal payment too.
+  const clearPaymentAndTerminal = useCallback(() => {
+    clearPayment()
+    clearTerminal()
+  }, [clearPayment, clearTerminal])
+
+  const submitCheckout = useCallback(async (
+    paymentMethod?: PaymentMethod,
+  ): Promise<PaymentData | null> => {
+    const payload = await buildClosePayload()
+    if (!payload) return null
+    const { personsPayload, summary } = payload
 
     const closeCheckoutAndGetPayment = rpcCallable<
       {
@@ -1078,17 +1131,9 @@ export function WizardProvider({
     checkoutId,
     identifiedUserRef,
     items,
-    persons,
-    feePersons,
-    pricingConfig,
-    membershipCatalogId,
-    badgeCatalogId,
-    tip,
-    visitUsageType,
+    buildClosePayload,
     functions,
     submit,
-    update,
-    db,
   ])
 
   const value: WizardContextValue = {
@@ -1129,7 +1174,7 @@ export function WizardProvider({
     totalPrice: totalPriceRef.current,
     paymentChoice,
     setPaymentChoice,
-    clearPayment,
+    clearPayment: clearPaymentAndTerminal,
     picc,
     cmac,
     kiosk,
@@ -1142,6 +1187,9 @@ export function WizardProvider({
     persistPersons,
     submitCheckout,
     submitting: submit.loading,
+    terminal: terminalPayment.terminal,
+    startTerminalPayment: terminalPayment.start,
+    abortTerminalPayment: terminalPayment.abort,
     submitError: submit.error?.message ?? null,
     addItem,
     updateItem,

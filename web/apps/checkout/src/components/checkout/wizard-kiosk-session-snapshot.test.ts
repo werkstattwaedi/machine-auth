@@ -56,6 +56,7 @@ function afterSubmit(
     committed: overrides.committed ?? true,
     holderName: "Max Muster",
     badgeTokenIds: [],
+    paymentInProgress: false,
   }
 }
 

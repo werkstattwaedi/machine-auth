@@ -32,11 +32,18 @@ const bridgeStub = {
   get available() {
     return bridgeAvailable
   },
+  features: [] as string[],
   onPaymentConfirmed: (cb: () => void) => {
     paymentConfirmed = cb
     return () => {}
   },
 }
+let kioskMethods = ["rechnung", "monthly", "raisenow"]
+vi.mock("@/lib/payment-config", () => ({
+  get paymentMethodConfig() {
+    return { kiosk: kioskMethods, web: ["rechnung", "monthly", "raisenow"] }
+  },
+}))
 vi.mock("@modules/lib/use-bridge", () => ({
   useBridge: () => bridgeStub,
 }))
@@ -136,6 +143,9 @@ function renderRoute() {
 beforeEach(() => {
   stepProps = null
   bridgeAvailable = false
+  kioskMethods = ["rechnung", "monthly", "raisenow"]
+  bridgeStub.features = []
+  delete (bridgeStub as { terminalPay?: unknown }).terminalPay
   paymentConfirmed = null
   finishHeld = null
   finishSignedIn = null
@@ -283,5 +293,40 @@ describe("Check Out route — commit (#750)", () => {
     )
     renderRoute()
     expect(finishSignedIn).toBe(false)
+  })
+
+  describe("payment terminal (ADR-0051)", () => {
+    it("offers the terminal card only on a kiosk that drives a terminal", () => {
+      kioskMethods = ["wallee_terminal", "rechnung"]
+      mockUseWizardContext.mockReturnValue(ctx({ kiosk: true }))
+      renderRoute()
+      expect(stepProps?.paymentMethods).toEqual(["rechnung"])
+      cleanup()
+
+      bridgeStub.features = ["nfc", "payment-terminal"]
+      ;(bridgeStub as { terminalPay?: unknown }).terminalPay = vi.fn()
+      renderRoute()
+      expect(stepProps?.paymentMethods).toEqual(["wallee_terminal", "rechnung"])
+    })
+
+    it("an approved terminal payment confirms from the attempt, with the kiosk countdown", async () => {
+      const c = ctx({
+        kiosk: true,
+        paymentChoice: "wallee_terminal",
+        terminal: {
+          phase: "approved",
+          checkoutId: "co-1",
+          amount: 25,
+          payerEmail: "max@test.com",
+          errorText: null,
+        },
+      })
+      mockUseWizardContext.mockReturnValue(c)
+      renderRoute()
+      expect(screen.getByTestId("confirmation").textContent).toBe("wallee_terminal")
+      expect(finishHeld).toBe(false)
+      await act(async () => screen.getByText("finish").click())
+      expect(c.startOver).toHaveBeenCalled()
+    })
   })
 })
