@@ -372,49 +372,32 @@ export function isUsageType(t: unknown): t is UsageType {
 }
 
 /**
- * Give every person a usage type and derive the visit's (issue #605,
+ * Check every person's usage type and derive the visit's (issue #605,
  * ADR-0050). Shared by the close and the admin correction.
  *
- * - A person who carries a `usageType` keeps it.
- * - Legacy client (no person carries one): each person gets `fallback`,
- *   the request's top-level type — except an owner-only type
- *   (Freiwilligengruppe / Interne Nutzung), which only the owner's line
- *   gets; everyone else is `regular`. Old clients offered those types to
- *   an identified visitor with companions, so the "alone" check below is
- *   not applied to them.
- * - An owner-only type is refused (`invalid-argument`) on any line but the
- *   owner's (`userRef.id === ownerId`), when there is no owner line at all,
- *   and — for a client that sends per-person types — while anyone else is
- *   on the visit (CHK-32).
+ * - Every person must carry a valid `usageType` (`invalid-argument`
+ *   otherwise) — there is no visit-wide fallback for writes; only readers
+ *   of historical docs fall back to `checkout.usageType`.
+ * - An owner-only type (Freiwilligengruppe / Interne Nutzung) is refused on
+ *   any line but the owner's (`userRef.id === ownerId`) and while anyone
+ *   else is on the visit (CHK-32).
  *
- * The visit's type is `deriveVisitUsageType` over the result. Pure.
+ * The visit's type is `deriveVisitUsageType` over the persons. Pure.
  */
 export function resolvePersonUsageTypes(
   persons: CheckoutPersonEntity[],
   ownerId: string | null,
-  fallback: UsageType | undefined,
 ): { persons: CheckoutPersonEntity[]; usageType: UsageType } {
-  const explicit = persons.some((p) => p.usageType != null);
-  if (!explicit && !fallback) {
-    throw new HttpsError("invalid-argument", "usageType is required");
+  if (!persons.every((p) => isUsageType(p.usageType))) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Bitte Seite neu laden: Nutzungsart pro Person fehlt.",
+    );
   }
   const isOwner = (p: CheckoutPersonEntity) =>
     ownerId !== null && p.userRef?.id === ownerId;
 
-  const resolved = persons.map((p) => {
-    if (p.usageType != null) return p;
-    let t: UsageType = fallback ?? "regular";
-    if (isOwnerOnlyUsage(t) && !isOwner(p)) t = "regular";
-    return { ...p, usageType: t };
-  });
-
-  if (!explicit && fallback && isOwnerOnlyUsage(fallback) && !resolved.some(isOwner)) {
-    throw new HttpsError(
-      "invalid-argument",
-      `${USAGE_TYPE_LABELS[fallback]} ist nur für die angemeldete Person möglich.`,
-    );
-  }
-  for (const p of resolved) {
+  for (const p of persons) {
     const t = p.usageType as UsageType;
     if (!isOwnerOnlyUsage(t)) continue;
     if (!isOwner(p)) {
@@ -423,7 +406,7 @@ export function resolvePersonUsageTypes(
         `${USAGE_TYPE_LABELS[t]} ist nur für die angemeldete Person möglich.`,
       );
     }
-    if (explicit && resolved.length > 1) {
+    if (persons.length > 1) {
       throw new HttpsError(
         "invalid-argument",
         `${USAGE_TYPE_LABELS[t]} ist nicht möglich, solange weitere Personen erfasst sind.`,
@@ -432,9 +415,9 @@ export function resolvePersonUsageTypes(
   }
 
   const usageType = deriveVisitUsageType(
-    resolved.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
+    persons.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
   );
-  return { persons: resolved, usageType };
+  return { persons, usageType };
 }
 
 /**
@@ -690,7 +673,7 @@ export interface ClosePersonInput {
   } | null;
   /** users/{id} the person was pre-filled from (owner, family roster). */
   userId?: string | null;
-  /** The person's own usage type (issue #605); absent from older clients. */
+  /** The person's own usage type (issue #605); required on every line. */
   usageType?: string | null;
   /** users/{owner}/savedPersons/{id} the line was added from (issue #605). */
   savedPersonId?: string | null;
@@ -781,12 +764,6 @@ interface CloseCheckoutRequest {
   checkoutId?: string;
   /** Data for the anonymous flow that creates a closed checkout in one shot. */
   newCheckout?: NewCheckoutInput;
-  /**
-   * Legacy: the visit's single type, for clients that send no per-person
-   * `usageType` (issue #605). Ignored for persons that carry their own;
-   * the stored visit type is always derived.
-   */
-  usageType?: UsageType;
   persons: ClosePersonInput[];
   summary: CheckoutSummaryEntity;
   /**
@@ -826,7 +803,7 @@ export const closeCheckoutAndGetPaymentHandler = async (
   request: CallableRequest<CloseCheckoutRequest>
 ) => {
   const data = request.data ?? ({} as CloseCheckoutRequest);
-  const { checkoutId, newCheckout, usageType, persons, summary } = data;
+  const { checkoutId, newCheckout, persons, summary } = data;
   const paymentMethod = data.paymentMethod ?? null;
 
   if (!Array.isArray(persons) || persons.length === 0) {
@@ -834,9 +811,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   }
   if (!persons.every(isClosePersonInput)) {
     throw new HttpsError("invalid-argument", "persons[] must be valid");
-  }
-  if (usageType != null && !isUsageType(usageType)) {
-    throw new HttpsError("invalid-argument", "usageType must be valid");
   }
   if (paymentMethod !== null) {
     if (!isPaymentMethod(paymentMethod)) {
@@ -857,7 +831,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (checkoutId) {
     return closeExistingCheckout(callerUid, isAnonymous, {
       checkoutId,
-      usageType,
       persons,
       clientSummary: summary,
       paymentMethod,
@@ -866,7 +839,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (newCheckout) {
     return createAnonymousCheckout(callerUid, firebaseAuthUid, {
       newCheckout,
-      usageType,
       persons,
       clientSummary: summary,
       paymentMethod,
@@ -883,7 +855,6 @@ async function closeExistingCheckout(
   isAnonymous: boolean,
   args: {
     checkoutId: string;
-    usageType?: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -943,7 +914,6 @@ async function closeExistingCheckout(
   const typed = resolvePersonUsageTypes(
     resolveClosePersons(db, args.persons, ownerId, context),
     ownerId,
-    args.usageType,
   );
   const visitUsageType = typed.usageType;
   const persons = await verifySavedPersonIds(db, typed.persons, ownerId, context);
@@ -1129,7 +1099,6 @@ async function createAnonymousCheckout(
   firebaseAuthUid: string | null,
   args: {
     newCheckout: NewCheckoutInput;
-    usageType?: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -1167,7 +1136,6 @@ async function createAnonymousCheckout(
   const typed = resolvePersonUsageTypes(
     resolveClosePersons(db, args.persons, effectiveUserId ?? null, "createAnonymousCheckout"),
     effectiveUserId ?? null,
-    args.usageType,
   );
   const visitUsageType = typed.usageType;
 

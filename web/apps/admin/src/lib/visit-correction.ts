@@ -43,6 +43,12 @@ export interface DraftPerson {
   entryFeeWaivedToday: boolean
   /** The person's own usage type (issue #605). */
   usageType: UsageType
+  /**
+   * users/{owner}/savedPersons/{id} the line was added from (issue #605). It
+   * keys the same-day waiver, so the replacement keeps it; the server only
+   * accepts ids the original checkout carried.
+   */
+  savedPersonId?: string
   billingAddress: { company: string; street: string; zip: string; city: string } | null
 }
 
@@ -150,6 +156,7 @@ export function draftFromCheckout(
       userId: p.userRef?.id ?? null,
       entryFeeWaivedToday: p.entryFeeWaivedToday === true,
       usageType: knownUsageType(p.usageType) ?? fallback,
+      ...(p.savedPersonId && !p.userRef ? { savedPersonId: p.savedPersonId } : {}),
       billingAddress: p.billingAddress
         ? {
             company: p.billingAddress.company ?? "",
@@ -312,8 +319,6 @@ export function toWireEntry(checkoutId: string, draft: CorrectionDraft): Correct
   return {
     checkoutId,
     replacement: {
-      // Derived; the server re-derives it from the persons (issue #605).
-      usageType: draftVisitUsageType(draft),
       persons: draft.persons.map((p) => ({
         name: p.name.trim(),
         email: p.email.trim(),
@@ -321,6 +326,7 @@ export function toWireEntry(checkoutId: string, draft: CorrectionDraft): Correct
         userId: p.userId,
         entryFeeWaivedToday: p.entryFeeWaivedToday,
         usageType: p.usageType,
+        ...(p.savedPersonId && !p.userId ? { savedPersonId: p.savedPersonId } : {}),
         billingAddress: p.billingAddress,
       })),
       items: draft.items.map((i) => ({

@@ -79,6 +79,8 @@ const ITEM_TYPES = new Set(["machine", "material", "service"]);
 const ITEM_ORIGINS = new Set(["nfc", "manual", "qr"]);
 const MAX_MONEY = 1_000_000;
 const MAX_TEXT = 200;
+/** Firestore auto-ids are 20 chars; leave headroom without accepting junk. */
+const MAX_SAVED_PERSON_ID = 128;
 
 // --- Payload validation ---------------------------------------------------
 
@@ -115,7 +117,10 @@ function isValidPerson(p: unknown): p is CorrectCheckoutPersonInput {
     typeof x.userType === "string" && USER_TYPES.has(x.userType) &&
     (x.userId === null || (typeof x.userId === "string" && x.userId.length > 0)) &&
     typeof x.entryFeeWaivedToday === "boolean" &&
-    (x.usageType == null || isUsageType(x.usageType)) &&
+    isUsageType(x.usageType) &&
+    (x.savedPersonId === undefined ||
+      (typeof x.savedPersonId === "string" && x.savedPersonId.length > 0 &&
+        x.savedPersonId.length <= MAX_SAVED_PERSON_ID)) &&
     (addr == null ||
       (typeof addr === "object" &&
         ["company", "street", "zip", "city"].every((k) => typeof addr[k] === "string")))
@@ -130,12 +135,6 @@ function parseReplacement(r: unknown, checkoutId: string): CorrectCheckoutReplac
   if (!Array.isArray(x.persons) || x.persons.length === 0 || !x.persons.every(isValidPerson)) {
     throw new HttpsError("invalid-argument", `${checkoutId}: persons[] is required and must be valid`);
   }
-  // The visit's type is derived from the persons (issue #605); a top-level
-  // one is only the fallback for an editor that sends no per-person types.
-  const perPerson = (x.persons as CorrectCheckoutPersonInput[]).some((p) => p.usageType != null);
-  if (x.usageType != null ? !isUsageType(x.usageType) : !perPerson) {
-    throw new HttpsError("invalid-argument", `${checkoutId}: invalid usageType`);
-  }
   if (!Array.isArray(x.items) || !x.items.every(isValidAdminItem)) {
     throw new HttpsError("invalid-argument", `${checkoutId}: items[] must be valid`);
   }
@@ -144,7 +143,6 @@ function parseReplacement(r: unknown, checkoutId: string): CorrectCheckoutReplac
     throw new HttpsError("invalid-argument", `${checkoutId}: invalid tip`);
   }
   return {
-    ...(x.usageType != null ? { usageType: x.usageType as UsageType } : {}),
     persons: x.persons as CorrectCheckoutPersonInput[],
     items: x.items as CorrectCheckoutItemInput[],
     tip,
@@ -203,7 +201,38 @@ function toPersonEntity(db: Firestore, p: CorrectCheckoutPersonInput): CheckoutP
   if (p.billingAddress) person.billingAddress = { ...p.billingAddress };
   if (p.entryFeeWaivedToday) person.entryFeeWaivedToday = true;
   if (p.usageType) person.usageType = p.usageType;
+  if (p.savedPersonId) person.savedPersonId = p.savedPersonId;
   return person;
+}
+
+/**
+ * Keep a replacement line's `savedPersonId` only when the original checkout
+ * carried that same id on one of its persons (issue #605): it keys the
+ * same-day waiver (`saved:<id>`), so an admin can carry an existing link
+ * through a correction but not invent one. A line with a `userRef` never
+ * carries one, and an id is kept on its first line only. Pure; exported for
+ * tests.
+ */
+export function keepOriginalSavedPersonIds(
+  persons: CheckoutPersonEntity[],
+  original: Pick<CheckoutEntity, "persons">,
+): CheckoutPersonEntity[] {
+  const allowed = new Set(
+    (original.persons ?? [])
+      .map((p) => p.savedPersonId)
+      .filter((id): id is string => !!id),
+  );
+  const seen = new Set<string>();
+  return persons.map((p) => {
+    const id = p.savedPersonId;
+    if (!id) return p;
+    if (!p.userRef && allowed.has(id) && !seen.has(id)) {
+      seen.add(id);
+      return p;
+    }
+    const { savedPersonId: _dropped, ...rest } = p;
+    return rest;
+  });
 }
 
 function toItemEntity(
@@ -299,9 +328,8 @@ export const correctCheckoutsHandler = async (
     // Same owner-only rules as the close (CHK-32); the owner is the
     // original's account.
     const typed = resolvePersonUsageTypes(
-      r.persons.map((p) => toPersonEntity(db, p)),
+      keepOriginalSavedPersonIds(r.persons.map((p) => toPersonEntity(db, p)), original),
       original.userId?.id ?? null,
-      r.usageType,
     );
     const persons = await markEntryFeeWaivedToday(
       db,

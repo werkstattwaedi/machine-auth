@@ -269,6 +269,23 @@ interface CallOptions {
   data: Record<string, unknown>;
 }
 
+/**
+ * Test shorthand: most cases write the visit's type once as `data.usageType`.
+ * The callable takes a type per person only (ADR-0050), so it is stamped onto
+ * every person that has none and dropped from the request — what the wizard
+ * sends when everyone shares one type.
+ */
+function perPersonUsageType(data: Record<string, unknown>): Record<string, unknown> {
+  const { usageType, ...rest } = data;
+  if (usageType == null || !Array.isArray(rest.persons)) return data;
+  return {
+    ...rest,
+    persons: (rest.persons as Array<Record<string, unknown>>).map((p) =>
+      p.usageType != null ? p : { ...p, usageType },
+    ),
+  };
+}
+
 function buildRequest(opts: CallOptions): CallableRequest<unknown> {
   const auth =
     opts.uid != null
@@ -283,7 +300,7 @@ function buildRequest(opts: CallOptions): CallableRequest<unknown> {
         }
       : undefined;
   return {
-    data: opts.data,
+    data: perPersonUsageType(opts.data),
     auth,
     rawRequest: {},
     acceptsStreaming: false,
@@ -295,7 +312,7 @@ async function call(
 ): ReturnType<typeof closeCheckoutAndGetPaymentHandler> {
   return closeCheckoutAndGetPaymentHandler(
     // The handler is typed against the request schema, but for tests we want
-    // to also exercise invalid shapes (missing persons / usageType / both
+    // to also exercise invalid shapes (missing persons / per-person usageType / both
     // checkoutId+newCheckout). Cast to any to bypass the narrowed type.
     buildRequest(opts) as unknown as Parameters<
       typeof closeCheckoutAndGetPaymentHandler
@@ -845,7 +862,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       );
     });
 
-    it("rejects when usageType is missing", async () => {
+    it("rejects a person without a usage type", async () => {
       await expectHttpsError(
         () =>
           call({
@@ -2033,7 +2050,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: opts.checkoutId ?? CHECKOUT_ID,
           usageType: opts.usageType ?? ("regular" as UsageType),
-          persons: [ADULT],
+          // An owner-only type needs the owner's line (CHK-32, ADR-0050).
+          persons: [opts.usageType === "intern" ? { ...wire(ADULT), userId: UID } : ADULT],
           summary: ZERO_SUMMARY,
           ...(paymentMethod !== undefined ? { paymentMethod } : {}),
         },
@@ -2437,27 +2455,6 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
           }),
         "invalid-argument",
       );
-    });
-
-    it("legacy client: an owner-only top-level type goes to the owner line only", async () => {
-      const uid = "ppu-legacy-intern";
-      await seedUser(uid, "erwachsen");
-      await seedCheckout("co-ppu-legacy", { ownerUid: uid });
-
-      const result = await call({
-        uid,
-        data: {
-          checkoutId: "co-ppu-legacy",
-          usageType: "intern" as UsageType,
-          persons: [{ ...wire(ADULT), userId: uid }, wire(CHILD)],
-          summary: EMPTY_SUMMARY,
-        },
-      });
-
-      expect(result.amount).to.equal("7.50");
-      const checkout = await getCheckout("co-ppu-legacy");
-      expect(checkout.usageType).to.equal("intern");
-      expect(checkout.persons.map((p) => p.usageType)).to.deep.equal(["intern", "regular"]);
     });
 
     it("keeps the stored purchaseOnly flag; a guest create writes false", async () => {

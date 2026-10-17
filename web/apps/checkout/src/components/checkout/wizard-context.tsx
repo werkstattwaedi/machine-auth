@@ -978,8 +978,6 @@ export function WizardProvider({
             pricingModel?: string | null
           }[]
         }
-        /** Derived from the persons; sent for older servers. */
-        usageType?: string
         persons: typeof personsPayload
         summary: typeof summary
         paymentMethod?: PaymentMethod
@@ -993,7 +991,6 @@ export function WizardProvider({
         data = await submit.mutate(async () => {
           const res = await closeCheckoutAndGetPayment({
             checkoutId,
-            usageType: visitUsageType,
             persons: personsPayload,
             summary,
             ...(paymentMethod ? { paymentMethod } : {}),
@@ -1020,7 +1017,6 @@ export function WizardProvider({
         data = await submit.mutate(async () => {
           const res = await closeCheckoutAndGetPayment({
             newCheckout,
-            usageType: visitUsageType,
             persons: personsPayload,
             summary,
             ...(paymentMethod ? { paymentMethod } : {}),

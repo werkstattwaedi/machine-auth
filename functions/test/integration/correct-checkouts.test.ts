@@ -179,8 +179,7 @@ async function seedSammelrechnung(): Promise<void> {
 
 function replacement(overrides: Partial<CorrectCheckoutReplacement> = {}): CorrectCheckoutReplacement {
   return {
-    usageType: "regular",
-    persons: [{ name: "Alice Adult", email: "alice@example.com", userType: "erwachsen", userId: null, entryFeeWaivedToday: false }],
+    persons: [{ name: "Alice Adult", email: "alice@example.com", userType: "erwachsen", userId: null, entryFeeWaivedToday: false, usageType: "regular" }],
     items: [{ workshop: "holz", description: "Sperrholz", type: "material", catalogId: null, quantity: 2, unitPrice: 5, totalPrice: 10 }],
     tip: 0,
     ...overrides,
@@ -246,7 +245,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       expect(() => bad({ items: [{ ...replacement().items[0], quantity: -1 }] })).to.throw(HttpsError, /items/);
       expect(() => bad({ items: [{ ...replacement().items[0], unitPrice: 2_000_000 }] })).to.throw(HttpsError, /items/);
       expect(() => bad({ persons: [] })).to.throw(HttpsError, /persons/);
-      expect(() => bad({ usageType: "gratis" as never })).to.throw(HttpsError, /usageType/);
+      expect(() => bad({ persons: [{ ...replacement().persons[0], usageType: "gratis" as never }] })).to.throw(HttpsError, /persons/);
     });
   });
 
@@ -516,11 +515,14 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       }
     });
 
-    it("rejects a replacement without any usage type", () => {
-      const { usageType: _omitted, ...noType } = replacement();
+    it("rejects a person without a usage type", () => {
+      const { usageType: _omitted, ...noType } = replacement().persons[0];
       expect(() =>
-        parseCorrectCheckoutsRequest({ reason: "Falsch", corrections: [{ checkoutId: "x", replacement: noType }] }),
-      ).to.throw(HttpsError, /usageType/);
+        parseCorrectCheckoutsRequest({
+          reason: "Falsch",
+          corrections: [{ checkoutId: "x", replacement: replacement({ persons: [noType as never] }) }],
+        }),
+      ).to.throw(HttpsError, /persons/);
     });
   });
 

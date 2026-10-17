@@ -583,7 +583,6 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         { ...childPerson, usageType: "regular" },
       ],
       "owner",
-      undefined,
     );
     expect(persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
     expect(usageType).to.equal("regular");
@@ -596,7 +595,6 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         { ...childPerson, usageType: "materialbezug" },
       ],
       null,
-      undefined,
     );
     expect(usageType).to.equal("materialbezug");
   });
@@ -605,41 +603,24 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
     const { usageType } = resolvePersonUsageTypes(
       [{ ...owner, usageType: "volunteering" }],
       "owner",
-      undefined,
     );
     expect(usageType).to.equal("volunteering");
   });
 
-  it("legacy client: every person gets the top-level type", () => {
-    const { persons, usageType } = resolvePersonUsageTypes(
-      [owner, childPerson],
-      "owner",
-      "ermaessigt",
-    );
-    expect(persons.map((p) => p.usageType)).to.deep.equal(["ermaessigt", "ermaessigt"]);
-    expect(usageType).to.equal("regular");
-  });
-
-  it("legacy client: an owner-only type goes to the owner line only", () => {
-    const { persons, usageType } = resolvePersonUsageTypes(
-      [owner, childPerson],
-      "owner",
-      "intern",
-    );
-    expect(persons.map((p) => p.usageType)).to.deep.equal(["intern", "regular"]);
-    expect(usageType).to.equal("intern");
-  });
-
-  it("legacy client: an owner-only type without an owner line is refused", () => {
+  it("requires a usage type on every person", () => {
     expectCode(
-      () => resolvePersonUsageTypes([adultPerson], null, "volunteering"),
+      () => resolvePersonUsageTypes([{ ...owner, usageType: "regular" }, childPerson], "owner"),
       "invalid-argument",
-      /nur für die angemeldete Person/,
+      /Nutzungsart pro Person fehlt/,
     );
+    expectCode(() => resolvePersonUsageTypes([adultPerson], null), "invalid-argument");
   });
 
-  it("requires a top-level type when no person carries one", () => {
-    expectCode(() => resolvePersonUsageTypes([adultPerson], null, undefined), "invalid-argument");
+  it("refuses an unknown usage type", () => {
+    expectCode(
+      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "bogus" as never }], null),
+      "invalid-argument",
+    );
   });
 
   it("refuses an owner-only type on a non-owner line", () => {
@@ -648,7 +629,6 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         resolvePersonUsageTypes(
           [{ ...owner, usageType: "regular" }, { ...childPerson, usageType: "intern" }],
           "owner",
-          undefined,
         ),
       "invalid-argument",
       /nur für die angemeldete Person/,
@@ -661,7 +641,6 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         resolvePersonUsageTypes(
           [{ ...owner, usageType: "intern" }, { ...childPerson, usageType: "regular" }],
           "owner",
-          undefined,
         ),
       "invalid-argument",
       /solange weitere Personen erfasst sind/,
@@ -670,7 +649,7 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
 
   it("refuses an owner-only type without an owner (guest check-in)", () => {
     expectCode(
-      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "volunteering" }], null, undefined),
+      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "volunteering" }], null),
       "invalid-argument",
     );
   });
@@ -681,7 +660,6 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         resolvePersonUsageTypes(
           [{ ...adultPerson, userRef: { id: "other" } as never, usageType: "intern" }],
           "owner",
-          undefined,
         ),
       "invalid-argument",
     );

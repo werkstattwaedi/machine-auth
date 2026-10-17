@@ -67,10 +67,13 @@ user type — not the usage type — are saved on continuing, in
 "Person hinzufügen" then offers them as a menu, each with a way to remove it.
 Saved persons belong to the account, whatever its membership, and are deleted
 with it. A checkout line added from one carries its `savedPersonId`, which
-gives the same-day waiver a stable key (`saved:<id>`).
+gives the same-day waiver a stable key (`saved:<id>`). An admin correction
+carries it over to the replacement, but only ids the original checkout carried.
 
 **Old documents are read, not migrated**: every fee reader uses
-`person.usageType ?? checkout.usageType`.
+`person.usageType ?? checkout.usageType`. Writes have no such fallback: the close
+and the admin correction refuse (`invalid-argument`) any person without a
+usage type of their own, and take no visit-wide type from the client.
 
 ## Consequences
 

@@ -116,6 +116,24 @@ describe("draftFromCheckout", () => {
     )
     expect(withKid.persons.map((p) => p.usageType)).toEqual(["regular", "regular"])
   })
+
+  it("keeps a guest's savedPersonId, not one on an account line (#605)", () => {
+    const d = draftFromCheckout(
+      {
+        usageType: "regular",
+        userId: ref("u-a") as never,
+        persons: [
+          { name: "A", email: "", userType: "erwachsen", userRef: ref("u-a") as never, savedPersonId: "sp-x" },
+          { name: "K", email: "", userType: "kind", savedPersonId: "sp-kid" },
+          { name: "L", email: "", userType: "kind" },
+        ],
+        summary: undefined,
+      },
+      [],
+    )
+    expect(d.persons.map((p) => p.savedPersonId)).toEqual([undefined, "sp-kid", undefined])
+    expect(d.persons[2]).not.toHaveProperty("savedPersonId")
+  })
 })
 
 describe("rowTotal", () => {
@@ -287,16 +305,25 @@ describe("toWireEntry", () => {
       usageType: "regular",
       billingAddress: null,
     })
-    expect(entry.replacement?.usageType).toBe("regular")
+    expect(entry.replacement).not.toHaveProperty("usageType")
   })
 
-  it("sends each person's type and the derived visit type (#605)", () => {
+  it("sends each person's type, no visit-wide one (#605)", () => {
     const d = draft()
     d.persons[0].usageType = "volunteering"
     d.persons = [d.persons[0]]
     const entry = toWireEntry("co-1", d)
     expect(entry.replacement?.persons[0].usageType).toBe("volunteering")
     expect(entry.replacement?.persons[0].userId).toBe("u-anna")
-    expect(entry.replacement?.usageType).toBe("volunteering")
+    expect(entry.replacement).not.toHaveProperty("usageType")
+  })
+
+  it("carries a guest's savedPersonId, never on an account line (#605)", () => {
+    const d = draft()
+    d.persons[1].savedPersonId = "sp-kid"
+    d.persons[0].savedPersonId = "sp-bogus"
+    const entry = toWireEntry("co-1", d)
+    expect(entry.replacement?.persons[1].savedPersonId).toBe("sp-kid")
+    expect(entry.replacement?.persons[0]).not.toHaveProperty("savedPersonId")
   })
 })
