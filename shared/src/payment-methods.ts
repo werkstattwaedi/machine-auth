@@ -15,7 +15,12 @@
 
 import type { BillDocument } from "./email-contract"
 
-export const PAYMENT_METHODS = ["rechnung", "monthly", "raisenow"] as const
+export const PAYMENT_METHODS = [
+  "rechnung",
+  "monthly",
+  "raisenow",
+  "wallee_terminal",
+] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 export interface PaymentMethodInfo {
@@ -32,6 +37,13 @@ export interface PaymentMethodInfo {
   isAggregated: boolean
   /** Only offered to members with an active membership. */
   requiresMembership: boolean
+  /**
+   * The payment provider confirms the payment, so the bill is born paid
+   * (`paidAt` set) instead of carrying the customer's promise to pay. Such a
+   * method never closes a checkout from the client: the provider's
+   * confirmation does (ADR-0051, Wallee terminal).
+   */
+  confirmsPayment: boolean
 }
 
 export const PAYMENT_METHOD_INFO: Readonly<
@@ -42,18 +54,28 @@ export const PAYMENT_METHOD_INFO: Readonly<
     paidDuringCheckout: false,
     isAggregated: false,
     requiresMembership: false,
+    confirmsPayment: false,
   },
   monthly: {
     label: "Sammelrechnung",
     paidDuringCheckout: false,
     isAggregated: true,
     requiresMembership: true,
+    confirmsPayment: false,
   },
   raisenow: {
     label: "TWINT",
     paidDuringCheckout: true,
     isAggregated: false,
     requiresMembership: false,
+    confirmsPayment: false,
+  },
+  wallee_terminal: {
+    label: "Karte / TWINT",
+    paidDuringCheckout: true,
+    isAggregated: false,
+    requiresMembership: false,
+    confirmsPayment: true,
   },
 }
 
@@ -73,9 +95,10 @@ export function isPaidDuringCheckout(
 
 /**
  * Channels through which a bill's money actually arrived (`bills.paidVia`).
- * `free` is server-only (zero-amount bills).
+ * `free` is server-only (zero-amount bills); `wallee_terminal` only the
+ * terminal settlement writes, never an admin.
  */
-export const PAID_VIA = ["raisenow", "ebanking", "free"] as const
+export const PAID_VIA = ["raisenow", "ebanking", "free", "wallee_terminal"] as const
 export type PaidVia = (typeof PAID_VIA)[number]
 
 /**

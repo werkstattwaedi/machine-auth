@@ -40,7 +40,8 @@
     "pdfkit": "^0.18.0",
     "qrcode": "^1.5.4",
     "resend": "^6.10.0",
-    "swissqrbill": "^4.3.0"
+    "swissqrbill": "^4.3.0",
+    "wallee": "5.5.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.47.2",

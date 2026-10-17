@@ -320,6 +320,36 @@ export interface CheckoutEntity {
   // on every other doc, so `where("statsFlushedAt", "==", null)` is a
   // precise "pending flush" query.
   statsFlushedAt?: Timestamp | null;
+
+  // --- Payment terminal (ADR-0051). Server-only (open-update denylist). ---
+  // Attempts `prepareTerminalPayment` priced while the checkout was open,
+  // keyed by attempt number. Each one stays settleable until the checkout
+  // closes — money may still arrive for an older attempt after a newer one
+  // was prepared. Deleted at close.
+  terminalAttempts?: Record<string, TerminalAttemptEntity>;
+  // Last attempt number handed out; only ever grows.
+  terminalAttemptCount?: number;
+  // The Wallee transaction whose payment closed this checkout.
+  walleeTransactionId?: number | null;
+}
+
+/**
+ * One priced terminal attempt: the close it becomes once Wallee confirms
+ * the payment. Settlement uses this stored input — what the person saw and
+ * paid — not a re-pricing at confirmation time.
+ */
+export interface TerminalAttemptEntity {
+  reference: string;
+  /** CHF, the amount sent to the terminal. */
+  amount: number;
+  usageType: UsageType;
+  persons: CheckoutPersonEntity[];
+  summary: CheckoutSummaryEntity;
+  /** `itemsFingerprint` of the items it priced; settlement refuses on a change. */
+  itemsKey?: string;
+  /** The principal that prepared it; stamped as `modifiedBy` on the close. */
+  preparedBy: string;
+  createdAt: Timestamp;
 }
 
 

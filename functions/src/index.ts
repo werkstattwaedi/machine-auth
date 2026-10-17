@@ -261,6 +261,12 @@ export {
   retryBillProcessing,
 } from "./invoice/bill_triggers";
 export { autoAcknowledgeBills } from "./invoice/acknowledge_bill";
+// Wallee terminal (ADR-0051): the signed webhook settles a terminal
+// payment; the nightly job settles what a lost delivery missed.
+export {
+  walleeWebhook,
+  reconcileTerminalPayments,
+} from "./payments/wallee_webhook";
 export { monthlyBillRun } from "./invoice/monthly_bill_run";
 
 // Membership callables are grouped into `membershipCall` (./membership/dispatcher).

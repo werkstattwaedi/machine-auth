@@ -231,7 +231,9 @@
       // when the cash actually arrives. Ids name the integration, not the
       // brand (shared/src/payment-methods.ts, ADR-0044): "raisenow" is the
       // TWINT paylink.
-      "paymentMethod": "rechnung | monthly | raisenow | null",
+      // "wallee_terminal" is server-only: written by settleTerminalPayment
+      // when Wallee confirms the payment, never by a client (rules).
+      "paymentMethod": "rechnung | monthly | raisenow | wallee_terminal | null",
 
       // --- Stale-open-checkout reminder log (#531) ---
       // One timestamp appended by the daily `staleCheckoutReminders` cron
@@ -257,6 +259,26 @@
       // watermark); absent on every other doc, so `== null` is a precise
       // "pending flush" query.
       "statsFlushedAt": "timestamp | null",
+
+      // --- Payment terminal (ADR-0051). Server-only. ---
+      // Attempts priced by prepareTerminalPayment while the checkout is
+      // open, keyed by attempt number; each is the close it becomes once
+      // Wallee confirms its payment (reference "{P|S}-{checkoutId}-{n}" is
+      // the terminal's merchantReference). Deleted at close.
+      "terminalAttempts": {
+        "{attempt}": {
+          "reference": "string",
+          "amount": "number",                // CHF sent to the terminal
+          "usageType": "string",
+          "persons": "[CheckoutPerson]",     // the roster as it will be stored
+          "summary": "CheckoutSummary",
+          "itemsKey": "string",              // digest of the priced items
+          "preparedBy": "string",            // principal; modifiedBy on close
+          "createdAt": "timestamp"
+        }
+      },
+      "terminalAttemptCount": "number",      // last attempt number handed out
+      "walleeTransactionId": "number | null", // the payment that closed it
 
       "items": {
         "{itemId}": { // Auto-generated — subcollection of checkouts/{checkoutId}
@@ -358,7 +380,7 @@
       "storagePath": "string | null",       // "invoices/{billId}.pdf"
       "created": "timestamp",
       "paidAt": "timestamp | null",
-      "paidVia": "raisenow | ebanking | free | null",
+      "paidVia": "raisenow | ebanking | free | wallee_terminal | null",
       "pdfGeneratedAt": "timestamp | null", // optimistic lock for PDF generation
       "emailSentAt": "timestamp | null",    // optimistic lock for email sending
       // Set once by trySendEmail when the bill has nobody to mail (no
@@ -368,12 +390,18 @@
       // admin adds an e-mail to a login-less account.
       "emailSkippedReason": "no-recipient | null",
       // The customer-stated "I'll pay this" ack. Server-only — written by
-      // the acknowledgeBill callable (source: "user") or the
-      // autoAcknowledgeBills cron (source: "auto"). The email and
-      // membership-activation triggers key off this transitioning from
-      // null to set.
+      // the acknowledgeBill callable / the close (source: "user"), the
+      // autoAcknowledgeBills cron (source: "auto") or a Wallee-confirmed
+      // terminal payment (source: "terminal", bill born paid). The email
+      // and membership-activation triggers key off this transitioning from
+      // null to set, or off a bill born committed.
       "paymentMethodConfirmationTime": "timestamp | null",
-      "paymentMethodConfirmationSource": "user | auto | null",
+      "paymentMethodConfirmationSource": "user | auto | terminal | null",
+      // Terminal payments only (ADR-0051), server-only: the Wallee
+      // transaction id and Wallee's cardholder receipt text (masked card
+      // number, auth code), printed on the Quittung.
+      "walleeTransactionId": "number | null",
+      "walleeReceiptText": "string | null",
       // Document kind (issue #245). "invoice" = real, payable QR-bill
       // (RE-XXXXXX); "beleg" = per-visit record for a member who picked
       // Sammelrechnung (BL-XXXXXX, no QR slip). Belege are aggregated
