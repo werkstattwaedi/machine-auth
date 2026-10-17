@@ -81,6 +81,10 @@ export function PaymentConfirmation({
         </div>
       )}
 
+      {ui.doneNote && (
+        <p className="text-sm text-muted-foreground leading-relaxed">{ui.doneNote}</p>
+      )}
+
       {choice === "raisenow" && paymentData.paylinkUrl && (
         <a
           href={paymentData.paylinkUrl}

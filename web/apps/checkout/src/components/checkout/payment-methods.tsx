@@ -78,7 +78,12 @@ export interface PaymentChoiceUi {
   doneStatus: string
   /** After the commit: the green box; null when nothing was sent. */
   doneBox: ((ctx: ChoiceCopyContext) => ReactNode) | null
+  /** After the commit: a line below the box, for what may still go wrong. */
+  doneNote?: ReactNode
 }
+
+/** Where a person turns when a payment did not go through. */
+export const KASSE_EMAIL = "kasse@werkstattwaedi.ch"
 
 export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   rechnung: {
@@ -133,13 +138,25 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
     actionLabel: "Mit TWINT bezahlen",
     instruction: () => "Bezahle direkt in der TWINT-App.",
     commitLabel: "Mit TWINT bezahlen",
-    doneStatus: "Bestätigt",
+    // Nothing confirms the TWINT payment itself (BIL-6): TWINT sends its
+    // own receipt, we send the Beleg, and a payment that never arrives is
+    // followed up by hand at reconciliation (BIL-34), with a QR-Rechnung.
+    doneStatus: "Beleg gesendet",
     doneBox: ({ email }) =>
       email ? (
         <>
-          Die Quittung haben wir dir an <strong>{email}</strong> gesendet.
+          Den Beleg haben wir dir an <strong>{email}</strong> gesendet.
         </>
       ) : null,
+    doneNote: (
+      <>
+        Hat die TWINT-Zahlung nicht geklappt? Melde dich bei{" "}
+        <a href={`mailto:${KASSE_EMAIL}`} className="font-semibold underline">
+          {KASSE_EMAIL}
+        </a>
+        .
+      </>
+    ),
   },
   free: {
     icon: <CircleCheck className="h-5 w-5" strokeWidth={1.6} />,

@@ -26,7 +26,7 @@ vi.mock("sonner", () => ({
 }))
 
 const { PaymentConfirmation } = await import("./payment-confirmation")
-import type { PaymentChoice, PaymentData } from "./payment-methods"
+import { KASSE_EMAIL, type PaymentChoice, type PaymentData } from "./payment-methods"
 
 const PAYMENT: PaymentData = {
   billId: "bill-1",
@@ -127,6 +127,15 @@ describe("PaymentConfirmation", () => {
     cleanup()
     renderConfirmation("rechnung", { qrOpen: true })
     expect(screen.getByTestId("payment-qr")).toBeTruthy()
+  })
+
+  it("after TWINT, says whom to contact if the payment did not go through", () => {
+    renderConfirmation("raisenow")
+    const contact = screen.getByRole("link", { name: KASSE_EMAIL })
+    expect(contact.getAttribute("href")).toBe(`mailto:${KASSE_EMAIL}`)
+    cleanup()
+    renderConfirmation("rechnung")
+    expect(screen.queryByRole("link", { name: KASSE_EMAIL })).toBeNull()
   })
 
   it("keeps the paylink at hand after TWINT, in case its window did not open", () => {
