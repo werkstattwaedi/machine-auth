@@ -15,7 +15,10 @@ environment when its file was *added* since that environment's last deploy
 its PR's `Deploy:` line, so that is exactly the set of steps the changes
 deployed since the last run declared. At each phase boundary the script
 stops, hands the pending files to an interactive agent session, and asks
-once whether they are done before it continues.
+once whether they are done before it continues. Files stay: we know when
+staging and prod ran a step, but another installation of this repo deploys
+on its own schedule from its own tag and must still find every step it has
+not run.
 
 Three things follow from "added since":
 
@@ -27,11 +30,9 @@ Three things follow from "added since":
   whose change also needs something on a fresh installation updates the
   checklist in the same PR: the step migrates, the checklist installs, and
   after the step both environments must match.
-- **Once a step has run in every environment, delete the file** in any
-  later PR (`Deploy: none — removes a completed step`). It carries no value
-  afterwards: the checklist describes the state, the deploy log says when
-  it ran, git keeps the text. `npx tsx scripts/deploy-steps.ts list --env
-  <env>` empty for every environment means every file here can go.
+- **A file that every tag is past is inert.** It is presented to nobody
+  and costs nothing, so there is no cleanup to remember. The deploy log
+  (`deploys/log.jsonl`, ADR-0045) says when each environment ran it.
 
 ## When a change needs a step
 
@@ -141,6 +142,6 @@ Deploy: docs/deploy/2026-10-20-migrate-bill-numbers.md
 ```
 
 The files it names are exactly the step files the PR **adds**, with a
-header that parses. A PR that edits or deletes a step file names nothing —
-nothing will run. Whether `none` is true, and whether the checklist got its
+header that parses. A PR that edits a step file names nothing — nothing
+will run. Whether `none` is true, and whether the checklist got its
 fresh-install half, is the reviewer's judgement.

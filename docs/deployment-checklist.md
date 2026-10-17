@@ -91,8 +91,10 @@ npx tsx scripts/deploy-steps.ts list --env prod     # what the next deploy stops
 A step migrates an environment that already runs; **this checklist builds
 a fresh one**, and after the step both must match. So a change that also
 needs something on a fresh installation updates this document in the same
-PR, and this document carries no migration history — a finished step's
-file is deleted once it ran everywhere. The BigQuery schema needs no step:
+PR, and this document carries no migration history: the rollouts before
+ADR-0049 are done in both environments and their sections are gone, while
+`docs/deploy/` keeps every step from now on — another installation of
+this repo may deploy from an older tag. The BigQuery schema needs no step:
 `setup-bigquery.ts` runs before every functions deploy (idempotent; needs
 `gcloud auth application-default login`, and the deploy stops without it).
 
@@ -275,9 +277,9 @@ Verify `config/pricing` exists in Firestore (Admin → Firestore → `config/pri
 Verify `config/billing` carries `referenceNumberFormat: "shifted-v1"` next
 to `nextBillNumber` (ADR-0042). `allocateBill` refuses to mint
 (`failed-precondition`) while the doc exists without that marker, so a seed
-that writes only `nextBillNumber` breaks every bill. (The marker was
-introduced by the 2026-09 bill-number migration; a fresh installation sets
-it directly.)
+that writes only `nextBillNumber` breaks every bill. The marker came with
+the 2026-09 bill-number migration and stays required until the legacy
+QR-slip fallback in the bank import can go (#764) — not yet.
 
 Verify `config/catalog-references` carries **both** references (ADR-0030):
 `membership` and `badge`, each pointing at an active catalog doc. The badge

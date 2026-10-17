@@ -82,10 +82,11 @@ script hands the pending ones to an agent.**
    pending. There is no other state: a successful deploy moves the tag, an
    aborted one does not.
 
-4. **Once a step has run in every environment, its file is deleted** — in
-   any later PR, with `Deploy: none`. It carries no value afterwards: the
-   checklist describes the resulting state, the deploy log says when the
-   step ran, and git history keeps the text.
+4. **Step files stay.** We know when staging and prod ran a step; we do
+   not know about an installation someone else runs from this repo, which
+   deploys on its own schedule from its own tag and must still find every
+   step it has not run. A file that every tag is past is inert, so keeping
+   it costs nothing.
 
 5. **The deploy script stops at each boundary with pending steps**
    (`scripts/deploy-steps.ts list`). On a terminal it starts an interactive
@@ -124,9 +125,11 @@ script hands the pending ones to an agent.**
    kiosk and firmware deploys do not stop for steps — none has needed one
    so far; when one does, the same list and prompt apply with their own tag
    glob. The rollouts that predate this ADR are done in both environments:
-   their migration sections leave the checklist, and what a fresh
-   installation needs from them (the bill-number format marker on
-   `config/billing`) is in the checklist's install steps instead.
+   their migration sections leave the checklist and are not backfilled as
+   files (they would be "added since the tag" for staging and prod and come
+   up once more for nothing; their ADRs and git history keep the record).
+   What a fresh installation needs from them — the bill-number format
+   marker on `config/billing` — is in the checklist's install steps.
 
 ## Consequences
 
@@ -156,8 +159,7 @@ script hands the pending ones to an agent.**
 - The check only sees files that exist. Forgetting to write one — or to
   update the checklist for a fresh installation — is caught by review, not
   by the workflow.
-- Deleting finished steps is a convention; a forgotten file is inert, so
-  nothing enforces it.
+- `docs/deploy/` grows by one file per migration and is never pruned.
 
 **Tradeoffs:**
 - *Structured headers (environments, once-per-project) plus confirmation
@@ -177,9 +179,12 @@ script hands the pending ones to an agent.**
 - *Detecting the BigQuery case by path (`functions/src/stats/schema.ts`
   changed since the tag):* running the idempotent script every time is
   simpler and cannot be wrong.
-- *Keeping step files forever as the migration history, and presenting all
-  of them to a new environment:* a fresh installation must not need
-  migrations; it follows the checklist and lands at the current state. The
-  deploy log and git history keep the record.
-- *Backfilling the finished rollouts as files:* they are done everywhere,
-  and a file that is done everywhere is deleted (decision 4).
+- *Presenting every step to a new environment:* a fresh installation must
+  not need migrations; it follows the checklist and lands at the current
+  state. Steps are for environments that already run.
+- *Deleting a step file once it ran everywhere:* "everywhere" is only
+  knowable for the environments we operate. Another installation of this
+  repo would silently miss the step.
+- *Backfilling the finished rollouts as files:* they would be presented to
+  staging and prod once more for nothing, and the install state they left
+  behind is in the checklist.

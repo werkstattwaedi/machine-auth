@@ -85,7 +85,7 @@ test("every step file the PR adds must be named", () => {
 
 test("an edited or deleted step file needs no mention", () => {
   assert.deepEqual(check("Deploy: none — typo fix", [{ path: STEP, status: "modified" }], { [STEP]: GOOD }), []);
-  assert.deepEqual(check("Deploy: none — removes a completed step", [{ path: STEP, status: "removed" }]), []);
+  assert.deepEqual(check("Deploy: none — added by mistake, deployed nowhere", [{ path: STEP, status: "removed" }]), []);
 });
 
 test("something that is neither none nor a step file cannot be parsed", () => {
