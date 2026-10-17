@@ -1,7 +1,12 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import type { VariantPrice } from "@oww/shared"
+import type {
+  TerminalPaymentEvent,
+  TerminalPaymentRequest,
+  TerminalPaymentResult,
+  VariantPrice,
+} from "@oww/shared"
 
 // Single mode today (the admin Electron build was retired in favour of Web NFC
 // in the admin web app). Kept as a named type so the bridge still advertises
@@ -60,7 +65,22 @@ export interface Bridge {
   // checkout webview so the previous user's in-memory session is dropped too.
   // Returns an unsubscribe fn.
   onReloadCheckout: (cb: () => void) => () => void
+  // Wallee payment terminal (ADR-0051). Usable when `features` includes
+  // "payment-terminal"; otherwise, and for any caller other than the
+  // checkout webview, `terminalPay` resolves `unavailable`. Resolves with the
+  // final result (never rejects); a second call while one runs resolves
+  // `busy`. Display only — the backend settles from Wallee's webhook.
+  terminalPay: (req: TerminalPaymentRequest) => Promise<TerminalPaymentResult>
+  // Progress of the running payment, delivered to the webContents that
+  // started it. Subscribe before calling `terminalPay`. Returns an
+  // unsubscribe fn.
+  onTerminalEvent: (cb: (event: TerminalPaymentEvent) => void) => () => void
+  // Ask the terminal to stop waiting for a card. Resolves true when the abort
+  // went out. Once the card is read the terminal ignores it: the
+  // `terminalPay` promise still resolves with the real outcome.
+  terminalAbort: () => Promise<boolean>
 }
 
 // Compile-time proof that the kiosk can resolve @oww/shared.
 export type { VariantPrice }
+export type { TerminalPaymentEvent, TerminalPaymentRequest, TerminalPaymentResult }

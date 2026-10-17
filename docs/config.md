@@ -63,6 +63,7 @@ See the [template repo README](https://github.com/werkstattwaedi/machine-auth-op
 - [Firebase Project Setup](#firebase-project-setup)
 - [Firebase Functions Configuration](#firebase-functions-configuration)
 - [Web App Configuration](#web-app-configuration)
+- [Checkout Kiosk Configuration](#checkout-kiosk-configuration)
 - [MaCo Gateway Configuration](#maco-gateway-configuration)
 - [Factory Provisioning](#factory-provisioning)
 - [Particle Cloud Setup](#particle-cloud-setup)
@@ -246,6 +247,30 @@ Payment configuration (IBAN, recipient, RaiseNow PayLink) is server-side only â€
 - API restrictions: Limit to Firebase APIs only
 
 See [`docs/deployment-checklist.md`](deployment-checklist.md) for full deployment steps.
+
+---
+
+## Checkout Kiosk Configuration
+
+The Electron kiosk (`checkout-kiosk/`) bakes its settings into the binary at build time: `scripts/inject-build-config.mjs` writes `src/build-config.generated.ts` from the operations config (`--prod` / `--env <name>`) or from env vars (dev). Explicit env vars always win.
+
+| Variable | Operations config | Description | Default |
+|----------|-------------------|-------------|---------|
+| `BRIDGE_KIOSK_URL` | `web.checkoutDomain` | Checkout URL the kiosk loads | `https://localhost:5173/?kiosk` |
+| `BRIDGE_BEARER_KEY` | Secret Manager `KIOSK_BEARER_KEY` (per environment) | Kiosk bearer for the kiosk-only callables | empty (dev) |
+| `BRIDGE_ENV_LABEL` | `web.envLabel` | Window/tray title prefix | empty |
+| `TERMINAL_HOST` | `kiosk.terminal.host` | Wallee A35 payment terminal (LTI, ADR-0051) on the LAN. **Empty = no terminal**: the kiosk doesn't advertise the `payment-terminal` bridge feature and the checkout offers no terminal payment | empty |
+| `TERMINAL_PORT` | `kiosk.terminal.port` | LTI TCP port (number or string) | `50000` |
+| `TERMINAL_POS_ID` | `kiosk.terminal.posId` | `posId` sent with every LTI request; the terminal accepts any value, it only identifies the till in the terminal's logs | `KIOSK-01` |
+
+For local development without the A35, run the simulator and point the kiosk at it:
+
+```bash
+npx tsx checkout-kiosk/scripts/lti-sim.ts --scenario approve   # or decline, abort-before-card, hang, drop, â€¦
+TERMINAL_HOST=127.0.0.1 npm run start:kiosk -w checkout-kiosk
+```
+
+LTI has no authentication: anyone on the LAN can reach port 50000. Restrict it to the kiosk (VLAN or firewall rule) where possible.
 
 ---
 

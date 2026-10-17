@@ -130,6 +130,9 @@ constants.
 | `BRIDGE_KIOSK_URL` | `https://localhost:5173/?kiosk` | Base URL for the checkout web app. |
 | `BRIDGE_BEARER_KEY` | `""` | Per-build Bearer secret. **The build fails** when the URL points at a non-localhost host and this is empty. The web app includes it in the `authCall/verifyTagCheckout` callable payload to decode the tag. The dev/emulator path bypasses the check, so empty is fine on localhost. |
 | `BRIDGE_ENV_LABEL` | `""` (dev) / `web.envLabel` from the ops config (`--prod` / `--env`) | Prefix for the window title and tray tooltip, e.g. `[staging]`. Empty means no prefix. |
+| `TERMINAL_HOST` | `""` (dev) / `kiosk.terminal.host` | Wallee A35 payment terminal on the LAN (LTI, ADR-0051). Empty = no terminal: the `payment-terminal` feature isn't advertised. |
+| `TERMINAL_PORT` | `50000` / `kiosk.terminal.port` | LTI TCP port. |
+| `TERMINAL_POS_ID` | `KIOSK-01` / `kiosk.terminal.posId` | `posId` sent with every LTI request. |
 
 Label printing is handled by the `maco_gateway` (printer host configured
 there), not this bridge — see the printing-via-gateway plan and
@@ -220,6 +223,13 @@ both sides).
    every subscribed webContents.
 4. The loaded **web app** (inside the webview) handles tag navigation —
    it parses `picc`/`cmac` from the NDEF URL and routes accordingly.
+5. With a terminal configured, the main process also drives the Wallee A35
+   over LTI (`bridge/wallee-terminal.ts`): the checkout webview calls
+   `terminalPay` / `terminalAbort` and receives `onTerminalEvent` progress.
+   The result is display only — Wallee's webhook settles the checkout.
+   For development without the terminal, run the simulator
+   (`npx tsx scripts/lti-sim.ts --scenario approve`) and build with
+   `TERMINAL_HOST=127.0.0.1`.
 
 ### Single instance
 
@@ -244,7 +254,10 @@ src/
 ├── config.ts                     URL/window resolver (pure function)
 ├── build-config.generated.ts     Build-injected constants (URL + bearer)
 ├── bridge/
-│   └── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
+│   ├── nfc.ts                    nfc-pcsc wrapper, APDU + NDEF parsing
+│   ├── lti-codec.ts              Wallee LTI framing, message builders + parser
+│   ├── wallee-terminal.ts        Terminal payment session (one use case at a time)
+│   └── fixtures/                 Captured (sanitized) LTI transcripts for tests
 ├── types.ts                      Shared Bridge / NfcTagEvent types
 └── renderer/
     ├── renderer.ts               Chrome script (creates webview, wires reset)
@@ -255,7 +268,8 @@ renderer/
 └── styles.css                    Chrome CSS
 
 scripts/
-└── inject-build-config.mjs       Writes src/build-config.generated.ts before each build
+├── inject-build-config.mjs       Writes src/build-config.generated.ts before each build
+└── lti-sim.ts                    Fake Wallee terminal (scripted LTI scenarios)
 ```
 
 ## Notes
