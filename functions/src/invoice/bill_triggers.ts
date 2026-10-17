@@ -853,9 +853,12 @@ export function isCommittedAtClose(bill: BillEntity): boolean {
  * Mail and membership are independent: a Resend outage or template
  * misconfiguration must not block the membership. trySendEmail swallows
  * its own failures, but a thrown exception is still possible — log it and
- * continue. Membership activation propagates errors so Firestore retries
- * the trigger; every step is idempotent (pdf/email locks, paymentCheckouts
- * arrayUnion).
+ * continue. Membership activation propagates its error, which fails the
+ * invocation — the triggers are not declared `retry: true` and the hourly
+ * `retryBillProcessing` sweep covers only PDF and mail, so a failed
+ * activation is not retried today (follow-up issue). Every step is
+ * idempotent (pdf/email locks, the `paymentCheckouts` check), so a retry
+ * would be safe.
  */
 async function runCommitSideEffects(
   billId: string,
