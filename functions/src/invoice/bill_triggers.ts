@@ -453,8 +453,9 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 
   // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
   // its kind transition (acknowledgeBill / autoAcknowledgeBills flip it to
-  // "beleg", or the close mints it as one, #750) and never carries a payment-method ack stamp. The member still
-  // wants an emailed receipt for the visit — just not a payable invoice
+  // "beleg", or the close mints it as one, #750) and never carries a
+  // payment-method ack stamp. The member still wants an emailed receipt for
+  // the visit — just not a payable invoice
   // (issue #405). So Belege bypass the ack gate; real invoices stay gated
   // on the customer's payment-method ack (issue #251). retryBillProcessing
   // also checks this, but the helper is exported and can be called directly

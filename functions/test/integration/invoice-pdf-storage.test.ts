@@ -129,9 +129,12 @@ async function seedBillWithCheckout(
 function buildRequest(
   uid: string | null,
   data: Record<string, unknown>,
-  opts: { anonymous?: boolean } = {},
+  opts: { anonymous?: boolean; actsAs?: string } = {},
 ): CallableRequest<unknown> {
-  const token = opts.anonymous ? { firebase: { sign_in_provider: "anonymous" } } : {};
+  const token = {
+    ...(opts.anonymous ? { firebase: { sign_in_provider: "anonymous" } } : {}),
+    ...(opts.actsAs ? { actsAs: opts.actsAs } : {}),
+  };
   const auth = uid != null ? { uid, token } : undefined;
   return { data, auth } as unknown as CallableRequest<unknown>;
 }
@@ -212,6 +215,25 @@ describe("invoice PDF storage (Integration, real Storage)", () => {
     }
   });
 
+  // BIL-15 / issue #418: the shared kiosk never gets a PDF, whoever is
+  // signed in there — the owner's badge session included.
+  it("getInvoiceDownloadUrl refuses a kiosk session acting as the owner", async function () {
+    this.timeout(15000);
+    const billId = "bill-kiosk";
+    await seedBillWithCheckout(billId);
+    await tryGeneratePdf(billId);
+
+    try {
+      await getInvoiceDownloadUrlHandler(
+        buildRequest("kiosk-session-uid", { billId }, { actsAs: USER_ID }),
+      );
+      throw new Error("expected permission-denied");
+    } catch (err) {
+      expect(err).to.be.instanceOf(HttpsError);
+      expect((err as HttpsError).code).to.equal("permission-denied");
+    }
+  });
+
   // Issue #750: a guest bill has no account holder; the anonymous session
   // that closed the checkout may still fetch its PDF — and only that one.
   describe("guest download (issue #750)", () => {
@@ -250,6 +272,18 @@ describe("invoice PDF storage (Integration, real Storage)", () => {
       // Same uid, but not an anonymous session: the uid alone is no proof.
       await expectCode(
         () => getInvoiceDownloadUrlHandler(buildRequest(GUEST, { billId: "bill-guest" })),
+        "permission-denied",
+      );
+    });
+
+    it("a guest bill whose checkout is missing is refused", async function () {
+      this.timeout(15000);
+      await seedBillWithCheckout("bill-guest-orphan", { guestUid: GUEST });
+      await tryGeneratePdf("bill-guest-orphan");
+      await getFirestore().doc("checkouts/co-bill-guest-orphan").delete();
+
+      await expectCode(
+        () => getInvoiceDownloadUrlHandler(buildRequest(GUEST, { billId: "bill-guest-orphan" }, { anonymous: true })),
         "permission-denied",
       );
     });

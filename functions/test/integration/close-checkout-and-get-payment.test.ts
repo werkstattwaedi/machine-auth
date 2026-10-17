@@ -2021,9 +2021,13 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       });
     }
 
-    function closeWith(paymentMethod: string | undefined, opts: { uid?: string; checkoutId?: string; usageType?: UsageType } = {}) {
+    function closeWith(
+      paymentMethod: string | undefined,
+      opts: { uid?: string; actsAs?: string; checkoutId?: string; usageType?: UsageType } = {},
+    ) {
       return call({
         uid: opts.uid ?? UID,
+        ...(opts.actsAs ? { actsAs: opts.actsAs } : {}),
         data: {
           checkoutId: opts.checkoutId ?? CHECKOUT_ID,
           usageType: opts.usageType ?? ("regular" as UsageType),
@@ -2186,6 +2190,106 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       bills = await listBills();
       expect(bills).to.have.length(1);
       expect(bills[0].data.paymentMethodConfirmationTime!.isEqual(firstAck!)).to.equal(true);
+    });
+
+    it("a repeated close with monthly turns the existing bill into a Beleg", async () => {
+      await seedMember(UID);
+      await seedOpen();
+
+      await closeWith(undefined);
+      await closeWith("monthly");
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      expect(bills[0].data.kind).to.equal("beleg");
+      expect(bills[0].data.paymentMethodConfirmationTime).to.equal(null);
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("monthly");
+    });
+
+    // The first commit wins: a retry carrying another method (after a lost
+    // response) answers with the bill as it is, so the client must render
+    // what the server returns, not what it sent.
+    it("a repeated close after the bill was committed keeps the first method", async () => {
+      await seedMember(UID);
+      await seedOpen();
+
+      await closeWith("rechnung");
+      await closeWith("monthly");
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      expect(bills[0].data.kind).to.equal("invoice");
+      expect(bills[0].data.paymentMethodConfirmationSource).to.equal("user");
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("rechnung");
+    });
+
+    it("a repeated close never commits a cancelled bill (ADR-0042)", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await closeWith(undefined);
+      const [bill] = await listBills();
+      await getFirestore().collection("bills").doc(bill.id).update({ cancelledAt: Timestamp.now() });
+
+      await closeWith("rechnung");
+
+      const [after] = await listBills();
+      expect(after.data.paymentMethodConfirmationTime).to.equal(null);
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
+    });
+
+    it("a repeated close by someone else is refused and leaves the bill unconfirmed", async () => {
+      await seedUser(UID);
+      await seedUser("user-intruder");
+      await seedOpen();
+
+      await closeWith(undefined);
+      await expectHttpsError(
+        () => closeWith("rechnung", { uid: "user-intruder" }),
+        "permission-denied",
+      );
+
+      const [bill] = await listBills();
+      expect(bill.data.paymentMethodConfirmationTime).to.equal(null);
+      expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
+    });
+
+    it("two closes at once mint one bill, committed once", async () => {
+      await seedUser(UID);
+      await seedOpen();
+
+      await Promise.all([closeWith("rechnung"), closeWith("rechnung")]);
+
+      const bills = await listBills();
+      expect(bills).to.have.length(1);
+      expect(bills[0].data.paymentMethodConfirmationSource).to.equal("user");
+    });
+
+    describe("kiosk badge session (actsAs)", () => {
+      const TAG = "tag:kiosk-commit";
+
+      it("monthly: a member's badge session mints a Beleg", async () => {
+        await seedMember(UID);
+        await seedOpen();
+
+        await closeWith("monthly", { uid: TAG, actsAs: UID });
+
+        const [bill] = await listBills();
+        expect(bill.data.kind).to.equal("beleg");
+        expect(bill.data.userId.id).to.equal(UID);
+      });
+
+      it("monthly: refused for a non-member's badge session", async () => {
+        await seedUser(UID);
+        await seedOpen();
+
+        await expectHttpsError(
+          () => closeWith("monthly", { uid: TAG, actsAs: UID }),
+          "failed-precondition",
+        );
+        expect(await listBills()).to.have.length(0);
+        expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
+      });
     });
   });
 });

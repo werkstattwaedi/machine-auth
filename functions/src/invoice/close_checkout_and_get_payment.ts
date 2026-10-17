@@ -655,10 +655,14 @@ interface CloseCheckoutRequest {
  * bill ignores the method: it is closed as `paidVia: "free"` either way
  * and needs no payment (BIL-8).
  */
-function mintCommitted(
-  method: PaymentMethod | null,
-  amount: number,
-): { method: PaymentMethod | null; kind?: "beleg"; preAck?: { source: "user" } } {
+interface MintCommit {
+  /** The method to write on the checkout; null leaves the bill unconfirmed. */
+  method: PaymentMethod | null;
+  kind?: "beleg";
+  preAck?: { source: "user" };
+}
+
+function mintCommitted(method: PaymentMethod | null, amount: number): MintCommit {
   if (!method || amount === 0) return { method: null };
   return PAYMENT_METHOD_INFO[method].isAggregated
     ? { method, kind: "beleg" }
@@ -873,7 +877,11 @@ async function closeExistingCheckout(
         const existingBill = existingBillDoc.data() as BillEntity;
         // A repeated close (double tap, retry after a lost response) that
         // carries a method still commits it, unless something already did.
-        if (args.paymentMethod && !isBillCommitted(existingBill) && !existingBill.cancelledAt) {
+        if (
+          args.paymentMethod &&
+          !isBillCommitted(existingBill) &&
+          !existingBill.cancelledAt
+        ) {
           tx.update(
             checkout.billRef,
             billCommitFields(args.paymentMethod, Timestamp.now()),
