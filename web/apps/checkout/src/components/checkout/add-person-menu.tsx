@@ -11,6 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@modules/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@modules/components/ui/tooltip"
 import type { SavedPersonEntry } from "./use-checkout-state"
 
 const TRIGGER =
@@ -51,6 +57,7 @@ export function AddPersonMenu({
 }: AddPersonMenuProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [reasonOpen, setReasonOpen] = useState(false)
   const disabled = disabledReason !== undefined
   const reasonId = useId()
 
@@ -58,7 +65,9 @@ export function AddPersonMenu({
     const button = (
       <button
         type="button"
-        className={TRIGGER}
+        // Disabled: the wrapper below takes the pointer, so hover and tap
+        // reach the tooltip trigger instead of dying on the disabled button.
+        className={disabled ? `${TRIGGER} pointer-events-none` : TRIGGER}
         onClick={onAddNew}
         disabled={disabled}
         aria-describedby={disabled ? reasonId : undefined}
@@ -70,19 +79,37 @@ export function AddPersonMenu({
       </button>
     )
     if (!disabled) return button
-    // Kiosk touchscreens can't hover: the reason sits visibly under the
-    // button, and the button points at it for screen readers.
+    // A disabled button fires no pointer or focus events, so a focusable
+    // wrapper is the tooltip's trigger: hover and keyboard focus open it on
+    // desktop. Radix tooltips ignore touch, and kiosk touchscreens can't
+    // hover — a tap opens it (preventDefault keeps Radix's close-on-press
+    // from undoing that), a tap anywhere else closes it. The hidden copy
+    // keeps the reason announced with the button without opening anything.
     return (
-      <div className="flex flex-col items-start gap-1.5">
-        {button}
-        <p
-          id={reasonId}
-          data-testid="add-person-disabled-reason"
-          className="text-xs text-muted-foreground"
-        >
+      <TooltipProvider>
+        <Tooltip open={reasonOpen} onOpenChange={setReasonOpen}>
+          <TooltipTrigger asChild>
+            <span
+              tabIndex={0}
+              data-testid="add-person-disabled"
+              className="inline-flex cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cog-teal"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.preventDefault()
+                setReasonOpen(true)
+              }}
+            >
+              {button}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" sideOffset={6}>
+            {disabledReason}
+          </TooltipContent>
+        </Tooltip>
+        <span id={reasonId} className="sr-only">
           {disabledReason}
-        </p>
-      </div>
+        </span>
+      </TooltipProvider>
     )
   }
 
