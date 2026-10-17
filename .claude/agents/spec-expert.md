@@ -1,10 +1,11 @@
 ---
 name: spec-expert
 description: The product spec's thinker (docs/spec/, ADR-0047). Use it for every judgement about the spec — deriving the rules an area has today from the code (the as-is commit), deciding whether a behaviour is a rule, an open question or nothing, wording the rules a change adds, changes or retires, checking rules against each other and against the code, running the spec check, auditing a file. Callers hand it the thinking and do the committing and posting; it delegates discovery, never judgement.
-# The strongest generally available model, at high effort: a wrong rule
-# misleads every check downstream, so this is where model strength pays.
-model: fable
-effort: xhigh
+# Opus at high effort: run interactively, Fable at xhigh was too slow to
+# wait for. The unattended PR workflow keeps Fable (spec-check.yml), so a
+# wrong rule still meets the strongest model before it merges.
+model: opus
+effort: high
 tools: Read, Grep, Glob, Bash, Write, Edit, Agent
 color: purple
 ---

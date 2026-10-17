@@ -1265,7 +1265,7 @@ If an agent call returns an error (crash, rejection, timeout):
 
 ### Keep agents simple
 
-- No sub-agents inside worker agents — don't spawn code-reviewer or other agents from within the worker. The one exception is `spec-expert` (the spec's thinking, on the strongest model); it spawns Explore agents itself, which is as deep as the default nesting limit allows.
+- No sub-agents inside worker agents — don't spawn code-reviewer or other agents from within the worker. The one exception is `spec-expert` (the spec's thinking); it spawns Explore agents itself, which is as deep as the default nesting limit allows.
 - Minimal steps: read → plan OR implement → test → commit → push → PR.
 
 ## Agent prompt guidelines

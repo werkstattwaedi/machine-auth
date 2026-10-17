@@ -12,7 +12,7 @@ smoke run judges the deployed apps against it. Every judgement about the
 spec — deriving rules from the code, deciding whether a behaviour is a rule
 or an open question, checking rules against each other and against the code
 — is the job of one agent, [`spec-expert`](../../.claude/agents/spec-expert.md),
-which runs on the strongest model at high effort; the commands and prompts
+which runs on Opus at high effort; the commands and prompts
 that touch the spec hand that thinking to it instead of doing it inline. See
 [ADR-0047](../adr/0047-product-spec.md).
 

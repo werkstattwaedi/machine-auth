@@ -98,13 +98,14 @@ jobs:
             next step posts it. Without the file nothing is posted.
             Tools: Read, Grep, Glob, Write and read-only git (diff, log, show,
             rev-parse, status). Nothing else is allowed — don't try.
-          # Locally the check runs as the `spec-expert` agent; project agents
-          # aren't loaded here (settings sources: user), so the top-level
-          # agent gets that agent's model and effort directly.
+          # Locally the check runs as the `spec-expert` agent (Opus, for
+          # speed); project agents aren't loaded here (settings sources:
+          # user), and nobody waits on this run, so it gets the strongest
+          # model instead.
           claude_args: >-
             --setting-sources user
             --model fable
-            --effort xhigh
+            --effort high
             --allowedTools "Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*),Bash(git status:*)"
 
       # The action logs only the first and last event. When the agent ends
