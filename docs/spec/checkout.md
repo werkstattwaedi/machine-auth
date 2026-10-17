@@ -31,8 +31,8 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 ## Kosten
 
-- **CHK-28** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032
-- **CHK-29** On Kosten, a machine row (CHK-28) unfolds to list the sessions behind it — machine, start time, duration. — #214
+- **CHK-28** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout, opened for them as *Reguläre Nutzung* if they have none, as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032, #105
+- **CHK-29** On Kosten, a machine row (CHK-28) unfolds to list the sessions behind it — machine, start time, duration — for a restricted session (ACC-4) as for a signed-in person. — #214, #648
 
 ## Usage type
 

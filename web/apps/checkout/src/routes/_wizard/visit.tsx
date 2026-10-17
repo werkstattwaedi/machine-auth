@@ -471,6 +471,7 @@ function VisitRoute() {
                   discountLevel={discountLevel}
                   pinnedCatalog={pinnedCatalogByWorkshop.get(wsId) ?? []}
                   checkoutId={checkoutId}
+                  ownerRef={ctx.identifiedUserRef}
                   onValidityChange={reportWsValidity(wsId)}
                   onRemoveWorkshop={() => requestRemoveWorkshop(wsId)}
                   // Selbstbedienungs-Badge (issue #505): the "tap a new badge

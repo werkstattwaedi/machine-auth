@@ -13,6 +13,7 @@ import {
   type ItemCallbacks,
 } from "@/components/usage/inline-rows"
 import type { CatalogItem } from "@modules/lib/workshop-config"
+import type { DocumentReference } from "firebase/firestore"
 import type { ItemErrors } from "@/components/checkout/validation"
 
 /**
@@ -28,6 +29,7 @@ export function WorkshopSectionWithCatalog({
   items,
   callbacks,
   checkoutId,
+  ownerRef,
   onAddMaterial,
   onRemoveWorkshop,
   pinnedCatalog,
@@ -48,6 +50,8 @@ export function WorkshopSectionWithCatalog({
   /** Legacy; kept for backwards-compat. */
   onBlurSave?: boolean
   checkoutId?: string | null
+  /** Whose machine sessions an unfolded NFC row lists (issue #648). */
+  ownerRef?: DocumentReference | null
   /** Legacy; kept for backwards-compat. */
   itemErrors?: Record<string, ItemErrors>
   onAddMaterial: () => void
@@ -65,6 +69,7 @@ export function WorkshopSectionWithCatalog({
       items={items}
       callbacks={callbacks}
       checkoutId={checkoutId}
+      ownerRef={ownerRef}
       onAddMaterial={onAddMaterial}
       onRemoveWorkshop={onRemoveWorkshop}
       pinnedCatalog={pinnedCatalog}

@@ -6,13 +6,11 @@ import { formatCHF } from "@modules/lib/format"
 import { primaryVariant } from "@modules/lib/pricing"
 import { Plus, X } from "lucide-react"
 import { useCollection } from "@modules/lib/firestore"
-import { where } from "firebase/firestore"
-import { useAuth } from "@modules/lib/auth"
+import { where, type DocumentReference } from "firebase/firestore"
 import {
   checkoutItemRef,
   machinesCollection,
   usageMachineCollection,
-  userRef as userRefHelper,
 } from "@modules/lib/firestore-helpers"
 import { useDb } from "@modules/lib/firebase-context"
 import {
@@ -70,23 +68,28 @@ export interface ItemCallbacks {
 function NfcUsageDetails({
   checkoutId,
   itemId,
+  ownerRef,
 }: {
   checkoutId: string
   itemId: string
+  ownerRef: DocumentReference | null
 }) {
   const db = useDb()
-  const { userDoc } = useAuth()
   const ref = checkoutItemRef(db, checkoutId, itemId)
   // Query must filter on `userId` to satisfy the per-user `usage_machine`
   // security rule (`resource.data.userId == /databases/.../users/uid`),
   // which is only checkable when the predicate is part of the query.
   // Without this, Firestore rejects the listen with permission-denied.
-  const userDocRef = userDoc ? userRefHelper(db, userDoc.id) : null
+  //
+  // Keyed on the visit's owner, not the signed-in account: a kiosk badge
+  // session has no account profile (`useAuth().userDoc` is null for a
+  // `tag:` principal), yet the rules grant it the badge user's sessions via
+  // `actsAs()` (issue #648).
   const { data, loading } = useCollection(
-    userDocRef ? usageMachineCollection(db) : null,
-    ...(userDocRef
+    ownerRef ? usageMachineCollection(db) : null,
+    ...(ownerRef
       ? [
-          where("userId", "==", userDocRef),
+          where("userId", "==", ownerRef),
           where("checkoutItemRef", "==", ref),
         ]
       : []),
@@ -234,16 +237,23 @@ function nfcMachineRow(
 export function NfcMachineItemRow({
   item,
   checkoutId,
+  ownerRef = null,
 }: {
   item: CheckoutItemLocal
   checkoutId: string | null
+  /** The person the checkout belongs to — whose machine sessions to list. */
+  ownerRef?: DocumentReference | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const row = nfcMachineRow(
     item,
     expanded,
     expanded && checkoutId ? (
-      <NfcUsageDetails checkoutId={checkoutId} itemId={item.id} />
+      <NfcUsageDetails
+        checkoutId={checkoutId}
+        itemId={item.id}
+        ownerRef={ownerRef}
+      />
     ) : null,
   )
   return (
@@ -268,6 +278,7 @@ export function WorkshopInlineSection({
   items,
   callbacks,
   checkoutId,
+  ownerRef = null,
   onAddMaterial,
   onRemoveWorkshop,
   pinnedCatalog = [],
@@ -297,6 +308,11 @@ export function WorkshopInlineSection({
   /** Legacy no-op kept for callers that still set it. */
   onBlurSave?: boolean
   checkoutId?: string | null
+  /**
+   * The person the checkout belongs to (the wizard's identified person) —
+   * whose machine sessions an unfolded NFC row lists (issue #648).
+   */
+  ownerRef?: DocumentReference | null
   /** Legacy no-op kept for callers that still set it. */
   itemErrors?: Record<string, unknown>
   /**
@@ -360,7 +376,11 @@ export function WorkshopInlineSection({
       item,
       isExpanded,
       isExpanded && checkoutId ? (
-        <NfcUsageDetails checkoutId={checkoutId} itemId={item.id} />
+        <NfcUsageDetails
+          checkoutId={checkoutId}
+          itemId={item.id}
+          ownerRef={ownerRef}
+        />
       ) : null,
     )
   })
