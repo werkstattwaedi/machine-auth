@@ -247,4 +247,44 @@ describe("purchaseMembership (Integration)", () => {
       expect(err?.code).to.equal("failed-precondition");
     }
   });
+
+  describe("renewal price tier", () => {
+    // The renewal tier comes from a membership that really lists the
+    // caller, not from the pointer alone (#745).
+    async function seedRenewal(uid: string, listed: boolean): Promise<void> {
+      const db = getFirestore();
+      await db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID).update({
+        variants: [
+          {
+            id: "single",
+            label: "Einzel (Jahr)",
+            pricingModel: "direct",
+            unitPrice: { default: 50, member: 40 },
+          },
+        ],
+      });
+      await seedUser(uid);
+      const userRef = db.collection("users").doc(uid);
+      const other = db.collection("users").doc("someone-else");
+      const memRef = db.collection("memberships").doc(`m-${uid}`);
+      await memRef.set({
+        type: "single",
+        status: "active",
+        validUntil: Timestamp.fromMillis(Date.now() + 30 * 24 * 3600 * 1000),
+        ownerUserId: listed ? userRef : other,
+        members: [listed ? userRef : other],
+        paymentCheckouts: [],
+      });
+      await userRef.update({ activeMembership: memRef });
+    }
+
+    it("a pointer to a membership that doesn't list the caller pays the default price", async () => {
+      await seedRenewal("forger-1", false);
+      const res = await handlePurchaseMembership(
+        { type: "single", renewExisting: true },
+        caller("forger-1"),
+      );
+      expect(res.unitPrice).to.equal(50);
+    });
+  });
 });

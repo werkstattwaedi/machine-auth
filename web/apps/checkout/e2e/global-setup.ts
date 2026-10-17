@@ -381,7 +381,8 @@ export default async function globalSetup() {
     roles: ["vereinsmitglied"],
     // verify_tag derives the TokenUser.activeMembership boolean from this
     // field. Without it a tag-tapping member would be treated as a non-member
-    // and never offered the Sammelrechnung payment tab (issue #414).
+    // and never offered the Sammelrechnung payment tab (issue #414). The
+    // membership doc itself is seeded by checkout-nfc-tag.spec.ts (#745).
     activeMembership: db.doc("memberships/e2e-nfc-membership"),
     permissions: [db.doc("permission/laser")],
     userType: "erwachsen",

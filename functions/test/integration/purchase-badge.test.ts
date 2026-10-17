@@ -74,6 +74,26 @@ async function seedUser(
   });
 }
 
+/**
+ * A user plus an active membership that lists them. `listed: false` seeds a
+ * forged pointer: the membership exists and is active, but the user isn't
+ * in its `members[]` (issue #745).
+ */
+async function seedMember(uid: string, listed = true): Promise<void> {
+  const db = getFirestore();
+  const membershipRef = db.doc(`memberships/m-${uid}`);
+  const other = db.doc("users/someone-else");
+  await membershipRef.set({
+    type: "family",
+    status: "active",
+    validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+    ownerUserId: other,
+    members: listed ? [db.doc(`users/${uid}`)] : [other],
+    paymentCheckouts: [],
+  });
+  await seedUser(uid, { activeMembership: membershipRef });
+}
+
 /** Kiosk actsAs session caller (badge tap or email-code sign-in). */
 function kioskCaller(userId: string) {
   return {
@@ -122,9 +142,7 @@ describe("addBadgeToCheckout (Integration)", () => {
 
   it("member with no tokens: first badge is gratis, checkout created", async () => {
     const db = getFirestore();
-    await seedUser("member-1", {
-      activeMembership: db.doc("memberships/m1"),
-    });
+    await seedMember("member-1");
 
     const res = await handleAddBadgeToCheckout(
       { badgeVoucher: voucherFor(TOKEN_ID) },
@@ -178,9 +196,21 @@ describe("addBadgeToCheckout (Integration)", () => {
     expect(res.unitPrice).to.equal(5);
   });
 
+  it("a pointer to a membership that doesn't list the user: no free badge (#745)", async () => {
+    await seedMember("forger-1", false);
+
+    const res = await handleAddBadgeToCheckout(
+      { badgeVoucher: voucherFor(TOKEN_ID), dryRun: true },
+      kioskCaller("forger-1"),
+      MASTER_KEY
+    );
+    expect(res.free).to.equal(false);
+    expect(res.unitPrice).to.equal(5);
+  });
+
   it("member who already owns an active token pays for the next badge", async () => {
     const db = getFirestore();
-    await seedUser("member-2", { activeMembership: db.doc("memberships/m1") });
+    await seedMember("member-2");
     await db.collection("tokens").doc("04aaaaaaaaaaaa").set({
       userId: db.doc("users/member-2"),
       registered: Timestamp.now(),
@@ -198,7 +228,7 @@ describe("addBadgeToCheckout (Integration)", () => {
 
   it("a deactivated token does not count against the free first badge", async () => {
     const db = getFirestore();
-    await seedUser("member-3", { activeMembership: db.doc("memberships/m1") });
+    await seedMember("member-3");
     await db.collection("tokens").doc("04aaaaaaaaaaaa").set({
       userId: db.doc("users/member-3"),
       registered: Timestamp.now(),
@@ -215,8 +245,7 @@ describe("addBadgeToCheckout (Integration)", () => {
   });
 
   it("second badge in the same checkout is standard-priced (buying two at once)", async () => {
-    const db = getFirestore();
-    await seedUser("member-4", { activeMembership: db.doc("memberships/m1") });
+    await seedMember("member-4");
 
     const first = await handleAddBadgeToCheckout(
       { badgeVoucher: voucherFor(TOKEN_ID) },
@@ -245,7 +274,7 @@ describe("addBadgeToCheckout (Integration)", () => {
     // on. The lookup now lives inside the transaction: the loser retries,
     // sees the winner's checkout, and appends to it.
     const db = getFirestore();
-    await seedUser("racer-3", { activeMembership: db.doc("memberships/m1") });
+    await seedMember("racer-3");
 
     const [a, b] = await Promise.all([
       handleAddBadgeToCheckout(
@@ -274,7 +303,7 @@ describe("addBadgeToCheckout (Integration)", () => {
 
   it("dryRun returns the quote without writing anything", async () => {
     const db = getFirestore();
-    await seedUser("member-5", { activeMembership: db.doc("memberships/m1") });
+    await seedMember("member-5");
 
     const quote = await handleAddBadgeToCheckout(
       { badgeVoucher: voucherFor(TOKEN_ID), dryRun: true },

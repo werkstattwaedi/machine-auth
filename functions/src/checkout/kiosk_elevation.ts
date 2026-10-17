@@ -202,7 +202,7 @@ export async function handleVerifyKioskElevation(
   });
   return {
     customToken,
-    ...buildKioskUserPayload(actsAs, snap.data(), elevatedUntil),
+    ...(await buildKioskUserPayload(actsAs, snap.data(), elevatedUntil)),
   };
 }
 

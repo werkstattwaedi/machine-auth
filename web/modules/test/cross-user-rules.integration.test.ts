@@ -1826,6 +1826,120 @@ describe("cross-user: family-roster join on users", () => {
   })
 })
 
+// Issue #745: `activeMembership` grants member prices, the Sammelrechnung,
+// a free first badge and the family-roster read (shareActiveMembership).
+// Only the server (Admin SDK) maintains it; no client principal but an
+// admin may set, change or clear it.
+describe("cross-user: activeMembership is server-only", () => {
+  const RULE = "firestore.rules users create/update (activeMembershipUnchanged, #745)"
+
+  function profile(uid: string, extra: Record<string, unknown> = {}) {
+    return {
+      firstName: "Self",
+      lastName: uid,
+      email: `${uid}@test.com`,
+      roles: [],
+      permissions: [],
+      userType: "erwachsen",
+      ...extra,
+    }
+  }
+
+  function ownerDb(uid: string) {
+    return getTestEnvironment()
+      .authenticatedContext(uid, { email: `${uid}@test.com` })
+      .firestore()
+  }
+
+  it("denies the owner creating their doc with a pointer", async () => {
+    await seedMembership("m-victim", "victim", "family", ["victim"])
+    const db = ownerDb("mallory")
+    await assertCrossUserDenied(
+      "users/{userId} create with activeMembership",
+      RULE,
+      () =>
+        setDoc(
+          doc(db, "users", "mallory"),
+          profile("mallory", { activeMembership: doc(db, "memberships", "m-victim") }),
+        ),
+    )
+  })
+
+  it("allows the owner creating their doc with a null or absent pointer", async () => {
+    await assertSucceeds(
+      setDoc(doc(ownerDb("mallory"), "users", "mallory"), profile("mallory", { activeMembership: null })),
+    )
+    await assertSucceeds(
+      setDoc(doc(ownerDb("trent"), "users", "trent"), profile("trent")),
+    )
+  })
+
+  it("denies the owner setting a pointer on update", async () => {
+    await seedUser("mallory")
+    await seedMembership("m-victim", "victim", "family", ["victim"])
+    const db = authedDb("mallory")
+    await assertCrossUserDenied(
+      "users/{userId} update sets activeMembership",
+      RULE,
+      () => updateDoc(doc(db, "users", "mallory"), { activeMembership: doc(db, "memberships", "m-victim") }),
+    )
+  })
+
+  it("denies the owner changing or clearing their pointer", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "single", ["alice"])
+    await seedMembership("m-victim", "victim", "family", ["victim"])
+    const db = authedDb("alice")
+    await assertCrossUserDenied(
+      "users/{userId} update changes activeMembership",
+      RULE,
+      () => updateDoc(doc(db, "users", "alice"), { activeMembership: doc(db, "memberships", "m-victim") }),
+    )
+    await assertCrossUserDenied(
+      "users/{userId} update clears activeMembership",
+      RULE,
+      () => updateDoc(doc(db, "users", "alice"), { activeMembership: null }),
+    )
+  })
+
+  it("allows the owner editing other fields while the pointer stays", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "single", ["alice"])
+    await assertSucceeds(updateDoc(doc(authedDb("alice"), "users", "alice"), { firstName: "Alicia" }))
+  })
+
+  it("denies an elevated kiosk session setting, changing or clearing the pointer", async () => {
+    await seedUser("mallory")
+    await seedUser("alice")
+    await seedMembership("m1", "alice", "single", ["alice"])
+    await seedMembership("m-victim", "victim", "family", ["victim"])
+    const malloryDb = elevatedTagSessionDb("mallory")
+    await assertCrossUserDenied(
+      "users/{userId} elevated kiosk update sets activeMembership",
+      RULE,
+      () => updateDoc(doc(malloryDb, "users", "mallory"), { activeMembership: doc(malloryDb, "memberships", "m-victim") }),
+    )
+    const aliceDb = elevatedTagSessionDb("alice")
+    await assertCrossUserDenied(
+      "users/{userId} elevated kiosk update changes activeMembership",
+      RULE,
+      () => updateDoc(doc(aliceDb, "users", "alice"), { activeMembership: doc(aliceDb, "memberships", "m-victim") }),
+    )
+    await assertCrossUserDenied(
+      "users/{userId} elevated kiosk update clears activeMembership",
+      RULE,
+      () => updateDoc(doc(aliceDb, "users", "alice"), { activeMembership: null }),
+    )
+  })
+
+  it("allows an admin setting the pointer", async () => {
+    await seedUser("alice")
+    await seedMembership("m2", "bob", "family", ["bob"])
+    const db = adminDb()
+    await assertSucceeds(updateDoc(doc(db, "users", "alice"), { activeMembership: doc(db, "memberships", "m2") }))
+  })
+})
+
 describe("cross-user: device status (admin read only, ADR-0045)", () => {
   // Status docs are machine-written by the functions (Admin SDK) from the
   // gateway/kiosk reports. Nobody writes them through the rules, and only

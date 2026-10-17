@@ -40,6 +40,7 @@ import { PAYMENT_METHOD_INFO, isPaymentMethod } from "@oww/shared";
 import {
   assertPaymentMethodAllowed,
   billCommitFields,
+  hasVerifiedMembership,
   isBillCommitted,
 } from "./commit_payment_method";
 import type { BillEntity } from "./types";
@@ -275,10 +276,17 @@ export async function runAutoAcknowledgeBills(
       // monthly tab on Step 4 but never tapped commit. Mirror the
       // user-ack-for-monthly transition — flip to Beleg instead of
       // emailing a per-visit invoice. The monthlyBillRun cron sweeps
-      // up these Belege on the 1st.
+      // up these Belege on the 1st. Only for an account holder whose
+      // membership really lists them, as `acknowledgeBill` requires
+      // (issue #745); anyone else gets the per-visit Rechnung below.
+      const refusedMembersOnly =
+        checkoutPaymentMethod !== null &&
+        PAYMENT_METHOD_INFO[checkoutPaymentMethod].requiresMembership &&
+        !(await hasVerifiedMembership(freshBill.userId, tx));
       if (
         checkoutPaymentMethod &&
-        PAYMENT_METHOD_INFO[checkoutPaymentMethod].isAggregated
+        PAYMENT_METHOD_INFO[checkoutPaymentMethod].isAggregated &&
+        !refusedMembersOnly
       ) {
         tx.update(doc.ref, { kind: "beleg" });
         return "beleg";
@@ -290,8 +298,9 @@ export async function runAutoAcknowledgeBills(
       });
 
       // Backfill the checkout's paymentMethod to "rechnung" only if the
-      // user never picked anything. Don't overwrite a real selection.
-      if (linkedCheckoutRef && !checkoutPaymentMethod) {
+      // user never picked anything, or picked a members-only method they
+      // aren't entitled to. Don't overwrite a real selection.
+      if (linkedCheckoutRef && (!checkoutPaymentMethod || refusedMembersOnly)) {
         tx.update(linkedCheckoutRef, {
           paymentMethod: "rechnung",
           modifiedAt: FieldValue.serverTimestamp(),

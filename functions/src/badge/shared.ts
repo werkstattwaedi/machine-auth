@@ -103,14 +103,19 @@ export function isBadgeItem(
 }
 
 /**
- * Free-first-badge eligibility: active members, and anyone holding ANY
+ * Free-first-badge eligibility: active members (`hasVerifiedMembership`,
+ * from `resolveVerifiedMembership` — never the bare `activeMembership`
+ * pointer, issue #745), and anyone holding ANY
  * permission — every granted permission implicitly requires a badge to use
  * the machine, so the badge is part of the deal. (Whether this specific
  * badge is actually free additionally requires zero active tokens and no
  * badge already in the checkout — decided at purchase time.)
  */
-export function isBadgeEligibleFree(user: UserEntity): boolean {
-  return !!user.activeMembership || (user.permissions?.length ?? 0) > 0;
+export function isBadgeEligibleFree(
+  user: UserEntity,
+  hasVerifiedMembership: boolean
+): boolean {
+  return hasVerifiedMembership || (user.permissions?.length ?? 0) > 0;
 }
 
 /** Count a user's active (non-deactivated) tokens from a query snapshot. */

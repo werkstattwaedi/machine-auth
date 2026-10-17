@@ -141,6 +141,13 @@ describe("verifyLoginCodeKiosk (Integration)", () => {
 
   it("collapses an activeMembership reference to a boolean", async () => {
     const db = getFirestore();
+    await db.doc("memberships/m1").set({
+      type: "single",
+      status: "active",
+      ownerUserId: db.doc("users/memberUser"),
+      members: [db.doc("users/memberUser")],
+      paymentCheckouts: [],
+    });
     await seedCompletedUser("memberUser", "member@example.com", {
       activeMembership: db.doc("memberships/m1"),
     });
