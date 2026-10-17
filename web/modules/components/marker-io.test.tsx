@@ -59,10 +59,22 @@ describe("MarkerIO", () => {
     expect(queue()).toContainEqual(["hide"])
   })
 
-  it("keeps the launcher when the config flag is \"true\"", () => {
+  it("hides the launcher again once the widget loaded", async () => {
+    render(<MarkerIO app="checkout" />)
+    const hide = vi.fn()
+    window.Marker!.hide = hide
+    await fireMarkerLoad()
+    expect(hide).toHaveBeenCalled()
+  })
+
+  it("keeps the launcher when the config flag is \"true\"", async () => {
     vi.stubEnv("VITE_MARKER_LAUNCHER_VISIBLE", "true")
     render(<MarkerIO app="admin" />)
     expect(queue()).not.toContainEqual(["hide"])
+    const hide = vi.fn()
+    window.Marker!.hide = hide
+    await fireMarkerLoad()
+    expect(hide).not.toHaveBeenCalled()
   })
 
   it("pre-fills the reporter for a signed-in member once the widget loaded", async () => {
