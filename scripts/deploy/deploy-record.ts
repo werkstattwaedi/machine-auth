@@ -20,23 +20,23 @@
  * could stop half-way. When GitHub is unreachable the entry waits in
  * `.git/deploy-record-pending.jsonl` and the next recording run sends it.
  *
- * The deploy scripts call this after they succeed (scripts/deploy.sh,
- * scripts/deploy-gateway.ts, the kiosk build, `./pw prod-flash`). It is
+ * The deploy scripts call this after they succeed (scripts/deploy/deploy.sh,
+ * scripts/deploy/deploy-gateway.ts, the kiosk build, `./pw prod-flash`). It is
  * best effort by design: a deploy that went out must never be reported as
  * failed because the bookkeeping could not reach GitHub. Callers treat a
  * non-zero exit as a warning.
  *
  * Usage:
- *   npx tsx scripts/deploy-record.ts deploy --env prod --component firebase
- *   npx tsx scripts/deploy-record.ts deploy --env prod --component gateway --target maker1@maco-gateway.internal
- *   npx tsx scripts/deploy-record.ts deploy --env prod --component firmware --target <device id>
- *   npx tsx scripts/deploy-record.ts event  --env prod --note "rotated KIOSK_BEARER_KEY"
- *   npx tsx scripts/deploy-record.ts render       # send pending entries, re-render STATE.md
+ *   npx tsx scripts/deploy/deploy-record.ts deploy --env prod --component firebase
+ *   npx tsx scripts/deploy/deploy-record.ts deploy --env prod --component gateway --target maker1@maco-gateway.internal
+ *   npx tsx scripts/deploy/deploy-record.ts deploy --env prod --component firmware --target <device id>
+ *   npx tsx scripts/deploy/deploy-record.ts event  --env prod --note "rotated KIOSK_BEARER_KEY"
+ *   npx tsx scripts/deploy/deploy-record.ts render       # send pending entries, re-render STATE.md
  *                                                 # (incl. the live device status, ADR-0045 phase 3)
- *   npx tsx scripts/deploy-record.ts usb-device   # print the single USB Particle device id
+ *   npx tsx scripts/deploy/deploy-record.ts usb-device   # print the single USB Particle device id
  *
  * Options: --note, --target, --version (default: BUILD_VERSION, else
- * scripts/build-version.ts), --no-push (keep the entry pending and the tag
+ * scripts/deploy/build-version.ts), --no-push (keep the entry pending and the tag
  * local, e.g. offline).
  *
  * Deploy paths run deploy-preflight.ts BEFORE deploying (latest main in both
@@ -80,7 +80,7 @@ import { readRunningDevices } from "./device-status-read.ts";
 import { opsRevision, overrideRequested, preflightProblems } from "./deploy-preflight.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, "..");
+const projectRoot = resolve(__dirname, "..", "..");
 const opsDir =
   process.env.OPERATIONS_CONFIG_DIR || resolve(projectRoot, "..", "machine-auth-operations");
 const LOG_REL = "deploys/log.jsonl";
@@ -222,7 +222,7 @@ function keepPending(entries: DeployEntry[]): void {
   appendFileSync(pendingPath(), entries.map(serializeEntry).join(""));
   warn(
     `${entries.length} entr${entries.length === 1 ? "y" : "ies"} kept in ${pendingPath()} — ` +
-      "sent by the next recording run (or: npx tsx scripts/deploy-record.ts render)"
+      "sent by the next recording run (or: npx tsx scripts/deploy/deploy-record.ts render)"
   );
 }
 
@@ -390,7 +390,7 @@ export async function recordDeploy(opts: RecordOptions): Promise<void> {
   };
   if (opts.kind === "deploy") {
     Object.assign(entry, deployedCommit());
-    // The deploy scripts export BUILD_VERSION (scripts/release.ts), so this
+    // The deploy scripts export BUILD_VERSION (scripts/deploy/release.ts), so this
     // is the version that was built, not a re-derivation afterwards.
     entry.version = opts.version ?? buildVersion();
     const ops = opsRevision();

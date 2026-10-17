@@ -133,7 +133,7 @@ constants.
 
 Label printing is handled by the `maco_gateway` (printer host configured
 there), not this bridge — see the printing-via-gateway plan and
-`scripts/deploy-gateway.ts`.
+`scripts/deploy/deploy-gateway.ts`.
 
 The Bearer is a soft revocation/audit knob, not real attestation — anyone
 with local admin on this machine can extract it. The actual security

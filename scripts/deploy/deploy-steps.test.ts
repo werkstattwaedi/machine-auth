@@ -93,7 +93,7 @@ test("the prompt names the environment, project, release, phase and files", () =
     "dry-run first",
     "stopped after it ran",
     "deploy-record.ts event --env prod",
-    "do not run or edit scripts/deploy.sh",
+    "do not run or edit scripts/deploy/deploy.sh",
   ]) {
     assert.ok(prompt.includes(needle), `prompt lacks: ${needle}`);
   }

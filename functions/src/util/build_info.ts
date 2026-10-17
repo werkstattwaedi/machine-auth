@@ -3,7 +3,7 @@
 
 /**
  * The release version this functions deploy was built as (ADR-0045), e.g.
- * "2026.10.3". scripts/deploy-functions.ts writes `lib/build-info.json`
+ * "2026.10.3". scripts/deploy/deploy-functions.ts writes `lib/build-info.json`
  * right before uploading; anywhere else (emulator, tests) the file is
  * absent and the version is "dev".
  *

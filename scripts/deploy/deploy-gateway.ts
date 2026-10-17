@@ -33,16 +33,16 @@
  *   4. Multiplexed SCP/SSH: extract, create venv, pip install
  *
  * Usage:
- *   npx tsx scripts/deploy-gateway.ts --host maker1@maco-gateway.internal
- *   npx tsx scripts/deploy-gateway.ts --host maker1@maco-gateway.internal --remote-dir /opt/gateway
- *   npx tsx scripts/deploy-gateway.ts --build-only   # just build, no deploy
- *   npx tsx scripts/deploy-gateway.ts --env staging --host maker1@test-pi.internal
- *   npx tsx scripts/deploy-gateway.ts --host … --allow-off-main   # deploy a branch (recorded)
- *   npx tsx scripts/deploy-gateway.ts --host … --yes              # cut a new release without asking
+ *   npx tsx scripts/deploy/deploy-gateway.ts --host maker1@maco-gateway.internal
+ *   npx tsx scripts/deploy/deploy-gateway.ts --host maker1@maco-gateway.internal --remote-dir /opt/gateway
+ *   npx tsx scripts/deploy/deploy-gateway.ts --build-only   # just build, no deploy
+ *   npx tsx scripts/deploy/deploy-gateway.ts --env staging --host maker1@test-pi.internal
+ *   npx tsx scripts/deploy/deploy-gateway.ts --host … --allow-off-main   # deploy a branch (recorded)
+ *   npx tsx scripts/deploy/deploy-gateway.ts --host … --yes              # cut a new release without asking
  *
  * Deploys refuse to run unless machine-auth (incl. submodules) and the
  * operations repo are on the latest main — see deploy-preflight.ts — and
- * then name the release (scripts/release.ts): reuse the commit's
+ * then name the release (scripts/deploy/release.ts): reuse the commit's
  * vYYYY.M.N tag, or cut the next one after a confirmation.
  *
  * `--env <name>` (ADR-0034) deep-merges the operations repo's
@@ -74,7 +74,7 @@ import { recordDeploy } from "./deploy-record.ts";
 import { ensureReleaseOrExit } from "./release.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, "..");
+const projectRoot = resolve(__dirname, "..", "..");
 const configDir =
   process.env.OPERATIONS_CONFIG_DIR ||
   resolve(projectRoot, "..", "machine-auth-operations");

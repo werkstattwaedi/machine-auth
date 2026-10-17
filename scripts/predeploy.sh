@@ -11,7 +11,7 @@
 # After this completes, the following commands will succeed without any
 # additional preparation:
 #   firebase deploy                                       # functions, rules, hosting
-#   npx tsx scripts/deploy-gateway.ts --host <pi>         # gateway → Raspberry Pi
+#   npx tsx scripts/deploy/deploy-gateway.ts --host <pi>         # gateway → Raspberry Pi
 #   (kiosk: rsync checkout-kiosk/ to kiosk box, npm install, npm start)
 #
 # This script does NOT cover one-time manual steps from the deploy
@@ -43,7 +43,7 @@ step "Generating env files from operations config"
 npm run generate-env
 
 # Self-heal leftover functions deploy state. A deploy points @oww/shared at a
-# packed `file:` tarball (scripts/{prepare,deploy}-functions-deploy.ts).
+# packed `file:` tarball (scripts/deploy/prepare-functions-deploy.ts, deploy-functions.ts).
 # An interrupted deploy — or an `npm install` run while in that state —
 # leaves package.json AND/OR package-lock.json pinning the tarball. The lock
 # is the sticky one: even after package.json is restored, npm keeps
@@ -72,7 +72,7 @@ step "Web: build (checkout + admin)"
 (cd web && npm run build)
 
 step "Gateway: build payload + generate .env from gcloud secrets"
-npx tsx scripts/deploy-gateway.ts --build-only
+npx tsx scripts/deploy/deploy-gateway.ts --build-only
 
 step "Checkout kiosk: typecheck (electron-rebuild ran in postinstall)"
 (cd checkout-kiosk && npm run typecheck)
@@ -83,7 +83,7 @@ ${GREEN}[predeploy] OK — all artifacts built.${NC}
 
 Ready to deploy:
   firebase deploy                                          # functions + rules + hosting
-  npx tsx scripts/deploy-gateway.ts --host <user@host>     # gateway → Pi
+  npx tsx scripts/deploy/deploy-gateway.ts --host <user@host>     # gateway → Pi
   (kiosk: push checkout-kiosk/ to kiosk machine, run npm install + npm start there)
 
 Manual steps not handled here (see docs/deployment-checklist.md):

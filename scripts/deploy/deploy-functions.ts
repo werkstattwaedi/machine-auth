@@ -29,7 +29,7 @@ import { fileURLToPath } from "url";
 import { buildVersion } from "./build-version.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(__dirname, "..", "..");
 const FUNCTIONS = join(ROOT, "functions");
 const PKG_JSON_PATH = join(FUNCTIONS, "package.json");
 const LOCK_PATH = join(ROOT, "package-lock.json");

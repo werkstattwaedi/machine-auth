@@ -19,8 +19,8 @@
  * and `roles/bigquery.jobUser` on the project.
  *
  * Usage:
- *   npx tsx scripts/setup-bigquery.ts --project oww-maco-staging
- *   npx tsx scripts/setup-bigquery.ts --project oww-maco --dataset stats
+ *   npx tsx scripts/deploy/setup-bigquery.ts --project oww-maco-staging
+ *   npx tsx scripts/deploy/setup-bigquery.ts --project oww-maco --dataset stats
  */
 
 import { config as loadEnv } from "dotenv";
@@ -30,7 +30,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 loadEnv({
-  path: [path.join(__dirname, ".env"), path.join(__dirname, ".env.local")],
+  path: [path.join(__dirname, "..", ".env"), path.join(__dirname, "..", ".env.local")],
 });
 
 function flagValue(name: string): string | undefined {
@@ -53,7 +53,7 @@ async function main() {
 
   const { BigQuery } = await import("@google-cloud/bigquery");
   const { STATS_TABLES, STATS_EXTRA_VIEWS, dedupViewQuery, viewName } = await import(
-    "../functions/src/stats/schema"
+    "../../functions/src/stats/schema"
   );
 
   const bq = new BigQuery({ projectId });

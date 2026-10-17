@@ -4,7 +4,7 @@
 /**
  * Deploy steps (ADR-0049): the one-off actions a deploy needs around it,
  * written as prose in docs/deploy/ and carried out by an agent while
- * scripts/deploy.sh waits at the phase boundary.
+ * scripts/deploy/deploy.sh waits at the phase boundary.
  *
  * A step is pending for an environment when its file was *added* since that
  * environment's last `deploy/<env>/firebase/*` tag (ADR-0045). Every added
@@ -14,9 +14,9 @@
  * the checklist, with nothing pending. There is no other state: a
  * successful deploy moves the tag, an aborted one doesn't.
  *
- * Usage (scripts/deploy.sh, or by hand to preview the next deploy):
- *   npx tsx scripts/deploy-steps.ts list   --env prod [--phase before-functions] [--no-fetch]
- *   npx tsx scripts/deploy-steps.ts prompt --env prod --phase before-functions \
+ * Usage (scripts/deploy/deploy.sh, or by hand to preview the next deploy):
+ *   npx tsx scripts/deploy/deploy-steps.ts list   --env prod [--phase before-functions] [--no-fetch]
+ *   npx tsx scripts/deploy/deploy-steps.ts prompt --env prod --phase before-functions \
  *       --project oww-maco --version 2026.10.4 [--no-fetch]
  *
  * `list` prints the pending files, one per line (nothing when there are
@@ -110,7 +110,7 @@ export function agentPrompt(opts: {
   return [
     `Deploy steps for the ${opts.env} deploy of machine-auth — Firebase project ${opts.project}, release ${opts.version} (ADR-0049, docs/deploy/README.md).`,
     "",
-    `scripts/deploy.sh is paused ${PHASE_WHEN[opts.phase]} (phase "${opts.phase}") and continues when this session ends. Carry out these steps, in this order, as their files say:`,
+    `scripts/deploy/deploy.sh is paused ${PHASE_WHEN[opts.phase]} (phase "${opts.phase}") and continues when this session ends. Carry out these steps, in this order, as their files say:`,
     "",
     files,
     "",
@@ -119,15 +119,15 @@ export function agentPrompt(opts: {
     "- Check before you act. A step is presented again when an earlier deploy stopped after it ran (the deploy tag only moves when the whole deploy went through) — so it may already be done. If the file's check says so, say so and move on.",
     `- Run every command against ${opts.project} (${opts.env}); where a file says <project-id>, that is ${opts.project}.`,
     "- Anything that changes production data: dry-run first, show me the output, and wait for my go before the live run.",
-    `- Record each step you carried out: npx tsx scripts/deploy-record.ts event --env ${opts.env} --note "deploy step <file>: <what you did>"`,
-    "- Do not deploy anything yourself and do not run or edit scripts/deploy.sh; the deploy continues after you.",
+    `- Record each step you carried out: npx tsx scripts/deploy/deploy-record.ts event --env ${opts.env} --note "deploy step <file>: <what you did>"`,
+    "- Do not deploy anything yourself and do not run or edit scripts/deploy/deploy.sh; the deploy continues after you.",
     "- When every step is done, or one cannot be done, say which and why, then stop and let me end the session — the deploy script then asks me to confirm.",
   ].join("\n");
 }
 
 // --- git side ---
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 
 function tryGit(args: string[]): string | null {

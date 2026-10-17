@@ -15,7 +15,8 @@
     "noEmit": true
   },
   "include": [
-    "*.ts"
+    "*.ts",
+    "deploy/*.ts"
   ],
   "exclude": [
     "node_modules",

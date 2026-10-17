@@ -26,7 +26,7 @@ import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(__dirname, "..", "..");
 const FUNCTIONS = join(ROOT, "functions");
 const SHARED = join(ROOT, "shared");
 const PKG_JSON_PATH = join(FUNCTIONS, "package.json");

@@ -5,7 +5,7 @@
  * The one version every component reports (ADR-0045, phase 2a).
  *
  * Releases are named `YYYY.M.N` — the Nth release in that month — and
- * tagged `vYYYY.M.N` on a machine-auth commit by scripts/release.ts at the
+ * tagged `vYYYY.M.N` on a machine-auth commit by scripts/deploy/release.ts at the
  * commit's first deploy. A build derives its version from the nearest
  * release tag:
  *
@@ -24,7 +24,7 @@
  * gateway/firmware preflight refuses it anyway.
  *
  * Usage:
- *   npx tsx scripts/build-version.ts          # prints the version
+ *   npx tsx scripts/deploy/build-version.ts          # prints the version
  *
  * Imported by the web apps' vite.config.ts (viteBuildVersion), so it must
  * type-check under their strict tsconfig.node.json as well.
@@ -34,7 +34,7 @@ import { execFileSync } from "child_process";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export const RELEASE_TAG_RE = /^v(\d{4})\.(\d{1,2})\.(\d+)$/;
 

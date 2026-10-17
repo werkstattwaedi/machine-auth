@@ -325,26 +325,26 @@ case "$1" in
     # Flash the optimized production firmware (ADR-0040). --config=prod builds
     # -c opt; prod boots without the 10s serial wait and arms the watchdog.
     # Latest main in both repos, or DEPLOY_ALLOW_OFF_MAIN=1 (ADR-0045).
-    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-preflight.ts" --component firmware || exit 1
+    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy/deploy-preflight.ts" --component firmware || exit 1
     # Name the release before building — the prod build stamps it into the
-    # firmware (scripts/release.ts). ./pw prod-flash [--yes] [--new-release]
+    # firmware (scripts/deploy/release.ts). ./pw prod-flash [--yes] [--new-release]
     RELEASE_ARGS=()
     for arg in "$@"; do
       case "$arg" in
         --yes|--new-release) RELEASE_ARGS+=("$arg") ;;
       esac
     done
-    npx tsx "$_PW_SCRIPT_DIR/scripts/release.ts" --question "flash it as PRODUCTION firmware" \
+    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy/release.ts" --question "flash it as PRODUCTION firmware" \
       ${RELEASE_ARGS[@]+"${RELEASE_ARGS[@]}"} || exit 1
     # Device id for the deploy record — read before flashing,
     # while the device is not rebooting.
-    DEVICE_ID=$(npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-record.ts" usb-device 2>/dev/null)
+    DEVICE_ID=$(npx tsx "$_PW_SCRIPT_DIR/scripts/deploy/deploy-record.ts" usb-device 2>/dev/null)
     echo "🔌 Flashing PRODUCTION firmware (optimized)..."
     bazelisk run --config=prod //maco_firmware/apps/prod:flash || exit $?
     # Record which commit this device now runs; best effort.
-    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy-record.ts" deploy --env prod --component firmware \
+    npx tsx "$_PW_SCRIPT_DIR/scripts/deploy/deploy-record.ts" deploy --env prod --component firmware \
       ${DEVICE_ID:+--target "$DEVICE_ID"} \
-      || echo "⚠️  Flash succeeded but was not recorded (scripts/deploy-record.ts)"
+      || echo "⚠️  Flash succeeded but was not recorded (scripts/deploy/deploy-record.ts)"
     ;;
   prod-console)
     # Connect console to a prod-flashed device. Builds the prod ELF with

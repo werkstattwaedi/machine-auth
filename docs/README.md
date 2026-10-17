@@ -42,7 +42,7 @@ against it, and the `spec-expert` agent does the thinking. Conventions and gloss
 
 One file per migration a deploy needs around it — a data migration, a
 backfill, a data gate, a newly required config parameter, a console switch
-— written for the agent that carries it out; `scripts/deploy.sh` stops for
+— written for the agent that carries it out; `scripts/deploy/deploy.sh` stops for
 the ones added since the environment's last deploy. A fresh installation
 follows `deployment-checklist.md` instead and has none pending; files stay,
 because another installation may deploy from an older tag. Conventions:

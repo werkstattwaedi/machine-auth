@@ -5,7 +5,7 @@
  * BigQuery statistics dataset — table + view definitions (ADR-0039).
  *
  * Single source of truth consumed by the export job's row builders, the
- * idempotent `scripts/setup-bigquery.ts` provisioner, and the integration
+ * idempotent `scripts/deploy/setup-bigquery.ts` provisioner, and the integration
  * tests. Deliberately dependency-free (no firebase imports) so the setup
  * script can import it from the `scripts/` package.
  *

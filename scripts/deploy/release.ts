@@ -24,8 +24,8 @@
  * out the same name: the loser of a push race fetches the tags and reuses
  * the winner's tag (same commit) or takes the next number.
  *
- * Usage (scripts/deploy.sh, ./pw prod-flash):
- *   npx tsx scripts/release.ts [--yes] [--new-release] \
+ * Usage (scripts/deploy/deploy.sh, ./pw prod-flash):
+ *   npx tsx scripts/deploy/release.ts [--yes] [--new-release] \
  *     [--question "deploy to PRODUCTION"] [--out <file>]
  * `--out` writes `BUILD_VERSION=…` and `RELEASE_CONFIRMED=0|1` (whether a
  * yes covered the deploy) for the shell to source. Exit code 1 = aborted.
@@ -47,7 +47,7 @@ import {
 } from "./build-version.ts";
 import { opsConfigCommitsBetween, opsRevision, overrideRequested } from "./deploy-preflight.ts";
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 const PUSH_ATTEMPTS = 3;
 const MAX_LISTED_COMMITS = 30;
