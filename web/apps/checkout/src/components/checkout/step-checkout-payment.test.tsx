@@ -163,6 +163,31 @@ describe("StepCheckout — payment choice (#750)", () => {
   })
 })
 
+describe("StepCheckout — the commit's hand-off", () => {
+  it("keeps the amount being paid while the close empties the cart", () => {
+    const base = {
+      persons,
+      usageType: "regular" as UsageType,
+      setUsageType: () => {},
+      tip: 0,
+      setTip: () => {},
+      paymentMethods: ["rechnung"] as PaymentMethod[],
+      paymentChoice: "rechnung" as PaymentChoice,
+      onPaymentChoiceChange: () => {},
+      onBack: () => {},
+      submitError: null,
+      items: [] as CheckoutItemLocal[],
+    }
+    const { rerender } = render(
+      <StepCheckout {...base} config={config(15)} onCommit={async () => {}} submitting={false} />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Rechnung senden" }))
+    // The close is in flight and the closed checkout's fees are gone.
+    rerender(<StepCheckout {...base} config={config(0)} onCommit={async () => {}} submitting />)
+    expect(screen.getByTestId("payment-frame").textContent).toContain("15.00")
+  })
+})
+
 describe("SpendeCard — collapsed on a phone", () => {
   function renderCard(spende: number) {
     return render(

@@ -79,7 +79,8 @@ export function PaymentOptionCards({ choices, onChoose, disabled }: PaymentOptio
     <section aria-labelledby="payment-options-heading" className="flex flex-col gap-3">
       <h2
         id="payment-options-heading"
-        className="font-heading font-bold text-lg text-foreground"
+        tabIndex={-1}
+        className="font-heading font-bold text-lg text-foreground outline-none"
       >
         {free ? "Nichts zu bezahlen" : "Wie möchtest du bezahlen?"}
       </h2>

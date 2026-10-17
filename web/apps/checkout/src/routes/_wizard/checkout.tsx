@@ -74,6 +74,7 @@ function CheckoutOpen() {
     // which the bridge does for any window.open, gesture or not.
     const popup = bridge.available ? null : window.open("", "_blank")
     popup?.document.write("<p style='font-family:sans-serif'>TWINT wird geöffnet …</p>")
+    popup?.document.close()
     const data = await ctx.submitCheckout("raisenow")
     if (!data?.paylinkUrl) {
       // A failed close keeps step 4 for a retry; a missing paylink leaves

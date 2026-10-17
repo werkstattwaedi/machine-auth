@@ -639,6 +639,38 @@ export function StepCheckout({
     monthlyDate: firstOfNextMonth(),
   }
 
+  // The commit closes the checkout, and its items drop out of the live
+  // query before the close answers: freeze the amount the person is paying
+  // for that moment instead of showing it fall to CHF 0.
+  const [commitTotal, setCommitTotal] = useState<number | null>(null)
+  const shownTotal = submitting && commitTotal !== null ? commitTotal : total
+  const commitChoice = (choice: PaymentChoice) => {
+    setCommitTotal(total)
+    // Synchronous up to the caller's first await: the TWINT window must
+    // open inside this click.
+    void onCommit(choice)
+  }
+
+  // Keep the last choice rendered while step 4 folds away on "Zurück", so
+  // the fold animates its content rather than an empty box.
+  const lastChoice = useRef<PaymentChoice | null>(null)
+  if (paymentChoice) lastChoice.current = paymentChoice
+  const shownChoice = paymentChoice ?? lastChoice.current
+
+  // Move focus with the fold: the control that was clicked has just become
+  // inert, so keyboard and screen-reader users land on the new content.
+  const stepFourRef = useRef<HTMLDivElement>(null)
+  const wasChosen = useRef(false)
+  useEffect(() => {
+    if (paymentChoice && !wasChosen.current) {
+      window.scrollTo({ top: 0 })
+      stepFourRef.current?.focus({ preventScroll: true })
+    } else if (!paymentChoice && wasChosen.current) {
+      document.getElementById("payment-options-heading")?.focus({ preventScroll: true })
+    }
+    wasChosen.current = !!paymentChoice
+  }, [paymentChoice])
+
   const handleChoose = (choice: PaymentChoice) => {
     if (hasMembership) {
       const errs = validateAddress(primaryAddress, { requireCompany })
@@ -651,7 +683,7 @@ export function StepCheckout({
     onPaymentChoiceChange(choice)
     // The free card's action is the commit itself: nothing to choose on a
     // step 4 that would only repeat "Abschliessen".
-    if (choice === "free") void onCommit("free")
+    if (choice === "free") commitChoice("free")
   }
 
   const totalMachineMinutes = timedMachineMinutes(nfcItems)
@@ -914,15 +946,17 @@ export function StepCheckout({
 
       {/* Step 4: the chosen card under the "Zu bezahlen" strip. */}
       <Fold open={!!paymentChoice}>
-        {paymentChoice && (
-          <PaymentFrame amount={total} free={free}>
-            <PaymentStep
-              choice={paymentChoice}
-              copy={copy}
-              committing={submitting}
-              onCommit={() => void onCommit(paymentChoice)}
-            />
-          </PaymentFrame>
+        {shownChoice && (
+          <div ref={stepFourRef} tabIndex={-1} className="outline-none">
+            <PaymentFrame amount={shownTotal} free={shownTotal === 0}>
+              <PaymentStep
+                choice={shownChoice}
+                copy={copy}
+                committing={submitting}
+                onCommit={() => commitChoice(shownChoice)}
+              />
+            </PaymentFrame>
+          </div>
         )}
       </Fold>
 

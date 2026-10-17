@@ -11,12 +11,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, cleanup, act } from "@testing-library/react"
 
 let CapturedComponent: (() => React.JSX.Element) | null = null
+const mockNavigate = vi.fn()
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: { component: () => React.JSX.Element }) => {
     CapturedComponent = opts.component
     return opts
   },
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useLocation: () => false,
 }))
 
@@ -67,10 +68,20 @@ vi.mock("@/components/checkout/payment-confirmation", () => ({
   ),
 }))
 let finishHeld: boolean | null = null
+let finishSignedIn: boolean | null = null
 vi.mock("@/components/checkout/checkout-finish-bar", () => ({
-  CheckoutFinishBar: ({ holdCountdown }: { holdCountdown: boolean }) => {
+  CheckoutFinishBar: ({
+    holdCountdown,
+    signedIn,
+    onFinish,
+  }: {
+    holdCountdown: boolean
+    signedIn: boolean
+    onFinish: () => void
+  }) => {
     finishHeld = holdCountdown
-    return null
+    finishSignedIn = signedIn
+    return <button onClick={onFinish}>finish</button>
   },
 }))
 
@@ -127,6 +138,8 @@ beforeEach(() => {
   bridgeAvailable = false
   paymentConfirmed = null
   finishHeld = null
+  finishSignedIn = null
+  mockNavigate.mockReset()
 })
 afterEach(() => {
   cleanup()
@@ -154,7 +167,7 @@ describe("Check Out route — commit (#750)", () => {
     })
     mockUseWizardContext.mockReturnValue(c)
     const popup = {
-      document: { write: vi.fn() },
+      document: { write: vi.fn(), close: vi.fn() },
       location: { href: "" },
       opener: {} as unknown,
       close: vi.fn(),
@@ -176,7 +189,7 @@ describe("Check Out route — commit (#750)", () => {
   it("TWINT: a failed close shuts the blank window again", async () => {
     const c = ctx({ submitCheckout: vi.fn(async () => null) })
     mockUseWizardContext.mockReturnValue(c)
-    const popup = { document: { write: vi.fn() }, location: { href: "" }, close: vi.fn() }
+    const popup = { document: { write: vi.fn(), close: vi.fn() }, location: { href: "" }, close: vi.fn() }
     vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window)
     renderRoute()
 
@@ -232,5 +245,33 @@ describe("Check Out route — commit (#750)", () => {
     expect(finishHeld).toBe(true)
     act(() => paymentConfirmed!())
     expect(finishHeld).toBe(false)
+  })
+
+  it("finish: the kiosk hands over with the strong reset", async () => {
+    bridgeAvailable = true
+    const c = ctx({ kiosk: true, paymentChoice: "rechnung", paymentData: { ...PAYMENT, paymentMethod: "rechnung" } })
+    mockUseWizardContext.mockReturnValue(c)
+    renderRoute()
+    await act(async () => screen.getByText("finish").click())
+    expect(c.startOver).toHaveBeenCalledOnce()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("finish: signed in on an own device goes to the past visits, no reset", async () => {
+    const c = ctx({ paymentChoice: "rechnung", paymentData: { ...PAYMENT, paymentMethod: "rechnung" } })
+    mockUseWizardContext.mockReturnValue(c)
+    renderRoute()
+    expect(finishSignedIn).toBe(true)
+    await act(async () => screen.getByText("finish").click())
+    expect(mockNavigate).toHaveBeenCalledWith({ to: "/account/usage" })
+    expect(c.startOver).not.toHaveBeenCalled()
+  })
+
+  it("a guest's finish bar knows they are not signed in", () => {
+    mockUseWizardContext.mockReturnValue(
+      ctx({ isAccountLoggedIn: false, paymentChoice: "rechnung", paymentData: { ...PAYMENT, paymentMethod: "rechnung" } }),
+    )
+    renderRoute()
+    expect(finishSignedIn).toBe(false)
   })
 })

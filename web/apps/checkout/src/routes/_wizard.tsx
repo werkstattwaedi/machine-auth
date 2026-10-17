@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
+import { showNoCheckoutGate, wizardStep } from "@/components/checkout/wizard-gate"
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
@@ -47,17 +48,6 @@ export const Route = createFileRoute("/_wizard")({
   validateSearch: wizardSearchSchema,
   component: WizardLayout,
 })
-
-/**
- * Map the current URL path to the wizard's step index (0..3). Anything
- * outside the four routes returns null so the progress indicator hides.
- */
-function stepForPathname(pathname: string): number | null {
-  if (pathname.startsWith("/checkin")) return 0
-  if (pathname.startsWith("/visit")) return 1
-  if (pathname.startsWith("/checkout")) return 2
-  return null
-}
 
 function WizardLayout() {
   const auth = useFirebaseAuth()
@@ -201,8 +191,14 @@ function WizardChrome({
   kioskSession?: boolean
 }) {
   const { pathname } = useLocation()
-  const { openCheckout, pendingCheckout, paymentData, paymentChoice, clearPayment } =
-    useWizardContext()
+  const {
+    openCheckout,
+    pendingCheckout,
+    paymentData,
+    paymentChoice,
+    clearPayment,
+    submitting,
+  } = useWizardContext()
   // A finished checkout's confirmation must not greet the next visit: a
   // signed-in person leaves it via "Fertig" without a reset, so forget it
   // as soon as the wizard is anywhere but /checkout.
@@ -211,28 +207,18 @@ function WizardChrome({
       clearPayment()
     }
   }, [pathname, paymentData, paymentChoice, clearPayment])
+  const gateState = {
+    pathname,
+    hasOpenCheckout: !!openCheckout,
+    pendingCheckout,
+    paymentChosen: !!paymentChoice,
+    committed: !!paymentData,
+    submitting,
+  }
   // /checkout is step 3 until a payment card is chosen, then step 4 in
   // place (issue #750).
-  const pathStep = stepForPathname(pathname)
-  const currentStep =
-    pathStep === 2 && (paymentChoice || paymentData) ? 3 : pathStep
-
-  const gateableRoute =
-    pathname.startsWith("/visit") ||
-    pathname.startsWith("/checkout") ||
-    pathname.startsWith("/payment")
-  // pendingCheckout is true between /checkin's "Weiter" creating a
-  // fresh doc and the onSnapshot listener surfacing it — without this
-  // check /visit would briefly flash the no-checkout gate.
-  //
-  // The commit on /checkout closes the checkout (status flips open →
-  // closed, so it falls out of the open-checkout query). paymentData is
-  // the commit's answer — when set, the page shows the confirmation and
-  // must not be gated.
-  const justSubmittedPayment =
-    pathname.startsWith("/checkout") && !!paymentData
-  const showGate =
-    gateableRoute && !openCheckout && !pendingCheckout && !justSubmittedPayment
+  const currentStep = wizardStep(gateState)
+  const showGate = showNoCheckoutGate(gateState)
 
   // "Von vorne beginnen" is a menu entry, but its confirm dialog lives here
   // so it survives the menu closing (and answers the kiosk chrome).
