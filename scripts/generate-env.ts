@@ -65,6 +65,7 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "TERMINAL_KEY", jsonPath: "functions.terminalKey" },
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
+  { envVar: "WALLEE_AUTH_KEY", jsonPath: "functions.walleeAuthKey" },
 ];
 
 const FUNCTIONS_RESEND: VarMapping[] = [
@@ -129,6 +130,14 @@ const FUNCTIONS_PAYMENT: VarMapping[] = [
   { envVar: "RAISENOW_PAYLINK_SOLUTION_ID", jsonPath: "web.raisenowPaylinkSolutionId" },
   { envVar: "PAYMENT_METHODS_KIOSK", jsonPath: "web.paymentMethodsKiosk" },
   { envVar: "PAYMENT_METHODS_WEB", jsonPath: "web.paymentMethodsWeb" },
+  // Wallee terminal (ADR-0051). Space, user and terminal are shared by
+  // staging and prod; the reference prefix ("P"/"S") tells their payments
+  // apart. Any empty value switches the integration off. The auth key is
+  // the WALLEE_AUTH_KEY secret.
+  { envVar: "WALLEE_SPACE_ID", jsonPath: "wallee.spaceId" },
+  { envVar: "WALLEE_USER_ID", jsonPath: "wallee.userId" },
+  { envVar: "WALLEE_TERMINAL_ID", jsonPath: "wallee.terminalId" },
+  { envVar: "WALLEE_REFERENCE_PREFIX", jsonPath: "wallee.referencePrefix" },
 ];
 
 const GATEWAY: VarMapping[] = [
@@ -210,6 +219,14 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     paymentRecipientCity: "Teststadt",
     paymentRecipientCountry: "CH",
   },
+  // Configured, so the terminal paths run in the emulator suite; the
+  // tests replace the Wallee API with a fake. Inert ids.
+  wallee: {
+    spaceId: "100",
+    userId: "200",
+    terminalId: "300",
+    referencePrefix: "P",
+  },
   nfc: {
     sdmBaseUrl: "id.test.localhost/",
   },
@@ -232,6 +249,7 @@ const TEST_FIXTURE_OVERRIDES: Record<string, string> = {
   // Dummy / standard test prefixes — no real production credentials.
   GATEWAY_API_KEY: "ci-test-gateway-key",
   RESEND_API_KEY: "re_test_fake_ci_key",
+  WALLEE_AUTH_KEY: "ci-test-wallee-key",
 };
 
 // --- Helpers ---

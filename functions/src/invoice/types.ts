@@ -19,6 +19,13 @@ export type BillKind = "invoice" | "beleg";
 // the daily renewalInvoicer cron for an expiring membership.
 export type BillSource = "checkout" | "membership-renewal";
 
+/**
+ * Who committed a bill's payment method: the person (`user`), the
+ * overnight job (`auto`), or the payment terminal's confirmed payment
+ * (`terminal`, ADR-0051 — the bill is born paid).
+ */
+export type BillAckSource = "user" | "auto" | "terminal";
+
 export interface BillEntity {
   userId: DocumentReference;
   checkouts: DocumentReference[];
@@ -38,12 +45,19 @@ export interface BillEntity {
   // account).
   emailSkippedReason?: "no-recipient" | null;
   // The customer-stated "I'll pay this" ack. Server-only — written by
-  // the acknowledgeBill callable (source: "user") or the
-  // autoAcknowledgeBills cron (source: "auto"). The email and
+  // the acknowledgeBill callable / the close (source: "user"), the
+  // autoAcknowledgeBills cron (source: "auto") or a Wallee-confirmed
+  // terminal payment (source: "terminal"). The email and
   // membership-activation triggers key off this transitioning from null
-  // to set.
+  // to set, or off a bill born committed (`isCommittedAtClose`).
   paymentMethodConfirmationTime: Timestamp | null;
-  paymentMethodConfirmationSource: "user" | "auto" | null;
+  paymentMethodConfirmationSource: BillAckSource | null;
+  // The Wallee transaction that paid the bill at the terminal, and the
+  // cardholder receipt text Wallee rendered for it (masked card number,
+  // auth code — printed on the Quittung). Server-only; null otherwise and
+  // on legacy docs (absent).
+  walleeTransactionId?: number | null;
+  walleeReceiptText?: string | null;
   // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
   // member who picked Sammelrechnung — the QR-bill is emitted as the
   // aggregated monthly invoice (`aggregatedIntoBillRef`) on the 1st.
@@ -152,6 +166,8 @@ export interface InvoiceData {
   currency: string;
   paidAt?: Date | null;
   paidVia?: PaidVia | null;
+  /** Wallee's cardholder receipt of a terminal payment (bill `walleeReceiptText`). */
+  terminalReceiptText?: string | null;
   /**
    * Customer's chosen payment method from Step 4 (Bezahlen). Null at
    * bill-create time (PDF generated before the user picks). Set after

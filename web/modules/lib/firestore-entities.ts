@@ -420,7 +420,9 @@ export interface BillDoc extends AuditFields {
   pdfGeneratedAt?: Timestamp | null
   emailSentAt?: Timestamp | null
   paymentMethodConfirmationTime?: Timestamp | null
-  paymentMethodConfirmationSource?: "user" | "auto" | null
+  paymentMethodConfirmationSource?: "user" | "auto" | "terminal" | null
+  walleeTransactionId?: number | null
+  walleeReceiptText?: string | null
   // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
   // member who picked Sammelrechnung — the payable QR-bill is emitted as
   // the aggregated monthly Sammelrechnung (`aggregatedIntoBillRef`) on the

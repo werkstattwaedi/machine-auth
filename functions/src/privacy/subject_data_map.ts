@@ -77,7 +77,7 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
   },
   {
     collection: "checkouts",
-    piiFields: ["persons[].name", "persons[].email", "persons[].billingAddress", "notes", "firebaseUid", "cancellationReason"],
+    piiFields: ["persons[].name", "persons[].email", "persons[].billingAddress", "notes", "firebaseUid", "cancellationReason", "terminalAttempts.*.persons[] (open checkouts only)", "walleeTransactionId (processor reference)"],
     legalBasis: "Contract (billing); DSG Art. 31(2)(e) for derived statistics",
     retention: `${RETENTION_YEARS} years after closedAt`,
     trim: { ageField: "closedAt", retentionYears: RETENTION_YEARS },
@@ -91,7 +91,7 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
   },
   {
     collection: "bills",
-    piiFields: ["userId", "referenceNumber (person-linkable)", "storagePath", "cancellationReason", "correctionReason"],
+    piiFields: ["userId", "referenceNumber (person-linkable)", "storagePath", "cancellationReason", "correctionReason", "walleeTransactionId (processor reference)", "walleeReceiptText (masked card number)"],
 
     legalBasis: "Contract (billing); OR Art. 958f for the PDF archive",
     retention: `${RETENTION_YEARS} years after paidAt (unpaid: created); PDF 10 years escrowed`,

@@ -355,6 +355,9 @@ export async function buildInvoicePdf(
       y += 16;
       doc.fontSize(9).font("Helvetica");
       doc.text("Diese Rechnung wurde bereits beglichen. Vielen Dank!", MARGIN_LEFT, y);
+      if (data.terminalReceiptText) {
+        y = renderTerminalReceipt(doc, y + 22, data.terminalReceiptText);
+      }
       if (isRenewal) {
         y += 20;
         y = renderVorstandSignoff(doc, y);
@@ -583,6 +586,32 @@ function renderDiscountRow(
 /** Round to centimes for display sums. */
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Wallee's cardholder receipt for a terminal payment, printed verbatim:
+ * Wallee requires the transaction details (masked card, Trm-Id, auth code)
+ * on the customer's document (ADR-0051). Monospace keeps its 40-column
+ * layout. Returns the y below it.
+ */
+function renderTerminalReceipt(
+  doc: PDFKit.PDFDocument,
+  startY: number,
+  text: string,
+): number {
+  const lines = text.split("\n");
+  const lineHeight = 9.5;
+  let y = ensureSpace(doc, startY, 16 + lines.length * lineHeight);
+  doc.fontSize(9).font("Helvetica-Bold");
+  doc.text("Zahlungsbeleg Terminal", MARGIN_LEFT, y);
+  y += 14;
+  doc.fontSize(8).font("Courier");
+  for (const line of lines) {
+    doc.text(line, MARGIN_LEFT, y, { lineBreak: false });
+    y += lineHeight;
+  }
+  doc.font("Helvetica");
+  return y;
 }
 
 /** "Beste Grüsse / Der Vorstand" block on renewal invoices (issue #323). */

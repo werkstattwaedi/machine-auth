@@ -5,7 +5,7 @@
  * Payment terminal contract shared by the kiosk (which drives the terminal
  * over Wallee's Local Till Interface), the checkout web app (which shows
  * its progress) and the functions (which settle the payment from Wallee's
- * backend, ADR-0048).
+ * backend, ADR-0051).
  *
  * The types are deliberately LTI-agnostic: the web app never sees an LTI
  * message, only these events, so the terminal protocol stays a kiosk
