@@ -267,6 +267,7 @@ function CheckinRoute() {
         ownerUserId={ctx.identifiedUserRef?.id ?? null}
         isMember={ctx.isMember}
         config={ctx.pricingConfig}
+        feePersons={ctx.feePersons}
         savedPersons={ctx.savedPersons}
         onDeleteSavedPerson={ctx.deleteSavedPerson}
         // Issue #465: a started visit flips the kiosk footer primary from

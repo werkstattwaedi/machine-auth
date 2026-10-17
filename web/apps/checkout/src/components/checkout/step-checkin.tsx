@@ -29,6 +29,7 @@ import type { PricingConfig } from "@modules/lib/workshop-config"
 import { validatePerson } from "./validation"
 import { cn } from "@modules/lib/utils"
 import { useAutoStartCountdown } from "./use-auto-start-countdown"
+import type { PricedPerson } from "./same-day-waiver"
 
 interface StepCheckinProps {
   persons: CheckoutPerson[]
@@ -102,6 +103,12 @@ interface StepCheckinProps {
   /** Pricing config for the live per-person usage fee; null = not loaded. */
   config?: PricingConfig | null
   /**
+   * The roster with the same-day waiver previewed (`withSameDayWaiver`), the
+   * same persons Check Out prices, so both pages show the fee the server
+   * will bill (CHK-39). Omitted = nobody waived.
+   */
+  feePersons?: readonly PricedPerson[]
+  /**
    * The identified person's saved persons (issue #605); offered under
    * "Person hinzufügen" unless already on the visit. Empty / omitted for a
    * guest check-in.
@@ -118,7 +125,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, config = null, savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, config = null, feePersons = [], savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -237,13 +244,20 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
   const othersPresent = persons.length > 1
   const usageFor = (person: CheckoutPerson): PersonUsageProps => {
     const standard = standardFee(person.userType, config)
+    const waivedToday =
+      feePersons.find((p) => p.id === person.id)?.entryFeeWaivedToday === true
     return {
       anonymous: isAnonymous,
       othersPresent,
       fee:
         standard === null
           ? null
-          : personEntryFee(person, "regular", () => standard),
+          : personEntryFee(
+              { ...person, entryFeeWaivedToday: waivedToday },
+              "regular",
+              () => standard,
+            ),
+      waivedToday,
     }
   }
   const setUsage = (person: CheckoutPerson) => (usageType: CheckoutPerson["usageType"]) =>

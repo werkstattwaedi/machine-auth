@@ -37,7 +37,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 - **CHK-37** A person whose usage type carries a usage fee (CHK-4) pays none of it on a visit when they were already on another visit of the same account — opened on the same day, closed before this one and not cancelled — on a usage type whose fee is at least as high; otherwise they pay it in full, and on a guest's checkout nobody gets this. — #268, ADR-0050, #605, #759
 - **CHK-38** For CHK-37 the account holder is the same person by their account, and every other person — typed in or added from the saved persons (CHK-34) — by user type and name, the name compared ignoring case, extra spaces and word order. — ADR-0050, #605
-- **CHK-39** The waiver (CHK-37) is applied wherever a usage fee is billed — closing a checkout, and an admin correction as of the visit it replaces — and Check Out shows the waived fee before the person pays. — ADR-0050, #605
+- **CHK-39** The waiver (CHK-37) is applied wherever a usage fee is billed — closing a checkout, and an admin correction as of the visit it replaces — and the check-in (CHK-43) and Check Out show the waived fee, saying it was already billed today, before the person pays. — ADR-0050, #605, #776
 - **CHK-43** On the check-in, each person's usage fee (CHK-4) is shown beside their usage type and follows it as it is changed. — #605
 
 ## Kosten

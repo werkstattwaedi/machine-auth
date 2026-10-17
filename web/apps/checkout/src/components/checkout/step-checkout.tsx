@@ -33,7 +33,7 @@ import {
   type AddressErrors,
 } from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
-import type { PricedPerson } from "./same-day-waiver"
+import { WAIVED_TODAY_LABEL, type PricedPerson } from "./same-day-waiver"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import {
   PositionTable,
@@ -197,9 +197,6 @@ export function roundUpOptionLabel(
   if (target % 1 !== 0) return `${target.toFixed(2)} Franken`
   return `${target.toFixed(0)} Franken`
 }
-
-/** Same wording as the invoice PDF's waived usage-fee row. */
-const WAIVED_TODAY_LABEL = "heute bereits abgerechnet"
 
 interface StepCheckoutProps {
   /**

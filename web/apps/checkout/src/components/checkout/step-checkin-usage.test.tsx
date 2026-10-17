@@ -78,10 +78,13 @@ function Harness({
   initial,
   anonymous = false,
   savedPersons = [],
+  waivedIds = [],
 }: {
   initial: CheckoutPerson[]
   anonymous?: boolean
   savedPersons?: SavedPersonEntry[]
+  /** Persons the same-day waiver preview marks as already billed today. */
+  waivedIds?: string[]
 }) {
   const [persons, dispatch] = useReducer(personsReducer, initial)
   return (
@@ -95,6 +98,9 @@ function Harness({
       ownerUserId={anonymous ? null : "u-self"}
       signedInEmail="max@example.com"
       config={config}
+      feePersons={persons.map((p) =>
+        waivedIds.includes(p.id) ? { ...p, entryFeeWaivedToday: true } : p,
+      )}
       savedPersons={savedPersons}
       onDeleteSavedPerson={vi.fn().mockResolvedValue(undefined)}
     />
@@ -185,5 +191,23 @@ describe("StepCheckin — saved persons (#605)", () => {
     expect(
       screen.getByRole("button", { name: /Person hinzufügen/ }),
     ).not.toHaveAttribute("aria-haspopup")
+  })
+})
+
+describe("StepCheckin — same-day waiver (#776, CHK-39)", () => {
+  it("shows a person already billed today at no fee, as Check Out does", () => {
+    render(<Harness initial={[self(), guest]} waivedIds={["p-guest"]} />)
+    expect(fees()).toEqual([formatCHF(15), formatCHF(0)])
+    const waived = screen.getAllByTestId("person-usage-fee-waived-today")
+    expect(waived).toHaveLength(1)
+    expect(
+      screen.getAllByTestId("person-usage-fee")[1].parentElement,
+    ).toContainElement(waived[0])
+  })
+
+  it("shows the full fee and no hint without a waiver", () => {
+    render(<Harness initial={[self(), guest]} />)
+    expect(fees()).toEqual([formatCHF(15), formatCHF(15)])
+    expect(screen.queryByTestId("person-usage-fee-waived-today")).toBeNull()
   })
 })
