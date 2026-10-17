@@ -6,27 +6,30 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Payment methods
 
-- **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung or TWINT. — ADR-0044
+- **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung, TWINT or *Karte / TWINT* at the payment terminal. — ADR-0044, ADR-0051, #735
 
   | Method | Paid during checkout (BIL-6) | Collected monthly | Members only | Document |
   |---|---|---|---|---|
   | QR-Rechnung | no | no | no | Rechnung with QR slip |
   | Sammelrechnung | no | yes | yes | Beleg, later a Sammelrechnung |
   | TWINT | yes | no | no | Quittung, no QR slip |
+  | *Karte / TWINT* | yes, confirmed by Wallee (BIL-39) | no | no | Quittung, no QR slip |
 
 - **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order. — ADR-0044
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung and its account holder is an active member (BIL-4), otherwise as a QR-Rechnung. — #251, #302, #761, #745
-- **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill nobody confirms is committed overnight (BIL-7). — #251, #302
+- **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill issued without a committed method that nobody confirms is committed overnight (BIL-7). — #251, #302
+- **BIL-39** A checkout paid at the payment terminal stays open until Wallee confirms the payment to the server — right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
+- **BIL-40** The bill of a terminal payment (BIL-39) is issued already paid, as of the time Wallee authorised the payment, for the persons, donation and amount priced when that payment was started. — ADR-0051, #735
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
 
 ## Documents
 
 - **BIL-9** Every document's title and file name name its kind: Rechnung, Quittung, Beleg or Sammelrechnung. — #405, #426
 - **BIL-10** Only a Rechnung or Sammelrechnung with an amount due carries a QR slip; a Beleg says its amount is added to the next Sammelrechnung. — ADR-0044
-- **BIL-11** A Quittung names the payment method but never states that the payment was received.
+- **BIL-11** A Quittung names the payment method; it states that the payment was received only for a terminal payment (BIL-40), and then also gives the payment date and Wallee's cardholder receipt — masked card, terminal and authorisation code. — ADR-0051, #735
 - **BIL-12** On a document, line items are grouped by workshop with a subtotal each, a membership is listed first, and a donation is listed as such. — #262, #464
 - **BIL-38** A document lists every person on the checkout with their user type, their usage type unless regular — *Nur Materialbezug* on a purchase-only checkout (CHK-9) — and the usage fee they pay, then one row per waived machine or material section naming the visit's type (CHK-29); a person whose usage fee is waived for an earlier visit that day (CHK-37) is listed at CHF 0 with the reason. — #284, #268, #269, ADR-0050, #605
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
@@ -61,10 +64,18 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Payment booking
 
-- **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement; booking skips bills already paid.
+- **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement — except a terminal payment, booked as its bill is issued (BIL-40); booking skips bills already paid. — ADR-0051, #735
 - **BIL-30** A statement import matches payments by QR reference and lists unmatched, duplicate and cancelled-bill payments for manual handling; a payment with a different amount is booked with a warning.
 - **BIL-31** Booking a payment sends no mail and changes no document.
-- **BIL-34** Nothing waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked; unpaid bills are followed up at reconciliation. — #746
+- **BIL-34** Nothing but a terminal payment (BIL-39) waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked; unpaid bills are followed up at reconciliation. — #746, ADR-0051
+- **BIL-41** In these cases a terminal payment changes no checkout or bill, and the money is handled by hand — ADR-0051, #735:
+
+  | Case | What stays |
+  |---|---|
+  | it arrives for a checkout already closed — by an earlier terminal payment or another method — or cancelled | the checkout and its bill as they are |
+  | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
+  | the checkout's items changed after it was started | the checkout stays open |
+  | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
 
 ## Retention
 
@@ -75,6 +86,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
+- [NEEDS CLARIFICATION] A terminal payment's bill is issued paid (BIL-40), so an admin can never cancel or correct it (BIL-21) — not even after the payment was reversed and the bill still says paid (BIL-41). Should a terminal bill be correctable, or a reversal un-book its payment? — #735
 - [NEEDS CLARIFICATION] Correction mails for TWINT bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 
 ## Retired
