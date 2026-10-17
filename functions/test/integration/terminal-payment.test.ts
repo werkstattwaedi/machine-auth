@@ -19,12 +19,16 @@ process.env.PAYMENT_RECIPIENT_CITY = process.env.PAYMENT_RECIPIENT_CITY ?? "Wäd
 process.env.PAYMENT_RECIPIENT_COUNTRY = process.env.PAYMENT_RECIPIENT_COUNTRY ?? "CH";
 process.env.PAYMENT_CURRENCY = process.env.PAYMENT_CURRENCY ?? "CHF";
 process.env.RAISENOW_PAYLINK_SOLUTION_ID = process.env.RAISENOW_PAYLINK_SOLUTION_ID ?? "test-solution";
-process.env.PAYMENT_METHODS_KIOSK = "wallee_terminal,rechnung,monthly";
-process.env.PAYMENT_METHODS_WEB = "rechnung,monthly,raisenow";
-process.env.WALLEE_SPACE_ID = "100";
-process.env.WALLEE_USER_ID = "200";
-process.env.WALLEE_TERMINAL_ID = "300";
-process.env.WALLEE_REFERENCE_PREFIX = "P";
+// The terminal's own params are pinned per test (see TERMINAL_ENV): all
+// integration files share one process, and others set these at import.
+const TERMINAL_ENV: Record<string, string> = {
+  PAYMENT_METHODS_KIOSK: "wallee_terminal,rechnung,monthly",
+  PAYMENT_METHODS_WEB: "rechnung,monthly,raisenow",
+  WALLEE_SPACE_ID: "100",
+  WALLEE_USER_ID: "200",
+  WALLEE_TERMINAL_ID: "300",
+  WALLEE_REFERENCE_PREFIX: "P",
+};
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT ?? "oww-maco";
 
 import { expect } from "chai";
@@ -222,11 +226,22 @@ describe("Wallee terminal payment (Integration)", () => {
     this.timeout(20000);
     await setupEmulator();
   });
+  afterEach(() => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
   after(async () => {
     setWalleeApiForTest(null);
     await teardownEmulator();
   });
+  const savedEnv: Record<string, string | undefined> = {};
   beforeEach(async () => {
+    for (const [k, v] of Object.entries(TERMINAL_ENV)) {
+      savedEnv[k] = process.env[k];
+      process.env[k] = v;
+    }
     await clearFirestore();
     await seedPricing();
     await seedUser(OWNER);
