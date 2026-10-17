@@ -125,7 +125,6 @@ interface SeedCheckoutOptions {
   userId?: string | null;
   paymentMethod?: PaymentMethod | null;
   usageType?: CheckoutEntity["usageType"];
-  purchaseOnly?: boolean;
   /** Seeded into the `items` subcollection; catalog ids as plain doc ids. */
   items?: Array<{ catalogId?: string; type?: "machine" | "material" }>;
 }
@@ -158,7 +157,6 @@ async function seedCheckout(
   };
   if (opts.summary) checkout.summary = opts.summary;
   if (opts.paymentMethod !== undefined) checkout.paymentMethod = opts.paymentMethod;
-  if (opts.purchaseOnly !== undefined) checkout.purchaseOnly = opts.purchaseOnly;
 
   await db.collection("checkouts").doc(checkoutId).set(checkout);
   for (const [i, item] of (opts.items ?? []).entries()) {
@@ -1134,28 +1132,6 @@ describe("bill processing triggers (Integration)", () => {
             items: [{ catalogId: "laser", type: "machine" }],
           });
           expect(template.id).to.equal("test-bill-invoice-visit");
-        });
-
-        // Issue #605: an all-Begleitung visit derives materialbezug too, so
-        // the explicit marker decides (CHK-9).
-        it("a visit whose persons all accompany stays a visit (purchaseOnly: false)", async () => {
-          const template = await sendFor({
-            paymentMethod: "rechnung",
-            usageType: "materialbezug",
-            purchaseOnly: false,
-            items: [{ catalogId: "badge-sku" }],
-          });
-          expect(template.id).to.equal("test-bill-invoice-visit");
-        });
-
-        it("a purchaseOnly checkout is a purchase whatever its usage type", async () => {
-          const template = await sendFor({
-            paymentMethod: "raisenow",
-            usageType: "regular",
-            purchaseOnly: true,
-            items: [{ catalogId: "badge-sku" }],
-          });
-          expect(template.id).to.equal("test-bill-receipt-purchase");
         });
 
         it("strips markup from user-supplied values", async () => {

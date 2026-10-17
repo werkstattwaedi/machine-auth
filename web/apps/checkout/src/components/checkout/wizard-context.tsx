@@ -217,9 +217,11 @@ export interface WizardContextValue {
    * Persist the current `persons` array to the open checkout doc, creating
    * the doc if none exists. Called from /checkin's onAdvance. `startVisit`
    * (kiosk "Besuch starten", KIO-18) also turns an existing purchase-only
-   * checkout into a visit: `purchaseOnly: false` and the identified
-   * person's line on Reguläre Nutzung. `persons` overrides the roster
-   * state (the result of `saveCompanions`, issue #605).
+   * checkout into a visit by putting the identified person's line on
+   * Reguläre Nutzung. The derived visit type is written alongside, so the
+   * open checkout reads as a visit or a purchase (CHK-9) before the close.
+   * `persons` overrides the roster state (the result of `saveCompanions`,
+   * issue #605).
    */
   persistPersons: (opts?: {
     startVisit?: boolean
@@ -588,19 +590,20 @@ export function WizardProvider({
     // now works in the workshop.
     const startsVisit =
       !!opts?.startVisit && !!openCheckout && !isStartedVisit(openCheckout)
-    const personDocs = roster.map((p) =>
-      personLocalToDoc(
-        startsVisit && !!ownerId && p.userId === ownerId
-          ? { ...p, usageType: "regular" }
-          : p,
-        db,
-      ),
+    const visitRoster = roster.map((p): CheckoutPerson =>
+      startsVisit && !!ownerId && p.userId === ownerId
+        ? { ...p, usageType: "regular" }
+        : p,
     )
+    const personDocs = visitRoster.map((p) => personLocalToDoc(p, db))
+    // The server re-derives it at close; kept current while open because
+    // it is what makes the checkout a visit or a purchase (CHK-9).
+    const usageType = deriveVisitUsageType(usagePersons(visitRoster, ownerId))
     try {
       if (openCheckout) {
         await fsMutation.update(checkoutRef(db, openCheckout.id), {
           persons: personDocs,
-          ...(startsVisit ? { purchaseOnly: false } : {}),
+          usageType,
         })
       } else {
         setPendingCheckout(true)
@@ -609,9 +612,7 @@ export function WizardProvider({
           fsMutation.add(checkoutsCollection(db), {
             userId: identifiedUserRef ?? null,
             status: "open",
-            // The server re-derives it at close; written for older readers.
-            usageType: deriveVisitUsageType(usagePersons(roster, ownerId)),
-            purchaseOnly: false,
+            usageType,
             created: serverTimestamp() as unknown as CheckoutDoc["created"],
             workshopsVisited: [],
             persons: personDocs,
@@ -729,7 +730,6 @@ export function WizardProvider({
                 userId: identifiedUserRef ?? null,
                 status: "open",
                 usageType: visitUsageType,
-                purchaseOnly: false,
                 created: serverTimestamp(),
                 workshopsVisited: [item.workshop],
                 persons: persons.map((p) => personLocalToDoc(p, db)),

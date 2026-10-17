@@ -237,7 +237,6 @@ async function assembleInvoiceData(
     return {
       date: data.created.toDate(),
       usageType: data.usageType,
-      ...(data.purchaseOnly != null ? { purchaseOnly: data.purchaseOnly } : {}),
       persons: data.persons,
       personEntryFees,
       items,
@@ -655,7 +654,6 @@ async function loadBillKind(bill: BillEntity): Promise<CheckoutKind> {
       const checkout = snap.data() as CheckoutEntity | undefined;
       return classifyCheckoutKind({
         usageType: checkout?.usageType ?? "regular",
-        purchaseOnly: checkout?.purchaseOnly,
         items: items.docs.map((d) => d.data() as CheckoutItemEntity),
         membershipCatalogId,
       });

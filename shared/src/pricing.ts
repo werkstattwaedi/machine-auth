@@ -367,8 +367,8 @@ export function personUsageType(
  * the owner's Freiwilligengruppe / Interne Nutzung; otherwise Begleitung /
  * nur Materialbezug when every person has it; otherwise Reguläre Nutzung.
  * It decides machine time and material — each person's usage fee follows
- * their own type. It does NOT mark a checkout as purchase-only; that is
- * `purchaseOnly` (see `isPurchaseOnly`).
+ * their own type. `materialbezug` also marks the checkout purchase-only
+ * (CHK-9, `isPurchaseOnly`): nobody works in the workshop.
  */
 export function deriveVisitUsageType(
   persons: readonly UsagePerson[],

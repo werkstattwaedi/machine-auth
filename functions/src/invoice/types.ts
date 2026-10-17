@@ -108,8 +108,6 @@ export interface InvoiceCheckout {
   date: Date;
   /** The visit's type: decides machine time and material. */
   usageType: UsageType;
-  /** No visit behind it (CHK-9); absent on older docs (`isPurchaseOnly`). */
-  purchaseOnly?: boolean;
   persons: CheckoutPersonEntity[];
   personEntryFees: PersonEntryFee[];
   items: CheckoutItemEntity[];

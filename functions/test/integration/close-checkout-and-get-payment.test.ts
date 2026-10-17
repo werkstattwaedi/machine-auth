@@ -2457,36 +2457,6 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       );
     });
 
-    it("keeps the stored purchaseOnly flag; a guest create writes false", async () => {
-      const uid = "ppu-purchase-only";
-      const db = getFirestore();
-      await seedUser(uid, "erwachsen");
-      await seedCheckout("co-ppu-po", { ownerUid: uid });
-      await db.collection("checkouts").doc("co-ppu-po").update({ purchaseOnly: true });
-
-      await call({
-        uid,
-        data: {
-          checkoutId: "co-ppu-po",
-          persons: [{ ...wire(ADULT), userId: uid, usageType: "materialbezug" }],
-          summary: EMPTY_SUMMARY,
-        },
-      });
-      expect((await getCheckout("co-ppu-po")).purchaseOnly).to.equal(true);
-
-      await call({
-        uid: null,
-        data: {
-          newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
-          persons: [{ ...wire(ADULT), usageType: "regular" }],
-          summary: EMPTY_SUMMARY,
-        },
-      });
-      const created = (await db.collection("checkouts").where("userId", "==", null).get()).docs;
-      expect(created).to.have.length(1);
-      expect((created[0].data() as CheckoutEntity).purchaseOnly).to.equal(false);
-    });
-
     it("keeps a savedPersonId only when the owner's saved person exists", async () => {
       const uid = "ppu-saved";
       await seedUser(uid, "erwachsen");

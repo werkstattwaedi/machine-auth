@@ -500,10 +500,6 @@ export const correctCheckoutsHandler = async (
           userId: (l.checkout.userId ?? null) as DocumentReference,
           status: "closed",
           usageType: r.usageType,
-          // A correction re-issues the same visit (or purchase).
-          ...(l.checkout.purchaseOnly != null
-            ? { purchaseOnly: l.checkout.purchaseOnly }
-            : {}),
           created: l.checkout.created,
           closedAt: l.checkout.closedAt ?? l.checkout.created,
           workshopsVisited: r.workshopsVisited,

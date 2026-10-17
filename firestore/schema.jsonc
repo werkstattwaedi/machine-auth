@@ -158,15 +158,12 @@
       // from persons[].usageType — the owner's volunteering/intern, else
       // materialbezug when every person has it, else regular. Decides machine
       // time and material; each person's own type decides their usage fee.
+      // materialbezug also marks a purchase-only checkout (CHK-9): nobody
+      // works in the workshop — the server's badge/membership/renewal
+      // checkouts (no persons) store it directly.
       // Checkouts closed before #605 carry only this one type
       // (readers: `person.usageType ?? checkout.usageType`).
       "usageType": "regular | ermaessigt | materialbezug | intern | hangenmoos | volunteering",
-      // Optional. True on a checkout with no visit behind it — a badge,
-      // membership or renewal the server bought on its own (CHK-9). Server
-      // purchases write true, client-created checkouts false; the client may
-      // clear it ("Besuch starten", KIO-18) but never set it. Absent on older
-      // docs: `isPurchaseOnly` then falls back to usageType == materialbezug.
-      "purchaseOnly": "boolean (optional)",
       "created": "timestamp",
       "workshopsVisited": ["string"], // e.g., ["holz", "metall"]
       "persons": [{ // Array of person entries

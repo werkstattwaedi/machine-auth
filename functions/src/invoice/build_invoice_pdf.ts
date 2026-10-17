@@ -598,7 +598,6 @@ function renderVorstandSignoff(doc: PDFKit.PDFDocument, y: number): number {
 function checkoutKind(checkout: InvoiceCheckout, data: InvoiceData): CheckoutKind {
   return classifyCheckoutKind({
     usageType: checkout.usageType,
-    purchaseOnly: checkout.purchaseOnly,
     items: checkout.items,
     membershipCatalogId: data.membershipCatalogId,
   });
@@ -675,7 +674,7 @@ function renderCheckoutSection(
   // was zero, leaving the recipient unclear. The membership-only carve-out
   // above is the one exception.
   if (checkout.personEntryFees.length > 0 && !isMembershipOnly) {
-    const purchaseOnly = isPurchaseOnly(checkout);
+    const purchase = isPurchaseOnly(checkout);
     y = ensureSpace(doc, y, 20 + checkout.persons.length * 14 + 30);
     doc.fontSize(10).font("Helvetica-Bold");
     doc.text("Nutzungsgebühren", MARGIN_LEFT, y);
@@ -690,10 +689,11 @@ function renderCheckoutSection(
       // here — spell out *why* so the zero doesn't read as an error.
       let label = `${pf.name} (${USER_TYPE_LABELS[pf.userType] ?? pf.userType})`;
       if (pf.usageType !== "regular") {
-        // A purchase-only checkout (badge, membership) had nobody to
-        // accompany; "Begleitung" would misdescribe the buyer.
+        // On a purchase-only checkout (CHK-9) nobody works in the workshop,
+        // so there is nobody to accompany; "Begleitung" would misdescribe
+        // the buyer.
         const usageLabel =
-          pf.usageType === "materialbezug" && purchaseOnly
+          pf.usageType === "materialbezug" && purchase
             ? "Nur Materialbezug"
             : USAGE_TYPE_LABELS[pf.usageType] ?? pf.usageType;
         label += ` · ${usageLabel}`;

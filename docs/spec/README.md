@@ -156,8 +156,8 @@ still passes a different wrong promise.
   next morning, Swiss time.
 - **Complete profile** — a profile with first and last name, accepted terms
   and, for a company, its address.
-- **Purchase-only checkout** — a checkout the server opened for a membership
-  or badge bought without a visit.
+- **Purchase-only checkout** — a checkout on which nobody works in the
+  workshop: everyone on it is on *Begleitung / nur Materialbezug*.
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
 - **User type** — whether a person is an adult, a child or a company.

@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-16
 
-**Applies to:** `shared/src/pricing.ts` (`deriveVisitUsageType`, `personUsageOptions`, `machineUsageBlocked`), `shared/src/checkout-summary.ts`, `shared/src/checkout-kind.ts` (`isPurchaseOnly`), `functions/src/invoice/close_checkout_and_get_payment.ts`, the bill/PDF/stats readers of `persons[]`, the check-in and check-out steps of the checkout wizard, the admin visit correction editor, and `users/{uid}/savedPersons`
+**Applies to:** `shared/src/pricing.ts` (`deriveVisitUsageType`, `personUsageOptions`, `machineUsageBlocked`), `shared/src/checkout-summary.ts`, `shared/src/checkout-kind.ts` (`isPurchaseOnly`), `functions/src/invoice/close_checkout_and_get_payment.ts`, `functions/src/session/handle_upload_usage.ts` (`ownerSwitchForMachineTime`), the bill/PDF/stats readers of `persons[]`, the check-in and check-out steps of the checkout wizard, the admin visit correction editor, and `users/{uid}/savedPersons`
 
 ## Context
 
@@ -52,13 +52,23 @@ Nutzungsart*, v10; screens in `.wq-capture/issue-605/`).
 - Machine usage while every person is on Begleitung is refused
   (`machineUsageBlocked`); Check Out shows the error and the person changes the
   type on the check-in.
+- **Machine time switches the owner to Reguläre Nutzung.** When a terminal
+  adds a machine session to an open checkout whose owner line is on
+  Begleitung, the server moves that line to Reguläre Nutzung and re-derives
+  the visit type (`ownerSwitchForMachineTime`, CHK-40): someone who ran a
+  machine worked in the workshop. Owner-only types and the other persons stay
+  as they are.
 
-**Purchase-only gets its own marker.** Once the visit type is derived, a
-visit where everyone accompanies is `materialbezug` too, so the two meanings
-split: `checkouts.purchaseOnly` is `true` on server-created purchase checkouts
-and `false` on every checkout a client creates; "Besuch starten" on a
-purchase-only checkout (KIO-18) clears it. `isPurchaseOnly` falls back to
-`usageType === "materialbezug"` for docs without the flag.
+**Purchase-only is derived from the persons.** A checkout on which nobody
+works in the workshop — every person on Begleitung / nur Materialbezug, i.e.
+the derived `usageType === "materialbezug"` — is purchase-only (CHK-9,
+`isPurchaseOnly`); anyone on another type makes it a visit. The server's
+badge, membership and renewal checkouts put their buyer on Begleitung and are
+purchase-only by that rule. "Besuch starten" (KIO-18) puts the owner on
+Reguläre Nutzung, which by itself makes the checkout a visit. The check-in
+keeps the derived type on the open checkout current, so it reads as a visit
+or a purchase before the close. On the bill, the buyer of a purchase-only
+checkout reads "Nur Materialbezug" rather than "Begleitung".
 
 **Saved persons.** An identified person (signed in or by badge tap) can tick
 "Für nächstes Mal speichern" on a typed-in companion. The companion's name and
@@ -85,6 +95,8 @@ usage type of their own, and take no visit-wide type from the client.
 - A saved companion returning the same day no longer pays twice.
 - Freiwilligengruppe / Interne Nutzung are refused by the server, not just
   hidden by the app.
+- Purchase-only needs no field of its own: one derived type answers both
+  "what does the visit cost" and "was it a visit".
 
 **Cons:**
 - Every reader of `persons[]` that prices the entry fee (bill trigger, PDF,
@@ -93,11 +105,19 @@ usage type of their own, and take no visit-wide type from the client.
   day — the waiver needs a stable key, and a name is not one.
 - A visit with an owner-only type cannot include anyone else; a volunteer
   bringing a child checks in twice.
+- A group that only accompanies and buys material reads as a purchase, not a
+  visit ("Danke für deinen Einkauf"), although they came in.
 
 **Tradeoffs:**
-- **Keep `materialbezug` as the purchase-only marker and derive Reguläre
-  Nutzung for an all-Begleitung visit** — rejected: it keeps one field with two
-  meanings and makes the derived type lie about the visit.
+- **A separate `checkouts.purchaseOnly` flag** (true on the server's
+  purchase checkouts, false on every client-created one, cleared by "Besuch
+  starten") — first shipped in this PR, then rejected: nobody working in the
+  workshop means no visit is the honest reading; the flag left a purchase
+  checkout whose owner switched to Reguläre Nutzung on the web stuck as a
+  purchase (only the kiosk's "Besuch starten" cleared it), and turned print
+  pickups into visits because the client created them.
+- **Derive Reguläre Nutzung for an all-Begleitung visit** — rejected: it makes
+  the derived type lie about what the visit costs.
 - **Owner-only types next to other persons, waived only on the owner's line** —
   rejected: machines and material are not per person, so the visit would be
   waived for paying companions too.

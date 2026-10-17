@@ -112,8 +112,6 @@ describe("purchaseMembership (Integration)", () => {
     expect(checkout.workshopsVisited).to.deep.equal([]);
     expect(checkout.persons).to.have.lengthOf(1);
     expect(checkout.persons[0].userType).to.equal("erwachsen");
-    // No visit behind it (CHK-9, issue #605).
-    expect(checkout.purchaseOnly).to.equal(true);
     expect(checkout.persons[0].usageType).to.equal("materialbezug");
 
     const itemsSnap = await checkoutSnap.ref.collection("items").get();

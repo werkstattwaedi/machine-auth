@@ -143,8 +143,6 @@ describe("addBadgeToCheckout (Integration)", () => {
       .get();
     expect(checkout.get("status")).to.equal("open");
     expect(checkout.get("usageType")).to.equal("materialbezug");
-    // No visit behind it (CHK-9, issue #605).
-    expect(checkout.get("purchaseOnly")).to.equal(true);
     expect(checkout.get("persons")[0].usageType).to.equal("materialbezug");
     expect(checkout.get("userId").id).to.equal("member-1");
 

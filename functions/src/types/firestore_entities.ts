@@ -269,12 +269,9 @@ export interface CheckoutEntity {
   status: CheckoutStatus;
   // The visit's type (issue #605): derived from the persons at close
   // (`deriveVisitUsageType`); decides machine time and material.
+  // `materialbezug` — nobody works in the workshop — marks a purchase-only
+  // checkout (CHK-9, `isPurchaseOnly`).
   usageType: UsageType;
-  // A checkout with no visit behind it — a badge, membership or renewal the
-  // server bought on its own (CHK-9). Server-created purchases write `true`,
-  // client-created checkouts `false`; older docs lack it (`isPurchaseOnly`
-  // falls back to `usageType == "materialbezug"`).
-  purchaseOnly?: boolean;
   created: Timestamp;
   workshopsVisited: string[];
   persons: CheckoutPersonEntity[];

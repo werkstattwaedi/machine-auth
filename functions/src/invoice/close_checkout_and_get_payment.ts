@@ -1065,8 +1065,6 @@ async function closeExistingCheckout(
       preAck: commit.preAck,
     });
 
-    // `purchaseOnly` stays as stored: the server set it on its purchase
-    // checkouts, the client clears it when a visit is started (KIO-18).
     tx.update(checkoutRef, {
       ...(commit.method ? { paymentMethod: commit.method } : {}),
       status: "closed",
@@ -1231,8 +1229,6 @@ async function createAnonymousCheckout(
       userId: userIdRef,
       status: "closed",
       usageType: visitUsageType,
-      // Created by the client's check-out: a visit (CHK-9, issue #605).
-      purchaseOnly: false,
       created: now,
       workshopsVisited: args.newCheckout.workshopsVisited,
       persons: dedupedPersons,

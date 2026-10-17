@@ -340,15 +340,10 @@ export interface CheckoutDoc extends AuditFields {
   /**
    * The visit's usage type. Since issue #605 derived from the persons'
    * types (`deriveVisitUsageType`) and re-derived by the server on close;
-   * it decides machine time and material.
+   * it decides machine time and material. `materialbezug` — nobody works
+   * in the workshop — marks a purchase-only checkout (CHK-9, `isPurchaseOnly`).
    */
   usageType: CheckoutUsageType | string
-  /**
-   * No visit behind this checkout — a badge/membership/renewal the server
-   * bought on its own (CHK-9, issue #605). Client-created checkouts write
-   * `false`; older docs lack it (read through `isPurchaseOnly`).
-   */
-  purchaseOnly?: boolean
   created: Timestamp
   workshopsVisited: string[]
   persons: CheckoutPersonDoc[]

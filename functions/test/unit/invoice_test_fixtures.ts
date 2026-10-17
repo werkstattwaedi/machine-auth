@@ -831,7 +831,6 @@ export function perPersonUsageInvoice(): InvoiceData {
       {
         date: zurich(2025, 8, 6, 14, 0),
         usageType: "regular",
-        purchaseOnly: false,
         persons: [
           { name: "Paula Begleitung", email: "paula@example.com", userType: "erwachsen", usageType: "materialbezug" },
           { name: "Kim Begleitung", email: "", userType: "kind", usageType: "regular" },

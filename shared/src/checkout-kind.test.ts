@@ -32,27 +32,13 @@ describe("classifyCheckoutKind", () => {
   }
 })
 
-// Issue #605: an all-Begleitung visit derives materialbezug too, so the
-// explicit flag decides; legacy docs without it keep the old reading.
+// Issue #605: purchase-only is derived — every person on Begleitung.
 describe("isPurchaseOnly (issue #605)", () => {
-  it("follows the flag when present", () => {
-    expect(isPurchaseOnly({ purchaseOnly: false, usageType: "materialbezug" })).toBe(false)
-    expect(isPurchaseOnly({ purchaseOnly: true, usageType: "regular" })).toBe(true)
-  })
-  it("reads materialbezug as purchase-only on legacy docs", () => {
+  it("is the materialbezug visit type", () => {
     expect(isPurchaseOnly({ usageType: "materialbezug" })).toBe(true)
     expect(isPurchaseOnly({ usageType: "regular" })).toBe(false)
+    expect(isPurchaseOnly({ usageType: "intern" })).toBe(false)
     expect(isPurchaseOnly({})).toBe(false)
-  })
-  it("a Begleitung visit with only material is a visit, not a purchase", () => {
-    expect(
-      classifyCheckoutKind({
-        usageType: "materialbezug",
-        purchaseOnly: false,
-        items: [material],
-        membershipCatalogId,
-      }),
-    ).toBe("visit")
   })
 })
 

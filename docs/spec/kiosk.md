@@ -33,8 +33,8 @@ TWINT, and when the kiosk resets. The check-in itself follows
 
   | Button | The purchase-only checkout |
   |---|---|
-  | "Besuch starten" | becomes a visit, with *Reguläre Nutzung* for the identified person |
-  | "Material erfassen" | stays a purchase-only checkout; the buyer's usage type is chosen on the check-in (CHK-4) |
+  | "Besuch starten" | becomes a visit: the identified person is put on *Reguläre Nutzung* |
+  | "Material erfassen" | continues to Kosten with the persons and usage types as entered on the check-in (CHK-4); it is a purchase-only checkout or a visit by those types (CHK-9) |
 
 ## Second badge
 

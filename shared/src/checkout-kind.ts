@@ -9,22 +9,17 @@ import { isMachineItem } from "./pricing"
 import type { CheckoutKind } from "./email-contract"
 
 /**
- * A checkout with no visit behind it: a badge, membership or renewal the
- * server bought on its own (CHK-9). Marked by `purchaseOnly` since issue
- * #605 — a visit whose persons all only accompany is `materialbezug` too.
- * Older docs lack the flag; for them the `materialbezug` usage type is the
- * marker.
+ * A checkout with no visit behind it: nobody works in the workshop, every
+ * person is on Begleitung / nur Materialbezug (CHK-9) — the stored visit type
+ * `deriveVisitUsageType` writes. The server's badge, membership and renewal
+ * checkouts have no persons and store `materialbezug` directly.
  */
-export function isPurchaseOnly(checkout: {
-  purchaseOnly?: boolean | null
-  usageType?: string | null
-}): boolean {
-  return checkout.purchaseOnly ?? checkout.usageType === "materialbezug"
+export function isPurchaseOnly(checkout: { usageType?: string | null }): boolean {
+  return checkout.usageType === "materialbezug"
 }
 
 export interface CheckoutKindInput {
   usageType: string
-  purchaseOnly?: boolean | null
   items: readonly (MembershipClassifiableItem & { type?: string | null })[]
   membershipCatalogId: string | null | undefined
 }
@@ -41,11 +36,10 @@ export interface CheckoutKindInput {
  */
 export function classifyCheckoutKind({
   usageType,
-  purchaseOnly,
   items,
   membershipCatalogId,
 }: CheckoutKindInput): CheckoutKind {
-  if (!isPurchaseOnly({ purchaseOnly, usageType })) return "visit"
+  if (!isPurchaseOnly({ usageType })) return "visit"
   if (items.some((item) => isMachineItem(item))) return "visit"
   if (
     items.length > 0 &&
