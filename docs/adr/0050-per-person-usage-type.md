@@ -64,8 +64,11 @@ works in the workshop — every person on Begleitung / nur Materialbezug, i.e.
 the derived `usageType === "materialbezug"` — is purchase-only (CHK-9,
 `isPurchaseOnly`); anyone on another type makes it a visit. The server's
 badge, membership and renewal checkouts put their buyer on Begleitung and are
-purchase-only by that rule. "Besuch starten" (KIO-18) puts the owner on
-Reguläre Nutzung, which by itself makes the checkout a visit. The check-in
+purchase-only by that rule. "Besuch starten" (KIO-18) writes the persons as
+entered and can't be pressed while every one of them is on Begleitung
+(KIO-21) — nobody works in the workshop, so there is no visit to start and
+"Material erfassen" is the default; the persons' types alone make the
+checkout a visit. The check-in
 keeps the derived type on the open checkout current, so it reads as a visit
 or a purchase before the close. On the bill, the buyer of a purchase-only
 checkout reads "Nur Materialbezug" rather than "Begleitung".
