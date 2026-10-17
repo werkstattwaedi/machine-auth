@@ -17,7 +17,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order. — ADR-0044
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
-- **BIL-5** TWINT can be confirmed only after the paylink was opened, and the TWINT option is hidden when no paylink could be built. — #537
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill left unconfirmed for at least an hour is committed overnight with the last method the person selected, or the QR-Rechnung if none was selected. — #251, #302
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill nobody confirms is committed overnight (BIL-7). — #251, #302
@@ -32,7 +31,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
 - **BIL-14** A document is addressed to the company for a company account, else the account holder, else the name given at check-in, and shows the postal address only when it is complete. — #269, #658
 - **BIL-35** A checkout produces one bill, to its account holder; the other persons on the visit are lines on that bill (CHK-11) and are never billed themselves. — ADR-0048, #747
-- **BIL-15** The person can download a document's PDF on their own device, not at the kiosk; a guest only in the session that closed the checkout, until the sign-out after paying ends it (CHK-17). — #418, #750
+- **BIL-15** The person can download a document's PDF on their own device, not at the kiosk; a guest only in the browser session that closed the checkout, and only from Bezahlen after the commit (CHK-25). — #418, #750
 
 ## Numbering & references
 
@@ -80,3 +79,4 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 <!-- `- BIL-n — <PR that retired it>` -->
 - BIL-18 — #743 (bill-number migration; a one-off transition, not the product)
+- BIL-5 — #750 (the TWINT confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)

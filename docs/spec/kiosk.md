@@ -38,7 +38,7 @@ TWINT, and when the kiosk resets. The check-in itself follows
 
 ## Second badge
 
-- **KIO-6** A registered badge tapped while someone is at the kiosk — #463, #468, #689, #732, #752, ADR-0030:
+- **KIO-6** A registered badge tapped while someone is at the kiosk — #463, #468, #689, #732, #750, #752, ADR-0030:
 
   | Situation at the kiosk | Reaction |
   |---|---|
@@ -47,8 +47,8 @@ TWINT, and when the kiosk resets. The check-in itself follows
   | "Besuch starten" is still filling after a badge tap (KIO-10), or a start is under way | that visit is started, then the kiosk switches to the new badge without asking; the new person's screen says whose visit was started (KIO-16) |
   | that start fails or takes longer than 8 s | the person is told that the start failed, then asked as in the next row |
   | an identified person is on the check-in, no visit started, no countdown running | asked "Benutzer wechseln?" and told that no visit was started and that what is on the screen is lost |
-  | an identified person is on the check-in with a started visit, or on Kosten or Check Out | asked "Benutzer wechseln?" and told that the open checkout is kept and continues on their next badge tap (KIO-1) |
-  | an identified person is on Bezahlen, or on a page outside the checkout steps | the kiosk switches to the new badge without asking |
+  | an identified person is on the check-in with a started visit, or on Kosten, Check Out or Bezahlen before the commit (CHK-22) | asked "Benutzer wechseln?" and told that the open checkout is kept and continues on their next badge tap (KIO-1) |
+  | an identified person's checkout is committed (CHK-22), or they are on a page outside the checkout steps | the kiosk switches to the new badge without asking |
   | someone is in the account | the tap does nothing |
 
 - **KIO-13** An unregistered badge never switches the kiosk to another person — ADR-0030:
@@ -61,7 +61,8 @@ TWINT, and when the kiosk resets. The check-in itself follows
 
 ## Paying
 
-- **KIO-19** At the kiosk the TWINT paylink opens in an overlay on the kiosk itself, and a payment completed there confirms TWINT without the button (BIL-5, BIL-6). — #416
+- **KIO-19** At the kiosk the TWINT paylink opens in an overlay on the kiosk itself; TWINT is committed when it opens (CHK-22), and what happens in the overlay changes nothing on the bill (BIL-6). — #416, #750
+- **KIO-20** After TWINT is committed at the kiosk, "Fertig" does not start its 8 s countdown (CHK-26) until the overlay reports the payment done; until then it waits to be pressed, and the idle reset (KIO-7) still applies. — #416, #750
 
 ## Idle & reset
 
@@ -74,12 +75,12 @@ TWINT, and when the kiosk resets. The check-in itself follows
   | the account | 2 min |
   | the start screen, or a guest who has entered nothing | none |
 
-- **KIO-8** A reset signs the person out, clears everything they entered and hides the kiosk until the next badge tap; a switch to another badge (KIO-6) keeps it open on the new person's check-in — ADR-0022, #415, #516, #689:
+- **KIO-8** A reset signs the person out, clears everything they entered and hides the kiosk until the next badge tap; a switch to another badge (KIO-6) keeps it open on the new person's check-in — ADR-0022, #415, #516, #689, #750:
 
   | Trigger | Asked first |
   |---|---|
   | "Besuch starten" | no |
-  | "Fertig" after paying, or 8 s without it (CHK-17) | no |
+  | "Fertig" after the commit, or 8 s without it unless held (CHK-26, KIO-20) | no |
   | the idle time ran out (KIO-7) | yes: whether the person is still there |
   | a switch to another badge | see KIO-6 |
   | "Abmelden" in the header menu | no |
@@ -98,6 +99,7 @@ TWINT, and when the kiosk resets. The check-in itself follows
 - [NEEDS CLARIFICATION] A badge tap that first runs the welcome onboarding (ACC-2) gets no countdown afterwards (KIO-10). Should the countdown start once the profile is complete? — #732
 - [NEEDS CLARIFICATION] A second badge over a check-in with a purchase-only checkout open tells the person that what is on the screen is lost (KIO-6), although that checkout is kept and comes back on their next tap (KIO-14). Should the dialog say so? — #732
 - [NEEDS CLARIFICATION] A start that stalled past 8 s (KIO-6) can still land while "Benutzer wechseln?" is open: after a countdown or a click the kiosk then resets under the dialog and hides (KIO-8); after a tap alone the visit exists although the dialog said none was started. Should a stalled start be abandoned, or should the dialog follow the late start? — #732
+- [NEEDS CLARIFICATION] After the commit (CHK-22) the kiosk still holds the visit's persons, so a second badge over a visit with more than one person, or with a person typed on this screen, asks "Benutzer wechseln?" and says the checkout is kept — although it is closed — instead of switching without asking (KIO-6); over a guest it asks to discard a checkout that is already closed. Same before #750 on Bezahlen. Should a committed checkout count as nothing to keep? — #735
 
 ## Retired
 
