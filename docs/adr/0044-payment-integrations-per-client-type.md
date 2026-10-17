@@ -1,6 +1,6 @@
 # ADR-0044: Payment Integrations per Client Type
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-10-16: the server also refuses a members-only method for a non-member — see decision 5)
 
 **Date:** 2026-10-11
 
@@ -24,6 +24,7 @@ Two problems followed:
 3. **Stored ids are migrated, not aliased.** `scripts/migrate-payment-method-ids.ts` rewrote `checkouts.paymentMethod` and `bills.paidVia` on staging and prod (2026-10-12). During the rollout the rules, `acknowledgeBill` and `adminMarkBillsPaid` accepted `"twint"` from tabs still running an old bundle; that alias, the read-side normalizers and the retired `paidVia: "cash"` were removed afterwards, so the code knows only the current ids. BigQuery `stats.paid_via` history is **not** rewritten: rows exported before the rename keep `twint` (same meaning as `raisenow`).
 4. **Enablement per client type, from the operations config.** `ClientType = "kiosk" | "web"`. `web.paymentMethodsKiosk` / `web.paymentMethodsWeb` are comma-separated ids in tab order. `generate-env` writes them to both `VITE_PAYMENT_METHODS_*` (checkout app) and `PAYMENT_METHODS_*` (functions), and rejects unknown ids. Empty means the defaults `rechnung,monthly,raisenow`.
 5. **The server gates only "enabled for some client type".** `acknowledgeBill` refuses a method that is switched off everywhere (`failed-precondition`), and the PayLink is not built at all then. Which client type shows which tab is a UI decision: a customer gains nothing by picking a method another client offers, so it is not a security boundary.
+   **Amendment (2026-10-16, #750):** a `requiresMembership` method (the Sammelrechnung) is refused unless the account holder has an active membership, a guest always. Unlike the client-type gating this protects something: a non-member's or a guest's Beleg is never collected by the monthly run, and a membership bought on it would never activate. `assertPaymentMethodAllowed` (`functions/src/invoice/commit_payment_method.ts`) is that gate, shared by `acknowledgeBill` and `closeCheckoutAndGetPayment`, which now takes the method when the person confirms it with the close. Confirming a method is the person's promise to pay, so the close commits it for the TWINT PayLink too — sent when the person clicks "Mit TWINT bezahlen" and the PayLink opens, not when the TWINT tab is selected; nothing confirms a PayLink payment afterwards, exactly as with the QR-Rechnung. A payment terminal (Wallee) is the exception: it confirms the payment, so its checkout stays open until the terminal reports an approved transaction and closes only then; a failed transaction leaves it open.
 6. **Integrations live in `functions/src/payments/`** (`raisenow.ts` today, `config.ts` for the switch). `PaymentData` carries one optional field per integration (`paylinkUrl: string | null`), and the UI drops a tab whose data is missing.
 
 ## Consequences

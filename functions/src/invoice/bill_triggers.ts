@@ -453,8 +453,9 @@ export async function trySendEmail(billId: string): Promise<boolean> {
 
   // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
   // its kind transition (acknowledgeBill / autoAcknowledgeBills flip it to
-  // "beleg") and never carries a payment-method ack stamp. The member still
-  // wants an emailed receipt for the visit — just not a payable invoice
+  // "beleg", or the close mints it as one, #750) and never carries a
+  // payment-method ack stamp. The member still wants an emailed receipt for
+  // the visit — just not a payable invoice
   // (issue #405). So Belege bypass the ack gate; real invoices stay gated
   // on the customer's payment-method ack (issue #251). retryBillProcessing
   // also checks this, but the helper is exported and can be called directly
@@ -826,11 +827,120 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
 // --- Triggers ---
 
 /**
- * Fast path: when a bill is created, generate the PDF so it (and the
- * SCOR reference) is ready by the time the user reaches Step 4. The
- * email no longer fires here — it's gated on the user acking the
- * payment method (see `onBillUpdate`).
+ * True for a bill the checkout close minted already committed (issue
+ * #750): a confirmed QR-Rechnung, or a Sammelrechnung Beleg. Such a bill
+ * never sees the null → set ack transition `onBillUpdate` watches, so
+ * `onBillCreate` runs the commit side effects instead. Every other bill
+ * born committed sends its own mail or none: a CHF 0 bill (no mail,
+ * BIL-8), the monthly run's Sammelrechnung (auto ack), corrected
+ * re-issues (`supersedesBillRef`) and renewal invoices (own source).
+ *
+ * Exported for unit testing.
  */
+export function isCommittedAtClose(bill: BillEntity): boolean {
+  if ((bill.source ?? "checkout") !== "checkout") return false;
+  if (bill.supersedesBillRef) return false;
+  if (bill.paidVia === "free") return false;
+  if ((bill.kind ?? "invoice") === "beleg") return !bill.aggregatedIntoBillRef;
+  return bill.paymentMethodConfirmationSource === "user";
+}
+
+/**
+ * What follows a bill's commit, wherever it happened: the PDF for the
+ * committed method, the mail, and — for a real invoice — membership
+ * activation (a Beleg's waits for the monthly run).
+ *
+ * Mail and membership are independent: a Resend outage or template
+ * misconfiguration must not block the membership. trySendEmail swallows
+ * its own failures, but a thrown exception is still possible — log it and
+ * continue. Membership activation propagates its error, which fails the
+ * invocation — the triggers are not declared `retry: true` and the hourly
+ * `retryBillProcessing` sweep covers only PDF and mail, so a failed
+ * activation is not retried today (follow-up issue). Every step is
+ * idempotent (pdf/email locks, the `paymentCheckouts` check), so a retry
+ * would be safe.
+ */
+async function runCommitSideEffects(
+  billId: string,
+  bill: BillEntity,
+  options: { regeneratePdf: boolean },
+): Promise<void> {
+  const isBeleg = (bill.kind ?? "invoice") === "beleg";
+  try {
+    await tryGeneratePdf(billId, { force: options.regeneratePdf });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(
+      `runCommitSideEffects: PDF generation threw for bill ${billId}, continuing with the existing PDF`,
+      { error: message },
+    );
+  }
+  try {
+    await trySendEmail(billId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(
+      `runCommitSideEffects: trySendEmail threw for bill ${billId}, continuing`,
+      { error: message },
+    );
+  }
+  if (!isBeleg) {
+    await processMembershipForAckedBill(billId);
+  }
+}
+
+/**
+ * Fast path: when a bill is created, generate the PDF so it (and the
+ * SCOR reference) is ready by the time the person needs it. A bill the
+ * close minted committed (`isCommittedAtClose`) also gets its mail and
+ * membership activation here; any other bill waits for its commit (see
+ * `handleBillUpdated`).
+ *
+ * Exported for integration testing — the trigger wrapper doesn't run in
+ * the emulator harness.
+ */
+export async function handleBillCreated(
+  billId: string,
+  bill: BillEntity,
+): Promise<void> {
+  if (isCommittedAtClose(bill)) {
+    // The checkout carries its method from the same transaction, so the
+    // first PDF is already the committed document — no regeneration.
+    await runCommitSideEffects(billId, bill, { regeneratePdf: false });
+    return;
+  }
+  await tryGeneratePdf(billId);
+}
+
+/**
+ * A bill committed after its creation — the ack stamp flips from null to
+ * set (`acknowledgeBill`, the daily 03:00 cron) or the bill turns into a
+ * Beleg (Sammelrechnung, issue #245/#405). The PDF was built before the
+ * method was known, so it is regenerated: a Beleg is titled "Beleg", and a
+ * method paid during the checkout or the Sammelrechnung must not carry the
+ * QR slip (#251).
+ *
+ * Exported for integration testing.
+ */
+export async function handleBillUpdated(
+  billId: string,
+  before: BillEntity,
+  after: BillEntity,
+): Promise<void> {
+  const beforeKind = before.kind ?? "invoice";
+  const afterKind = after.kind ?? "invoice";
+  const becameBeleg = beforeKind !== "beleg" && afterKind === "beleg";
+  // Defensive: Belege never carry an ack stamp, but if one ever lands
+  // (manual ops repair?) we still skip the side effects.
+  const becameAcked =
+    !before.paymentMethodConfirmationTime &&
+    !!after.paymentMethodConfirmationTime &&
+    afterKind !== "beleg";
+  if (!becameBeleg && !becameAcked) return;
+
+  await runCommitSideEffects(billId, after, { regeneratePdf: true });
+}
+
 export const onBillCreate = onDocumentCreated(
   {
     document: "bills/{billId}",
@@ -838,24 +948,19 @@ export const onBillCreate = onDocumentCreated(
     // PDF generation builds the full invoice Buffer in memory (pdfkit +
     // swissqrbill); 256 MiB is tight for non-trivial invoices.
     memory: "512MiB",
+    secrets: [resendApiKey],
   },
   async (event) => {
     const billId = event.params.billId;
-    if (!event.data?.data()) {
+    const bill = event.data?.data() as BillEntity | undefined;
+    if (!bill) {
       logger.error(`onBillCreate: no data for bill ${billId}`);
       return;
     }
-    await tryGeneratePdf(billId);
+    await handleBillCreated(billId, bill);
   },
 );
 
-/**
- * Ack trigger: when `paymentMethodConfirmationTime` flips from null to
- * set (either via the `acknowledgeBill` callable or the daily 03:00
- * cron), run the two gated side-effects — email + membership activation.
- * Both helpers are individually idempotent so this trigger firing twice
- * is safe.
- */
 export const onBillUpdate = onDocumentUpdated(
   {
     document: "bills/{billId}",
@@ -868,80 +973,7 @@ export const onBillUpdate = onDocumentUpdated(
     const before = event.data?.before.data() as BillEntity | undefined;
     const after = event.data?.after.data() as BillEntity | undefined;
     if (!before || !after) return;
-
-    // Sammelrechnung path (issue #245/#405): when acknowledgeBill /
-    // autoAcknowledgeBills flip a bill to kind "beleg", regenerate the
-    // PDF so the title reads "Beleg" / "Belegnummer:" instead of
-    // "Rechnung", then email the Beleg to the member as a receipt for the
-    // visit (issue #405 — a receipt, not a payable invoice). Membership
-    // activation still waits for the monthly aggregation cron. trySendEmail
-    // is idempotent (emailSentAt lock).
-    const beforeKind = before.kind ?? "invoice";
-    const afterKind = after.kind ?? "invoice";
-    if (beforeKind !== "beleg" && afterKind === "beleg") {
-      try {
-        await tryGeneratePdf(billId, { force: true });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error(
-          `onBillUpdate: Beleg PDF regen threw for bill ${billId}`,
-          { error: message },
-        );
-      }
-      try {
-        await trySendEmail(billId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error(
-          `onBillUpdate: Beleg trySendEmail threw for bill ${billId}`,
-          { error: message },
-        );
-      }
-      return;
-    }
-
-    if (before.paymentMethodConfirmationTime) return;
-    if (!after.paymentMethodConfirmationTime) return;
-    // Defensive: Belege never carry an ack stamp, but if one ever lands
-    // (manual ops repair?) we still skip the email side-effects.
-    if (afterKind === "beleg") return;
-
-    // Regenerate the PDF so it reflects the user's chosen method
-    // (#251). At create-time the PDF is built before the user picks a
-    // method, which means rechnung gets the QR slip by default. For
-    // methods paid during the checkout (TWINT via RaiseNow) and the
-    // Sammelrechnung we don't want the QR slip in the PDF (the user
-    // already paid or it's going on the next Sammelrechnung — they
-    // shouldn't see "pay this" again).
-    // tryGeneratePdf with `force: true` overwrites the existing PDF.
-    try {
-      await tryGeneratePdf(billId, { force: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error(
-        `onBillUpdate: tryGeneratePdf regen threw for bill ${billId}, continuing with existing PDF`,
-        { error: message },
-      );
-    }
-
-    // Email + membership activation must be independent: a Resend
-    // outage or template misconfiguration cannot block the user's
-    // membership from landing. trySendEmail already swallows its own
-    // failures (catch + operations_log + return false) but a thrown
-    // exception is still possible — log it and continue.
-    try {
-      await trySendEmail(billId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error(
-        `onBillUpdate: trySendEmail threw for bill ${billId}, continuing to membership activation`,
-        { error: message },
-      );
-    }
-    // Membership activation propagates errors so Firestore retries the
-    // trigger; processMembershipForAckedBill is idempotent
-    // (paymentCheckouts arrayUnion).
-    await processMembershipForAckedBill(billId);
+    await handleBillUpdated(billId, before, after);
   },
 );
 

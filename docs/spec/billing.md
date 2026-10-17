@@ -16,7 +16,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order. — ADR-0044
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
-- **BIL-4** Only a person with an active membership is offered the Sammelrechnung, including a member identified by a badge tap. — #414, #437
+- **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
 - **BIL-5** TWINT can be confirmed only after the paylink was opened, and the TWINT option is hidden when no paylink could be built. — #537
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill left unconfirmed for at least an hour is committed overnight with the last method the person selected, or the QR-Rechnung if none was selected. — #251, #302
@@ -32,7 +32,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
 - **BIL-14** A document is addressed to the company for a company account, else the account holder, else the name given at check-in, and shows the postal address only when it is complete. — #269, #658
 - **BIL-35** A checkout produces one bill, to its account holder; the other persons on the visit are lines on that bill (CHK-11) and are never billed themselves. — ADR-0048, #747
-- **BIL-15** The person can download a document's PDF on their own device, not at the kiosk. — #418
+- **BIL-15** The person can download a document's PDF on their own device, not at the kiosk; a guest only in the session that closed the checkout, until the sign-out after paying ends it (CHK-17). — #418, #750
 
 ## Numbering & references
 
@@ -72,12 +72,9 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Open questions
 
-- [NEEDS CLARIFICATION] The Sammelrechnung is *offered* only to members (BIL-4), but the server accepts it from anyone — including an anonymous checkout, whose Beleg then has no account holder and is never collected by the monthly run. Should it be *accepted* only for members?
-- [NEEDS CLARIFICATION] A checkout containing a membership is never offered the Sammelrechnung, because its buyer isn't a member yet (BIL-4, MEM-2) — but the server would accept it, and the membership would then never activate (the Beleg path skips membership processing). Refuse it server-side?
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for TWINT bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
-- [NEEDS CLARIFICATION] A guest on their own device is offered the PDF download (BIL-15), but the request fails on the server, which matches the caller against an account holder the bill doesn't have; the mail (BIL-25) is their only copy. Hide the download for guests, or allow it? — #750
 
 ## Retired
 

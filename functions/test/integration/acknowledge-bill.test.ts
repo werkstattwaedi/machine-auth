@@ -41,6 +41,8 @@ interface SeedBillOpts {
   paidVia?: BillEntity["paidVia"];
   paymentMethod?: PaymentMethod | null;
   createdMsAgo?: number;
+  /** Seeds the owner's user doc with an active membership (Sammelrechnung). */
+  member?: boolean;
 }
 
 async function seedBillAndCheckout(opts: SeedBillOpts): Promise<void> {
@@ -68,6 +70,18 @@ async function seedBillAndCheckout(opts: SeedBillOpts): Promise<void> {
   };
   if (opts.paymentMethod !== undefined) checkout.paymentMethod = opts.paymentMethod;
   await checkoutRef.set(checkout);
+
+  if (opts.member && userRef) {
+    await userRef.set({
+      created,
+      email: "alice@example.com",
+      firstName: "Alice",
+      lastName: "Test",
+      permissions: [],
+      roles: [],
+      activeMembership: db.collection("memberships").doc(`m-${opts.ownerUid}`),
+    });
+  }
 
   const bill: BillEntity = {
     userId: userRef as unknown as FirebaseFirestore.DocumentReference,
@@ -295,6 +309,7 @@ describe("acknowledgeBill callable (Integration)", () => {
         billId: "b1",
         ownerUid: "alice",
         checkoutId: "co1",
+        member: true,
       });
       await call("alice", { billId: "b1", paymentMethod: "monthly" });
       expect((await readBill("b1")).kind).to.equal("beleg");
@@ -323,6 +338,7 @@ describe("acknowledgeBill callable (Integration)", () => {
     await seedBillAndCheckout({
       billId: "b-monthly",
       ownerUid: "alice",
+      member: true,
       checkoutId: "co-monthly",
     });
 
@@ -341,10 +357,45 @@ describe("acknowledgeBill callable (Integration)", () => {
     expect(checkout.paymentMethod).to.equal("monthly");
   });
 
+  // The Sammelrechnung is offered to members only (BIL-4); a non-member's
+  // or a guest's Beleg would never be collected, so the server refuses it.
+  it("refuses 'monthly' for an account holder without an active membership", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly-nonmember",
+      ownerUid: "alice",
+      checkoutId: "co-monthly-nonmember",
+    });
+    try {
+      await call("alice", { billId: "b-monthly-nonmember", paymentMethod: "monthly" });
+      throw new Error("Expected failed-precondition");
+    } catch (err) {
+      expect((err as { code?: string }).code).to.equal("failed-precondition");
+    }
+    const bill = await readBill("b-monthly-nonmember");
+    expect(bill.kind ?? "invoice").to.equal("invoice");
+    expect((await readCheckout("co-monthly-nonmember")).paymentMethod ?? null).to.equal(null);
+  });
+
+  it("refuses 'monthly' for a guest bill without an account holder", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly-guest",
+      ownerUid: null,
+      checkoutId: "co-monthly-guest",
+    });
+    try {
+      await call("anon-1", { billId: "b-monthly-guest", paymentMethod: "monthly" }, { anonymous: true });
+      throw new Error("Expected failed-precondition");
+    } catch (err) {
+      expect((err as { code?: string }).code).to.equal("failed-precondition");
+    }
+    expect((await readBill("b-monthly-guest")).kind ?? "invoice").to.equal("invoice");
+  });
+
   it("is idempotent on a bill already flipped to 'beleg' (double-click)", async () => {
     await seedBillAndCheckout({
       billId: "b-beleg-idem",
       ownerUid: "alice",
+      member: true,
       checkoutId: "co-beleg-idem",
     });
 

@@ -616,6 +616,7 @@ function formatDuration(minutes: number): string {
 
 function DownloadButton({ billId }: { billId: string }) {
   const functions = useFunctions()
+  const { sessionKind } = useAuth()
   // ADR-0025: hook owns the toast + telemetry. Caller must not add a
   // sibling try/catch with `toast.error`.
   const download = useAsyncMutation<void>({
@@ -652,6 +653,11 @@ function DownloadButton({ billId }: { billId: string }) {
         // see comment above
       })
   }
+
+  // A kiosk session (always a tag session, elevated or not) never offers
+  // the PDF: the shared machine must not keep invoices on its disk (BIL-15,
+  // issue #418).
+  if (sessionKind === "tag") return null
 
   return (
     <Button

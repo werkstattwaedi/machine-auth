@@ -587,4 +587,29 @@ describe("Usage page", () => {
       screen.queryAllByRole("button", { name: "PDF herunterladen" }),
     ).toHaveLength(0)
   })
+
+  it("does not show the download button in a kiosk session, even when the PDF exists", async () => {
+    mockAuthReturn = { ...mockAuthReturn, sessionKind: "tag" }
+    fakeDb.setDoc(fakeDb.doc("bills", "bill6"), {
+      userId: fakeDb.doc("users", "user1"),
+      checkouts: [],
+      referenceNumber: 980,
+      amount: 20,
+      currency: "CHF",
+      storagePath: "invoices/bill6.pdf",
+      created: new Date("2025-09-01"),
+      paidAt: null,
+      paidVia: null,
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("RE-000098").length).toBeGreaterThan(0)
+    })
+
+    expect(
+      screen.queryAllByRole("button", { name: "PDF herunterladen" }),
+    ).toHaveLength(0)
+  })
 })
