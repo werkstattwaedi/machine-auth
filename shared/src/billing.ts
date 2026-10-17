@@ -63,7 +63,7 @@ export interface CorrectCheckoutPersonInput {
   userType: CorrectCheckoutUserType
   /** users/{id} of the roster member, when known (drives the daily entry-fee dedup). */
   userId: string | null
-  /** Admin-set "Nutzungsgebühr heute bereits bezahlt". The server may add, never remove. */
+  /** Admin-set "Nutzungsgebühr heute bereits erfasst". The server may add, never remove. */
   entryFeeWaivedToday: boolean
   /** The person's usage type (issue #605); the server derives the visit's from these. */
   usageType: UsageType

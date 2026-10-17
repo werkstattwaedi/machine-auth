@@ -33,6 +33,7 @@ import {
   type AddressErrors,
 } from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
+import type { PricedPerson } from "./same-day-waiver"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import {
   PositionTable,
@@ -197,8 +198,15 @@ export function roundUpOptionLabel(
   return `${target.toFixed(0)} Franken`
 }
 
+/** Same wording as the invoice PDF's waived usage-fee row. */
+const WAIVED_TODAY_LABEL = "heute bereits erfasst"
+
 interface StepCheckoutProps {
-  persons: CheckoutPerson[]
+  /**
+   * The roster, with `entryFeeWaivedToday` previewed for anyone already on
+   * a visit of the account opened the same business day (ADR-0050).
+   */
+  persons: PricedPerson[]
   /**
    * The visit's usage type, derived from the persons' own (issue #605). It
    * decides machine time and material; each person's usage fee follows
@@ -848,6 +856,11 @@ export function StepCheckout({
                     <span className="block text-xs text-muted-foreground">
                       {USER_TYPE_LABELS[p.userType]} ·{" "}
                       {USAGE_TYPE_LABELS[p.usageType]}
+                      {p.entryFeeWaivedToday && (
+                        <span data-testid="usage-fee-waived-today">
+                          {" "}· {WAIVED_TODAY_LABEL}
+                        </span>
+                      )}
                     </span>
                   </span>
                   <span className="font-medium tabular-nums text-right min-w-[70px]">

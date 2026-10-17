@@ -25,9 +25,11 @@ import {
   orderBy,
   serverTimestamp,
   arrayUnion,
+  Timestamp,
   type DocumentReference,
 } from "firebase/firestore"
 import { rpcCallable, prewarm } from "@modules/lib/rpc"
+import { businessDayStart } from "@oww/shared"
 import {
   userRef,
   savedPersonRef,
@@ -75,6 +77,7 @@ import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { PaymentMethod } from "@oww/shared"
 import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
+import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
 import { runStartOver } from "./start-over"
 
 /**
@@ -160,6 +163,11 @@ export interface WizardContextValue {
    * #605, `deriveVisitUsageType`). Decides machine time and material.
    */
   visitUsageType: UsageType
+  /**
+   * `persons` with the same-day usage-fee waiver previewed (ADR-0050) — what
+   * the Check Out summary prices. The server decides again on close.
+   */
+  feePersons: PricedPerson[]
   /**
    * The identified person's saved persons (issue #605), by first name;
    * empty for a guest check-in.
@@ -469,6 +477,35 @@ export function WizardProvider({
     [persons, ownerId],
   )
 
+  // Same-day usage-fee waiver preview (issue #268, ADR-0050): the owner's
+  // visits closed since the start of this visit's opening business day —
+  // an earlier visit opened that day can't have closed before it. Same
+  // index as the account usage page (userId, status, closedAt desc). The
+  // rules let both a signed-in member and a badge (`actsAs`) session list
+  // their own checkouts.
+  const openedAtMs = openCheckout?.created?.toMillis?.() ?? null
+  const [fallbackOpenedAt] = useState(() => Date.now())
+  const openedAt = useMemo(
+    () => new Date(openedAtMs ?? fallbackOpenedAt),
+    [openedAtMs, fallbackOpenedAt],
+  )
+  const openingDayStartMs = businessDayStart(openedAt).getTime()
+  const { data: closedToday } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "closed"),
+          where("closedAt", ">=", Timestamp.fromMillis(openingDayStartMs)),
+          orderBy("closedAt", "desc"),
+        ]
+      : []),
+  )
+  const feePersons = useMemo(
+    () => withSameDayWaiver(persons, ownerId, openedAt, closedToday, checkoutId),
+    [persons, ownerId, openedAt, closedToday, checkoutId],
+  )
+
   // Saved persons of the identified principal (account login or badge tap).
   const { data: savedPersonDocs } = useCollection(
     ownerId ? savedPersonsCollection(db, ownerId) : null,
@@ -627,9 +664,8 @@ export function WizardProvider({
 
   // Issue #605: keep ticked companions for next time. Called BEFORE the
   // roster is persisted, so the open checkout already records each line's
-  // saved person (CHK-11) — a kiosk visit closed elsewhere later still
-  // gets the same-day waiver (CHK-12). Dedupes against the saved persons
-  // and within the batch.
+  // saved person (CHK-11). Dedupes against the saved persons and within
+  // the batch.
   const saveCompanions = useCallback(async (): Promise<CheckoutPerson[]> => {
     if (!ownerId) return persons
     const links = await saveTickedCompanions(persons, savedPersons, async (data) => {
@@ -858,7 +894,8 @@ export function WizardProvider({
       machineCostNet,
       materialCostNet,
     } = computeCheckoutCosts({
-      persons,
+      // With the previewed same-day waiver, as StepCheckout shows it.
+      persons: feePersons,
       usageType: visitUsageType,
       items,
       config: pricingConfig,
@@ -1019,6 +1056,7 @@ export function WizardProvider({
     identifiedUserRef,
     items,
     persons,
+    feePersons,
     pricingConfig,
     membershipCatalogId,
     badgeCatalogId,
@@ -1058,6 +1096,7 @@ export function WizardProvider({
     persons,
     personsDispatch,
     visitUsageType,
+    feePersons,
     savedPersons,
     saveCompanions,
     deleteSavedPerson,

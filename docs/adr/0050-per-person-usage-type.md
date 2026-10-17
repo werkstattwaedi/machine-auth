@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-16
 
-**Applies to:** `shared/src/pricing.ts` (`deriveVisitUsageType`, `personUsageOptions`, `machineUsageBlocked`), `shared/src/checkout-summary.ts`, `shared/src/checkout-kind.ts` (`isPurchaseOnly`), `functions/src/invoice/close_checkout_and_get_payment.ts`, `functions/src/session/handle_upload_usage.ts` (`ownerSwitchForMachineTime`), the bill/PDF/stats readers of `persons[]`, the check-in and check-out steps of the checkout wizard, the admin visit correction editor, and `users/{uid}/savedPersons`
+**Applies to:** `shared/src/pricing.ts` (`deriveVisitUsageType`, `personUsageOptions`, `machineUsageBlocked`), `shared/src/checkout-summary.ts`, `shared/src/checkout-kind.ts` (`isPurchaseOnly`), `shared/src/same-day-fee.ts`, `functions/src/invoice/close_checkout_and_get_payment.ts`, `functions/src/session/handle_upload_usage.ts` (`ownerSwitchForMachineTime`), the bill/PDF/stats readers of `persons[]`, the check-in and check-out steps of the checkout wizard, the admin visit correction editor, and `users/{uid}/savedPersons`
 
 ## Context
 
@@ -79,9 +79,35 @@ user type — not the usage type — are saved on continuing, in
 `users/{uid}/savedPersons/{id}`, never twice with the same name and type.
 "Person hinzufügen" then offers them as a menu, each with a way to remove it.
 Saved persons belong to the account, whatever its membership, and are deleted
-with it. A checkout line added from one carries its `savedPersonId`, which
-gives the same-day waiver a stable key (`saved:<id>`). An admin correction
-carries it over to the replacement, but only ids the original checkout carried.
+with it. A checkout line added from one carries its `savedPersonId` as a plain
+link. An admin correction carries it over to the replacement, but only ids the
+original checkout carried.
+
+**Same-day usage-fee waiver by person, on the opening day** (replaces the
+#268 rule). A person pays the usage fee at most once per business day of an
+account:
+
+- The owner is matched by account id, everyone else by **name + person type**
+  — the name lowercased, trimmed, whitespace collapsed and its words sorted
+  ("Anna Alpha" = " alpha  anna"), no diacritic folding. Saved or not makes no
+  difference; `savedPersonId` takes no part.
+- A person is waived in full when they are on another closed, non-cancelled
+  visit of the same account (`userId`) **opened** (`created`, 03:00 boundary)
+  on the same business day as this one — whatever that line's usage type or
+  fee: a morning Hangenmoos visit covers the regular afternoon one. A
+  purchase-only checkout (badge, membership, renewal) is no visit and counts
+  for nothing. Guests (no account) are never waived.
+- The opening day is the open checkout's `created`, "now" for a checkout
+  created and closed at once, and the original's `created` for an admin
+  correction. A correction skips the visit it replaces and counts only visits
+  closed before it, so a later visit that was waived because of it cannot
+  waive it back.
+- The rule is one pure function in `@oww/shared` (`samedayPersonKey`,
+  `sameDayCoveredPersons`). The server applies it on close
+  (`markEntryFeeWaivedToday`, authoritative) and writes
+  `persons[].entryFeeWaivedToday`, which the bill, PDF and stats keep
+  reading; the Check Out page applies it to the owner's closed checkouts to
+  show the same total before paying.
 
 **Old documents are read, not migrated**: every fee reader uses
 `person.usageType ?? checkout.usageType`. Writes have no such fallback: the close
@@ -95,7 +121,11 @@ usage type of their own, and take no visit-wide type from the client.
 - The usage type is decided where the people are entered, and the Check Out
   step becomes a summary to confirm.
 - Companions are one click again, without putting them on a membership.
-- A saved companion returning the same day no longer pays twice.
+- A companion returning the same day no longer pays twice — saved or typed
+  in again — and someone who came on Hangenmoos in the morning doesn't pay for
+  the afternoon.
+- The Check Out page shows the waiver before paying, from the same function
+  the server bills with.
 - Freiwilligengruppe / Interne Nutzung are refused by the server, not just
   hidden by the app.
 - Purchase-only needs no field of its own: one derived type answers both
@@ -104,8 +134,13 @@ usage type of their own, and take no visit-wide type from the client.
 **Cons:**
 - Every reader of `persons[]` that prices the entry fee (bill trigger, PDF,
   stats, correction editor) has to know the per-person type and its fallback.
-- A companion typed in without ticking "speichern" still pays again the same
-  day — the waiver needs a stable key, and a name is not one.
+- Names are not unique: two different companions with the same name and
+  person type on visits of one account the same day are taken for one person
+  and only the first pays. A typo or a nickname ("Ann" vs "Anna") makes the
+  same person pay twice.
+- A checkout left open overnight belongs to the day it was opened, so its
+  persons are not waived by — and do not waive — visits of the day it is
+  closed on.
 - A visit with an owner-only type cannot include anyone else; a volunteer
   bringing a child checks in twice.
 - A group that only accompanies and buys material reads as a purchase, not a
@@ -127,5 +162,13 @@ usage type of their own, and take no visit-wide type from the client.
 - **Remember the last usage type per saved person** — rejected for now: the
   type is a per-visit declaration (KulturLegi, Begleitung) and should be chosen
   each time.
-- **Match a returning companion by name** for the same-day waiver — rejected:
-  names are not unique; the saved person's id is.
+- **Key the same-day waiver on the saved person's id** (`saved:<id>`, the first
+  version of this ADR) — replaced: a companion typed in again without ticking
+  "speichern" paid twice, and the visitor can't tell the difference. Name +
+  person type is good enough within one account and one day.
+- **Waive only when the earlier line was actually charged** (the #268 rule) —
+  rejected: someone on Hangenmoos or Begleitung in the morning would then pay
+  in the afternoon, and the rule the visitor sees ("you were here today")
+  would depend on what an earlier bill happened to charge.
+- **Compare close instants instead of opening days** — rejected: a visit left
+  open past 03:00 would land on the next day's waiver.

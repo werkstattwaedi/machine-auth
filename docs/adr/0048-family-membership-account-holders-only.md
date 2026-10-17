@@ -78,6 +78,8 @@ still understands them (`updateUserEmail` promotion, the identity audit), and
 - The same-day entry-fee waiver (#268) keys on `userRef`, so it now applies to
   the owner only; a companion returning the same day pays the entry fee again.
   Saved persons could restore it with a stable id per companion.
+  *Superseded by [ADR-0050](0050-per-person-usage-type.md): the waiver now
+  matches companions by name + person type.*
 - Companions are retyped on every visit until saved persons exist.
 - Until #605, an accompanying parent cannot remove themselves from the visit.
 

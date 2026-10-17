@@ -465,6 +465,32 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       expect(nc.persons[0].entryFeeWaivedToday).to.be.true;
     });
 
+    it("waives a person already on an earlier visit opened the same day, never the other way round (ADR-0050)", async () => {
+      await seedUser("u-alice");
+      // Two visits opened the same business day (2026-08-12, Zurich), both
+      // listing Alice by name; the morning one closed first.
+      const morning = Timestamp.fromDate(new Date("2026-08-12T07:00:00Z"));
+      const afternoon = Timestamp.fromDate(new Date("2026-08-12T13:00:00Z"));
+      await seedCheckout("co-am", { ownerUid: "u-alice", billId: "bill-am", created: morning });
+      await seedCheckout("co-pm", { ownerUid: "u-alice", billId: "bill-pm", created: afternoon });
+      await seedBill("bill-am", { ownerUid: "u-alice", checkoutIds: ["co-am"], referenceNumber: 42000010, amount: 25, acked: true });
+      await seedBill("bill-pm", { ownerUid: "u-alice", checkoutIds: ["co-pm"], referenceNumber: 42000020, amount: 25, acked: true });
+
+      // The afternoon visit's correction is covered by the morning one…
+      const pm = await correctCheckoutsHandler(
+        request({ reason: "Menge", corrections: [{ checkoutId: "co-pm", replacement: replacement() }] }),
+      );
+      expect((await checkout(pm.replacementCheckoutIds[0])).persons[0].entryFeeWaivedToday).to.be.true;
+      expect((await bill(pm.replacementBillIds[0])).amount).to.equal(10);
+
+      // …but the morning visit's is not covered by the (later) afternoon one.
+      const am = await correctCheckoutsHandler(
+        request({ reason: "Menge", corrections: [{ checkoutId: "co-am", replacement: replacement() }] }),
+      );
+      expect((await checkout(am.replacementCheckoutIds[0])).persons[0].entryFeeWaivedToday).to.not.equal(true);
+      expect((await bill(am.replacementBillIds[0])).amount).to.equal(25);
+    });
+
     it("prices per-person usage types and derives the visit's (issue #605)", async () => {
       await seedVisit();
       const result = await correctCheckoutsHandler(

@@ -96,7 +96,7 @@ function CheckoutOpen() {
 
   return (
     <StepCheckout
-      persons={ctx.persons}
+      persons={ctx.feePersons}
       initialOpenSections={initialOpenSections}
       visitUsageType={ctx.visitUsageType}
       ownerUserId={ctx.identifiedUserRef?.id ?? null}

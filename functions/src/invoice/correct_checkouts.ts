@@ -207,8 +207,8 @@ function toPersonEntity(db: Firestore, p: CorrectCheckoutPersonInput): CheckoutP
 
 /**
  * Keep a replacement line's `savedPersonId` only when the original checkout
- * carried that same id on one of its persons (issue #605): it keys the
- * same-day waiver (`saved:<id>`), so an admin can carry an existing link
+ * carried that same id on one of its persons (issue #605): it links the
+ * line to the owner's saved person, so an admin can carry an existing link
  * through a correction but not invent one. A line with a `userRef` never
  * carries one, and an id is kept on its first line only. Pure; exported for
  * tests.
@@ -310,8 +310,8 @@ export const correctCheckoutsHandler = async (
       ?.entryFees ?? null;
   const membershipCatalogId = await loadMembershipCatalogId(db);
 
-  // Price each replacement outside the transaction: the daily entry-fee
-  // dedup is a historical scan on the ORIGINAL visit date (cancelled
+  // Price each replacement outside the transaction: the same-day fee
+  // waiver is a historical scan on the ORIGINAL visit's opening day (cancelled
   // checkouts drop out of its `status == "closed"` query automatically;
   // an admin-set waiver survives because the scan only adds). The
   // originals are re-read and re-guarded inside the transaction.
@@ -324,20 +324,24 @@ export const correctCheckoutsHandler = async (
       throw new HttpsError("not-found", `Besuch ${entry.checkoutId} nicht gefunden.`);
     }
     const r = entry.replacement;
-    const visitDate = (original.closedAt ?? original.created).toDate();
     // Same owner-only rules as the close (CHK-32); the owner is the
     // original's account.
     const typed = resolvePersonUsageTypes(
       keepOriginalSavedPersonIds(r.persons.map((p) => toPersonEntity(db, p)), original),
       original.userId?.id ?? null,
     );
+    // The original's opening day decides (ADR-0050). Only visits closed
+    // before it count: a later visit waived because of the original must
+    // not waive its correction back.
     const persons = await markEntryFeeWaivedToday(
       db,
       typed.persons,
       original.userId ?? null,
-      visitDate,
-      entry.checkoutId,
-      configFees,
+      original.created.toDate(),
+      {
+        excludeCheckoutId: entry.checkoutId,
+        closedBefore: (original.closedAt ?? original.created).toDate(),
+      },
     );
     const { items, summary, membershipPresent } = priceCheckoutItems({
       persons,
