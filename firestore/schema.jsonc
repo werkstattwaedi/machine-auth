@@ -272,6 +272,7 @@
           "usageType": "string",
           "persons": "[CheckoutPerson]",     // the roster as it will be stored
           "summary": "CheckoutSummary",
+          "itemsKey": "string",              // digest of the priced items
           "preparedBy": "string",            // principal; modifiedBy on close
           "createdAt": "timestamp"
         }

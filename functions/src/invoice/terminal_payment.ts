@@ -43,6 +43,7 @@ import type {
 import {
   assertCheckoutPrincipal,
   effectiveUid,
+  itemsFingerprint,
   isAnonymousCaller,
   payerFromPersons,
   priceOpenCheckout,
@@ -132,7 +133,7 @@ export const prepareTerminalPaymentHandler = async (
       throw new HttpsError("failed-precondition", `Checkout ${checkoutId} is not open`);
     }
 
-    const summary = await priceOpenCheckout(tx, resolved, checkout, data.summary);
+    const { summary, itemsKey } = await priceOpenCheckout(tx, resolved, checkout, data.summary);
     // A free visit has nothing to charge: it closes with "Abschliessen".
     if (summary.totalPrice <= 0) {
       throw new HttpsError("failed-precondition", "Für diesen Besuch ist nichts zu bezahlen.");
@@ -150,6 +151,7 @@ export const prepareTerminalPaymentHandler = async (
       usageType: resolved.visitUsageType,
       persons: resolved.persons,
       summary,
+      itemsKey,
       preparedBy: callerUid,
       createdAt: Timestamp.now(),
     };
@@ -188,6 +190,8 @@ export type SettleOutcome =
   | "unmatched"
   /** The authorized amount differs from the attempt. */
   | "amount-mismatch"
+  /** The visit's items changed after the attempt was priced. */
+  | "items-changed"
   /** The checkout was already closed by something else: money twice. */
   | "double-charge";
 
@@ -304,6 +308,12 @@ export async function settleTransaction(
     ) {
       return "amount-mismatch";
     }
+    // The bill and summary come from the attempt, the Quittung's lines from
+    // the items: they must still be the ones that were priced.
+    const itemsSnap = await tx.get(checkoutRef.collection("items"));
+    if (attempt.itemsKey !== undefined && itemsFingerprint(itemsSnap.docs) !== attempt.itemsKey) {
+      return "items-changed";
+    }
 
     const billRef = db.collection("bills").doc();
     const paidAt = transaction.authorizedOn
@@ -349,6 +359,11 @@ export async function settleTransaction(
       break;
     case "amount-mismatch":
       logger.error("terminal_amount_mismatch", { event: "terminal_amount_mismatch", ...logFields });
+      break;
+    case "items-changed":
+      // Paid for a version of the visit that no longer exists; the
+      // checkout stays open for the current one. Refunded by hand.
+      logger.error("terminal_items_changed", { event: "terminal_items_changed", ...logFields });
       break;
     case "double-charge":
       // Money arrived for a checkout that is already closed — by another
