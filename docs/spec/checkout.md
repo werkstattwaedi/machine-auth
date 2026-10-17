@@ -111,6 +111,17 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | an own device, signed in | "Fertig", without countdown | the account's Nutzungsverlauf |
   | an own device, as a guest | no button; the person is told they can close the window | nothing — the guest is neither signed out nor sent anywhere |
 
+## Reminder
+
+- **CHK-41** When an account's checkout is still open on a later day, its account holder is e-mailed a reminder linking to it, on the days after its opening that the configuration sets (by default the 1st and the 7th), at most one a day; a guest's checkout gets none. — #531
+- **CHK-42** The reminder's link (CHK-41) leads on according to who opens it — #531:
+
+  | Opened by | Leads to |
+  |---|---|
+  | nobody signed in | the sign-in, and after it back to the link |
+  | the checkout's account holder | the app, as when opening it (CHK-2) |
+  | another signed-in account | a notice that the checkout belongs to another account and needs the account that got the reminder |
+
 ## Open questions
 
 - [NEEDS CLARIFICATION] A person who signs in on the check-in of their own device while a checkout of theirs is open stays on the check-in, its persons filled from that checkout, instead of landing on Kosten (CHK-2); the same sign-in at the kiosk lands on Kosten (KIO-1). Intended?
