@@ -102,6 +102,14 @@ export const acknowledgeBillHandler = async (
   if (!isPaymentMethod(paymentMethod)) {
     throw new HttpsError("invalid-argument", "invalid paymentMethod");
   }
+  // A provider-confirmed method is committed by its provider's
+  // confirmation (settleTerminalPayment), never by the person.
+  if (PAYMENT_METHOD_INFO[paymentMethod].confirmsPayment) {
+    throw new HttpsError(
+      "invalid-argument",
+      `paymentMethod ${paymentMethod} is confirmed by its provider`,
+    );
+  }
   const isAggregated = PAYMENT_METHOD_INFO[paymentMethod].isAggregated;
 
   const db = getFirestore();
@@ -299,8 +307,17 @@ export async function runAutoAcknowledgeBills(
 
       // Backfill the checkout's paymentMethod to "rechnung" only if the
       // user never picked anything, or picked a members-only method they
-      // aren't entitled to. Don't overwrite a real selection.
-      if (linkedCheckoutRef && (!checkoutPaymentMethod || refusedMembersOnly)) {
+      // aren't entitled to. Don't overwrite a real selection — except a
+      // provider-confirmed one (the Wallee terminal): its bill is only ever
+      // minted paid, so an unconfirmed bill carrying it was never paid and
+      // must go out as a QR-Rechnung, not as a Quittung.
+      const unconfirmedProviderMethod =
+        !!checkoutPaymentMethod &&
+        PAYMENT_METHOD_INFO[checkoutPaymentMethod].confirmsPayment;
+      if (
+        linkedCheckoutRef &&
+        (!checkoutPaymentMethod || refusedMembersOnly || unconfirmedProviderMethod)
+      ) {
         tx.update(linkedCheckoutRef, {
           paymentMethod: "rechnung",
           modifiedAt: FieldValue.serverTimestamp(),

@@ -14,6 +14,7 @@ import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { acknowledgeBillHandler } from "./acknowledge_bill";
+import { prepareTerminalPaymentHandler } from "./terminal_payment";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
 import { correctCheckoutsHandler } from "./correct_checkouts";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
@@ -29,6 +30,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   getPaymentQrData: getPaymentQrDataHandler,
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   acknowledgeBill: acknowledgeBillHandler,
+  // Prices a Wallee terminal attempt; reads params only, no Wallee secret.
+  prepareTerminalPayment: prepareTerminalPaymentHandler,
   adminMarkBillsPaid: adminMarkBillsPaidHandler,
   correctCheckouts: correctCheckoutsHandler,
 

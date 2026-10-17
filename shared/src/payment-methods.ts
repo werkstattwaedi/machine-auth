@@ -41,7 +41,7 @@ export interface PaymentMethodInfo {
    * The payment provider confirms the payment, so the bill is born paid
    * (`paidAt` set) instead of carrying the customer's promise to pay. Such a
    * method never closes a checkout from the client: the provider's
-   * confirmation does (ADR-0048, Wallee terminal).
+   * confirmation does (ADR-0051, Wallee terminal).
    */
   confirmsPayment: boolean
 }

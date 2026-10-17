@@ -21,6 +21,7 @@ export const FUNCTION_SECRET_NAMES = [
   "RESEND_API_KEY",
   "STATS_SUBJECT_SALT",
   "TERMINAL_KEY",
+  "WALLEE_AUTH_KEY",
 ];
 
 /**

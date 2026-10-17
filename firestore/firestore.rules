@@ -372,18 +372,31 @@ service cloud.firestore {
       // when the user doc has an active membership. Anonymous flow on a
       // null-userId checkout can't consult a membership doc, so monthly
       // is intentionally denied.
+      //
+      // Payment terminal (ADR-0051): `wallee_terminal` is never a client
+      // value — only Wallee's confirmation sets it, together with the paid
+      // bill. A client-set one on an unconfirmed bill would turn the
+      // overnight commit's QR-Rechnung into a Quittung for money nobody
+      // received. The attempt fields are server-only too.
+      function notProviderConfirmedMethod() {
+        return request.resource.data.get('paymentMethod', null) != 'wallee_terminal';
+      }
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent'
-         ])) ||
+           'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent',
+           'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+         ]) &&
+         notProviderConfirmedMethod()) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-           'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent'
-         ])) ||
+           'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent',
+           'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+         ]) &&
+         notProviderConfirmedMethod()) ||
         (resource.data.status == "closed" &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
            'paymentMethod', 'modifiedBy', 'modifiedAt'
