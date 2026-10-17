@@ -643,8 +643,9 @@ interface CloseCheckoutRequest {
    * Commit this method together with the close (issue #750): the person
    * confirmed it on the same screen, so the bill is minted committed. The
    * commit is the person's promise to pay, never proof of payment — for
-   * the TWINT paylink too, which the response carries (`paylinkUrl`) and
-   * which nothing can confirm afterwards. A payment terminal is different:
+   * the TWINT paylink too: the client closes when the person clicks to pay
+   * by TWINT (not when the tab is selected), the response carries the
+   * `paylinkUrl`, and nothing can confirm that payment afterwards. A payment terminal is different:
    * its checkout must close only on an approved transaction, so it must
    * not come through here.
    * Omitted: the bill stays unconfirmed, as before.
