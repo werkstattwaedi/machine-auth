@@ -70,6 +70,7 @@ const PAID_VIA_LABELS: Record<PaidVia, string> = {
   raisenow: " via TWINT",
   ebanking: " via E-Banking",
   free: "",
+  wallee_terminal: " via Karte/TWINT (Terminal)",
 };
 
 /** Entry fee labels per user type */

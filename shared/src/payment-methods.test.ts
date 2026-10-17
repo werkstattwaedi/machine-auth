@@ -24,8 +24,9 @@ describe("isPaymentMethod", () => {
 })
 
 describe("isPaidDuringCheckout", () => {
-  it("is true for raisenow only", () => {
+  it("is true for the methods paid on the spot", () => {
     expect(isPaidDuringCheckout("raisenow")).toBe(true)
+    expect(isPaidDuringCheckout("wallee_terminal")).toBe(true)
     expect(isPaidDuringCheckout("rechnung")).toBe(false)
     expect(isPaidDuringCheckout("monthly")).toBe(false)
     expect(isPaidDuringCheckout(null)).toBe(false)
