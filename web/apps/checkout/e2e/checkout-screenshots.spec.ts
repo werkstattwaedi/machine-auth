@@ -442,7 +442,7 @@ test.describe("Checkout step screenshots", () => {
 
   // CHK-8 (#605): machine time with every person on „Begleitung / nur
   // Materialbezug" can't be billed — Check Out says so in Maschinen and
-  // withholds the payment button, instead of a server refusal on submit.
+  // disables the payment cards, instead of a server refusal on submit.
   test("summary — machine usage with everyone on Begleitung is blocked", async ({ page }) => {
     await signIn(page)
     await page.goto("/")
@@ -468,7 +468,11 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     await expect(page.getByTestId("machine-usage-blocked")).toBeVisible()
-    await expect(page.getByTestId("payment-option-rechnung")).toBeDisabled()
+    // Begleitung prices the machine time at CHF 0, so the one card offered
+    // may be "Kostenlos" (#750) — whichever it is, it is disabled.
+    const cards = page.locator('[data-testid^="payment-option-"]')
+    await expect(cards.first()).toBeVisible()
+    for (const card of await cards.all()) await expect(card).toBeDisabled()
 
     await page.locator("h1").first().click()
     await page.evaluate(() => window.scrollTo(0, 0))
