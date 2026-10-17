@@ -1,6 +1,6 @@
 # Wallee A35 terminal payment at the kiosk — LTI (technical draft)
 
-Status: **draft**, 2026-10-15. Technical side only; the checkout UI design follows separately. Account-specific identifiers (space, terminal, merchant) live in the operations config, not here.
+Status: **draft**, updated 2026-10-17. Builds on the checkout UI refresh in #750, which ships first: payment methods are chosen on step 3, and the checkout only closes once the method is confirmed. The terminal adds one option, "Karte / TWINT", to that flow. Its states are in the #750 mockup (Kiosk view). Account-specific identifiers (space, terminal, merchant) live in the operations config, not here.
 
 ## Context
 
@@ -21,7 +21,7 @@ ADR-0044 prepared the method table and reserved the id `wallee_terminal`. RaiseN
 | Timeouts | `toCardIn` 30 s, `toPosTrxRq` 45 s. Card tap → final response took about 13 s on a decline. |
 | Test outcomes | The test acquirer **simulates the result from the amount** (Wallee, 2026-10-16): CHF 3.00–9.00 approve; 1.00, 2.00, 9.97 and ≥ 20.17 decline; 1.01/1.02/1.03/1.09 give card or system errors; 6.66/9.98/9.99 decline with auto-reversal; 1.28/11.30/20.16 need a PIN or cardholder ID; 20.15 asks to confirm the amount. Our early CHF 1.00 tests were declined on purpose. |
 | Approved payment | CHF 3.00: `trxResult 0`, `ep2AuthResponseCode 00`, `amountAuth 300`, `merchantReference` echoed. About 15 s from request to response, mostly waiting for the tap. Merchant and cardholder receipts arrive as `printerNotification` text (not needed: the Quittung is our own PDF). |
-| Backend state on approval | Webhooks PROCESSING → CONFIRMED → **AUTHORIZED** within about 1 s, out of order again. The transaction stays **`AUTHORIZED`** (`completedOn` empty). Completion presumably comes with the daily closing or after the connector's completion delay (5 days); being checked with a payment left un-reversed. |
+| Backend state on approval | Webhooks PROCESSING → CONFIRMED → **AUTHORIZED** within about 1 s, out of order again. The transaction stays **`AUTHORIZED`** until the **daily closing**: at 02:08 it went to `COMPLETED` and right away to `FULFILL`, both as webhooks (checked 2026-10-17). So `AUTHORIZED` is the "paid" signal; `COMPLETED`/`FULFILL` arrive the next night and change nothing. |
 | Reversal | `reversalRequest` with `origTrxSeqCnt` works, but the terminal first sends a `confirmationRequest` ("Storno CHF 3.00 OK?") that the till must answer with `confirmationResponse result=1`. Then a **VOIDED** webhook, and the backend transaction is `VOIDED`. |
 | `reprintReceiptRequest` | Works once a transaction exists (`VCS.ERR.0017` just meant there wasn't one). `lastTrx` does **not** include our `merchantReference`. |
 
@@ -30,23 +30,27 @@ ADR-0044 prepared the method table and reserved the id `wallee_terminal`. RaiseN
 ## Architecture
 
 ```
- checkout webview ──bridge IPC──▶ kiosk main (Node) ──TCP/LTI──▶ A35 ──▶ Wallee backend
-                                                                              │
-                         walleeWebhook (onRequest) ◀──signed webhook──────────┘
-                                │ re-read tx via SDK
-                                ▼
-                     settleTerminalPayment ──▶ bill paidAt + ack ──▶ onBillUpdate (Quittung)
-                                ▲
-       nightly reconcileTerminalPayments (safety net: SDK search) ──┘
+ checkout webview ─prepareTerminalPayment─▶ Functions (stores the attempt on the open checkout)
+        │ reference, amount
+        └──bridge IPC──▶ kiosk main (Node) ──TCP/LTI──▶ A35 ──▶ Wallee backend
+                                                                     │
+                     walleeWebhook (onRequest) ◀──signed webhook─────┘
+                            │ re-read tx via SDK
+                            ▼
+              settleTerminalPayment ──▶ close checkout + paid bill ──▶ onBillCreate (Quittung)
+                            ▲
+   nightly reconcileTerminalPayments (safety net: SDK search) ──┘
 ```
 
-1. The checkout closes the checkout and gets `PaymentData` (bill id, reference, amount), as it does today.
-2. The webview asks the kiosk bridge `terminal.pay({ amount, reference })`. Kiosk main opens the LTI socket and sends `financialTrxRequest` (`merchantReference = bill reference`). It streams status events back and resolves with the final result.
-3. **The UI trusts the terminal for display only.** On `approved` it shows success and resets, with no backend round trip and no "checking payment" phase. Someone who fakes an approval in their own UI only fools themselves: the bill stays unpaid and keeps its normal reminder path.
-4. **The webhook settles the bill.** Wallee posts the Transaction state change, about 0.3 s after the tap. `walleeWebhook` verifies the signature, **re-reads the transaction** (payloads carry no data and arrive out of order), maps `merchantReference` to the bill, checks amount, currency and terminal, and marks the bill paid in one Firestore transaction. The ack and `paidAt` are written together, so `onBillUpdate` renders the Quittung with "Bezahlt" once.
+The checkout **stays open** while the terminal waits. That is what lets "Abbrechen"/"Zurück" return to an editable step 3 (#750). So the terminal cannot carry a bill reference: no bill exists yet.
+
+1. **Choosing "Karte / TWINT"** calls `billingCall/prepareTerminalPayment`. It takes the same input as the close (`checkoutId` or `newCheckout`, `usageType`, `persons`, `summary`), validates and prices it exactly like the close, but creates no bill. It stores the attempt on the still-open checkout and returns `{ reference, amount }`. This is needed because the donation and round-up only exist in the client until the close.
+2. The webview asks the kiosk bridge `terminal.pay({ amount, reference })`. Kiosk main opens the LTI socket and sends `financialTrxRequest` with `merchantReference = reference`. It streams status events back and resolves with the final result.
+3. **The UI trusts the terminal for display only.** On `approved` it shows the confirmation (#750), with no backend round trip and no "checking payment" phase. Someone who fakes an approval only fools themselves: the checkout stays open and no bill is issued.
+4. **The webhook closes the checkout.** Wallee posts the Transaction state change, about 0.3 s after the tap. `walleeWebhook` verifies the signature, **re-reads the transaction** (payloads carry no data and arrive out of order), and maps `merchantReference` to the checkout and attempt. It checks amount, currency and terminal, then **closes the checkout and issues an already-paid bill in one Firestore transaction**. It reuses the close path from #750 (bill created committed), with `paidAt`/`paidVia` added. `onBillCreate` renders the Quittung with "Bezahlt" and mails it once.
 5. **Safety net:** a nightly job searches the last few days' successful terminal transactions and settles anything a lost webhook missed. Wallee retries deliveries, but deactivates a listener that keeps failing.
 
-The client never tells the backend that a bill is paid; only Wallee does.
+The client never tells the backend that something is paid; only Wallee does.
 
 ## Components
 
@@ -64,7 +68,7 @@ The client never tells the backend that a bill is paid; only Wallee does.
     - `started`, `cardEntered`, `cardRemoved`, `display { target, lines }`, `aborted`;
     - a final `result { outcome: "approved" | "declined" | "aborted" | "error", errorCode?, amountAuth?, brand?, entryMethod?, reference }`.
   - `abort()`: sends `abortCardEntryNotification silentAbort=true`. If the card has already been read, the abort does nothing; we keep waiting for the final response.
-  - Timeouts: no final response within ~120 s, or the socket drops, ends with `result { outcome: "unknown" }`. The kiosk doesn't guess. Before offering a retry, the UI checks whether the bill has become paid: the webhook will have settled it within a second if the payment went through. It reads the bill through the existing Firestore listener or a read; no new callable is needed.
+  - Timeouts: no final response within ~120 s, or the socket drops, ends with `result { outcome: "unknown" }`. The kiosk doesn't guess. Before offering a retry, the UI checks whether the checkout has been closed: the webhook will have closed it within a second if the payment went through. It reads the checkout through the existing listener; no new callable is needed. This is the "Zahlung wird geprüft" state in the #750 mockup.
   - **Partial approvals** (`amountAuth < amount`) are disabled by `partialApprovalCap=0`. If one still arrives, it is treated as `approved` and the backend amount check catches it.
   - **No `trxSyncNumber`**: recovery comes from the backend lookup, and sync numbers would force till-triggered final balances.
   - `health()`: `pingRequest` with a short timeout, for the status report.
@@ -83,16 +87,28 @@ The client never tells the backend that a bill is paid; only Wallee does.
 - **The official `wallee` SDK** (npm, pinned; 5.5.0 at the time of the spike). We follow Wallee's own client, JWT auth and webhook signature check (`WebhookEncryptionKeysService.isContentValid`, ECDSA via `starkbank-ecdsa`) instead of maintaining our own.
   - **Not tree-shaken**: functions are built with plain `tsc` and deployed with `node_modules`. The package is about 15 MB (CJS+ESM), and `require("wallee")` loads every service and model (about 106 ms locally). Import it **lazily inside the Wallee handlers** with a dynamic `import()`, so other functions' cold starts don't pay for it.
   - It sits behind a small `WalleeApi` interface (`getTransaction`, `searchTransactions`, `isSignatureValid`) that tests replace with a fake.
-- `settleTerminalPayment(transactionId, source: "webhook" | "reconcile")` is **the only way a bill gets paid by the terminal**:
+- **Reference format:** `{env}-{checkoutId}-{attempt}`, e.g. `P-a1B2c3…-2`. Only `A–Z a–z 0–9 -`, within EP2's "ans" set. `env` is `P` (prod) or `S` (staging); see Config.
+- `settleTerminalPayment(transactionId, source: "webhook" | "reconcile")` is **the only way a terminal payment closes a checkout**:
   1. Re-read the transaction through the SDK. **Never use the webhook payload's `state`**: deliveries arrive out of order and carry no entity data.
-  2. It must be in a **successful** state (**`AUTHORIZED`**, which is where an approved terminal payment lands, or a later `COMPLETED`/`FULFILL`), with `userInterfaceType == TERMINAL` and `terminal.id == WALLEE_TERMINAL_ID`. Anything else (FAILED, PROCESSING, …) → no-op.
-  3. Map `merchantReference` to the bill. A reference outside our bill number range belongs to the other environment and is ignored (see Config). A reference inside our range with no matching bill → log `terminal_unmatched_payment`.
-  4. Check `currency == CHF` and `|authorizationAmount − bill.amount| < 0.005`. A mismatch → error event; don't settle.
-  5. In one Firestore transaction:
-     - bill already paid by *this* transaction → no-op (idempotent);
-     - paid by a *different* Wallee transaction → **double charge**, log `terminal_double_charge` for manual refund;
-     - cancelled → log an alert, since money was taken on a cancelled bill;
-     - otherwise set `paidAt` (the Wallee `authorizedOn`/`completedOn` time), `paidVia: "wallee_terminal"`, `walleeTransactionId`, `paymentMethodConfirmationTime` and `paymentMethodConfirmationSource: "terminal"`, and set `paymentMethod` on the checkout. This mirrors `acknowledgeBillHandler`, with `paidAt` added.
+  2. It must be **`AUTHORIZED`** (where an approved terminal payment lands) or a later `COMPLETED`/`FULFILL`, with `userInterfaceType == TERMINAL` and `terminal.id == WALLEE_TERMINAL_ID`. Anything else (FAILED, PROCESSING, …) → no-op.
+  3. Parse the reference. Another environment's prefix → ignore (debug log). Our prefix but no such checkout or attempt → `terminal_unmatched_payment`.
+  4. In one Firestore transaction on the checkout:
+     - **open**, and the attempt's stored `amount` equals `authorizationAmount` (CHF, tolerance 0.005): run the shared close with that attempt's priced input. The bill is created with:
+       - `paymentMethod: wallee_terminal`
+       - `paidAt` = `authorizedOn`
+       - `paidVia: "wallee_terminal"`
+       - `walleeTransactionId`
+       - confirmation source `"terminal"`
+       - `walleeReceiptText` (see 5)
+     - **open, but the amount differs** from the attempt: don't close; log `terminal_amount_mismatch` for manual handling.
+     - **closed by this transaction** already → no-op (idempotent).
+     - **closed by anything else** (another attempt, or the person later chose QR-Rechnung) → **double charge**: log `terminal_double_charge` for a manual reversal/refund.
+- **`prepareTerminalPayment`** (`billingCall`): shares the validation and pricing of `closeCheckoutAndGetPayment` (extract one `priceCloseInput` helper, so both paths can't drift).
+  - Without a `checkoutId`, it creates the checkout **open**. Today's anonymous `newCheckout` branch creates it already closed.
+  - It writes `checkout.pendingTerminalPayment = { attempt, reference, amount, usageType, persons, summary, createdAt }` and increments the attempt counter.
+  - Each "Nochmals versuchen" or new choice calls it again and gets a fresh attempt. Older attempts stay valid for settlement as long as the checkout is open, because money may still arrive for them after a read card ignored the abort.
+  - Items can't change while the terminal is armed: the UI hides "Zurück" once the card is read, and "Abbrechen" aborts first.
+  - The rules need `pendingTerminalPayment` and the counter to be server-only fields on open checkouts.
 - **Params**:
   - `defineString`: `WALLEE_SPACE_ID`, `WALLEE_USER_ID`, `WALLEE_TERMINAL_ID` (the Wallee backend terminal id, *not* the EP2 terminal id the terminal reports over LTI).
   - `defineSecret`: `WALLEE_AUTH_KEY`.
@@ -108,12 +124,12 @@ The client never tells the backend that a bill is paid; only Wallee does.
   - It searches Wallee for terminal transactions from the last 3 days in a successful state and runs `settleTerminalPayment(…, "reconcile")` on each. Settled ones are no-ops.
   - It logs `terminal_unmatched_payment` for successful transactions whose reference matches no bill, e.g. a payment made from the terminal's standalone menu.
   - It also checks that the webhook listener is still `ACTIVE`, because Wallee deactivates failing listeners. If not, it logs `wallee_webhook_inactive` for an alert.
-- **Overnight commit (`autoAcknowledgeBills`, BIL-7):** a bill whose last selected method is the terminal but which Wallee never confirmed is committed as `rechnung`, so it gets a Rechnung with a QR slip instead of a Quittung for money never received.
-- **No callable.** The kiosk drives the terminal directly and never reports results to the backend. Consequence: the UI does not call `acknowledgeBill` for this method either; the webhook writes the ack.
+- **`prepareTerminalPayment`** (`billingCall`, see 3) is the only callable the terminal adds. The kiosk never reports results to the backend, and the UI doesn't call `acknowledgeBill` for this method; the webhook closes and commits.
+- **Abandoned attempts** (declined, cancelled, walked away) leave an open checkout with no bill, the same as an unfinished visit today. So there is no overnight-commit gap (BIL-7 never sees them).
 
 ### 5. Data model, rules, PDF
-- `BillEntity` (`functions/src/invoice/types.ts`), `firestore/schema.jsonc` and the web mirror get `walleeTransactionId: number | null`.
-- **Data protection**: store no masked PAN or card expiry, only the Wallee id. Add the field to the subject-data map (`functions/src/privacy/subject_data_map.ts`): it is a pseudonymous processor reference, kept with the bill.
+- `BillEntity` (`functions/src/invoice/types.ts`), `firestore/schema.jsonc` and the web mirror get `walleeTransactionId: number | null` and `walleeReceiptText: string | null`. `CheckoutEntity` gets `pendingTerminalPayment` and the attempt counter (server-only, cleared on close).
+- **Data protection**: no card data of our own. We keep the Wallee id, plus Wallee's receipt text with the masked card number (last four digits), because Wallee requires it on the customer's document. Both go into the subject-data map (`functions/src/privacy/subject_data_map.ts`) and are kept and deleted with the bill.
 - `firestore/firestore.rules`: add `wallee_terminal` to both closed-checkout `paymentMethod` lists (~343/349), plus a `cross-user-rules` test case.
 - `build_invoice_pdf.ts`: add a `PAID_VIA_LABELS` entry "Karte/TWINT (Terminal)". With `paidAt` set, the Quittung prints "Bezahlt … am …" through the existing branch.
 - **Customer receipt on the Quittung** (Wallee requires the transaction details on the customer's document): Wallee provides the exact text. `GET /payment/transactions/{id}/terminal-receipts?format=TXT&width=40` returns a "Kunde" receipt (base64 `text/plain`, 40 columns: card brand, masked card number, date/time, Trm-Id, AID, Trx. Seq-Cnt, Trx. Ref-Nr, Auth. Code, Acq-Id, total), plus a "Händler" one. `settleTerminalPayment` fetches the customer receipt in the same step and stores it on the bill (`walleeReceiptText`); the Quittung prints it verbatim in a monospace block. It comes from the backend, never from the kiosk. It contains the last four card digits, so it goes into the subject-data map with the bill.
@@ -126,7 +142,7 @@ The client never tells the backend that a bill is paid; only Wallee does.
   - `wallee.{spaceId,userId,terminalId}`;
   - `kiosk.terminal.{host,port,posId}`.
 - Set the secret `WALLEE_AUTH_KEY` per project.
-- **One space, two environments.** Staging and prod share one Wallee space (and the one A35). Both projects register a webhook URL, and **both receive every event**. They are kept apart by **disjoint bill number ranges**: bill numbers come from the per-project counter `config/billing.nextBillNumber` (`create_bill.ts`), so staging's counter is moved to a range prod will never reach (e.g. `9000000` as the base). A reference from the other environment matches no bill and is ignored, logged at debug level rather than as `terminal_unmatched_payment`, which is reserved for references inside our own range. No prefix and no code path differ between environments. Document the range in `docs/config.md`, and add a check that refuses a staging counter overlapping prod's.
+- **One space, two environments.** Staging and prod share one Wallee space (and the one A35). Both projects register a webhook URL, and **both receive every event**. They are kept apart by the **environment letter in the reference** (`P-`/`S-`, ops config `wallee.referencePrefix`). Each environment ignores the other's references at debug level, and only alerts `terminal_unmatched_payment` for its own. (The earlier idea of disjoint bill number ranges no longer applies: the reference names the checkout, not a bill.)
 - **Webhook registration** per environment: one URL plus one Transaction listener for the states `AUTHORIZED`, `COMPLETED`, `FULFILL` and `FAILED`. Transaction entity id `1472041829003`. Signing is on by default (`enablePayloadSignatureAndState`). Add a script `scripts/wallee-webhook-setup.ts` (idempotent, `--dry-run`), so a restore or a new environment doesn't depend on portal clicks, and add it to `docs/deployment-checklist.md`.
 - The application user needs to read transactions and webhook encryption keys, and to manage webhooks for the setup script. The shop-system application user used in the spike could do all three.
 - Deploy record: `deploy-kiosk.ts` already records itself. Secret and config changes get a `deploy-record.ts event`.
@@ -147,7 +163,7 @@ The client never tells the backend that a bill is paid; only Wallee does.
 |---|---|---|
 | BIL-1 + table | QR-Rechnung, Sammelrechnung or TWINT | Add the terminal method (kiosk only, paid during checkout, Quittung). |
 | BIL-6 | Confirming TWINT is the person's own statement | Unchanged for RaiseNow; new rule: a terminal payment counts as paid only once Wallee reports it, never on the kiosk's word. |
-| BIL-7 | Overnight commit with the last selected method | **Gap:** a declined or abandoned terminal attempt must not be committed as the terminal method (that would mail a Quittung for an unpaid bill). Commit it as QR-Rechnung instead. The `autoAcknowledgeBills` job needs the matching change. |
+| BIL-7 | Overnight commit with the last selected method | Unchanged. A terminal attempt creates no bill until Wallee confirms it, so nothing unconfirmed reaches the overnight job (#750 makes this true for all methods but TWINT/RaiseNow). |
 | BIL-11 | A Quittung never states that the payment was received | A Quittung for a terminal payment states it was paid, with method and date. |
 | BIL-29 | Only an admin books payments | Wallee's confirmation books a terminal payment automatically. |
 | BIL-31 | Booking sends no mail and changes no document | A terminal payment is booked together with the commit, so its single Quittung already says "paid". Later bookings keep sending nothing. |
@@ -159,43 +175,53 @@ The client never tells the backend that a bill is paid; only Wallee does.
   - XML parsing against the captured spike transcripts (decline, abort, ping, pinpad info) as fixtures;
   - the state machine against `lti-sim` (approve, decline, abort before the card, abort after the card, socket drop → `unknown`, and a second `pay` refused while busy).
 - **Functions unit**: `settleTerminalPayment` with a fake `WalleeApi`:
-  - success, decline/FAILED no-op, amount mismatch, wrong terminal, reference from the other environment's range;
-  - double charge, cancelled bill;
-  - idempotent re-entry, and out-of-order deliveries (PROCESSING after AUTHORIZED).
-  - `autoAcknowledgeBills`: an unconfirmed bill with the terminal selected is committed as `rechnung`.
+  - success closes the open checkout with a paid bill;
+  - decline/FAILED no-op, amount mismatch, wrong terminal, the other environment's prefix;
+  - double charge (checkout already closed by another attempt or method);
+  - idempotent re-entry, and out-of-order deliveries (PROCESSING after AUTHORIZED);
+  - a stale attempt paid after a newer one was prepared.
+  `prepareTerminalPayment`: priced like the close, no bill, attempt counter, anonymous new checkout created open.
 - **Functions integration** (emulator):
-  - `walleeWebhook` with captured spike payloads plus signature headers (fake verifier). An invalid signature → 401; a valid one → the bill is paid, and `onBillUpdate` produces the Quittung with "Bezahlt";
+  - `walleeWebhook` with captured spike payloads plus signature headers (fake verifier). An invalid signature → 401; a valid one → the checkout closes with a paid bill, and `onBillCreate` produces and mails the Quittung with "Bezahlt" and the receipt text;
   - concurrent duplicate deliveries racing each other without double effects;
   - the reconcile job settling a payment whose webhook was "lost".
 - **E2E**: bridge stub with a scripted terminal (the web already stubs `window.bridge` for NFC). The kiosk flow shows success and resets; the backend side is covered by the integration tests. The screenshots come with the UI work.
-- **Staging, on the real A35**, once the acquirer approves:
-  - card and TWINT for small amounts: the webhook settles, and the Quittung mail says "Bezahlt";
+- **Staging, on the real A35** (test amounts decide the outcome: CHF 3.00 approves, 1.00 declines):
+  - card and TWINT: the webhook closes the checkout, and the Quittung mail says "Bezahlt";
   - abort before the card;
   - kill the kiosk after the tap: the webhook still settles;
   - then add a runbook scenario to `/smoke-staging`.
 
 ## Rollout (one PR per step, several commits each)
-1. **Backend**: shared types, the provider module (SDK), `walleeWebhook`, the reconcile job, the webhook setup script, the rules, the PDF label, and tests. Ships dark: the webhook only acts on references in this environment's bill number range and on bills that exist, and the checkout offers `wallee_terminal` nowhere.
+0. **Prerequisite: #750** (UI refresh): the close with `paymentMethod`, bills born committed with the `onBillCreate` tail, and the one-page step 3/4 flow.
+1. **Backend**:
+   - shared types, the provider module (SDK), `prepareTerminalPayment`, `walleeWebhook`, the reconcile job;
+   - the webhook setup script, the rules, the PDF label + receipt block;
+   - tests.
+   Ships dark: the checkout offers `wallee_terminal` nowhere, and the webhook only acts on its own prefix.
 2. **Kiosk**: codec, session, bridge feature, simulator and tests. Bump the kiosk version. Ships dark without `kiosk.terminal.host`.
-3. **Checkout UI**: the terminal panel, the flow, error states and screenshots. To be designed next.
+3. **Checkout UI**: the "Karte / TWINT" card and its states (waiting, processing, declined, no card, connection lost, offline), as designed in the #750 mockup.
 4. **Enablement**: ops config and secret on staging, then the staging test, ADR-0048 and the docs, then prod.
 
 ## Risks
-- **The kiosk dies after the tap** (crash, reset, customer walks off): irrelevant to settlement. The webhook settles the bill, and the Quittung mail still goes out.
+- **The kiosk dies after the tap** (crash, reset, customer walks off): irrelevant to settlement. The webhook closes the checkout, and the Quittung mail still goes out.
 - **A webhook is lost, or the listener gets deactivated**: the nightly reconcile settles it, and alerts on `wallee_webhook_inactive`.
-- **The customer pays twice** (retries after an `unknown`): the double-charge alert fires and the refund is manual. Lower the risk in the UI: after `unknown`, check whether the bill is already paid before offering a retry.
+- **The customer pays twice** (retries after an `unknown`, or pays by terminal and then picks QR-Rechnung): the double-charge alert fires and the refund is manual. Lower the risk in the UI: after `unknown`, check whether the checkout is already closed before offering a retry.
 - **Webhook endpoint abuse**: it is public, but it does nothing without a valid ECDSA signature, and even with one it only re-reads Wallee. Keep the payload size limit small.
-- **Charged on a cancelled or corrected bill**: alert plus manual refund. Rare at the kiosk.
+- **The prepared attempt goes stale:** the pricing config changes between prepare and payment. Settlement uses the attempt's stored, priced input, which is what the customer saw and paid.
 - **Terminal or LAN down**: the bridge feature reports unavailable, and the UI falls back to the other methods.
 - **LTI is unauthenticated on the LAN**: anyone on the workshop LAN could start payments on the terminal. That doesn't take money from anyone, but it means the kiosk never trusts the terminal's word, which is already the design. Consider a VLAN or a firewall rule so only the kiosk can reach port 50000.
 - **Amount format**: bills are CHF floats. Send `Math.round(amount * 100)` Rappen and compare with a tolerance of 0.005.
 
 ## Open questions
-1. **When does a terminal transaction move from `AUTHORIZED` to `COMPLETED`?** Expected at the daily closing (about 02:08) or after the 5-day completion delay; being checked. Either way the bill is settled on `AUTHORIZED`, with `paidAt` = `authorizedOn`.
-2. **A `VOIDED` after settlement** (reversal at the terminal or in the portal) must not leave the bill "paid": un-settle it, or at least alert. To be decided with the implementation.
-3. **Double charges:** reverse automatically over LTI (the kiosk answers the confirmation prompt), or handle them by hand in the portal? An LTI reversal only reaches the terminal's recent transactions.
-4. *(resolved: staging uses a disjoint bill number range in the shared space)*
-5. Should a retry after a decline reuse the bill reference? (Proposal: yes. Settlement only looks at successful transactions, so earlier declines don't matter.)
-6. Do webhooks cost extra on our Wallee plan, now that the feature is switched on?
+1. **A `VOIDED` after settlement** (reversal at the terminal or in the portal) must not leave the bill "paid": un-settle it, or at least alert. To be decided with the implementation.
+2. **Double charges:** reverse automatically over LTI (the kiosk answers the confirmation prompt), or handle them by hand in the portal? An LTI reversal only reaches the terminal's recent transactions.
+3. Do webhooks cost extra on our Wallee plan, now that the feature is switched on?
+4. Wallee to confirm (asked 2026-10-16): printing the "Kunde" terminal receipt unchanged on our Quittung PDF is enough; `width=40`; whether a reversal needs its own receipt text.
 
-Resolved by the spike: TWINT goes through the terminal with the same reference flow, and webhooks are available, delivered fast and signed.
+Resolved by the spike:
+- TWINT goes through the terminal with the same reference flow.
+- Webhooks are available, delivered fast and signed.
+- Approved payments land in `AUTHORIZED` and complete at the daily closing.
+- Test outcomes are chosen by the amount.
+- The receipt text comes from the API.
