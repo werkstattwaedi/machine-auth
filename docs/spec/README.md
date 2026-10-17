@@ -149,7 +149,8 @@ still passes a different wrong promise.
 
 **Things**
 - **Badge** — a person's NFC tag.
-- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout.
+- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
+  it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was
   paid.
 - **Day** (today, an earlier day) — the workshop day: 03:00 to 03:00 the
