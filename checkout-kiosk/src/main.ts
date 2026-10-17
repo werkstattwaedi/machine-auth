@@ -10,6 +10,7 @@ import {
   session,
   Tray,
   webContents,
+  type IpcMainInvokeEvent,
   type WebContents,
 } from "electron"
 import path from "node:path"
@@ -17,11 +18,15 @@ import { spawn } from "node:child_process"
 import {
   decideKioskOverlay,
   isAllowedKioskOverlayNavigation,
+  PAYMENT_TERMINAL_FEATURE,
   RAISENOW_PAYLINK_ORIGIN,
+  type TerminalPaymentRequest,
+  type TerminalPaymentResult,
 } from "@oww/shared"
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
-import { performSessionReset } from "./reset-session"
+import { WalleeTerminal } from "./bridge/wallee-terminal"
+import { abortTerminalBestEffort, performSessionReset } from "./reset-session"
 import { claimSingleInstance } from "./single-instance"
 import {
   createDisplayWaker,
@@ -31,6 +36,20 @@ import {
 import type { NfcTagEvent, ResetSessionOptions } from "./types"
 
 const config = resolveConfig()
+
+// Wallee A35 over LTI (ADR-0048). Null when the build has no terminal host:
+// the bridge then doesn't advertise the feature and refuses payments.
+const terminal = config.terminal
+  ? new WalleeTerminal({
+      ...config.terminal,
+      log: (level, message) =>
+        level === "warn" ? console.warn(message) : console.log(message),
+    })
+  : null
+
+function abortTerminalPayment(): Promise<unknown> {
+  return terminal ? terminal.abort() : Promise.resolve(false)
+}
 
 // Off-origin URLs the checkout app links to via target="_blank" that should
 // open inside the in-kiosk overlay webview (with a close button) instead of
@@ -197,6 +216,9 @@ const wakeDisplay = createDisplayWaker({
 // by reloading the checkout webview.
 async function endSessionAndHide(): Promise<void> {
   hideWindow()
+  // A terminal still waiting for a card would otherwise wait for the next
+  // visitor's card.
+  await abortTerminalBestEffort(terminal ? abortTerminalPayment : undefined)
   await clearSession()
   mainWindow?.webContents.send("bridge:reload-checkout")
 }
@@ -401,7 +423,10 @@ function dispatchNfc(event: NfcTagEvent): void {
 // structured clone.
 const bridgeBootstrap = {
   mode: config.mode,
-  features: ["nfc"] as readonly string[],
+  features: [
+    "nfc",
+    ...(terminal ? [PAYMENT_TERMINAL_FEATURE] : []),
+  ] as readonly string[],
   // Release version (ADR-0045): set by scripts/deploy/deploy-kiosk.ts through
   // electron-builder's extraMetadata, so it is what the installer shipped.
   version: app.getVersion(),
@@ -446,8 +471,81 @@ ipcMain.handle("bridge:bearer", () => config.bearer || null)
 ipcMain.handle(
   "bridge:reset-session",
   (_event, opts?: ResetSessionOptions) =>
-    performSessionReset({ clearSession, hideWindow }, opts)
+    performSessionReset(
+      {
+        clearSession,
+        hideWindow,
+        abortTerminalPayment: terminal ? abortTerminalPayment : undefined,
+      },
+      opts
+    )
 )
+
+// Payment terminal (ADR-0048). Only the checkout web app may start or abort
+// a payment: the preload also runs in the chrome renderer (file://), and an
+// off-origin page must never drive the terminal even if it ever got a
+// preload. So the sender's top frame has to be on the checkout origin.
+const checkoutOrigin = new URL(config.url).origin
+
+function isCheckoutSender(event: IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame
+  if (!frame || frame !== event.sender.mainFrame) return false
+  try {
+    return new URL(frame.url).origin === checkoutOrigin
+  } catch {
+    return false
+  }
+}
+
+ipcMain.handle(
+  "bridge:terminal-pay",
+  async (event, req: unknown): Promise<TerminalPaymentResult> => {
+    const input = (req ?? {}) as Partial<TerminalPaymentRequest>
+    const reference = typeof input.reference === "string" ? input.reference : ""
+    if (!terminal) return { outcome: "unavailable", reference }
+    if (!isCheckoutSender(event)) {
+      console.warn("[terminal] refused a payment request from a non-checkout sender")
+      return { outcome: "unavailable", reference }
+    }
+    const wc = event.sender
+    // The page that started the payment went away (crash, reload into a
+    // new session): nobody is left to present a card for it.
+    const onDestroyed = () => void terminal.abort()
+    wc.once("destroyed", onDestroyed)
+    try {
+      return await terminal.pay(
+        { amountRappen: input.amountRappen as number, reference },
+        (terminalEvent) => {
+          if (!wc.isDestroyed()) wc.send("bridge:terminal-event", terminalEvent)
+        }
+      )
+    } finally {
+      if (!wc.isDestroyed()) wc.removeListener("destroyed", onDestroyed)
+    }
+  }
+)
+
+ipcMain.handle("bridge:terminal-abort", async (event): Promise<boolean> => {
+  if (!terminal || !isCheckoutSender(event)) return false
+  return terminal.abort()
+})
+
+// One ping + terminal id at startup, so the kiosk log shows whether the
+// configured terminal answers. Diagnostic only; payments don't depend on it.
+async function logTerminalStatus(): Promise<void> {
+  if (!terminal || !config.terminal) return
+  const where = `${config.terminal.host}:${config.terminal.port}`
+  const health = await terminal.health()
+  if (!health.reachable) {
+    console.warn(`[terminal] ${where} not reachable: ${health.error ?? "unknown"}`)
+    return
+  }
+  const info = await terminal.terminalInfo()
+  const details = info?.terminalId
+    ? ` (terminal id ${info.terminalId}, ${info.hardwareType ?? "?"} ${info.softwareVersion ?? ""})`
+    : ""
+  console.log(`[terminal] ${where} reachable${details}`)
+}
 
 // One kiosk per installation (issue #688). Two instances both hold the reader
 // and both forward every tap, racing each other on the SDM read counter. The
@@ -480,6 +578,7 @@ if (isPrimaryInstance) {
     createTray()
     createWindow()
     startNfc({ onTag: dispatchNfc })
+    void logTerminalStatus()
   })
 } else {
   console.log("Another kiosk instance is already running — exiting.")

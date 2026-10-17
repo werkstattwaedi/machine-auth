@@ -7,6 +7,8 @@ import type {
   BridgeMode,
   NfcTagEvent,
   ResetSessionOptions,
+  TerminalPaymentEvent,
+  TerminalPaymentRequest,
 } from "./types"
 
 // Per-context subscriber sets. The main process broadcasts NFC events to
@@ -73,6 +75,17 @@ ipcRenderer.on(
   }
 )
 
+// Payment terminal progress (ADR-0048). Main sends these only to the
+// webContents that started the payment, i.e. the checkout webview.
+const terminalEventCallbacks = new Set<(event: TerminalPaymentEvent) => void>()
+
+ipcRenderer.on(
+  "bridge:terminal-event",
+  (_event, payload: TerminalPaymentEvent) => {
+    terminalEventCallbacks.forEach((cb) => cb(payload))
+  }
+)
+
 // Bootstrap (mode + features) is delivered synchronously from main so
 // the preload doesn't depend on any sibling module (sandboxed preloads
 // can't reliably resolve relative requires).
@@ -134,6 +147,15 @@ const bridge: Bridge = {
       reloadCheckoutCallbacks.delete(cb)
     }
   },
+  terminalPay: (req: TerminalPaymentRequest) =>
+    ipcRenderer.invoke("bridge:terminal-pay", req),
+  onTerminalEvent: (cb) => {
+    terminalEventCallbacks.add(cb)
+    return () => {
+      terminalEventCallbacks.delete(cb)
+    }
+  },
+  terminalAbort: () => ipcRenderer.invoke("bridge:terminal-abort"),
 }
 
 contextBridge.exposeInMainWorld("bridge", bridge)
