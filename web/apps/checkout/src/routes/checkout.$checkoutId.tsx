@@ -17,7 +17,8 @@
  *   - Signed in as a different member (the owner's checkout is unreadable to
  *     them under security rules, surfaced as a permission error / no doc) →
  *     show a "wrong account" hint rather than a blank screen, offering a
- *     sign-out to switch accounts.
+ *     sign-out to switch accounts (signs out, then /login with a redirect
+ *     back here).
  *
  * NB: PR #551 (issue #535, `/denied`) introduces a parallel signed-in-user
  * mismatch pattern. This route was built independently off `main` (which does
@@ -26,7 +27,7 @@
  */
 
 import { useEffect, useRef } from "react"
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Loader2, AlertTriangle } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
 import { useDocument } from "@modules/lib/firestore"
@@ -48,6 +49,7 @@ function CheckoutByIdRoute() {
     loading: authLoading,
     userDocLoading,
     sessionKind,
+    signOut,
   } = useAuth()
 
   // The reminder always targets a real account holder, so only a signed-in
@@ -118,6 +120,22 @@ function CheckoutByIdRoute() {
         userDoc != null &&
         checkout.userId?.id !== userDoc.id))
 
+  // Sign out *before* heading to /login: the login page forwards any
+  // signed-in member straight to its redirect target, so a plain link would
+  // bounce right back to this hint (#771).
+  const switchAccount = async () => {
+    dispatchedRef.current = true
+    try {
+      await signOut()
+    } catch (err) {
+      console.error("signOut failed", err)
+    }
+    navigate({
+      to: "/login",
+      search: { redirect: `/checkout/${checkoutId}` },
+    })
+  }
+
   if (isWrongAccount) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -131,13 +149,8 @@ function CheckoutByIdRoute() {
             dich mit dem Konto an, das die Erinnerung erhalten hat, um den
             Besuch abzuschliessen.
           </p>
-          <Button asChild variant="outline">
-            <Link
-              to="/login"
-              search={{ redirect: `/checkout/${checkoutId}` }}
-            >
-              Konto wechseln
-            </Link>
+          <Button variant="outline" onClick={switchAccount}>
+            Konto wechseln
           </Button>
         </div>
       </div>
