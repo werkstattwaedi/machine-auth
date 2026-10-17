@@ -207,6 +207,12 @@ describe("useTerminalPayment", () => {
     expect(hook.result.current.terminal?.phase).toBe("checking")
     act(() => vi.advanceTimersByTime(TERMINAL_CHECK_MS + 1))
     expect(hook.result.current.terminal?.phase).toBe("unknown")
+
+    // A confirmation that arrives late still counts.
+    act(() =>
+      snapshotListener?.({ data: () => ({ status: "closed", paymentMethod: "wallee_terminal" }) }),
+    )
+    expect(hook.result.current.terminal?.phase).toBe("approved")
   })
 
   it("shows the server's refusal instead of arming the terminal", async () => {
