@@ -6,7 +6,7 @@
 
 **Amends:** [ADR-0020](0020-dual-payment-qrbill-twint-paylink.md) (the RaiseNow PayLink becomes one switchable integration among several)
 
-**Applies to:** `shared/src/payment-methods.ts`, `functions/src/payments/`, `functions/src/invoice/acknowledge_bill.ts`, `web/apps/checkout/src/components/checkout/payment-{methods,result}.tsx`, `web/apps/checkout/src/lib/payment-config.ts`, `scripts/generate-env.ts`
+**Applies to:** `shared/src/payment-methods.ts`, `functions/src/payments/`, `functions/src/invoice/acknowledge_bill.ts`, `functions/src/invoice/commit_payment_method.ts`, `functions/src/invoice/close_checkout_and_get_payment.ts`, `web/apps/checkout/src/components/checkout/payment-{methods,options,confirmation}.tsx`, `web/apps/checkout/src/lib/payment-config.ts`, `scripts/generate-env.ts`
 
 ## Context
 
@@ -20,7 +20,7 @@ Two problems followed:
 ## Decision
 
 1. **Method ids name the integration.** `"twint"` becomes `"raisenow"`, for both `checkouts.paymentMethod` and `bills.paidVia`. Future ids follow the same rule (`wallee_terminal`, `wallee_web`). The brand is only a label.
-2. **One method table** in `@oww/shared` (`PAYMENT_METHOD_INFO`) holds the per-method behaviour: `paidDuringCheckout` (the document is a receipt / "Quittung" without a QR slip), `isAggregated` (becomes a Beleg for the Sammelrechnung), `requiresMembership`, and the label. Callers read properties; they don't compare ids. The checkout UI has a matching table (`PAYMENT_METHOD_UI`) for icon, panel, commit label and commit gate.
+2. **One method table** in `@oww/shared` (`PAYMENT_METHOD_INFO`) holds the per-method behaviour: `paidDuringCheckout` (the document is a receipt / "Quittung" without a QR slip), `isAggregated` (becomes a Beleg for the Sammelrechnung), `requiresMembership`, and the label. Callers read properties; they don't compare ids. The checkout UI has a matching table for icon, panel, commit label and commit gate — since #761 `PAYMENT_CHOICE_UI` (`payment-methods.tsx`), keyed by method or the CHF 0 `free` card, with each method's card copy, commit button and confirmation, and no commit gate (the commit is the close).
 3. **Stored ids are migrated, not aliased.** `scripts/migrate-payment-method-ids.ts` rewrote `checkouts.paymentMethod` and `bills.paidVia` on staging and prod (2026-10-12). During the rollout the rules, `acknowledgeBill` and `adminMarkBillsPaid` accepted `"twint"` from tabs still running an old bundle; that alias, the read-side normalizers and the retired `paidVia: "cash"` were removed afterwards, so the code knows only the current ids. BigQuery `stats.paid_via` history is **not** rewritten: rows exported before the rename keep `twint` (same meaning as `raisenow`).
 4. **Enablement per client type, from the operations config.** `ClientType = "kiosk" | "web"`. `web.paymentMethodsKiosk` / `web.paymentMethodsWeb` are comma-separated ids in tab order. `generate-env` writes them to both `VITE_PAYMENT_METHODS_*` (checkout app) and `PAYMENT_METHODS_*` (functions), and rejects unknown ids. Empty means the defaults `rechnung,monthly,raisenow`.
 5. **The server gates only "enabled for some client type".** `acknowledgeBill` refuses a method that is switched off everywhere (`failed-precondition`), and the PayLink is not built at all then. Which client type shows which tab is a UI decision: a customer gains nothing by picking a method another client offers, so it is not a security boundary.

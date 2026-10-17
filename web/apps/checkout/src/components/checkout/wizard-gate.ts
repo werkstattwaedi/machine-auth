@@ -39,9 +39,7 @@ export function wizardStep(s: WizardGateState): number | null {
  */
 export function showNoCheckoutGate(s: WizardGateState): boolean {
   const gateable =
-    s.pathname.startsWith("/visit") ||
-    s.pathname.startsWith("/checkout") ||
-    s.pathname.startsWith("/payment")
+    s.pathname.startsWith("/visit") || s.pathname.startsWith("/checkout")
   const committing =
     s.pathname.startsWith("/checkout") && (s.committed || s.submitting)
   return gateable && !s.hasOpenCheckout && !s.pendingCheckout && !committing

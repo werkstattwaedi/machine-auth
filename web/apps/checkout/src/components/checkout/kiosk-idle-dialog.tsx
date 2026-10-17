@@ -97,7 +97,7 @@ export function KioskIdleDialog({
 }) {
   // The auto-accepting "Neuen Besuch starten" button owns the 30 s timing —
   // its filling background replaces a countdown text (same pattern as the
-  // completion dialog). "Besuch fortsetzen" aborts back to the visit.
+  // checkout's "Fertig"). "Besuch fortsetzen" aborts back to the visit.
   return (
     <AlertDialog open={open}>
       <AlertDialogContent>

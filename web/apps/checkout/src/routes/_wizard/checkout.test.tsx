@@ -267,6 +267,16 @@ describe("Check Out route — commit (#750)", () => {
     expect(c.startOver).not.toHaveBeenCalled()
   })
 
+  it("a bill the server closed at CHF 0 confirms as free, whatever was chosen (BIL-8)", async () => {
+    mockUseWizardContext.mockReturnValue(
+      ctx({ paymentChoice: "rechnung", paymentData: { ...PAYMENT, amount: "0.00", paymentMethod: null } }),
+    )
+    await act(async () => {
+      renderRoute()
+    })
+    expect(screen.getByTestId("confirmation").textContent).toBe("free")
+  })
+
   it("a guest's finish bar knows they are not signed in", () => {
     mockUseWizardContext.mockReturnValue(
       ctx({ isAccountLoggedIn: false, paymentChoice: "rechnung", paymentData: { ...PAYMENT, paymentMethod: "rechnung" } }),

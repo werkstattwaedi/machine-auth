@@ -172,7 +172,7 @@ function WizardLayout() {
 /**
  * Renders the wizard chrome (header, "Self-Checkout" title, progress
  * indicator, stale banner, current step via Outlet) OR — when the
- * visitor lands directly on /visit /checkout /payment without an open
+ * visitor lands directly on /visit or /checkout without an open
  * checkout — strips the chrome and shows the NoCheckoutGate dialog
  * against a blank page. The progress indicator is intentionally hidden
  * for that case: there's no step to be "on" yet.

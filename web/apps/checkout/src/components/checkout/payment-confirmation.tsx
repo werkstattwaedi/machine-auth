@@ -18,6 +18,7 @@ import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { rpcCallable } from "@modules/lib/rpc"
 import { cn } from "@modules/lib/utils"
 import {
+  KASSE_EMAIL,
   PAYMENT_CHOICE_UI,
   SWISS_CROSS_SVG,
   type ChoiceCopyContext,
@@ -57,6 +58,9 @@ export function PaymentConfirmation({
 }: PaymentConfirmationProps) {
   const ui = PAYMENT_CHOICE_UI[choice]
   const box = ui.doneBox?.(copy) ?? null
+  // A badge or signed-in account without an e-mail address gets no mail
+  // (the server finds no recipient, #651): don't claim one was sent.
+  const noRecipient = choice !== "free" && !copy.email.trim()
   const showQr = choice === "rechnung" && !isPhone
 
   return (
@@ -71,13 +75,27 @@ export function PaymentConfirmation({
       <div className="flex items-center gap-3" role="status">
         <AnimatedCheck />
         <span className="font-heading font-bold text-xl text-foreground">
-          {ui.doneStatus}
+          {noRecipient ? PAYMENT_CHOICE_UI.free.doneStatus : ui.doneStatus}
         </span>
       </div>
 
       {box && (
         <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 leading-relaxed">
           {box}
+        </div>
+      )}
+
+      {noRecipient && (
+        <div
+          data-testid="no-recipient"
+          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 leading-relaxed"
+        >
+          Wir haben keine E-Mail-Adresse von dir und konnten dir nichts schicken.
+          Melde dich bei{" "}
+          <a href={`mailto:${KASSE_EMAIL}`} className="font-semibold underline">
+            {KASSE_EMAIL}
+          </a>
+          .
         </div>
       )}
 

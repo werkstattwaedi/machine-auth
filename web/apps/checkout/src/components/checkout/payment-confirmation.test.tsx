@@ -54,6 +54,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 function renderConfirmation(
   choice: PaymentChoice,
   opts: {
+    email?: string
     ownDevice?: boolean
     isPhone?: boolean
     qrOpen?: boolean
@@ -64,7 +65,7 @@ function renderConfirmation(
     <PaymentConfirmation
       choice={choice}
       paymentData={PAYMENT}
-      copy={{ email: "max@test.com", monthlyDate: "1. November" }}
+      copy={{ email: opts.email ?? "max@test.com", monthlyDate: "1. November" }}
       ownDevice={opts.ownDevice ?? true}
       isPhone={opts.isPhone ?? false}
       qrOpen={opts.qrOpen ?? false}
@@ -92,6 +93,15 @@ describe("PaymentConfirmation", () => {
       expect(screen.getByText("max@test.com")).toBeTruthy()
     },
   )
+
+  it("without an e-mail address it claims no mail and says whom to contact", () => {
+    renderConfirmation("rechnung", { email: "" })
+    expect(screen.getByTestId("no-recipient")).toBeTruthy()
+    expect(screen.getByRole("link", { name: KASSE_EMAIL })).toBeTruthy()
+    cleanup()
+    renderConfirmation("rechnung")
+    expect(screen.queryByTestId("no-recipient")).toBeNull()
+  })
 
   it("a free visit reports a status and names no mail (BIL-8)", () => {
     renderConfirmation("free")

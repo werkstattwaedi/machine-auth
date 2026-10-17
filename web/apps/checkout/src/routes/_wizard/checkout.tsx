@@ -139,10 +139,12 @@ function CheckoutDone({
   // scanning it, and folding it again must not restart the clock.
   const [qrHeld, setQrHeld] = useState(false)
   // The server names the method the bill is committed with — the first
-  // one, should a retry have asked for another (#750).
-  const committed: PaymentChoice =
-    choice === "free" ? "free" : (paymentData.paymentMethod ?? choice)
+  // one, should a retry have asked for another (#750). Its amount decides
+  // a free visit: should its recompute land on CHF 0 where the page showed
+  // more, the bill closed free, without a mail (BIL-8).
   const amount = Number(paymentData.amount)
+  const committed: PaymentChoice =
+    choice === "free" || amount === 0 ? "free" : (paymentData.paymentMethod ?? choice)
 
   // At the kiosk the TWINT payment runs in the overlay (KIO-19), after the
   // commit. Counting down to a reset meanwhile would wipe the session under

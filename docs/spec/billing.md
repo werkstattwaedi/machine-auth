@@ -18,7 +18,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
 - **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
-- **BIL-7** A bill left unconfirmed for at least an hour is committed overnight with the last method the person selected, or the QR-Rechnung if none was selected. — #251, #302
+- **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung, otherwise as a QR-Rechnung. — #251, #302, #761
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill nobody confirms is committed overnight (BIL-7). — #251, #302
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
 
@@ -53,6 +53,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 ## Mail
 
 - **BIL-25** Bill mail goes only to the account holder, or for a guest without an account to the first e-mail given at check-in, and to nobody else on the visit. — ADR-0048, #471, #651
+- **BIL-37** A bill whose recipient (BIL-25) has no e-mail address is not mailed; the person is told so on Bezahlen (CHK-23). — #651, #761
 - **BIL-26** A Rechnung or Quittung is mailed once the payment method is committed, a Beleg when the checkout becomes a Beleg, and a Sammelrechnung by the monthly run. — #251, #405
 - **BIL-27** A Beleg and a Sammelrechnung are announced by different mails. — ADR-0046, #502
 - **BIL-28** A correction sends exactly one mail for the new top-level document, with corrected Belege attached; a cancellation without replacement sends a notice only if the original was mailed. — ADR-0042
