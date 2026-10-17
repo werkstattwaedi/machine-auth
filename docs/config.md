@@ -195,6 +195,7 @@ firebase functions:secrets:set TERMINAL_KEY
 | `DIVERSIFICATION_MASTER_KEY` | 32-character hex key for tag personalization | `openssl rand -hex 16` |
 | `GATEWAY_API_KEY` | API key for MaCo gateway authentication | `openssl rand -hex 32` |
 | `TERMINAL_KEY` | Key for SDM encryption/decryption on terminals | `openssl rand -hex 16` |
+| `WALLEE_AUTH_KEY` | Wallee application user's authentication key (ADR-0051), shared by staging and prod | Wallee portal → Account → Application users; a placeholder until the terminal is enabled |
 
 ### Required Parameters
 
@@ -204,6 +205,9 @@ Parameters are set in your operations repo `config.jsonc` under `functions.*` an
 |-----------|-------------|
 | `DIVERSIFICATION_SYSTEM_NAME` | System name for key diversification (e.g. `OwwMachineAuth`) |
 | `KIOSK_ELEVATION_TTL_MS` | Kiosk step-up elevation lifetime in ms (ADR-0041); `functions.kioskElevationTtlMs` in the operations config, empty/absent = 15 min |
+| `WALLEE_SPACE_ID` / `WALLEE_USER_ID` | Wallee space and application user of the payment terminal (ADR-0051); `wallee.spaceId` / `wallee.userId`. Staging and prod share them |
+| `WALLEE_TERMINAL_ID` | The terminal's Wallee **backend** id (`Transaction.terminal.id`), not the EP2 terminal id it reports over LTI; `wallee.terminalId` |
+| `WALLEE_REFERENCE_PREFIX` | `P` (prod) or `S` (staging): this environment's letter in terminal references, so each ignores the other's payments in the shared space; `wallee.referencePrefix`. Any empty `WALLEE_*` value switches the terminal off |
 
 ### Verify Configuration
 
