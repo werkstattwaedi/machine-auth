@@ -65,7 +65,7 @@ export interface Bridge {
   // checkout webview so the previous user's in-memory session is dropped too.
   // Returns an unsubscribe fn.
   onReloadCheckout: (cb: () => void) => () => void
-  // Wallee payment terminal (ADR-0048). Usable when `features` includes
+  // Wallee payment terminal (ADR-0051). Usable when `features` includes
   // "payment-terminal"; otherwise, and for any caller other than the
   // checkout webview, `terminalPay` resolves `unavailable`. Resolves with the
   // final result (never rejects); a second call while one runs resolves

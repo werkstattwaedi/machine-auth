@@ -76,7 +76,7 @@ if (!bearer && !isDev) {
   )
 }
 
-// ── Payment terminal (Wallee A35 over LTI, ADR-0048) ────────────────
+// ── Payment terminal (Wallee A35 over LTI, ADR-0051) ────────────────
 // From the ops config's `kiosk.terminal.{host,port,posId}`; env vars
 // TERMINAL_HOST / TERMINAL_PORT / TERMINAL_POS_ID win. An empty host keeps
 // the feature off, so builds without the key ship it dark. In the dev

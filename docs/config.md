@@ -259,7 +259,7 @@ The Electron kiosk (`checkout-kiosk/`) bakes its settings into the binary at bui
 | `BRIDGE_KIOSK_URL` | `web.checkoutDomain` | Checkout URL the kiosk loads | `https://localhost:5173/?kiosk` |
 | `BRIDGE_BEARER_KEY` | Secret Manager `KIOSK_BEARER_KEY` (per environment) | Kiosk bearer for the kiosk-only callables | empty (dev) |
 | `BRIDGE_ENV_LABEL` | `web.envLabel` | Window/tray title prefix | empty |
-| `TERMINAL_HOST` | `kiosk.terminal.host` | Wallee A35 payment terminal (LTI, ADR-0048) on the LAN. **Empty = no terminal**: the kiosk doesn't advertise the `payment-terminal` bridge feature and the checkout offers no terminal payment | empty |
+| `TERMINAL_HOST` | `kiosk.terminal.host` | Wallee A35 payment terminal (LTI, ADR-0051) on the LAN. **Empty = no terminal**: the kiosk doesn't advertise the `payment-terminal` bridge feature and the checkout offers no terminal payment | empty |
 | `TERMINAL_PORT` | `kiosk.terminal.port` | LTI TCP port (number or string) | `50000` |
 | `TERMINAL_POS_ID` | `kiosk.terminal.posId` | `posId` sent with every LTI request; the terminal accepts any value, it only identifies the till in the terminal's logs | `KIOSK-01` |
 

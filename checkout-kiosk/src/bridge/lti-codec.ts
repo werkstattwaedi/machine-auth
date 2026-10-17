@@ -101,7 +101,7 @@ export interface FinancialTrxRequestInput {
  * A purchase (transactionType 0) in CHF. Partial approvals and DCC are off;
  * the result screens stay on so the customer sees the outcome on the
  * terminal too. No `trxSyncNumber`: recovery is the backend's job, and sync
- * numbers would force till-triggered final balances (ADR-0048).
+ * numbers would force till-triggered final balances (ADR-0051).
  */
 export function financialTrxRequest(input: FinancialTrxRequestInput): string {
   return (
