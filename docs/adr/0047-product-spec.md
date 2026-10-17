@@ -79,14 +79,15 @@ and backfilling a complete spec up front would cost weeks and go stale.
    and a rule written down and then changed under both.
 8. **One agent does the spec's thinking.** `.claude/agents/spec-expert.md`
    derives rules from code, words the rules of a change, assesses behaviour,
-   runs the check and audits a file — on the strongest generally available
-   model at high effort (`model: fable`, `effort: xhigh`). It delegates
+   runs the check and audits a file — on Opus at high effort (`model: opus`,
+   `effort: high`; amended 2026-10-17 from Fable at xhigh, which was too
+   slow to wait for interactively). It delegates
    discovery to Explore agents and keeps the judgement. The commands and
    prompts that touch the spec call it instead of judging inline; the
    workqueue's "no sub-agents inside workers" rule has this one exception.
    The PR workflow can't load project agents (its settings sources are
-   restricted to `user`, decision 6), so it gives its top-level agent the
-   same model and effort.
+   restricted to `user`, decision 6); its top-level agent runs on the
+   strongest model, Fable at high effort, since nobody waits on it.
 
 ## Consequences
 

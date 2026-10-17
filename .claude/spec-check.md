@@ -2,10 +2,10 @@
 
 Check a change against the product spec in `docs/spec/`. One procedure,
 three callers: `/spec-check` and the workqueue worker run it through the
-`spec-expert` agent (`.claude/agents/spec-expert.md` — the strongest model at
-high effort); `.github/workflows/spec-check.yml` can't load project agents
-(settings sources are restricted to `user`), so it gives its top-level agent
-the same model and effort and has it follow this file directly. Keep the
+`spec-expert` agent (`.claude/agents/spec-expert.md` — Opus at high
+effort); `.github/workflows/spec-check.yml` can't load project agents
+(settings sources are restricted to `user`), so it runs its top-level agent
+on Fable at high effort and has it follow this file directly. Keep the
 callers in sync by editing only this file.
 
 ## Inputs
