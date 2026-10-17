@@ -15,6 +15,8 @@
 #   scripts/deploy.sh staging --allow-off-main   # deploy a branch (recorded as such)
 #   scripts/deploy.sh prod --new-release         # new release name for an already
 #                                                # released commit (ops config change)
+#   scripts/deploy.sh prod --no-agent            # print pending deploy steps instead
+#                                                # of starting an agent for them
 #
 # Refuses to run unless machine-auth AND the operations repo are on the
 # latest main with no uncommitted changes (scripts/deploy-preflight.ts,
@@ -28,12 +30,21 @@
 # Per environment this runs (and finally records the deploy — git tag plus
 # the operations repo's deploys/log.jsonl and STATE.md, ADR-0045):
 #   1. generate-env (staging: --env staging overlay per ADR-0034)
-#   2. functions deploy via scripts/deploy-functions.ts (packs @oww/shared,
+#   2. setup-bigquery.ts — every time, so a new stats column exists before
+#      the functions that emit it (ADR-0049; needs ADC)
+#   3. functions deploy via scripts/deploy-functions.ts (packs @oww/shared,
 #      restores package.json/lockfile even on failure)
-#   3. firebase deploy --only firestore,storage   (rules + indexes)
-#   4. firebase deploy --only hosting             (predeploy hook builds web;
+#   4. firebase deploy --only firestore,storage   (rules + indexes)
+#   5. firebase deploy --only hosting             (predeploy hook builds web;
 #      staging builds with WEB_BUILD_SCRIPT=build:staging so staging sites
 #      never ship prod-configured bundles)
+#
+# One-off deploy steps (ADR-0049, docs/deploy/): before step 3, between 3
+# and 4, and after 5 the script stops for the step files added since this
+# environment's last deploy tag (migrations the PRs since then declared in
+# their Deploy: line), hands them to an interactive `claude` session (or
+# prints them: --no-agent, no terminal, or already inside Claude Code) and
+# asks once whether they are done. --yes does not answer that question.
 #
 # The active `firebase use` alias is never changed — every command passes
 # --project explicitly.
@@ -58,6 +69,7 @@ WANT_STAGING=0
 WANT_PROD=0
 ASSUME_YES=0
 NEW_RELEASE=0
+USE_AGENT=1
 for arg in "$@"; do
   case "$arg" in
     staging) WANT_STAGING=1 ;;
@@ -65,7 +77,8 @@ for arg in "$@"; do
     --yes|-y) ASSUME_YES=1 ;;
     --allow-off-main) export DEPLOY_ALLOW_OFF_MAIN=1 ;;
     --new-release) NEW_RELEASE=1 ;;
-    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --allow-off-main, --new-release)" ;;
+    --no-agent) USE_AGENT=0 ;;
+    *) fail "Unknown argument: $arg (expected: staging, prod, --yes, --allow-off-main, --new-release, --no-agent)" ;;
   esac
 done
 [ $((WANT_STAGING + WANT_PROD)) -gt 0 ] || fail "Usage: scripts/deploy.sh [staging] [prod] [--yes]"
@@ -135,6 +148,51 @@ export BUILD_VERSION
 step "Install workspace dependencies (also builds @oww/shared via postinstall)"
 npm install
 
+# One-off deploy steps (ADR-0049, docs/deploy/): a step file added since
+# this environment's last deploy tag is pending (an environment without a
+# tag is a fresh installation — nothing pending). At each phase boundary
+# the script stops, hands the pending files to an interactive
+# `claude` session that carries them out — or prints them, with --no-agent,
+# without a terminal, or when this script already runs inside a Claude Code
+# session (the outer agent reads them) — and asks once whether they are
+# done. --yes never answers that question.
+deploy_steps() {
+  local env="$1" phase="$2" project="$3" pending prompt answer f
+  pending="$(npx tsx scripts/deploy-steps.ts list --env "$env" --phase "$phase" --no-fetch)" \
+    || fail "Could not read the deploy steps in docs/deploy/ — fix the file named above."
+  [ -n "$pending" ] || return 0
+
+  step "[$env] Deploy steps, $phase (docs/deploy/, ADR-0049):"
+  sed 's/^/  /' <<<"$pending"
+  if [ "$USE_AGENT" -eq 1 ] && [ -t 0 ] && [ -z "${CLAUDECODE:-}" ] && command -v claude >/dev/null; then
+    prompt="$(npx tsx scripts/deploy-steps.ts prompt --env "$env" --phase "$phase" \
+      --project "$project" --version "$BUILD_VERSION" --no-fetch)" \
+      || fail "Could not build the agent prompt."
+    echo "Starting an agent session to carry them out — end it when they are done."
+    claude "$prompt" || warn "The agent session ended with an error."
+  else
+    while IFS= read -r f; do
+      echo; echo -e "${YELLOW}----- $f -----${NC}"; cat "$f"
+    done <<<"$pending"
+    echo; echo "Carry these out now (or hand them to an agent), then confirm."
+  fi
+
+  echo -en "\n${YELLOW}All $phase steps done for $env? [y/N] ${NC}"
+  read -r answer || answer=""
+  [[ "$answer" =~ ^[Yy] ]] && return 0
+  case "$phase" in
+    before-functions)
+      fail "Deploy steps not done — nothing deployed to $env. Carry them out, then run the deploy again." ;;
+    after-functions)
+      fail "Deploy steps not done — functions are deployed to $env, rules and hosting are not.
+  Carry them out, then run the deploy again." ;;
+    *)
+      fail "Deploy steps not done — $env is deployed but NOT recorded, on purpose: the steps
+  come back at the next deploy. Carry them out, then record the deploy:
+  npx tsx scripts/deploy-record.ts deploy --env $env --component firebase" ;;
+  esac
+}
+
 deploy_env() {
   local env="$1" project web_build
   if [ "$env" = "prod" ]; then
@@ -154,6 +212,17 @@ deploy_env() {
     step "[$env] Generating staging env files (config.staging.jsonc overlay)"
     npx tsx scripts/generate-env.ts --env staging
   fi
+
+  # Every deploy (ADR-0049): BigQuery learns a new stats column before the
+  # functions that emit it go live — the export inserts with
+  # skipInvalidRows: false, so one unknown column fails the whole batch.
+  # Idempotent and quick; needs Application Default Credentials.
+  step "[$env] BigQuery schema → $project (setup-bigquery.ts, idempotent)"
+  npx tsx scripts/setup-bigquery.ts --project "$project" \
+    || fail "setup-bigquery.ts failed for $project — nothing deployed. No credentials?
+  gcloud auth application-default login"
+
+  deploy_steps "$env" before-functions "$project"
 
   step "[$env] Functions → $project"
   npx tsx scripts/deploy-functions.ts --project "$project"
@@ -175,11 +244,15 @@ deploy_env() {
     done
   fi
 
+  deploy_steps "$env" after-functions "$project"
+
   step "[$env] Firestore + Storage rules/indexes → $project"
   firebase deploy --only firestore,storage --project "$project"
 
   step "[$env] Hosting (checkout + admin) → $project"
   WEB_BUILD_SCRIPT="$web_build" firebase deploy --only hosting --project "$project"
+
+  deploy_steps "$env" after-deploy "$project"
 
   step "[$env] Recording the deploy (ADR-0045)"
   npx tsx scripts/deploy-record.ts deploy --env "$env" --component firebase \
