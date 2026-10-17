@@ -69,6 +69,31 @@ git log "$(git tag -l 'deploy/prod/firebase/*' | tail -1)"..origin/main --onelin
 If a record step warns (e.g. offline), re-run it by hand —
 `npx tsx scripts/deploy-record.ts deploy --env <env> --component <component>`.
 
+### One-off deploy steps (ADR-0049)
+
+A change that needs something done around the deploy, in order — a
+migration or backfill, a data gate, a mail-template publish, a console
+switch — ships it as a file in [`docs/deploy/`](deploy/README.md), and
+`scripts/deploy.sh` stops for it: before the functions deploy, after it, or
+after everything, as the file's `phase:` says. A step is pending for an
+environment when its file changed since that environment's last deploy
+tag (an environment without a tag gets all of them). The script hands the
+pending files to an interactive agent session — or prints them with
+`--no-agent`, without a terminal, or inside Claude Code — and asks once
+whether they are done. `--yes` does not answer that. Declining at the last
+boundary leaves the deploy unrecorded on purpose, so the step comes back.
+
+```bash
+npx tsx scripts/deploy-steps.ts list --env prod     # what the next deploy stops for
+```
+
+The BigQuery schema needs no step: `setup-bigquery.ts` runs before every
+functions deploy (idempotent; needs
+`gcloud auth application-default login`, and the deploy stops without it).
+The rollouts further down that predate ADR-0049 — generated mail templates,
+bill numbers, member identity, catalog snapshots — are completed in both
+environments and stay here as the record; new ones go to `docs/deploy/`.
+
 ## Prerequisites
 
 - Firebase CLI authenticated: `firebase login`
@@ -285,7 +310,8 @@ every send loudly (`failed-precondition`, bill mails into
 `operations_log`), it does not block the deploy.
 
 **Whenever the contract changed** (a mail, dimension or variable added or
-renamed), before the functions deploy of each project:
+renamed), before the functions deploy of each project — the PR that changes
+it ships this as a `before-functions` step in `docs/deploy/` (ADR-0049):
 
 ```bash
 cd ../machine-auth-operations
@@ -316,6 +342,9 @@ email).
 
 ### Bill-number migration (ADR-0042) — once per project, RIGHT AFTER the functions deploy
 
+_Completed in staging and prod; kept as the record. A step like this now
+ships as a `docs/deploy/` file (ADR-0049)._
+
 Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
 refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily
 stats export emits a new `cancelled_at` column. Order matters — and it is **functions first**:
@@ -345,6 +374,8 @@ Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a
 confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
 
 ### Member identity (ADR-0043) — data gate BEFORE the functions + rules deploy
+
+_Completed in staging and prod; kept as the record (ADR-0049)._
 
 Login resolves by `users.email` and the Auth-linked phone must equal `users.phone`, both by exact
 match. That is only safe while the stored values are clean, and the old admin profile tab can
@@ -533,7 +564,8 @@ FIREBASE_PROJECT_ID=<project-id> \
 ```
 
 **9c′. One-off: catalog snapshots + visit_items variants** (ADR-0039
-amendment 2026-09-29). Order: `setup-bigquery.ts` (adds the catalog
+amendment 2026-09-29; completed in both environments, kept as the record —
+ADR-0049). Order: `setup-bigquery.ts` (adds the catalog
 tables/views and the `visit_items.variant_id` / `pricing_model` columns) →
 deploy functions → re-emit the old `visit_items` rows. The first daily
 export after the deploy takes the first catalog snapshot by itself.

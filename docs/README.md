@@ -38,6 +38,15 @@ as the behaviour; `/spec-check` and the Spec check workflow compare code
 against it, and the `spec-expert` agent does the thinking. Conventions and glossary:
 [spec/README.md](spec/README.md); see [ADR-0047](adr/0047-product-spec.md).
 
+### `deploy/` - Deploy Steps
+
+One file per one-off deploy action — a migration, a backfill, a data gate,
+a console switch — written for the agent that carries it out;
+`scripts/deploy.sh` stops for the ones pending in an environment. Never
+deleted: the migration history, and a new environment gets the whole list.
+Conventions: [deploy/README.md](deploy/README.md); see
+[ADR-0049](adr/0049-deploy-steps.md).
+
 ### `requirements/` - Product Requirements
 
 Longer requirement documents for a feature before it exists. Rules about how
@@ -69,6 +78,7 @@ Design assets, mockups, and brand guidelines.
 ## File Naming
 
 - **ADRs:** `NNNN-descriptive-title.md` (e.g., `0001-use-firebase-for-backend.md`)
+- **Deploy steps:** `YYYY-MM-DD-slug.md` (the date written; never renamed)
 - **Requirements:** Freeform, descriptive names
 - **Ideas:** Freeform, descriptive names
 
