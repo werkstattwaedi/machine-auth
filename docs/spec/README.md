@@ -139,6 +139,8 @@ still passes a different wrong promise.
 - **Own device** — the checkout app on the person's phone or computer.
 - **Kiosk** — the shared terminal in the workshop (badge reader, printer).
 - **Machine terminal** — the device on a machine that unlocks it.
+- **Payment terminal** — the Wallee terminal next to the kiosk that takes card
+  and TWINT payments.
 
 **Screens**
 - **Check-in, Kosten, Check Out, Bezahlen** — the four steps of the checkout
