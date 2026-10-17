@@ -86,6 +86,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The workqueue opens and pushes its PRs as this bot; the action
+          # refuses bot-triggered runs unless the bot is named here.
+          allowed_bots: worker-claude
           prompt: |
             Follow .claude/spec-check.md for PR #${{ env.PR }}. You run the check
             yourself — project agents aren't loaded here, so don't try to spawn one.
