@@ -84,8 +84,8 @@ link. An admin correction carries it over to the replacement, but only ids the
 original checkout carried.
 
 **Same-day usage-fee waiver by person, on the opening day** (replaces the
-#268 rule). A person pays the usage fee at most once per business day of an
-account:
+#268 rule). A person pays no usage fee an earlier visit of the account already
+covered that day:
 
 - The owner is matched by account id, everyone else by **name + person type**
   — the name lowercased, trimmed, whitespace collapsed and its words sorted
@@ -93,10 +93,15 @@ account:
   difference; `savedPersonId` takes no part.
 - A person is waived in full when they are on another closed, non-cancelled
   visit of the same account (`userId`) **opened** (`created`, 03:00 boundary)
-  on the same business day as this one — whatever that line's usage type or
-  fee: a morning Hangenmoos visit covers the regular afternoon one. A
-  purchase-only checkout (badge, membership, renewal) is no visit and counts
-  for nothing. Guests (no account) are never waived.
+  on the same business day as this one, on a usage type whose fee multiplier
+  is at least their type's now — they pay the difference to what they already
+  paid today: a regular morning covers a regular or reduced afternoon; a
+  morning on Begleitung or Hangenmoos AG (no fee) covers nothing, so a regular
+  afternoon is charged in full; a reduced morning does not cover a regular
+  afternoon (charged in full — KulturLegi then regular does not validly
+  occur). A line whose type carries no fee is never marked. A purchase-only
+  checkout (badge, membership, renewal) is no visit and counts for nothing.
+  Guests (no account) are never waived.
 - The opening day is the open checkout's `created`, "now" for a checkout
   created and closed at once, and the original's `created` for an admin
   correction. A correction skips the visit it replaces and counts only visits
@@ -122,8 +127,7 @@ usage type of their own, and take no visit-wide type from the client.
   step becomes a summary to confirm.
 - Companions are one click again, without putting them on a membership.
 - A companion returning the same day no longer pays twice — saved or typed
-  in again — and someone who came on Hangenmoos in the morning doesn't pay for
-  the afternoon.
+  in again.
 - The Check Out page shows the waiver before paying, from the same function
   the server bills with.
 - Freiwilligengruppe / Interne Nutzung are refused by the server, not just
@@ -166,9 +170,12 @@ usage type of their own, and take no visit-wide type from the client.
   version of this ADR) — replaced: a companion typed in again without ticking
   "speichern" paid twice, and the visitor can't tell the difference. Name +
   person type is good enough within one account and one day.
-- **Waive only when the earlier line was actually charged** (the #268 rule) —
-  rejected: someone on Hangenmoos or Begleitung in the morning would then pay
-  in the afternoon, and the rule the visitor sees ("you were here today")
-  would depend on what an earlier bill happened to charge.
+- **Waive whenever the person was on an earlier visit that day, whatever it
+  charged** (the first version of this ADR) — replaced: Begleitung is free
+  because the person did not use the workshop, Hangenmoos AG because the
+  Hangenmoos AG sponsors its residents — different semantics the types don't
+  carry explicitly, so a free morning saying nothing about a paid afternoon
+  is the one consistent rule: the person pays the difference to what they
+  already paid today.
 - **Compare close instants instead of opening days** — rejected: a visit left
   open past 03:00 would land on the next day's waiver.

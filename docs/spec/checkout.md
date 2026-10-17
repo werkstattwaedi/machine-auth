@@ -35,7 +35,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 ## Usage fee
 
-- **CHK-37** A person who was already on another visit of the same account — opened on the same day, closed before this one and not cancelled — pays no usage fee on this visit, whatever their usage type was there; on a guest's checkout nobody gets this. — #268, ADR-0050, #605
+- **CHK-37** A person whose usage type carries a usage fee (CHK-4) pays none of it on a visit when they were already on another visit of the same account — opened on the same day, closed before this one and not cancelled — on a usage type whose fee is at least as high; otherwise they pay it in full, and on a guest's checkout nobody gets this. — #268, ADR-0050, #605, #759
 - **CHK-38** For CHK-37 the account holder is the same person by their account, and every other person — typed in or added from the saved persons (CHK-34) — by user type and name, the name compared ignoring case, extra spaces and word order. — ADR-0050, #605
 - **CHK-39** The waiver (CHK-37) is applied wherever a usage fee is billed — closing a checkout, and an admin correction as of the visit it replaces — and Check Out shows the waived fee before the person pays. — ADR-0050, #605
 
@@ -111,7 +111,6 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - [NEEDS CLARIFICATION] Only the app keeps a person to one open checkout (CHK-7); nothing on the server refuses a second one when two devices check in at once. Intended?
 - [NEEDS CLARIFICATION] After the commit (CHK-22) a reload, the browser's back or a deep link leaves Bezahlen for good: there is no open checkout, the person is sent to the check-in, and a guest has no way back to the PDF download (CHK-25) or the paylink (CHK-27) — the document is in the mail (BIL-26). Intended?
 - [NEEDS CLARIFICATION] Nothing tells a person that machine time switched them to *Reguläre Nutzung* (CHK-40); their usage fee simply appears on Kosten and Check Out. Intended, or should Check Out say so? — #605
-- [NEEDS CLARIFICATION] Under CHK-37 a person on *Begleitung / nur Materialbezug* in the morning who works in the workshop (*Reguläre Nutzung*) in the afternoon pays no usage fee for the afternoon, since the earlier visit's usage type doesn't count. Intended?
 
 ## Retired
 
@@ -120,4 +119,4 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - CHK-15 — #761 (picking and confirming on Bezahlen, the pick recorded for the overnight commit; the method is chosen on Check Out, CHK-19, and written only with the commit, CHK-22)
 - CHK-16 — #761 (the QR code on screen on every device while the QR-Rechnung was picked; now unfolded on request after sending, CHK-24)
 - CHK-17 — #761 (the completion dialog and its per-device follow-up; replaced by CHK-26)
-- CHK-12 — #759 (the same-day waiver now matches every person by name and ignores the earlier visit's usage type: CHK-37..39)
+- CHK-12 — #759 (the same-day waiver now matches every person by name and waives what an earlier visit that day already charged: CHK-37..39)
