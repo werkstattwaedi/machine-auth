@@ -63,7 +63,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | *Begleitung / nur Materialbezug* (every person has it) | machine time; Check Out says so in the Maschinen section and does not continue to payment — the type is changed on the check-in |
   | *Interne Nutzung* | a paid badge (a membership: MEM-6) |
 
-- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, the account holder's usage type becomes *Reguläre Nutzung* and the visit's type follows (CHK-29); every other person keeps theirs. — ADR-0050, #605
+- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, the account holder's usage type becomes *Reguläre Nutzung* and the visit's type follows (CHK-29), every other person keeping theirs; nothing tells the account holder of the switch — their usage fee just appears in the Nutzungsgebühren on Check Out (CHK-31). — ADR-0050, #605, #778
 - **CHK-5** A membership or badge bought without a visit opens a checkout with the buyer as its only person, on *Begleitung / nur Materialbezug* — a purchase-only checkout (CHK-9) that carries no usage fee (CHK-4). — ADR-0030, #660, ADR-0050, #605
 
 ## Check Out
@@ -110,7 +110,6 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - [NEEDS CLARIFICATION] A person who signs in on the check-in of their own device while a checkout of theirs is open stays on the check-in, its persons filled from that checkout, instead of landing on Kosten (CHK-2); the same sign-in at the kiosk lands on Kosten (KIO-1). Intended?
 - [NEEDS CLARIFICATION] Only the app keeps a person to one open checkout (CHK-7); nothing on the server refuses a second one when two devices check in at once. Intended?
 - [NEEDS CLARIFICATION] After the commit (CHK-22) a reload, the browser's back or a deep link leaves Bezahlen for good: there is no open checkout, the person is sent to the check-in, and a guest has no way back to the PDF download (CHK-25) or the paylink (CHK-27) — the document is in the mail (BIL-26). Intended?
-- [NEEDS CLARIFICATION] Nothing tells a person that machine time switched them to *Reguläre Nutzung* (CHK-40); their usage fee simply appears on Kosten and Check Out. Intended, or should Check Out say so? — #605
 
 ## Retired
 

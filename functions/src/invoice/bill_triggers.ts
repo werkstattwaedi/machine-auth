@@ -208,7 +208,7 @@ async function assembleInvoiceData(
     // day, so the close path zeroed their contribution to the bill total.
     // Re-derive their fee as 0 here too so the PDF's per-person breakdown
     // stays consistent with the billed amount; `waivedToday` lets the
-    // renderer annotate the row ("heute bereits erfasst").
+    // renderer annotate the row ("heute bereits abgerechnet").
     //
     // Each person's own usage type discounts their fee (issue #605); older
     // checkouts carry only the visit's. `fee` stays RAW so `entryFees`

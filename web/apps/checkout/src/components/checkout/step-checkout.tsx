@@ -199,7 +199,7 @@ export function roundUpOptionLabel(
 }
 
 /** Same wording as the invoice PDF's waived usage-fee row. */
-const WAIVED_TODAY_LABEL = "heute bereits erfasst"
+const WAIVED_TODAY_LABEL = "heute bereits abgerechnet"
 
 interface StepCheckoutProps {
   /**
