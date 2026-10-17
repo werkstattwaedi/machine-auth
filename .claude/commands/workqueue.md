@@ -1,5 +1,5 @@
 ---
-description: Autonomous queue processor. Stays branches up-to-main, self-heals mechanical baseline failures, processes claude-workqueue issues and PR review feedback, scores each PR, and posts a daily digest. Runs as a long-running loop in tmux with Remote Control for push notifications when input is needed.
+description: Autonomous queue processor. Stays branches up-to-main, self-heals mechanical baseline failures, processes claude-workqueue issues and PR review feedback, and code-reviews the PRs it touches. Runs as a long-running loop in tmux with Remote Control for push notifications when input is needed.
 ---
 
 # /workqueue
@@ -9,7 +9,7 @@ via `.claude/scripts/workqueue-loop.sh` (see "Loop setup" below); also safe
 to invoke interactively for one-off runs.
 
 **Arguments:** `$ARGUMENTS` (optional issue number or PR number to process only
-that item; in that mode the idle-gate, baseline self-heal, and digest phases
+that item; in that mode the idle-gate and baseline self-heal phases
 are skipped — only that single item is handled.)
 
 ## Phase flow (state machine)
@@ -25,7 +25,7 @@ Phase 1   stay up to main       → Phase 1b
 Phase 1b auto-merge approved   → Phase 2
 Phase 2   baseline + self-heal
   ├─ green / push-direct safe   → Phase 3
-  ├─ fix-PR opened              → Phase 4c (review fix-PR) → Phase 5 → Phase 6 → STOP
+  ├─ fix-PR opened              → Phase 4c (review fix-PR) → Phase 5 → STOP
   ├─ escalated (issue filed)    → STOP
   └─ baseline-red (interactive) → STOP
 Phase 3   fetch issues          → Phase 3b
@@ -33,16 +33,14 @@ Phase 3b  fetch PR feedback     → Phase 4
 Phase 4   process each issue    → Phase 4b
 Phase 4b  process PR feedback   → Phase 4c
 Phase 4c  code-review touched PRs → Phase 5
-Phase 5   confidence scoring    → Phase 6
-Phase 6   daily digest          → Phase 7
-Phase 7   stdout summary        → STOP
+Phase 5   stdout summary        → STOP
 ```
 
 **Interactive single-item mode** (`$ARGUMENTS` is a number):
-- Phase 0, 1, 1.5, Phase 2 self-heal, and Phase 6 are skipped.
+- Phase 0, 1, 1b and Phase 2 self-heal are skipped.
 - Phase 2 still runs the baseline; red baseline → STOP.
 - Phase 3 / 3b filters to just the requested item.
-- Phase 4c and Phase 5 run against the one item if it produced or modified a PR.
+- Phase 4c runs against the one item if it produced or modified a PR.
 
 **Support files** (read by the orchestrator when needed; not slash commands):
 - `.claude/workqueue/worker-prompt.md` — issue-worker prompt template (Phase 4b).
@@ -54,15 +52,15 @@ Phase 7   stdout summary        → STOP
 2. **Plan-first for non-trivial issues.** For anything beyond a clearly trivial fix, post a short plan as an issue comment and wait for human approval before implementing. The human approves by removing the `claude-workqueue-plan-review` label. The plan's *Spec* section has two parts — *As is*: the `docs/spec/` rules for what the code does today in the touched area, if not yet written down, which become the branch's first commit; *Change*: the rules the change adds, changes or retires — so approving the plan approves their wording, and every later commit reads as a diff to the spec (ADR-0047). The `spec-expert` agent derives and words them.
 3. **Regression tests are mandatory.** Every fix must include a test that would have caught the bug or that locks in the new behavior — for logic (unit) and layout (screenshots). A rule about *what a person is told* is locked in by its `docs/spec/` rule instead, never by a test that string-matches UI copy (ADR-0047). If a regression test is genuinely impractical, the plan must explicitly request an exception and explain why — the human decides during plan review.
 4. **All `gh` calls go through `.claude/scripts/wq-gh.sh`**, which authenticates as the workqueue GitHub App so comments, PRs, and review acks are attributed to the bot rather than the local user. `git push` and other `git` commands keep using the user's credentials — commits remain the user's.
-5. **Human approval is the merge gate; the bot handles the mechanics.** The human signal is a GitHub PR review with `APPROVED` state. Once a PR is approved, the workqueue is responsible for getting it merged: rebase onto main if behind, resolve trivial conflicts (lockfiles, snapshots), enable GitHub's native auto-merge so it lands as soon as CI is green. This applies to *any* approved PR in the repo (workqueue-produced or otherwise) — if you reviewed it and clicked Approve, the bot finishes the job. Confidence scoring (Phase 5) still runs on workqueue PRs to make the review itself fast. The one carve-out for skipping the PR entirely is **Phase 2 push-direct**: regenerated test artifacts (Playwright/Vitest snapshots, npm lockfiles) may be pushed straight to `main` without a PR, because there is no reviewable judgment in a snapshot diff.
+5. **Human approval is the merge gate; the bot handles the mechanics.** The human signal is a GitHub PR review with `APPROVED` state. Once a PR is approved, the workqueue is responsible for getting it merged: rebase onto main if behind, resolve trivial conflicts (lockfiles, snapshots), enable GitHub's native auto-merge so it lands as soon as CI is green. This applies to *any* approved PR in the repo (workqueue-produced or otherwise) — if you reviewed it and clicked Approve, the bot finishes the job. The one carve-out for skipping the PR entirely is **Phase 2 push-direct**: regenerated test artifacts (Playwright/Vitest snapshots, npm lockfiles) may be pushed straight to `main` without a PR, because there is no reviewable judgment in a snapshot diff.
 6. **Bounded self-heal only.** Baseline failures may be auto-fixed *only* when they are mechanical (snapshot drift, lockfile drift) or a clear test-side hermeticity issue with an obvious, small fix. Any prod-behavior change, ambiguity, or multi-file scope must be escalated as a `claude-workqueue` issue instead. Default to escalating.
-7. **No scheduling, no fire-and-forget.** Do NOT create `ScheduleWakeup`, `CronCreate`, `/loop`, or other persistent background tasks during a /workqueue run. The `workqueue-loop.sh` wrapper IS the scheduler. Worker agents must run foreground (`run_in_background: true` is fine for monitoring, but you MUST wait for completion before Phase 7). Pending background work at exit pops a "Background work is running" prompt the wrapper has to auto-dismiss; keep your work synchronous so the exit is clean.
+7. **No scheduling, no fire-and-forget.** Do NOT create `ScheduleWakeup`, `CronCreate`, `/loop`, or other persistent background tasks during a /workqueue run. The `workqueue-loop.sh` wrapper IS the scheduler. Worker agents must run foreground (`run_in_background: true` is fine for monitoring, but you MUST wait for completion before Phase 5). Pending background work at exit pops a "Background work is running" prompt the wrapper has to auto-dismiss; keep your work synchronous so the exit is clean.
 
 ## Termination signal (every exit path)
 
 The `workqueue-loop.sh` wrapper runs `claude` interactively in a tmux pane
 and watches for a signal file at `$WORKQUEUE_SIGNAL_FILE`. **Every** path
-that ends the run — normal Phase 7 completion, idle gate, dirty tree,
+that ends the run — normal Phase 5 completion, idle gate, dirty tree,
 baseline-red, baseline-fix-pr, baseline-escalated, or any error — MUST,
 as its final tool call, write a one-line **cadence verdict** to that file.
 The verdict tells the wrapper what to do next:
@@ -166,14 +164,14 @@ Run it:
 
 ```bash
 # In a tmux pane you can leave running (the script refuses to start
-# outside tmux because Phase 7's self-exit depends on tmux send-keys):
+# outside tmux because Phase 5's self-exit depends on tmux send-keys):
 cd ~/werkstattwaedi/machine-auth
 ./.claude/scripts/workqueue-loop.sh
 ```
 
 Detach the tmux pane (`Ctrl-b d`) and it keeps running. `tmux attach -t
 <session>` to peek. Ctrl-C in the wrapper stops the loop; an in-flight
-claude session is not killed (it exits on its own via Phase 7).
+claude session is not killed (it exits on its own via Phase 5).
 
 Each iteration writes one line to `~/.claude/logs/workqueue/last-run.txt`
 so you can `tail -f` it to see the loop's heartbeat. Logs older than
@@ -239,9 +237,6 @@ Set in `~/.config/workqueue-app/env` or your shell rc:
 | `claude-workqueue-plan-review` | A plan has been posted; waiting for human to review and approve |
 | `claude-workqueue-design` | UI/flow decisions open; waiting for a human to run `/design-session <N>` |
 | `wq-baseline-fix` | PR that auto-heals a baseline failure (snapshot/lockfile/hermeticity) |
-| `wq-low-risk` | PR scored ≥8 by the confidence rubric (Phase 5) |
-| `wq-medium` | PR scored 5–7 |
-| `wq-needs-review` | PR scored <5, or touches security/schema/auth |
 
 Ensure all labels exist (idempotent):
 
@@ -251,9 +246,6 @@ Ensure all labels exist (idempotent):
 .claude/scripts/wq-gh.sh label create "claude-workqueue-plan-review" --color "1D76DB" --description "Workqueue: plan posted, needs human approval" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "claude-workqueue-design" --color "C5DEF5" --description "Workqueue: needs a /design-session" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 .claude/scripts/wq-gh.sh label create "wq-baseline-fix" --color "5319E7" --description "Workqueue: baseline auto-fix (snapshot/lockfile/hermeticity)" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-.claude/scripts/wq-gh.sh label create "wq-low-risk" --color "0E8A16" --description "Workqueue: confidence ≥8 (low risk)" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-.claude/scripts/wq-gh.sh label create "wq-medium" --color "FBCA04" --description "Workqueue: confidence 5–7" --repo werkstattwaedi/machine-auth 2>/dev/null || true
-.claude/scripts/wq-gh.sh label create "wq-needs-review" --color "B60205" --description "Workqueue: confidence <5 or sensitive area" --repo werkstattwaedi/machine-auth 2>/dev/null || true
 ```
 
 ## Phase 0 — Idle gate
@@ -387,7 +379,7 @@ For each approved PR:
    | Status | Meaning | Action |
    |---|---|---|
    | `CLEAN` | Ready to merge right now | Merge immediately: `gh pr merge <PR> --merge` |
-   | `UNSTABLE` | CI still running or has failures | Enable auto-merge: `gh pr merge <PR> --auto --merge`. If CI is actually red (`statusCheckRollup` shows FAILURE), do NOT enable auto-merge — flag in the digest. |
+   | `UNSTABLE` | CI still running or has failures | Enable auto-merge: `gh pr merge <PR> --auto --merge`. If CI is actually red (`statusCheckRollup` shows FAILURE), do NOT enable auto-merge — flag it in the summary. |
    | `BLOCKED` | Branch protection rule unmet (other than CI) | Enable auto-merge: `gh pr merge <PR> --auto --merge`. GitHub will land it when the rule is satisfied. |
    | `BEHIND` | Base advanced; branch needs update | Update the branch (step 3), then re-evaluate next run. |
    | `DIRTY` | Conflicts with main | Update the branch (step 3), then re-evaluate next run. |
@@ -416,7 +408,7 @@ For each approved PR:
 4. **Merge method:** this repo uses merge commits (see recent git log).
    Always pass `--merge`. Do NOT use `--squash` or `--rebase`.
 
-5. Record each merged / auto-merge-enabled / blocked PR for the digest.
+5. Record each merged / auto-merge-enabled / blocked PR for the summary.
 
 End on `main` with a clean tree.
 
@@ -529,7 +521,7 @@ git branch -D workqueue/baseline-fix-<ts>
 ```
 
 If `git push origin main` fails because of branch protection, fall back
-to the open-PR branch below — and add a note in Phase 6's digest so the
+to the open-PR branch below — and add a note in the Phase 5 summary so the
 human knows to relax protection (or accept the PR overhead).
 
 Commit message:
@@ -542,7 +534,7 @@ Fix: <one-line>
 Safe paths touched: <comma-separated list>
 ```
 
-Record under "Baseline auto-pushes" for the digest. Continue to Phase 3
+Record under "Baseline self-heal" for the summary. Continue to Phase 3
 normally — main is green again, queued issues can proceed.
 
 #### open-PR branch
@@ -577,10 +569,9 @@ git checkout main
 ```
 
 Record the PR URL as **outstanding baseline-fix** and add it to the
-`reviewed_prs` list for Phase 4c. Run Phase 4c (code review) then Phase 5
-(scoring) on this PR. Then **skip Phases 3 and 4 entirely for this run** —
+`reviewed_prs` list for Phase 4c. Run Phase 4c (code review) on this PR. Then **skip Phases 3 and 4 entirely for this run** —
 main is still red, so spawning workers would just produce broken PRs.
-Jump straight to Phase 6 (the digest will list the queue as blocked on
+Jump straight to Phase 5 (the summary lists the queue as blocked on
 this fix PR). Output:
 
 ```
@@ -806,7 +797,7 @@ replies; working tree clean; on `main`.
 
 ### 4b.3. Handle the result
 
-- **`pr-fixed`** → record as fixed and add the PR to the `reviewed_prs` list (Phase 4c re-reviews because the diff changed; Phase 5 re-scores).
+- **`pr-fixed`** → record as fixed and add the PR to the `reviewed_prs` list (Phase 4c re-reviews because the diff changed).
 - **`error`** → record the error.
 
 ## Phase 4c — Code review on workqueue PRs
@@ -843,7 +834,7 @@ BEFORE_SHA=$(git rev-parse HEAD)
 ```
 
 If the local branch is dirty or the pull is not fast-forward, skip this
-PR and record `error: dirty tree before code review` for the digest.
+PR and record `error: dirty tree before code review` for the summary.
 
 ### 4c.3. Spawn the code-reviewer agent
 
@@ -889,7 +880,7 @@ FLAG (don't fix) when:
 - It touches `functions/src/auth/`, `firestore/firestore.rules`,
   `firestore/schema.jsonc`, `functions/src/sessions/`, or anything
   security/permission/schema-sensitive — these are the same paths
-  Phase 5 marks `wq-needs-review`; defer to the human there.
+  security-sensitive; defer to the human there.
 - The fix would require expanding to files not already in the PR diff.
 - You'd want to discuss it before changing it.
 
@@ -950,7 +941,7 @@ commit on top of the base PR so the human can drop just this commit
 with `git revert <sha>` if any of the fixes missed the mark:
 
 ```bash
-git diff --cached --name-only   # capture file list for the digest + comment
+git diff --cached --name-only   # capture file list for the comment
 git commit -m "$(cat <<'EOF'
 chore(code-review): auto-applied fixes from /workqueue Phase 4c
 
@@ -1035,158 +1026,7 @@ If the tree is dirty after checkout, stop the loop with
 `WORKQUEUE_RESULT: error | Phase 4c left dirty tree on main: <details>`
 — never auto-clean.
 
-### Tracking for the digest
-
-For each PR, record:
-- `pr`: number / url
-- `fixes_applied`: count (after test-revert handling)
-- `findings`: count
-- `fixes_pushed`: bool (true if step 4c.4 pushed)
-- `revert_reason`: string if fixes were reverted
-
-Phase 6's digest renders these as a one-liner under each PR (see Phase 6).
-
-## Phase 5 — Confidence scoring
-
-Run this against every PR the workqueue produced or modified this run
-(implemented issues, PR-feedback fixes, and baseline self-heal PRs).
-Phase 4c may have pushed a commit since the PR was created, so always
-re-fetch the PR JSON here rather than relying on cached numbers.
-The score is advisory — it feeds the morning digest so you can decide
-which PRs to read carefully and which to skim before approving. The
-score itself never gates merge; **the merge gate is your `APPROVED`
-review** (see Phase 1b).
-
-For each PR, compute these inputs:
-
-```bash
-.claude/scripts/wq-gh.sh pr view <PR> --repo werkstattwaedi/machine-auth --json additions,deletions,files,labels
-```
-
-Rubric (start at 5, then add/subtract):
-
-| Signal | Adjustment |
-|--------|-----------|
-| Diff total `additions + deletions` ≤ 30 | +2 |
-| Diff total 31–150 | +0 |
-| Diff total 151–500 | −1 |
-| Diff total > 500 | −3 |
-| Files touched ≤ 3 | +1 |
-| Files touched ≥ 10 | −1 |
-| Includes a new/changed test file (`*.test.*` or `*.spec.*`) | +1 |
-| All file paths are under `web/` or `functions/` test dirs | +1 |
-| Touches any path under `functions/src/auth/`, `firestore/firestore.rules`, `firestore/schema.jsonc`, or `functions/src/sessions/` | −3 (sensitive) |
-| Touches `package.json` / `package-lock.json` only (dep bump) and CI green | +1 |
-| Label `wq-baseline-fix` AND bucket was MECHANICAL | +2 |
-| Label `wq-baseline-fix` AND bucket was HERMETICITY | +0 |
-
-Clamp to `[0, 10]`. Apply label:
-- `≥ 8` → `wq-low-risk`
-- `5–7` → `wq-medium`
-- `< 5` → `wq-needs-review`
-
-Write the score into the PR body by appending (idempotent — replace any
-existing `<!-- wq-score -->` block):
-
-```markdown
-<!-- wq-score -->
-## /workqueue confidence score: <N>/10 (<label>)
-
-- diff: <+a / -d> across <n> file(s)
-- tests: <added | updated | none>
-- sensitive paths: <listed paths or "none">
-- baseline-fix bucket: <MECHANICAL | HERMETICITY | n/a>
-```
-
-```bash
-.claude/scripts/wq-gh.sh pr edit <PR> --add-label "<label>" --repo werkstattwaedi/machine-auth
-```
-
-If the PR previously had a different `wq-*` label, remove it first.
-
-## Phase 6 — Daily digest
-
-> Skip this phase when `$ARGUMENTS` is set.
-
-Upsert a single pinned tracking issue titled `[workqueue] Daily digest` so
-the morning review is one URL, not a search across PRs.
-
-1. Find the digest issue:
-   ```bash
-   .claude/scripts/wq-gh.sh issue list --repo werkstattwaedi/machine-auth \
-     --search "in:title [workqueue] Daily digest" --state open \
-     --json number --jq '.[0].number'
-   ```
-   If none exists, create it (pin manually once after first run):
-   ```bash
-   .claude/scripts/wq-gh.sh issue create --repo werkstattwaedi/machine-auth \
-     --title "[workqueue] Daily digest" \
-     --body "Updated automatically by /workqueue at the end of each run."
-   ```
-
-2. Build the digest body. Gather currently-open `workqueue/issue-*` PRs and
-   any `wq-baseline-fix` PRs from this run:
-
-   ```bash
-   .claude/scripts/wq-gh.sh pr list --repo werkstattwaedi/machine-auth \
-     --search "head:workqueue/" --state open \
-     --json number,title,url,additions,deletions,labels,reviewDecision,mergeStateStatus,statusCheckRollup
-   ```
-
-3. Compose the body (overwrite, not append):
-
-   ```markdown
-   <!-- wq-digest -->
-   Last updated: <UTC timestamp>
-   
-   ## Ready for morning review (`wq-low-risk`)
-   - [#<PR>](<url>) — <title> — score <N>/10, CI <PASSING|PENDING|FAILING>, <one-sentence what-it-does>
-     - Code review: <X fixes pushed, Y findings flagged> | <or "no issues found"> | <or "reverted: <reason>">
-   
-   ## Worth a real look (`wq-medium`)
-   - <same format, with code-review sub-line>
-   
-   ## Needs careful review (`wq-needs-review`)
-   - <same format, with code-review sub-line>
-   
-   ## Merged this run (Phase 1b)
-   - [#<PR>](<url>) — <title> — merged immediately
-   - [#<PR>](<url>) — <title> — auto-merge enabled, waiting on <CI | branch protection>
-   
-   ## Approved but blocked (needs your attention)
-   - [#<PR>](<url>) — <title> — CI red on <check>
-   - [#<PR>](<url>) — <title> — conflict with main, needs manual resolution
-   
-   ## Baseline self-heal (this run)
-   - Auto-pushed to main:
-     - <commit SHA> — <bucket> — <what was fixed> — paths: <list>
-   - Outstanding fix PR (queue paused until merged):
-     - [#<PR>](<url>) — <bucket> — <what was fixed>
-   
-   ## Blocked
-   - Plans awaiting your approval:
-     - #<N>: <one-line plan summary> (remove `claude-workqueue-plan-review` to approve)
-   - Questions awaiting your answer:
-     - #<N>: <question summary>
-   - Design sessions pending (run `/design-session <N>`):
-     - #<N>: <open decision>
-   - Conflicts needing manual rebase:
-     - #<PR>: <files>
-   - Errors from this run:
-     - <issue/PR>: <what went wrong>
-   ```
-
-   Omit sections with no entries.
-
-4. Update the issue:
-   ```bash
-   .claude/scripts/wq-gh.sh issue edit <digest-issue-number> --repo werkstattwaedi/machine-auth --body "$(cat <<'EOF'
-   <the body from step 3>
-   EOF
-   )"
-   ```
-
-## Phase 7 — Final summary (stdout) and self-exit
+## Phase 5 — Final summary (stdout) and self-exit
 
 Print a short summary table to stdout:
 
@@ -1213,7 +1053,6 @@ Print a short summary table to stdout:
 ### Pending questions
 ...
 
-### Digest issue: <URL>
 ```
 
 Omit sections with no entries.
