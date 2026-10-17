@@ -78,6 +78,7 @@ export const RpcMethod = {
     "getPaymentQrData",
     "closeCheckoutAndGetPayment",
     "acknowledgeBill",
+    "prepareTerminalPayment",
     "adminMarkBillsPaid",
     "correctCheckouts",
   ],

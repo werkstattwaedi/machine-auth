@@ -44,6 +44,12 @@ export interface KioskSessionState {
    */
   badgeTokenIds: string[]
   /**
+   * A terminal payment is armed or running (ADR-0051). A badge tap must not
+   * switch the session under it: the payment would be orphaned on screen
+   * while the money still moves.
+   */
+  paymentInProgress: boolean
+  /**
    * Issue #732: the /checkin "Besuch starten" countdown is running (or its
    * start is in flight). A badge tap then starts this visit first
    * (`startPendingVisit`) and switches without asking.
@@ -73,6 +79,7 @@ const NO_SESSION: WizardSessionState = {
   identified: false,
   holderName: null,
   badgeTokenIds: [],
+  paymentInProgress: false,
 }
 
 const NO_CHECKIN_SCREEN: CheckinScreenState = {

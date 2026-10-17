@@ -34,7 +34,11 @@ const PDF_MAX_ATTEMPTS = 15
 
 interface PaymentConfirmationProps {
   choice: PaymentChoice
-  paymentData: PaymentData
+  /**
+   * The close's answer. Null after a terminal payment: this screen never
+   * closed anything — Wallee's confirmation does (ADR-0051).
+   */
+  paymentData: PaymentData | null
   copy: ChoiceCopyContext
   /** The person's own device: offers the PDF (BIL-15). */
   ownDevice: boolean
@@ -103,7 +107,7 @@ export function PaymentConfirmation({
         <p className="text-sm text-muted-foreground leading-relaxed">{ui.doneNote}</p>
       )}
 
-      {choice === "raisenow" && paymentData.paylinkUrl && (
+      {choice === "raisenow" && paymentData?.paylinkUrl && (
         <a
           href={paymentData.paylinkUrl}
           target="_blank"
@@ -115,7 +119,7 @@ export function PaymentConfirmation({
         </a>
       )}
 
-      {ownDevice && (
+      {ownDevice && paymentData && (
         <PdfDownloadLink billId={paymentData.billId} sleep={sleep} />
       )}
 
@@ -132,7 +136,7 @@ export function PaymentConfirmation({
               className={cn("h-4 w-4 transition-transform", qrOpen && "rotate-180")}
             />
           </button>
-          {qrOpen && <QrSlip paymentData={paymentData} />}
+          {qrOpen && paymentData && <QrSlip paymentData={paymentData} />}
         </div>
       )}
     </div>
