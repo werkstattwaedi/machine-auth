@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-17
 
-**Applies to:** `scripts/deploy.sh`, `scripts/deploy-steps.ts`, `docs/deploy/`, `scripts/check-deploy-line.ts`, the PR template
+**Applies to:** `scripts/deploy.sh`, `scripts/deploy-steps.ts`, `docs/deploy/`, `scripts/check-deploy-line.ts`, the PR template, `docs/deployment-checklist.md`
 
 ## Context
 
@@ -30,7 +30,7 @@ times. A missed step fails quietly or late (#756).
 
 Two things are already in place. ADR-0045 tags every deploy per
 environment (`deploy/<env>/firebase/<timestamp>`) and logs manual steps
-(`deploy-record.ts event`), so "what changed since this environment's last
+(`deploy-record.ts event`), so "what came in since this environment's last
 deploy" is a git question. And the staging smoke run (`/smoke-staging`)
 showed that an agent following a prose runbook is the right executor for
 work that needs judgement — dry-run first, read the output, decide.
@@ -41,10 +41,20 @@ executor. The goal is only that no step is forgotten.
 
 ## Decision
 
-**A deploy step is a Markdown file, and the deploy script hands the
-pending ones to an agent.**
+**A deploy step is a migration, written as a Markdown file; the deploy
+script hands the pending ones to an agent.**
 
-1. **One file per step, next to the code:** `docs/deploy/YYYY-MM-DD-<slug>.md`
+1. **A step migrates an existing environment.** It brings an environment
+   that already runs to the state a fresh installation reaches by following
+   `docs/deployment-checklist.md`. The two must end up the same: a PR whose
+   change also needs something on a fresh installation (a secret, a config
+   document, a console switch, a required config parameter) updates the
+   checklist in the same PR. The step migrates; the checklist installs.
+   `docs/deployment-checklist.md` therefore stops carrying migration
+   narratives — it describes how to build the current state, nothing
+   historical.
+
+2. **One file per step, next to the code:** `docs/deploy/YYYY-MM-DD-<slug>.md`
    (the date it was written; the slug says what). The only structure is a
    header line, `phase:`, with one of three values:
 
@@ -55,24 +65,34 @@ pending ones to an agent.**
    | `after-deploy` | after everything, before the deploy is recorded |
 
    The body is plain words written for the agent that will carry it out:
-   what to run (with `<project-id>` placeholders), **how to check it
-   worked — and how to tell it was already done**, what breaks without it,
-   and whether staging and prod differ. Conventions: `docs/deploy/README.md`.
+   what to run (with `<project-id>` placeholders), how to check it worked
+   and how to tell it was already done, what breaks without it, and whether
+   staging and prod differ. Conventions: `docs/deploy/README.md`.
 
-2. **Pending = changed since this environment's last deploy.** A step is
-   pending for an environment when its file was added or changed since that
-   environment's last `deploy/<env>/firebase/*` tag. With no tag at all —
-   a new installation — every step is pending. There is no other state: a
-   successful deploy moves the tag, an aborted one does not, and files are
-   never deleted. `docs/deploy/` therefore doubles as the history of every
-   migration, and a future environment that deploys on its own schedule
-   gets the same list.
+3. **Pending = added since this environment's last deploy.** A step is
+   pending for an environment when its file was *added* since that
+   environment's last `deploy/<env>/firebase/*` tag. The `Deploy:` line
+   check (decision 6) makes every added step file appear in its PR's
+   `Deploy:` line, so this is exactly the set of steps the changes deployed
+   since the last run declared — read from git, with no GitHub call at
+   deploy time. Editing a step file afterwards (a typo fix) triggers
+   nothing; renaming one counts as adding it, so merged files keep their
+   name. An environment with no deploy tag is a fresh installation: it was
+   built from the checklist and is up to date by definition, so nothing is
+   pending. There is no other state: a successful deploy moves the tag, an
+   aborted one does not.
 
-3. **The deploy script stops at each boundary with pending steps**
+4. **Once a step has run in every environment, its file is deleted** — in
+   any later PR, with `Deploy: none`. It carries no value afterwards: the
+   checklist describes the resulting state, the deploy log says when the
+   step ran, and git history keeps the text.
+
+5. **The deploy script stops at each boundary with pending steps**
    (`scripts/deploy-steps.ts list`). On a terminal it starts an interactive
    `claude` session (`deploy-steps.ts prompt`) that names the environment,
    the project, the release and the files, and tells the agent to carry the
-   steps out in order, to check first whether a step already ran, to
+   steps out in order, to check first whether a step already ran (an
+   earlier deploy may have stopped after it, leaving the tag in place), to
    dry-run and wait for a go before anything that changes production data,
    and to record each step with `deploy-record.ts event`. When the session
    ends, the script asks once whether the steps are done and only then
@@ -83,28 +103,30 @@ pending ones to an agent.**
    deploy unrecorded on purpose: the tag does not move, so the steps come
    back at the next deploy.
 
-4. **The idempotent step runs every time, without a file.** `deploy.sh`
+6. **Every PR says whether it needs one.** The PR description carries
+   exactly one `Deploy:` line — `Deploy: none — <reason>` or
+   `Deploy: docs/deploy/<file>.md` — checked by the `Deploy line` workflow
+   (`scripts/check-deploy-line.ts`, same pattern as the `Spec:` line of
+   ADR-0047): the files it names are exactly the step files the PR adds,
+   and their headers parse. A PR that edits or deletes a step file names
+   nothing, because nothing will run. Whether `none` is honest is the
+   reviewer's call; the `code-reviewer` agent asks it.
+
+7. **The idempotent step runs every time, without a file.** `deploy.sh`
    runs `scripts/setup-bigquery.ts` before every functions deploy. It is
    idempotent and quick (append-only columns, views updated in place), so
    the whole class of "column deployed before the table knew it" disappears
    without anyone remembering anything. It needs Application Default
-   Credentials, and a failure stops the deploy. The mail publish lives in
-   the operations repo and stays a step file for now.
+   Credentials, and a failure stops the deploy. What every deploy does is
+   listed in the header of `scripts/deploy.sh`.
 
-5. **Every PR says whether it needs one.** The PR description carries
-   exactly one `Deploy:` line — `Deploy: none — <reason>` or
-   `Deploy: docs/deploy/<file>.md` — checked by the `Deploy line` workflow
-   (`scripts/check-deploy-line.ts`, same pattern as the `Spec:` line of
-   ADR-0047): the files it names are the step files the PR adds or changes,
-   and their headers parse. Whether `none` is honest is the reviewer's
-   call; the `code-reviewer` agent asks it.
-
-6. **Scope.** The gate lives in `scripts/deploy.sh` only. The gateway,
+8. **Scope.** The gate lives in `scripts/deploy.sh` only. The gateway,
    kiosk and firmware deploys do not stop for steps — none has needed one
    so far; when one does, the same list and prompt apply with their own tag
-   glob. The rollouts that predate this ADR stay in the checklist, marked as
-   completed, and are not backfilled as files: they are done in both
-   environments and would only be presented again for nothing.
+   glob. The rollouts that predate this ADR are done in both environments:
+   their migration sections leave the checklist, and what a fresh
+   installation needs from them (the bill-number format marker on
+   `config/billing`) is in the checklist's install steps instead.
 
 ## Consequences
 
@@ -117,37 +139,47 @@ pending ones to an agent.**
 - The agent handles what a script cannot: a step that is already done, a
   step that is nothing to do for staging, a dry run whose output needs
   reading.
-- A new environment gets every past step in order; `docs/deploy/` is the
-  migration history.
+- The checklist stays an installation guide: a fresh environment and a
+  migrated one are built to the same state, and nobody reads through
+  finished migrations to find the step they need.
 
 **Cons:**
 - Every `deploy.sh` run now needs Application Default Credentials for the
   BigQuery setup and fails without them.
 - A pending step costs an interactive agent session in the middle of the
   deploy; the person deploying stays at the terminal.
-- A step file edited after it ran (a typo fix) is presented again. Its
-  "how to check" paragraph makes that a quick no-op, but it is a cost of
-  having no done-markers.
+- A step that ran before a deploy was aborted is presented again at the
+  next one. Its "how to check" paragraph makes that a quick no-op.
 - The agent can run a destructive command. The session is interactive and
   the prompt demands a dry run and a go before the live run; that is the
   same trust model as the smoke run, not less.
-- The check only sees files that exist. Forgetting to write one is caught
-  by review, not by the workflow.
+- The check only sees files that exist. Forgetting to write one — or to
+  update the checklist for a fresh installation — is caught by review, not
+  by the workflow.
+- Deleting finished steps is a convention; a forgotten file is inert, so
+  nothing enforces it.
 
 **Tradeoffs:**
 - *Structured headers (environments, once-per-project) plus confirmation
   records in the deploy log, as #756 first proposed:* every field is
   something the agent reads from the prose anyway, and the confirmation
   record duplicates the deploy tag. Rejected as machinery.
+- *Reading the `Deploy:` lines of the PRs merged since the tag at deploy
+  time:* needs GitHub at deploy time and breaks when a description is
+  edited after the merge. "Added since the tag" is the same set by
+  construction, from git alone.
+- *Pending = added or changed since the tag:* would re-run a step for a
+  typo fix, and nothing in the file says whether an edit means "run again".
+  A step that must run again is a new file.
 - *A `run:` line the script executes itself:* the steps that matter most
   (migrations, data gates) need judgement between commands. An agent
   reading prose covers both kinds; a script covers one.
 - *Detecting the BigQuery case by path (`functions/src/stats/schema.ts`
   changed since the tag):* running the idempotent script every time is
   simpler and cannot be wrong.
-- *Deleting step files once every environment has run them:* loses the
-  history and the new-environment case; the tag already makes old files
-  inert.
-- *Backfilling the finished rollouts as files:* each would be presented to
-  both environments at their next deploy, and a fresh install runs the full
-  checklist anyway.
+- *Keeping step files forever as the migration history, and presenting all
+  of them to a new environment:* a fresh installation must not need
+  migrations; it follows the checklist and lands at the current state. The
+  deploy log and git history keep the record.
+- *Backfilling the finished rollouts as files:* they are done everywhere,
+  and a file that is done everywhere is deleted (decision 4).

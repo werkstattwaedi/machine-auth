@@ -3,13 +3,17 @@
 
 // Deterministic half of the deploy-step check (ADR-0049): every PR says
 // which deploy steps it adds — or that it needs none — in a `Deploy:` line,
-// and the step files it names are exactly the ones it adds or changes, with
-// a header the deploy script can read. Whether `none` is honest is the
-// reviewer's job (the code-reviewer agent asks); this only keeps the line
-// present and consistent, so it can be a required check — the same split as
-// the `Spec:` line (scripts/check-spec-line.ts).
+// and the step files it names are exactly the ones it adds, with a header
+// the deploy script can read. Only additions matter: a step runs when its
+// file is added (deploy-steps.ts), so a PR that edits or deletes one names
+// nothing. Whether `none` is honest — and whether the checklist got its
+// fresh-install half — is the reviewer's job (the code-reviewer agent
+// asks); this only keeps the line present and consistent, so it can be a
+// required check — the same split as the `Spec:` line
+// (scripts/check-spec-line.ts).
 //
-// CLI (CI): PR_BODY, PR_AUTHOR and CHANGED_FILES (newline-separated) in the
+// CLI (CI): PR_BODY, PR_AUTHOR and PR_FILES (one JSON object per line,
+// {"path", "status"} as the GitHub pulls/files API reports them) in the
 // env, run from the repo root with plain `node` (type stripping, no deps).
 
 import { existsSync, readFileSync } from "node:fs";
@@ -19,6 +23,16 @@ import { isStepFile, parseStepHeader, STEPS_DIR } from "./deploy-steps.ts";
 export type DeployLine =
   | { kind: "none"; reason: string }
   | { kind: "steps"; files: string[] };
+
+export interface PrFile {
+  path: string;
+  /** As the GitHub API reports it: added, modified, removed, renamed, copied, changed. */
+  status: string;
+}
+
+// A renamed or copied file is new at its path: the deploy script sees an
+// addition (git diff --no-renames) and will run it.
+const ADDED = new Set(["added", "renamed", "copied"]);
 
 // PRs that carry no deploy step by construction.
 const EXEMPT_AUTHORS = new Set(["dependabot[bot]", "app/dependabot"]);
@@ -78,8 +92,8 @@ export function parseDeployLine(body: string): DeployLine | string {
 export function checkPr(input: {
   body: string;
   author: string;
-  changedFiles: string[];
-  /** The file's content at the PR head, undefined when it does not exist there (deleted). */
+  files: PrFile[];
+  /** The file's content at the PR head, undefined when it does not exist there. */
   read: (path: string) => string | undefined;
 }): string[] {
   if (EXEMPT_AUTHORS.has(input.author)) return [];
@@ -87,30 +101,39 @@ export function checkPr(input: {
   const line = parseDeployLine(input.body);
   if (typeof line === "string") return [line];
 
-  // Steps this PR adds or changes. A deleted step file is nobody's business
-  // here (they are meant to stay, but a deletion is not a step to run).
-  const inDiff = input.changedFiles.filter((f) => isStepFile(f) && input.read(f) !== undefined);
+  const steps = input.files.filter((f) => isStepFile(f.path));
+  const added = steps.filter((f) => ADDED.has(f.status)).map((f) => f.path);
   const errors: string[] = [];
 
   if (line.kind === "none") {
-    for (const f of inDiff) {
-      errors.push(`${f} is added or changed in this PR but the description says \`Deploy: none\` — name it`);
+    for (const f of added) {
+      errors.push(`${f} is added in this PR but the description says \`Deploy: none\` — name it`);
     }
     return errors;
   }
 
   const named = new Set(line.files);
-  for (const f of inDiff) {
-    if (!named.has(f)) errors.push(`${f} is added or changed in this PR but not named in the \`Deploy:\` line`);
+  for (const f of added) {
+    if (!named.has(f)) errors.push(`${f} is added in this PR but not named in the \`Deploy:\` line`);
   }
   for (const f of line.files) {
+    const status = steps.find((s) => s.path === f)?.status;
+    if (status === undefined) {
+      errors.push(`${f} is named in the \`Deploy:\` line but not part of this PR`);
+      continue;
+    }
+    if (!ADDED.has(status)) {
+      errors.push(
+        status === "removed"
+          ? `${f} is deleted in this PR — a deleted step names nothing`
+          : `${f} is edited in this PR, not added — a step runs only when its file is added; to run it again, add a new file`,
+      );
+      continue;
+    }
     const text = input.read(f);
     if (text === undefined) {
       errors.push(`${f} is named in the \`Deploy:\` line but does not exist in this PR`);
       continue;
-    }
-    if (!input.changedFiles.includes(f)) {
-      errors.push(`${f} is named in the \`Deploy:\` line but not changed in this PR`);
     }
     try {
       parseStepHeader(text, f);
@@ -121,11 +144,25 @@ export function checkPr(input: {
   return errors;
 }
 
+/** One JSON object per line, as `gh api … --paginate --jq '.[] | {…}'` prints them. */
+export function parsePrFiles(ndjson: string): PrFile[] {
+  return ndjson
+    .split("\n")
+    .filter((l) => l.trim() !== "")
+    .map((l) => {
+      const o = JSON.parse(l) as Partial<PrFile>;
+      if (typeof o.path !== "string" || typeof o.status !== "string") {
+        throw new Error(`PR_FILES line is not {path, status}: ${l}`);
+      }
+      return { path: o.path, status: o.status };
+    });
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const errors = checkPr({
     body: process.env.PR_BODY ?? "",
     author: process.env.PR_AUTHOR ?? "",
-    changedFiles: (process.env.CHANGED_FILES ?? "").split("\n").filter(Boolean),
+    files: parsePrFiles(process.env.PR_FILES ?? ""),
     read: (path) => (existsSync(path) ? readFileSync(path, "utf8") : undefined),
   });
   for (const e of errors) console.error(`::error::${e}`);

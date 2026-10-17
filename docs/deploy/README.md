@@ -1,44 +1,65 @@
 # Deploy steps
 
-A deploy step is something that has to be done by hand around a deploy, in
-a fixed order: a data migration or backfill, a data gate, a one-time console
-switch, a template publish. Each one is a file in this directory, next to the
+A deploy step is a **migration**: something that has to be done by hand
+around a deploy, in a fixed order, to bring an environment that already
+runs to the state a fresh installation reaches by following
+[`deployment-checklist.md`](../deployment-checklist.md) — a data migration
+or backfill, a data gate, a template publish, a config parameter that is
+required from now on. Each one is a file in this directory, next to the
 code that needs it, written for the agent that will carry it out
 ([ADR-0049](../adr/0049-deploy-steps.md)).
 
 `scripts/deploy.sh` reads this directory. A step is **pending** for an
-environment when its file was added or changed since that environment's
-last deploy (its `deploy/<env>/firebase/*` tag, ADR-0045); an environment
-with no deploy tag yet gets every step. At each phase boundary the script
+environment when its file was *added* since that environment's last deploy
+(its `deploy/<env>/firebase/*` tag, ADR-0045). Every added step file is in
+its PR's `Deploy:` line, so that is exactly the set of steps the changes
+deployed since the last run declared. At each phase boundary the script
 stops, hands the pending files to an interactive agent session, and asks
-once whether they are done before it continues. Files are never deleted:
-this directory is also the history of every migration, and a new
-installation gets the whole list in order.
+once whether they are done before it continues.
+
+Three things follow from "added since":
+
+- **Editing a step file triggers nothing.** A typo fix after the step ran
+  is harmless. A step that must run again is a new file. Don't rename a
+  merged file — a rename counts as adding it.
+- **A fresh installation has nothing pending.** It has no deploy tag; it
+  was built from the checklist and is up to date by definition. So a PR
+  whose change also needs something on a fresh installation updates the
+  checklist in the same PR: the step migrates, the checklist installs, and
+  after the step both environments must match.
+- **Once a step has run in every environment, delete the file** in any
+  later PR (`Deploy: none — removes a completed step`). It carries no value
+  afterwards: the checklist describes the state, the deploy log says when
+  it ran, git keeps the text. `npx tsx scripts/deploy-steps.ts list --env
+  <env>` empty for every environment means every file here can go.
 
 ## When a change needs a step
 
 Ask: does something have to happen before or after this deploy, in order,
-that the deploy script does not do? Then write a step. Typical cases:
+that `scripts/deploy.sh` does not do? Then write a step. Typical cases:
 
 - a data migration or backfill script (`scripts/migrate-*.ts`,
   `scripts/backfill-*.ts`), with its dry run;
 - a data gate — a check that must pass before the new code is safe;
 - a change to the mail contract (`shared/src/email-contract.ts`): the
   templates must be published from the operations repo first;
-- a switch in a console (Firebase Auth providers, IAM, an alert policy);
-- a new `defineSecret` that must have a value before the functions deploy.
+- a config parameter or secret that is required from now on: the step says
+  so and checks it is present in the operations repo's config (we usually
+  commit the operations repo together with the change, but that is a
+  convention, and a separate installation has its own operations config);
+- a switch in a console (Firebase Auth providers, IAM, an alert policy).
 
-Not a step, because the deploy does it every time: the BigQuery schema
-(`setup-bigquery.ts` runs before every functions deploy), indexes and rules
-(they ship with the deploy), config params (change the operations config,
-`generate-env` runs at deploy time). The standard order — functions, then
-rules, then hosting — is also not a step; a PR that only relies on it says
+Not a step, because every deploy does it (the list is in the header of
+`scripts/deploy.sh`): the BigQuery schema — `setup-bigquery.ts` runs before
+every functions deploy; indexes and rules — they ship with the deploy;
+`generate-env`. The standard order — functions, then rules, then hosting —
+is also not a step; a PR that only relies on it says
 `Deploy: none — standard order`.
 
 ## The file
 
 `docs/deploy/YYYY-MM-DD-<slug>.md` — the date it was written, a slug that
-says what it does. Keep the name once it is merged.
+says what it does.
 
 ```markdown
 ---
@@ -65,11 +86,11 @@ The body is plain words for an agent. It needs:
 1. **What to run**, with the exact commands. Write `<project-id>` where the
    project goes; the agent is told which project it is deploying to. Say
    when a dry run comes first and what its output should look like.
-2. **How to check it worked — and how to tell it was already done.** This
-   matters more than it looks: a step is presented to every environment,
-   and again whenever its file changes after it ran. The agent checks
-   before it acts, so say what "done" looks like (a config doc exists, a
-   script refuses to run twice, a count is zero).
+2. **How to check it worked — and how to tell it was already done.** A
+   deploy that stops after the step ran (a declined later phase, a failed
+   hosting deploy) leaves the tag where it was, so the step comes back
+   next time. The agent checks before it acts; say what "done" looks like
+   (a config doc exists, a script refuses to run twice, a count is zero).
 3. **What breaks without it**, so the agent can tell a harmless skip from a
    dangerous one.
 4. **Staging vs prod**, if they differ — e.g. "staging has no legacy bills:
@@ -119,5 +140,7 @@ Deploy: none — standard order, no data change
 Deploy: docs/deploy/2026-10-20-migrate-bill-numbers.md
 ```
 
-The files it names must be the step files the PR adds or changes, with a
-header that parses. Whether `none` is true is the reviewer's judgement.
+The files it names are exactly the step files the PR **adds**, with a
+header that parses. A PR that edits or deletes a step file names nothing —
+nothing will run. Whether `none` is true, and whether the checklist got its
+fresh-install half, is the reviewer's judgement.

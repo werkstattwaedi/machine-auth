@@ -40,11 +40,11 @@
 #      never ship prod-configured bundles)
 #
 # One-off deploy steps (ADR-0049, docs/deploy/): before step 3, between 3
-# and 4, and after 5 the script stops for the step files added or changed
-# since this environment's last deploy tag, hands them to an interactive
-# `claude` session (or prints them: --no-agent, no terminal, or already
-# inside Claude Code) and asks once whether they are done. --yes does not
-# answer that question.
+# and 4, and after 5 the script stops for the step files added since this
+# environment's last deploy tag (migrations the PRs since then declared in
+# their Deploy: line), hands them to an interactive `claude` session (or
+# prints them: --no-agent, no terminal, or already inside Claude Code) and
+# asks once whether they are done. --yes does not answer that question.
 #
 # The active `firebase use` alias is never changed — every command passes
 # --project explicitly.
@@ -148,9 +148,10 @@ export BUILD_VERSION
 step "Install workspace dependencies (also builds @oww/shared via postinstall)"
 npm install
 
-# One-off deploy steps (ADR-0049, docs/deploy/): a step file added or changed
-# since this environment's last deploy tag is pending. At each phase
-# boundary the script stops, hands the pending files to an interactive
+# One-off deploy steps (ADR-0049, docs/deploy/): a step file added since
+# this environment's last deploy tag is pending (an environment without a
+# tag is a fresh installation — nothing pending). At each phase boundary
+# the script stops, hands the pending files to an interactive
 # `claude` session that carries them out — or prints them, with --no-agent,
 # without a terminal, or when this script already runs inside a Claude Code
 # session (the outer agent reads them) — and asks once whether they are

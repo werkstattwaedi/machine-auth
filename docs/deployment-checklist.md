@@ -71,14 +71,15 @@ If a record step warns (e.g. offline), re-run it by hand —
 
 ### One-off deploy steps (ADR-0049)
 
-A change that needs something done around the deploy, in order — a
-migration or backfill, a data gate, a mail-template publish, a console
-switch — ships it as a file in [`docs/deploy/`](deploy/README.md), and
-`scripts/deploy.sh` stops for it: before the functions deploy, after it, or
-after everything, as the file's `phase:` says. A step is pending for an
-environment when its file changed since that environment's last deploy
-tag (an environment without a tag gets all of them). The script hands the
-pending files to an interactive agent session — or prints them with
+A change that needs a **migration** around the deploy, in order — a data
+migration or backfill, a data gate, a mail-template publish, a config
+parameter that is required from now on, a console switch — ships it as a
+file in [`docs/deploy/`](deploy/README.md), and `scripts/deploy.sh` stops
+for it: before the functions deploy, after it, or after everything, as the
+file's `phase:` says. A step is pending for an environment when its file
+was added since that environment's last deploy tag — the migrations the
+PRs merged since then declared in their `Deploy:` line. The script hands
+the pending files to an interactive agent session — or prints them with
 `--no-agent`, without a terminal, or inside Claude Code — and asks once
 whether they are done. `--yes` does not answer that. Declining at the last
 boundary leaves the deploy unrecorded on purpose, so the step comes back.
@@ -87,12 +88,13 @@ boundary leaves the deploy unrecorded on purpose, so the step comes back.
 npx tsx scripts/deploy-steps.ts list --env prod     # what the next deploy stops for
 ```
 
-The BigQuery schema needs no step: `setup-bigquery.ts` runs before every
-functions deploy (idempotent; needs
+A step migrates an environment that already runs; **this checklist builds
+a fresh one**, and after the step both must match. So a change that also
+needs something on a fresh installation updates this document in the same
+PR, and this document carries no migration history — a finished step's
+file is deleted once it ran everywhere. The BigQuery schema needs no step:
+`setup-bigquery.ts` runs before every functions deploy (idempotent; needs
 `gcloud auth application-default login`, and the deploy stops without it).
-The rollouts further down that predate ADR-0049 — generated mail templates,
-bill numbers, member identity, catalog snapshots — are completed in both
-environments and stay here as the record; new ones go to `docs/deploy/`.
 
 ## Prerequisites
 
@@ -270,6 +272,13 @@ After editing `machine-auth-operations/config.jsonc`, run `npm run generate-env`
 
 Verify `config/pricing` exists in Firestore (Admin → Firestore → `config/pricing`). Per issue #149 the checkout UI and the `closeCheckoutAndGetPayment` function refuse to operate when the doc is missing or fails the shape check, so a missing doc breaks all checkouts loudly rather than silently misbilling with hardcoded fallbacks.
 
+Verify `config/billing` carries `referenceNumberFormat: "shifted-v1"` next
+to `nextBillNumber` (ADR-0042). `allocateBill` refuses to mint
+(`failed-precondition`) while the doc exists without that marker, so a seed
+that writes only `nextBillNumber` breaks every bill. (The marker was
+introduced by the 2026-09 bill-number migration; a fresh installation sets
+it directly.)
+
 Verify `config/catalog-references` carries **both** references (ADR-0030):
 `membership` and `badge`, each pointing at an active catalog doc. The badge
 SKU must have the two variants `standard` (5 CHF) and `gratis` (0 CHF) —
@@ -311,7 +320,9 @@ every send loudly (`failed-precondition`, bill mails into
 
 **Whenever the contract changed** (a mail, dimension or variable added or
 renamed), before the functions deploy of each project — the PR that changes
-it ships this as a `before-functions` step in `docs/deploy/` (ADR-0049):
+it ships this as a `before-functions` step in `docs/deploy/` (ADR-0049).
+On a fresh installation, publish both environments once before the first
+functions deploy:
 
 ```bash
 cd ../machine-auth-operations
@@ -324,82 +335,12 @@ aliases. After the deploy has settled, `npm run email:publish -- --env
 <env> --prune` removes aliases nothing uses any more. A copy-only change
 needs no functions deploy at all.
 
-**First rollout of the generated templates (replaces the hand-maintained
-`self-checkout-*` / `membership-renewal` templates):** publish both
-environments, add `functions.resendTemplateEnv` to `config.jsonc` /
-`config.staging.jsonc`, `npm run generate-env`, deploy functions to
-staging, `/smoke-staging`, then prod. Keep the old templates and the
-`functions.resend*TemplateId` config keys (no longer read) for one billing
-cycle so a rollback to the previous functions still finds them, then
-delete both by hand.
-
 Smoke test for the kiosk account-instructions mail (issue #595): sign up
 with a fresh e-mail at the kiosk (`/checkin?kiosk`) — the visitor should
 land identified (identity strip) and receive the instructions email; an
 unclaimed member's e-mail should sign in with a code and get the 4-step
 "Willkommen" onboarding overlay (step 4 offers the same instructions
 email).
-
-### Bill-number migration (ADR-0042) — once per project, RIGHT AFTER the functions deploy
-
-_Completed in staging and prod; kept as the record. A step like this now
-ships as a `docs/deploy/` file (ADR-0049)._
-
-Stored `bills.referenceNumber` values move to `base × 10 + revisionDigit`. The new `allocateBill`
-refuses to mint until `config/billing.referenceNumberFormat == "shifted-v1"` exists, and the daily
-stats export emits a new `cancelled_at` column. Order matters — and it is **functions first**:
-
-```bash
-# 1. BigQuery first — the sink rejects unknown columns (skipInvalidRows: false).
-npx tsx scripts/setup-bigquery.ts --project <project-id>
-
-# 2. Deploy functions (section 3). From now on bill minting is BLOCKED
-#    (failed-precondition) until step 3 runs — keep the gap short.
-
-# 3. Dry-run, then migrate. Refuses to run twice; resumable per document.
-FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
-  npx tsx scripts/migrate-bill-numbers.ts --prod --dry-run
-FIREBASE_PROJECT_ID=<project-id> GOOGLE_APPLICATION_CREDENTIALS=<sa.json> \
-  npx tsx scripts/migrate-bill-numbers.ts --prod
-
-# 4. Then hosting (section 6); rules/indexes carry no change for this feature.
-```
-
-Why not migrate first: the *old* `allocateBill` would keep minting un-shifted numbers
-(4200017 …) next to migrated ones, and every such bill is misread by the new formatter forever
-(4200017 = base 420001, revision 8) with no way to rerun the migration. The new code refusing to
-mint for a minute is the safe failure; a wrong number is not. Existing PDFs keep their printed
-number and legacy QR payload; the bank import resolves those slips through a ×10 fallback.
-Afterwards, check the admin Rechnungen list still shows `RE-4200001…`, close a test checkout to
-confirm minting works again, and confirm a second `migrate-bill-numbers.ts` run refuses.
-
-### Member identity (ADR-0043) — data gate BEFORE the functions + rules deploy
-
-_Completed in staging and prod; kept as the record (ADR-0049)._
-
-Login resolves by `users.email` and the Auth-linked phone must equal `users.phone`, both by exact
-match. That is only safe while the stored values are clean, and the old admin profile tab can
-still write any e-mail until the new **rules** are live — so check right before deploying:
-
-```bash
-# Read-only; prints counts and offender UIDs only, never an e-mail or phone. Exit 1 = findings.
-FIREBASE_PROJECT_ID=<project-id> npx tsx scripts/check-user-identity-fields.ts --prod
-```
-
-It must report: every phone null or E.164, every e-mail null or trimmed+lowercase, **no e-mail
-shared by two users docs** (after the deploy that is a hard login failure for both). Fix findings
-by hand first. Then deploy functions **and** rules together (the rules pin `users.email` for
-clients; the functions make the doc the login lookup key — either half alone leaves a gap), then
-hosting (the admin profile tab now changes e-mails through `updateUserEmail`). Between the rules and
-the hosting deploy the *old* profile tab gets "Keine Berechtigung" when an admin changes an e-mail
-— the rules now pin `users.email` for admins too — so keep that gap short.
-
-Afterwards backfill the drift that predates the sync — report first, read it, then fix:
-
-```bash
-npx tsx scripts/privacy-cli.ts audit-identity --prod
-npx tsx scripts/privacy-cli.ts audit-identity --fix --prod   # expect only report-only kinds left
-```
 
 ## 3. Deploy Functions
 
@@ -562,22 +503,6 @@ FIREBASE_PROJECT_ID=<project-id> \
 #  - SUM(summary.totalPrice) vs SELECT SUM(total_price) FROM stats.visits_v
 #  - 5 random checkouts field-by-field
 ```
-
-**9c′. One-off: catalog snapshots + visit_items variants** (ADR-0039
-amendment 2026-09-29; completed in both environments, kept as the record —
-ADR-0049). Order: `setup-bigquery.ts` (adds the catalog
-tables/views and the `visit_items.variant_id` / `pricing_model` columns) →
-deploy functions → re-emit the old `visit_items` rows. The first daily
-export after the deploy takes the first catalog snapshot by itself.
-
-```bash
-FIREBASE_PROJECT_ID=<project-id> \
-  npx tsx scripts/backfill-visit-item-variants.ts --prod --dry-run
-FIREBASE_PROJECT_ID=<project-id> \
-  npx tsx scripts/backfill-visit-item-variants.ts --prod
-```
-
-Do NOT reset `export_state/visits` for this — see the ADR amendment.
 
 **9d. Ops calendar:** January = yearly retention trim
 (`privacy-cli.ts trim --dry-run --prod` → review counts → live run). See

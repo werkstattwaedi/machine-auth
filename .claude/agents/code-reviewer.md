@@ -30,7 +30,7 @@ Spawn experts with: `Task(subagent_type="<expert>", prompt="Review for <domain>.
 
 - If a plan file exists (`.claude/plan.md`), compare changes against the plan and flag deviations
 - Product spec (ADR-0047): user-visible behaviour changes come with their `docs/spec/` rule change, after a first commit that writes the area down as it was; flag tests that string-match UI copy to lock in a product rule (the rule belongs in the spec). For a full pass, spawn `spec-expert` (task *check*)
-- Deploy steps (ADR-0049): a change that needs something done around the deploy, in order — a migration or backfill, a data gate, a mail-contract change (`shared/src/email-contract.ts`), a new `defineSecret`, a console switch — comes with a `docs/deploy/YYYY-MM-DD-<slug>.md` step file (header `phase:`, prose that says how to check it worked); flag a `Deploy: none` that hides one. The BigQuery schema and the standard order functions → rules → hosting are not steps
+- Deploy steps (ADR-0049): a change that needs a migration around the deploy, in order — a migration or backfill, a data gate, a mail-contract change (`shared/src/email-contract.ts`), a `defineString`/`defineSecret` that is required from now on, a console switch — comes with a `docs/deploy/YYYY-MM-DD-<slug>.md` step file (header `phase:`, prose that says how to check it worked); flag a `Deploy: none` that hides one. A step migrates a running environment; if a fresh installation needs the same thing, `docs/deployment-checklist.md` must say so in the same PR. The BigQuery schema and the standard order functions → rules → hosting are not steps
 - Stale references from renames/moves
 - Compilation (use `./pw build` from CLAUDE.md)
 - Style (Google C++ for firmware, TS conventions for functions)

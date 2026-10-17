@@ -6,11 +6,13 @@
  * written as prose in docs/deploy/ and carried out by an agent while
  * scripts/deploy.sh waits at the phase boundary.
  *
- * A step is pending for an environment when its file was added or changed
- * since that environment's last `deploy/<env>/firebase/*` tag (ADR-0045);
- * with no tag yet — a new environment — every step is pending. There is no
- * other state: a successful deploy moves the tag, an aborted one doesn't,
- * and step files are never deleted.
+ * A step is pending for an environment when its file was *added* since that
+ * environment's last `deploy/<env>/firebase/*` tag (ADR-0045). Every added
+ * step file is in its PR's `Deploy:` line, so that is the set of steps the
+ * changes deployed since the last run declared. Editing a file triggers
+ * nothing; an environment without a tag is a fresh installation, built from
+ * the checklist, with nothing pending. There is no other state: a
+ * successful deploy moves the tag, an aborted one doesn't.
  *
  * Usage (scripts/deploy.sh, or by hand to preview the next deploy):
  *   npx tsx scripts/deploy-steps.ts list   --env prod [--phase before-functions] [--no-fetch]
@@ -114,7 +116,7 @@ export function agentPrompt(opts: {
     "",
     "Rules:",
     "- Read docs/deploy/README.md first, then each file. A file says what to run, how to check it worked and what breaks without it; it may say there is nothing to do for this environment.",
-    "- Check before you act. A step is presented again whenever its file changed since this environment's last deploy, and every step is presented to a new environment — so it may already be done. If the file's check says so, say so and move on.",
+    "- Check before you act. A step is presented again when an earlier deploy stopped after it ran (the deploy tag only moves when the whole deploy went through) — so it may already be done. If the file's check says so, say so and move on.",
     `- Run every command against ${opts.project} (${opts.env}); where a file says <project-id>, that is ${opts.project}.`,
     "- Anything that changes production data: dry-run first, show me the output, and wait for my go before the live run.",
     `- Record each step you carried out: npx tsx scripts/deploy-record.ts event --env ${opts.env} --note "deploy step <file>: <what you did>"`,
@@ -146,24 +148,25 @@ function lines(out: string | null): string[] {
   return out ? out.split("\n").filter(Boolean) : [];
 }
 
-/** The environment's last firebase deploy tag (ADR-0045); none for a new environment. */
+/** The environment's last firebase deploy tag (ADR-0045); none for a fresh installation. */
 export function lastDeployTag(env: string): string | undefined {
   // Timestamps are zero-padded, so name order is time order.
   return lines(tryGit(["tag", "--list", `deploy/${env}/firebase/*`])).sort().at(-1);
 }
 
 /**
- * Step files added or changed since the tag, compared with the working
- * tree — so a step that is not committed yet shows up in a preview (the
- * deploy itself runs on a clean tree). Renames count as new files and
- * deletions don't count: both the safe direction.
+ * Step files added since the tag, compared with the working tree — so a
+ * step that is not committed yet shows up in a preview (the deploy itself
+ * runs on a clean tree). Only additions: an edit means nothing, a rename
+ * counts as an addition (the safe direction). No tag — a fresh installation
+ * — means nothing is pending.
  */
-export function changedSince(tag: string | undefined): string[] {
+export function addedSince(tag: string | undefined): string[] {
+  if (!tag) return [];
+  const added = tryGit(["diff", "--name-only", "--no-renames", "--diff-filter=A", tag, "--", STEPS_DIR]);
+  if (added === null) throw new Error(`git diff against ${tag} failed — is the tag reachable?`);
   const untracked = lines(tryGit(["ls-files", "--others", "--exclude-standard", "--", STEPS_DIR]));
-  if (!tag) return [...lines(tryGit(["ls-files", "--", STEPS_DIR])), ...untracked];
-  const changed = tryGit(["diff", "--name-only", "--no-renames", "--diff-filter=AM", tag, "--", STEPS_DIR]);
-  if (changed === null) throw new Error(`git diff against ${tag} failed — is the tag reachable?`);
-  return [...lines(changed), ...untracked];
+  return [...lines(added), ...untracked];
 }
 
 export function pendingSteps(env: string, phase?: Phase): Step[] {
@@ -171,7 +174,7 @@ export function pendingSteps(env: string, phase?: Phase): Step[] {
     const abs = resolve(projectRoot, path);
     return existsSync(abs) ? readFileSync(abs, "utf8") : undefined;
   };
-  const steps = stepsOf(changedSince(lastDeployTag(env)), read);
+  const steps = stepsOf(addedSince(lastDeployTag(env)), read);
   return phase ? steps.filter((s) => s.phase === phase) : steps;
 }
 

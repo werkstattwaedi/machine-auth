@@ -40,11 +40,13 @@ against it, and the `spec-expert` agent does the thinking. Conventions and gloss
 
 ### `deploy/` - Deploy Steps
 
-One file per one-off deploy action — a migration, a backfill, a data gate,
-a console switch — written for the agent that carries it out;
-`scripts/deploy.sh` stops for the ones pending in an environment. Never
-deleted: the migration history, and a new environment gets the whole list.
-Conventions: [deploy/README.md](deploy/README.md); see
+One file per migration a deploy needs around it — a data migration, a
+backfill, a data gate, a newly required config parameter, a console switch
+— written for the agent that carries it out; `scripts/deploy.sh` stops for
+the ones added since the environment's last deploy. A fresh installation
+follows `deployment-checklist.md` instead and has none pending; a step's
+file is deleted once it ran everywhere. Conventions:
+[deploy/README.md](deploy/README.md); see
 [ADR-0049](adr/0049-deploy-steps.md).
 
 ### `requirements/` - Product Requirements
@@ -78,7 +80,7 @@ Design assets, mockups, and brand guidelines.
 ## File Naming
 
 - **ADRs:** `NNNN-descriptive-title.md` (e.g., `0001-use-firebase-for-backend.md`)
-- **Deploy steps:** `YYYY-MM-DD-slug.md` (the date written; never renamed)
+- **Deploy steps:** `YYYY-MM-DD-slug.md` (the date written; never renamed — a rename counts as a new step)
 - **Requirements:** Freeform, descriptive names
 - **Ideas:** Freeform, descriptive names
 

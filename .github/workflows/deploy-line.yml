@@ -1,8 +1,8 @@
 name: Deploy line
 
 # Deterministic half of the deploy-step check (ADR-0049): the PR
-# description carries a `Deploy:` line, and the step files it names are the
-# ones the PR adds or changes under docs/deploy/, with a header the deploy
+# description carries a `Deploy:` line, and the step files it names are
+# exactly the ones the PR adds under docs/deploy/, with a header the deploy
 # script can read. Cheap and stable, so it can be a required check. Whether
 # `none` is honest is the reviewer's call.
 
@@ -30,7 +30,10 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          CHANGED_FILES="$(gh pr diff ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} --name-only)"
-          export CHANGED_FILES
+          # Status per file (added/modified/removed/renamed): only an added
+          # step file is one the deploy will run. One object per line, so
+          # pagination just appends.
+          PR_FILES="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[] | {path: .filename, status: .status}')"
+          export PR_FILES
           node scripts/check-deploy-line.ts

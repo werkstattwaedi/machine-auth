@@ -4,7 +4,8 @@
 // Locks the deploy-step contract (ADR-0049): the header parser that both the
 // deploy script and the PR check rely on, and the pending-step selection
 // that decides where a deploy stops. A false "nothing pending" lets a
-// migration be forgotten; a false "pending" only costs a question.
+// migration be forgotten; a false "pending" only costs a question. The git
+// side (added since the tag) is exercised by hand — see the PR.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -90,6 +91,7 @@ test("the prompt names the environment, project, release, phase and files", () =
     "before rules, indexes and hosting",
     `  - ${FILE}\n  - docs/deploy/2026-10-21-y.md`,
     "dry-run first",
+    "stopped after it ran",
     "deploy-record.ts event --env prod",
     "do not run or edit scripts/deploy.sh",
   ]) {
