@@ -41,7 +41,7 @@
     "test:precommit": "npm run test:scripts && npm run test:shared && npm run test:kiosk && npm run test:precommit:web && npm run test:precommit:functions",
     "snapshots:normalize": "node scripts/normalize-snapshots.mjs",
     "block": "npx tsx scripts/port-block.ts --",
-    "predeploy": "scripts/deploy/predeploy.sh",
+    "predeploy": "scripts/predeploy.sh",
     "deploy:staging": "scripts/deploy/deploy.sh staging",
     "deploy:prod": "scripts/deploy/deploy.sh prod",
     "deploy:functions": "npx tsx scripts/deploy/deploy-functions.ts",

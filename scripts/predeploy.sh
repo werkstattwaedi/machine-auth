@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/.."
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

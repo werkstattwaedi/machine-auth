@@ -10,6 +10,7 @@ CLI tools for device provisioning and configuration. User/token management has m
 | `sync-device-config.ts` | Sync machine config from Firebase → Particle ledger | Firebase + Particle creds |
 | `seed-emulator.ts` | Populate Firebase emulator with test data | Running emulators |
 | `deploy/` | The deploy tooling — every deploy path, preflight, release, deploy record; [its README](deploy/README.md) lists what every deploy does, in order | — |
+| `predeploy.sh` | Build every deployable artifact by hand, deploy nothing (`npm run predeploy`) — no deploy runs it | firebase, bazelisk, gcloud |
 | `check-deploy-line.ts` | CI: the PR's `Deploy:` line names exactly the step files it adds (ADR-0049) | — |
 
 ## Setup

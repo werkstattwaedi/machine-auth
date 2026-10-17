@@ -105,7 +105,7 @@ for env in "${ENVS[@]}"; do
   fi
 done
 
-# Self-heal leftover functions deploy state (same logic as predeploy.sh):
+# Self-heal leftover functions deploy state (same logic as scripts/predeploy.sh):
 # an interrupted deploy leaves package.json/package-lock.json pinning
 # @oww/shared at a packed tarball, and deploy-functions.ts would snapshot
 # and faithfully restore that dirty state.

@@ -2,8 +2,7 @@
 
 Everything that ships a release lives here: the deploy paths, the checks
 they run first, the release naming and the deploy record. Run each script
-from the repository root (`deploy.sh` and `predeploy.sh` change there
-themselves).
+from the repository root (`deploy.sh` changes there itself).
 
 The one-off steps a single change needs around its deploy are not here.
 They are text in [`docs/deploy/`](../../docs/deploy/README.md), carried out
@@ -107,9 +106,6 @@ component in the record. None of them stops for one-off steps yet.
 - **Firmware** (`./pw prod-flash`). Flashes the production firmware over
   USB and records the device id.
 
-`predeploy.sh` (`npm run predeploy`) builds every artifact without
-deploying anything.
-
 ## Files
 
 | File | Purpose |
@@ -119,7 +115,6 @@ deploying anything.
 | `prepare-functions-deploy.ts` | The functions predeploy hook that points `functions/package.json` at the packed tarball |
 | `deploy-gateway.ts` | Gateway build and deploy to the Raspberry Pi |
 | `deploy-kiosk.ts` | Kiosk installer build |
-| `predeploy.sh` | Build every artifact, deploy nothing |
 | `deploy-preflight.ts` | Refuse unless both repos are on the latest `main` |
 | `release.ts` | Reuse the commit's `vYYYY.M.N` tag or cut the next one |
 | `build-version.ts` | The version every component reports; also the Vite plugin both web apps use |
