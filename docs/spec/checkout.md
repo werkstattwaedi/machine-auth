@@ -94,7 +94,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 ## Retired
 
 <!-- `- CHK-n — <PR that retired it>` -->
-- CHK-14 — #750 (the close on "Weiter zum Bezahlen" before a method was chosen; confirming the method closes now, CHK-22)
-- CHK-15 — #750 (picking and confirming on Bezahlen, the pick recorded for the overnight commit; the method is chosen on Check Out, CHK-19, and written only with the commit, CHK-22)
-- CHK-16 — #750 (the QR code on screen on every device while the QR-Rechnung was picked; now unfolded on request after sending, CHK-24)
-- CHK-17 — #750 (the completion dialog and its per-device follow-up; replaced by CHK-26)
+- CHK-14 — #761 (the close on "Weiter zum Bezahlen" before a method was chosen; confirming the method closes now, CHK-22)
+- CHK-15 — #761 (picking and confirming on Bezahlen, the pick recorded for the overnight commit; the method is chosen on Check Out, CHK-19, and written only with the commit, CHK-22)
+- CHK-16 — #761 (the QR code on screen on every device while the QR-Rechnung was picked; now unfolded on request after sending, CHK-24)
+- CHK-17 — #761 (the completion dialog and its per-device follow-up; replaced by CHK-26)

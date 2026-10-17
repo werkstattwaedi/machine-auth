@@ -79,4 +79,4 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 <!-- `- BIL-n — <PR that retired it>` -->
 - BIL-18 — #743 (bill-number migration; a one-off transition, not the product)
-- BIL-5 — #750 (the TWINT confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)
+- BIL-5 — #761 (the TWINT confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)
