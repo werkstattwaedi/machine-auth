@@ -7,6 +7,9 @@ import {
   BRIDGE_BEARER_KEY,
   BRIDGE_ENV_LABEL,
   BRIDGE_URL,
+  TERMINAL_HOST,
+  TERMINAL_PORT,
+  TERMINAL_POS_ID,
 } from "./build-config.generated"
 import type { BridgeMode } from "./types"
 
@@ -20,6 +23,8 @@ export interface BridgeConfig {
   partition: string
   isDev: boolean
   productName: string
+  /** Wallee payment terminal (LTI); null when none is configured. */
+  terminal: { host: string; port: number; posId: string } | null
   windowOpts: {
     width: number
     height: number
@@ -45,6 +50,9 @@ export function resolveConfig(): BridgeConfig {
     // "[staging] OWW Self Checkout" on non-prod builds (BRIDGE_ENV_LABEL
     // comes from the ops config's web.envLabel via inject-build-config).
     productName: withEnvLabel(BRIDGE_ENV_LABEL, PRODUCT_NAME),
+    terminal: TERMINAL_HOST
+      ? { host: TERMINAL_HOST, port: TERMINAL_PORT, posId: TERMINAL_POS_ID }
+      : null,
     windowOpts: {
       width: 1280,
       height: 900,
