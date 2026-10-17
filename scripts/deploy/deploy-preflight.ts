@@ -21,7 +21,7 @@
  *   DEPLOY_ALLOW_OFF_MAIN=1     (any path, e.g. `./pw prod-flash`, the kiosk build)
  *
  * Usage:
- *   npx tsx scripts/deploy-preflight.ts --component firebase [--allow-off-main]
+ *   npx tsx scripts/deploy/deploy-preflight.ts --component firebase [--allow-off-main]
  */
 
 import { execFileSync } from "child_process";
@@ -33,7 +33,7 @@ import { parseArgs } from "util";
 import { COMPONENTS, type DeployComponent } from "./deploy-log.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, "..");
+const projectRoot = resolve(__dirname, "..", "..");
 const opsDir =
   process.env.OPERATIONS_CONFIG_DIR || resolve(projectRoot, "..", "machine-auth-operations");
 

@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite"
 import basicSsl from "@vitejs/plugin-basic-ssl"
-import { viteBuildVersion } from "../../../scripts/build-version.ts"
+import { viteBuildVersion } from "../../../scripts/deploy/build-version.ts"
 
 export default defineConfig({
   plugins: [

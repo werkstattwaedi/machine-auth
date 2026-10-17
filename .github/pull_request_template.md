@@ -13,7 +13,7 @@ Deploy: <fill in>
        Deploy: none — <why nothing has to be run around the deploy>
        Deploy: docs/deploy/2026-10-20-<slug>.md
      A step is a migration: something that must happen before or after the
-     deploy, in order, that scripts/deploy.sh does not do — a migration or
+     deploy, in order, that scripts/deploy/deploy.sh does not do — a migration or
      backfill (with its dry run), a data gate, a mail-contract publish, a
      config parameter or secret required from now on, a console switch. The
      standard order (functions, rules, hosting) is not a step. If a fresh

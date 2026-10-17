@@ -68,7 +68,7 @@ function useCheckoutVersion(): Loaded {
       return
     }
     let live = true
-    // Served next to the checkout app by its build (scripts/build-version.ts),
+    // Served next to the checkout app by its build (scripts/deploy/build-version.ts),
     // with a CORS header for this page (firebase.json).
     fetch(`https://${domain}/version.json`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))

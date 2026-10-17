@@ -402,7 +402,7 @@ function dispatchNfc(event: NfcTagEvent): void {
 const bridgeBootstrap = {
   mode: config.mode,
   features: ["nfc"] as readonly string[],
-  // Release version (ADR-0045): set by scripts/deploy-kiosk.ts through
+  // Release version (ADR-0045): set by scripts/deploy/deploy-kiosk.ts through
   // electron-builder's extraMetadata, so it is what the installer shipped.
   version: app.getVersion(),
 }

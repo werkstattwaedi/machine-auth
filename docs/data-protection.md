@@ -101,7 +101,7 @@ invoice PDFs remain in a locked archive for the legal 10 years.
   Jan 1 three years back; moves trimmed bills' PDFs to the archive. The
   dry-run review is mandatory — first prod run doubly so.
 - **After schema changes to the stats tables:** re-run
-  `scripts/setup-bigquery.ts` (idempotent).
+  `scripts/deploy/setup-bigquery.ts` (idempotent).
 - **Monthly, and after any restore or bulk import: identity audit**
   (ADR-0043).
   ```bash

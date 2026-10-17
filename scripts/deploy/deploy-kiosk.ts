@@ -7,7 +7,7 @@
  *
  *   1. Refuse unless both repos are on the latest main (deploy-preflight.ts;
  *      override --allow-off-main / DEPLOY_ALLOW_OFF_MAIN=1, recorded).
- *   2. Name the release (scripts/release.ts): reuse the commit's
+ *   2. Name the release (scripts/deploy/release.ts): reuse the commit's
  *      vYYYY.M.N tag or cut the next one after a confirmation.
  *   3. Bake URL, bearer and version into the binary
  *      (checkout-kiosk/scripts/inject-build-config.mjs), compile, and run
@@ -19,7 +19,7 @@
  *      says "built", not "running".
  *
  * Usage (or `npm run build:kiosk:staging|prod` in checkout-kiosk/):
- *   npx tsx scripts/deploy-kiosk.ts --env staging [--yes] [--new-release] [--allow-off-main]
+ *   npx tsx scripts/deploy/deploy-kiosk.ts --env staging [--yes] [--new-release] [--allow-off-main]
  *
  * `--dev` (`npm run build:kiosk`) builds a local, native-platform binary
  * against localhost: no preflight, no release, no record — but it still
@@ -38,7 +38,7 @@ import { buildVersion } from "./build-version.ts";
 import { recordDeploy } from "./deploy-record.ts";
 import { ensureReleaseOrExit } from "./release.ts";
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const kioskDir = resolve(projectRoot, "checkout-kiosk");
 
 function run(command: string, env: NodeJS.ProcessEnv = process.env): void {

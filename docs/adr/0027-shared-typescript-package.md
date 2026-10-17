@@ -100,7 +100,7 @@ help either: npm walks up to the root `package.json`, sees `functions`
 listed as a workspace member, and re-creates the symlink instead of
 installing from the tarball.
 
-The shipping fix lives in `scripts/prepare-functions-deploy.ts`,
+The shipping fix lives in `scripts/deploy/prepare-functions-deploy.ts`,
 invoked as a Firebase predeploy hook (`functions[].predeploy` in
 `firebase.json`). It packs `shared/` into
 `functions/oww-shared-X.Y.Z.tgz` and rewrites `functions/package.json`
@@ -110,7 +110,7 @@ installs from the local tarball.
 The mutation persists until cleanup. Two paths:
 
 - `npm run deploy:functions` — the wrapper script
-  (`scripts/deploy-functions.ts`) runs `firebase deploy --only functions
+  (`scripts/deploy/deploy-functions.ts`) runs `firebase deploy --only functions
   [args...]` and restores `functions/package.json` + removes the tarball
   on exit (including on failure or Ctrl+C). Snapshots the pre-deploy
   bytes so it works regardless of whether `HEAD` is clean.

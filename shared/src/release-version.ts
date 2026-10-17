@@ -5,7 +5,7 @@
  * Reading the release versions every component reports (ADR-0045):
  * `2026.10.3` (a release), `2026.10.3-dev.4+g1a2b3c4d[.dirty]` (a build after
  * it), `0.0.0-dev+g…` (no release yet), `dev` (a local build). Used by the
- * admin "Versionen" page; scripts/build-version.ts produces the strings.
+ * admin "Versionen" page; scripts/deploy/build-version.ts produces the strings.
  */
 
 export interface ParsedVersion {

@@ -7,7 +7,7 @@
  * `pricing_model` existed gain them (see `functions/src/stats/
  * reemit_visit_items.ts` for why this is not a watermark reset).
  *
- * Run `scripts/setup-bigquery.ts` first — the columns must exist. Safe to
+ * Run `scripts/deploy/setup-bigquery.ts` first — the columns must exist. Safe to
  * re-run: the `visit_items_v` dedup view keeps the latest row per doc_id.
  * Never touches `export_state/*`.
  *

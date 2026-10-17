@@ -688,7 +688,7 @@ function generateEnvOverlay(opts: {
 /**
  * Emit `maco_gateway/.env.<name>` so a locally started gateway can talk to
  * the overlay environment (deploys to the Pi still go through
- * `scripts/deploy-gateway.ts`). FIREBASE_URL comes from the merged config;
+ * `scripts/deploy/deploy-gateway.ts`). FIREBASE_URL comes from the merged config;
  * MASTER_KEY / GATEWAY_API_KEY come from Secret Manager in the BASE
  * project — environments share secret values (ADR-0034) and the base
  * project is their canonical home. A fetch failure skips this file with a

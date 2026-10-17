@@ -7,10 +7,10 @@ Steps to deploy the full system to production.
 ```bash
 npm run deploy:staging          # functions + rules + hosting → oww-maco-staging
 npm run deploy:prod             # same → oww-maco (asks for confirmation)
-scripts/deploy.sh staging prod  # both, staging first
+scripts/deploy/deploy.sh staging prod  # both, staging first
 ```
 
-`scripts/deploy.sh` chains generate-env, the functions deploy wrapper,
+`scripts/deploy/deploy.sh` chains generate-env, the functions deploy wrapper,
 `firestore,storage`, and hosting (with `WEB_BUILD_SCRIPT=build:staging` on
 staging) — always passing `--project` explicitly. It does NOT cover the
 gateway, the kiosk, or the manual steps below (secrets, custom claims,
@@ -26,7 +26,7 @@ deploy a branch on purpose: `--allow-off-main` or `DEPLOY_ALLOW_OFF_MAIN=1`;
 the record then says "off main" and why.
 
 
-Then each of them names the **release** it ships (`scripts/release.ts`):
+Then each of them names the **release** it ships (`scripts/deploy/release.ts`):
 a commit that was deployed before reuses its `vYYYY.M.N` tag; a new commit
 gets the next number of the month (`v2026.10.3`) after one question that
 lists the commits since the previous release — and the operations config
@@ -62,19 +62,19 @@ which its `STATE.md` (what runs where) is regenerated. Log every manual
 step from this checklist the same way:
 
 ```bash
-npx tsx scripts/deploy-record.ts event --env prod --note "ran migrate-bill-numbers.ts"
+npx tsx scripts/deploy/deploy-record.ts event --env prod --note "ran migrate-bill-numbers.ts"
 git log "$(git tag -l 'deploy/prod/firebase/*' | tail -1)"..origin/main --oneline   # not in prod yet
 ```
 
 If a record step warns (e.g. offline), re-run it by hand —
-`npx tsx scripts/deploy-record.ts deploy --env <env> --component <component>`.
+`npx tsx scripts/deploy/deploy-record.ts deploy --env <env> --component <component>`.
 
 ### One-off deploy steps (ADR-0049)
 
 A change that needs a **migration** around the deploy, in order — a data
 migration or backfill, a data gate, a mail-template publish, a config
 parameter that is required from now on, a console switch — ships it as a
-file in [`docs/deploy/`](deploy/README.md), and `scripts/deploy.sh` stops
+file in [`docs/deploy/`](deploy/README.md), and `scripts/deploy/deploy.sh` stops
 for it: before the functions deploy, after it, or after everything, as the
 file's `phase:` says. A step is pending for an environment when its file
 was added since that environment's last deploy tag — the migrations the
@@ -85,7 +85,7 @@ whether they are done. `--yes` does not answer that. Declining at the last
 boundary leaves the deploy unrecorded on purpose, so the step comes back.
 
 ```bash
-npx tsx scripts/deploy-steps.ts list --env prod     # what the next deploy stops for
+npx tsx scripts/deploy/deploy-steps.ts list --env prod     # what the next deploy stops for
 ```
 
 A step migrates an environment that already runs; **this checklist builds
@@ -131,7 +131,7 @@ npm run dev:gateway:staging
 # …or deploy a test Pi against staging (config.staging.jsonc sets
 # printerHost: "" so the print worker stays off — it would otherwise
 # consume PROD print jobs via the prod GATEWAY_FIRESTORE_SA key):
-npx tsx scripts/deploy-gateway.ts --env staging --host maker1@<test-pi>.internal
+npx tsx scripts/deploy/deploy-gateway.ts --env staging --host maker1@<test-pi>.internal
 
 # Kiosk (local Electron for integration testing / packaged build):
 cd checkout-kiosk && npm run start:kiosk:staging   # or build:kiosk:staging
@@ -182,7 +182,7 @@ mailbox (`users.email` starts with `smoke.testing+`) on a machine that exists
 (`functions/src/testing/upload_test_usage.ts`). The runbook calls it as
 `npm run agent -- usage add <uid> <machineId> <activeSeconds>`.
 
-`scripts/deploy.sh prod` fails if either function is ever found in production.
+`scripts/deploy/deploy.sh prod` fails if either function is ever found in production.
 
 ```bash
 # Smoke-check it after a staging deploy (prints {"picc":…,"cmac":…}):
@@ -368,7 +368,7 @@ firebase deploy --only firestore,storage
 
 This covers Firestore rules **and indexes** (collection-group queries need
 their fieldOverrides deployed to every project — the emulator doesn't
-enforce them) plus Storage rules. `scripts/deploy.sh` runs the same command.
+enforce them) plus Storage rules. `scripts/deploy/deploy.sh` runs the same command.
 
 Verify: The `isAdmin()` rule now checks `request.auth.token.admin == true` (custom claims).
 
@@ -445,7 +445,7 @@ One-time per project (staging first, then prod). See
 
 ```bash
 # Dataset, tables, dedup views (idempotent; re-run after schema changes):
-npx tsx scripts/setup-bigquery.ts --project <project-id>
+npx tsx scripts/deploy/setup-bigquery.ts --project <project-id>
 
 # Functions runtime SA needs dataset write + job run:
 SA="<project-id>@appspot.gserviceaccount.com"   # or the configured runtime SA
@@ -515,7 +515,7 @@ FIREBASE_PROJECT_ID=<project-id> \
 The gateway runs separately on a Raspberry Pi (not on Firebase). Use the deploy script:
 
 ```bash
-npx tsx scripts/deploy-gateway.ts --host maker1@maco-gateway.internal
+npx tsx scripts/deploy/deploy-gateway.ts --host maker1@maco-gateway.internal
 ```
 
 This builds the gateway-service + pw_rpc protos via Bazel, stages a small payload (gateway sources + generated protos + vendored pigweed Python sources + a pinned `requirements.txt`), generates the `.env` from `config.jsonc` and Google Cloud Secret Manager (including `GATEWAY_ASCON_MASTER_KEY`), and deploys to the target host. On the host, the script ensures a Python 3.11 venv at `~/gateway/venv` and runs `pip install -r requirements.txt`.
@@ -528,4 +528,4 @@ ssh maker1@maco-gateway.internal 'cd ~/gateway && venv/bin/python -m maco_gatewa
 
 The Pi needs `python3.11` + `python3.11-venv` installed once (Raspberry Pi OS Bookworm ships them).
 
-See `scripts/deploy-gateway.ts --help` for additional options (e.g., `--remote-dir`, `--build-only`).
+See `scripts/deploy/deploy-gateway.ts --help` for additional options (e.g., `--remote-dir`, `--build-only`).

@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-17
 
-**Applies to:** `scripts/deploy.sh`, `scripts/deploy-steps.ts`, `docs/deploy/`, `scripts/check-deploy-line.ts`, the PR template, `docs/deployment-checklist.md`
+**Applies to:** `scripts/deploy/deploy.sh`, `scripts/deploy/deploy-steps.ts`, `docs/deploy/`, `scripts/check-deploy-line.ts`, the PR template, `docs/deployment-checklist.md`
 
 ## Context
 
@@ -23,7 +23,7 @@ fixed order, by hand:
 Until now these steps lived in prose: sections of
 `docs/deployment-checklist.md`, "Deploy order:" sentences in CLAUDE.md,
 and PR descriptions ("Deploy: functions first, then hosting", #755).
-`scripts/deploy.sh` knew none of them. Whoever deploys — a person or an
+`scripts/deploy/deploy.sh` knew none of them. Whoever deploys — a person or an
 agent — has to remember which PRs merged since the last deploy carry one,
 and deploys happen days after the merge, staging and prod at different
 times. A missed step fails quietly or late (#756).
@@ -89,7 +89,7 @@ script hands the pending ones to an agent.**
    it costs nothing.
 
 5. **The deploy script stops at each boundary with pending steps**
-   (`scripts/deploy-steps.ts list`). On a terminal it starts an interactive
+   (`scripts/deploy/deploy-steps.ts list`). On a terminal it starts an interactive
    `claude` session (`deploy-steps.ts prompt`) that names the environment,
    the project, the release and the files, and tells the agent to carry the
    steps out in order, to check first whether a step already ran (an
@@ -114,14 +114,14 @@ script hands the pending ones to an agent.**
    reviewer's call; the `code-reviewer` agent asks it.
 
 7. **The idempotent step runs every time, without a file.** `deploy.sh`
-   runs `scripts/setup-bigquery.ts` before every functions deploy. It is
+   runs `scripts/deploy/setup-bigquery.ts` before every functions deploy. It is
    idempotent and quick (append-only columns, views updated in place), so
    the whole class of "column deployed before the table knew it" disappears
    without anyone remembering anything. It needs Application Default
    Credentials, and a failure stops the deploy. What every deploy does is
-   listed in the header of `scripts/deploy.sh`.
+   listed, in order, in [`scripts/deploy/README.md`](../../scripts/deploy/README.md).
 
-8. **Scope.** The gate lives in `scripts/deploy.sh` only. The gateway,
+8. **Scope.** The gate lives in `scripts/deploy/deploy.sh` only. The gateway,
    kiosk and firmware deploys do not stop for steps — none has needed one
    so far; when one does, the same list and prompt apply with their own tag
    glob. The rollouts that predate this ADR are done in both environments:

@@ -18,7 +18,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
-import { isStepFile, parseStepHeader, STEPS_DIR } from "./deploy-steps.ts";
+import { isStepFile, parseStepHeader, STEPS_DIR } from "./deploy/deploy-steps.ts";
 
 export type DeployLine =
   | { kind: "none"; reason: string }

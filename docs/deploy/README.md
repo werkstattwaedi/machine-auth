@@ -9,7 +9,7 @@ required from now on. Each one is a file in this directory, next to the
 code that needs it, written for the agent that will carry it out
 ([ADR-0049](../adr/0049-deploy-steps.md)).
 
-`scripts/deploy.sh` reads this directory. A step is **pending** for an
+`scripts/deploy/deploy.sh` reads this directory. A step is **pending** for an
 environment when its file was *added* since that environment's last deploy
 (its `deploy/<env>/firebase/*` tag, ADR-0045). Every added step file is in
 its PR's `Deploy:` line, so that is exactly the set of steps the changes
@@ -37,7 +37,7 @@ Three things follow from "added since":
 ## When a change needs a step
 
 Ask: does something have to happen before or after this deploy, in order,
-that `scripts/deploy.sh` does not do? Then write a step. Typical cases:
+that `scripts/deploy/deploy.sh` does not do? Then write a step. Typical cases:
 
 - a data migration or backfill script (`scripts/migrate-*.ts`,
   `scripts/backfill-*.ts`), with its dry run;
@@ -50,8 +50,8 @@ that `scripts/deploy.sh` does not do? Then write a step. Typical cases:
   convention, and a separate installation has its own operations config);
 - a switch in a console (Firebase Auth providers, IAM, an alert policy).
 
-Not a step, because every deploy does it (the list is in the header of
-`scripts/deploy.sh`): the BigQuery schema — `setup-bigquery.ts` runs before
+Not a step, because every deploy does it (the list, in order, is in
+[`scripts/deploy/README.md`](../../scripts/deploy/README.md)): the BigQuery schema — `setup-bigquery.ts` runs before
 every functions deploy; indexes and rules — they ship with the deploy;
 `generate-env`. The standard order — functions, then rules, then hosting —
 is also not a step; a PR that only relies on it says
@@ -102,17 +102,17 @@ but was not in the PR. Link the ADR or issue.
 
 ## How it is carried out
 
-`scripts/deploy.sh <env>` runs `scripts/deploy-steps.ts list` at each
+`scripts/deploy/deploy.sh <env>` runs `scripts/deploy/deploy-steps.ts list` at each
 boundary. With pending steps and a terminal it starts
 
 ```bash
-claude "<prompt from: npx tsx scripts/deploy-steps.ts prompt --env prod --phase before-functions --project oww-maco --version …>"
+claude "<prompt from: npx tsx scripts/deploy/deploy-steps.ts prompt --env prod --phase before-functions --project oww-maco --version …>"
 ```
 
 — the prompt names the environment, the project, the release and the files,
 and tells the agent to check first, dry-run before anything that changes
 production data, record each step with
-`npx tsx scripts/deploy-record.ts event --env <env> --note "deploy step <file>: …"`,
+`npx tsx scripts/deploy/deploy-record.ts event --env <env> --note "deploy step <file>: …"`,
 and stop when done. When the session ends, the script asks
 "All <phase> steps done for <env>? [y/N]" and continues on yes. `--yes`
 does not answer this question. With `--no-agent`, without a terminal, or
@@ -122,13 +122,13 @@ instead and the same question is asked — the outer agent reads them.
 Declining at `after-deploy` leaves the deploy **unrecorded on purpose**:
 the tag does not move, so the step comes back at the next deploy. Finish
 the step, then record by hand
-(`npx tsx scripts/deploy-record.ts deploy --env <env> --component firebase`).
+(`npx tsx scripts/deploy/deploy-record.ts deploy --env <env> --component firebase`).
 
 Preview what the next deploy would stop for:
 
 ```bash
-npx tsx scripts/deploy-steps.ts list --env prod            # all phases
-npx tsx scripts/deploy-steps.ts list --env staging --phase before-functions
+npx tsx scripts/deploy/deploy-steps.ts list --env prod            # all phases
+npx tsx scripts/deploy/deploy-steps.ts list --env staging --phase before-functions
 ```
 
 ## The PR

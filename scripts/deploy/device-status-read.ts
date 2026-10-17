@@ -15,7 +15,7 @@
 import type { DeployEnv } from "./deploy-log.ts";
 import type { RunningDevice } from "./deploy-log.ts";
 
-/** Same project ids as scripts/deploy.sh. */
+/** Same project ids as scripts/deploy/deploy.sh. */
 const PROJECTS: Record<DeployEnv, string> = {
   prod: process.env.DEPLOY_PROD_PROJECT || "oww-maco",
   staging: process.env.DEPLOY_STAGING_PROJECT || "oww-maco-staging",

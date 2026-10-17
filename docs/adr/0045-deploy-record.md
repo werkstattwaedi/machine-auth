@@ -37,7 +37,7 @@ Constraints for reporting:
 
 ## Decision
 
-### Phase 1a — only the latest main ships (`scripts/deploy-preflight.ts`)
+### Phase 1a — only the latest main ships (`scripts/deploy/deploy-preflight.ts`)
 
 Every deploy path refuses to start unless machine-auth *and* the operations
 repo (whose working tree supplies `config.jsonc` and the staging overlay)
@@ -50,10 +50,10 @@ kiosk build) — and the deploy record lists what was off (`offMain`,
 "⚠️ off main" in `STATE.md`). It applies to staging too: deploying a
 branch to staging is legitimate, but it should be a visible choice.
 
-### Phase 1b — record every deploy where it happens (`scripts/deploy-record.ts`)
+### Phase 1b — record every deploy where it happens (`scripts/deploy/deploy-record.ts`)
 
-The deploy paths call it after they succeed: `scripts/deploy.sh`
-(component `firebase`), `scripts/deploy-gateway.ts` (`gateway`, target =
+The deploy paths call it after they succeed: `scripts/deploy/deploy.sh`
+(component `firebase`), `scripts/deploy/deploy-gateway.ts` (`gateway`, target =
 host), the kiosk `build:kiosk:{staging,prod}` scripts (`kiosk`) and
 `./pw prod-flash` (`firmware`, target = USB device id). Manual steps
 (secret rotation, migration scripts, config changes, restores) are logged
@@ -92,7 +92,7 @@ releases in a day just increment N. Deploying a commit a second time
 (staging → prod, another terminal) reuses its tag. The deploy tags from
 phase 1b stay: the release tag names *what*, the deploy tags *where and when*.
 
-Every build computes its version with one script, `scripts/build-version.ts`,
+Every build computes its version with one script, `scripts/deploy/build-version.ts`,
 based on `git describe --tags --match 'v*' --dirty`:
 
 | Build | Version |
@@ -239,7 +239,7 @@ hours, so it gets no absence alert.
   release than the newest one anything in the project runs; versions are
   read with `@oww/shared` `release-version.ts`.
 - **Drift:** every deploy record and `deploy-record.ts render` read the
-  status documents of both projects (`scripts/device-status-read.ts`,
+  status documents of both projects (`scripts/deploy/device-status-read.ts`,
   Application Default Credentials) and add a "Running (live)" table to
   `STATE.md`, next to what was deployed. Devices that are offline, quiet
   (see below), or on an older release than the newest one **deployed to

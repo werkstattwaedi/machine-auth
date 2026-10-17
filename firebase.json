@@ -22,7 +22,7 @@
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run lint",
         "npm --prefix \"$RESOURCE_DIR\" run build",
-        "npx tsx scripts/prepare-functions-deploy.ts"
+        "npx tsx scripts/deploy/prepare-functions-deploy.ts"
       ]
     }
   ],
