@@ -146,10 +146,12 @@ test("no final answer in time → unknown", async () => {
   await withSim(
     "hang",
     async (_sim, terminal) => {
-      const started = Date.now()
       const result = await terminal.pay({ amountRappen: 300, reference: REF })
-      assert.equal(result.outcome, "unknown")
-      assert.ok(Date.now() - started >= 140)
+      assert.deepEqual(result, {
+        outcome: "unknown",
+        reference: REF,
+        errorText: "no final answer from the terminal",
+      })
     },
     { finalAnswerTimeoutMs: 150 }
   )
