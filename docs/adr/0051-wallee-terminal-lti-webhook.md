@@ -25,7 +25,7 @@ A spike on 2026-10-15/17 against the real terminal and our Wallee space (results
 5. **A nightly reconcile is the safety net** (`reconcileTerminalPayments`, 04:30): it searches the last three days of paid terminal transactions, settles what a lost delivery missed, and alerts when Wallee deactivated our listener.
 6. **No `trxSyncNumber`.** Recovery after a dropped connection comes from the backend, so the till never has to trigger final balances; the daily closing stays automatic. After an `unknown` result the UI checks whether the checkout closed before offering a retry.
 7. **One space, two environments.** Staging and prod share the Wallee space and the one terminal; both receive every webhook. The reference's letter (`WALLEE_REFERENCE_PREFIX`) makes each ignore the other's payments.
-8. **Nothing un-books automatically.** A double charge (money for a checkout already closed), an amount that differs from the attempt, a reversal after settlement and a sale started on the terminal itself only raise alerts (`terminal_double_charge`, `terminal_amount_mismatch`, `terminal_payment_voided`, `terminal_unmatched_payment`); refunds and corrections are done by hand in the Wallee portal and with the ADR-0042 correction.
+8. **Nothing un-books automatically.** A double charge (money for a checkout already closed), an amount that differs from the attempt, a payment for an attempt whose items changed since it was priced (`itemsKey`), a reversal after settlement and a sale started on the terminal itself only raise alerts (`terminal_double_charge`, `terminal_amount_mismatch`, `terminal_items_changed`, `terminal_payment_voided`, `terminal_unmatched_payment`); the checkout and its bill stay as they are and the money is refunded by hand in the Wallee portal.
 9. **Clients can never claim the method.** The close callable and `acknowledgeBill` refuse a `confirmsPayment` method; the rules refuse a client-written `paymentMethod: wallee_terminal` and the attempt fields; the overnight commit treats an unconfirmed bill naming the terminal as a QR-Rechnung.
 
 ## Consequences
@@ -40,6 +40,7 @@ A spike on 2026-10-15/17 against the real terminal and our Wallee space (results
 - The Wallee backend shows the attempt reference, not the bill number; reconciliation goes through `bills.walleeTransactionId`.
 - The SDK is large (~15 MB, every service loaded on import); it is imported lazily inside the Wallee code paths so other functions' cold starts don't pay for it.
 - Double charges and post-settlement reversals need a human. Rare at one kiosk, but not automated.
+- A terminal bill is born paid, and the ADR-0042 correction refuses paid bills: a terminal-paid visit can't be corrected or cancelled in the admin app, not even after a reversal left it "paid". Open question in `docs/spec/billing.md`; until it is decided, such a case is fixed by hand.
 - The webhook is a public endpoint (gated by the signature; a delivery only triggers a re-read).
 
 **Tradeoffs:**

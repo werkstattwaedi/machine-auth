@@ -356,6 +356,26 @@ describe("Wallee terminal payment (Integration)", () => {
       expect((await checkout("co1")).summary?.tip).to.equal(0);
     });
 
+    it("refuses an attempt whose items changed since it was priced", async () => {
+      await seedOpenCheckout("co1");
+      const { reference } = await prepare("co1");
+      // "Zurück" to step 3, one more item.
+      await getFirestore().collection("checkouts").doc("co1").collection("items").doc("i1").set({
+        workshop: "holz",
+        description: "Leim",
+        origin: "manual",
+        catalogId: null,
+        created: Timestamp.now(),
+        quantity: 1,
+        unitPrice: 4,
+        totalPrice: 4,
+      });
+      wallee.pay(9001, reference, 25);
+      expect(await settleTerminalPayment(9001, "webhook")).to.equal("items-changed");
+      expect((await checkout("co1")).status).to.equal("open");
+      expect(await bills()).to.have.length(0);
+    });
+
     it("leaves the checkout open for what isn't a paid payment of ours", async () => {
       await seedOpenCheckout("co1");
       const { reference } = await prepare("co1");

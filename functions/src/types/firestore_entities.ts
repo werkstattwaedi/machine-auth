@@ -345,6 +345,8 @@ export interface TerminalAttemptEntity {
   usageType: UsageType;
   persons: CheckoutPersonEntity[];
   summary: CheckoutSummaryEntity;
+  /** `itemsFingerprint` of the items it priced; settlement refuses on a change. */
+  itemsKey?: string;
   /** The principal that prepared it; stamped as `modifiedBy` on the close. */
   preparedBy: string;
   createdAt: Timestamp;
