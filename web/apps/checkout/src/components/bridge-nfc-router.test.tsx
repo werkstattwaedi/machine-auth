@@ -115,6 +115,7 @@ const PRISTINE = {
   identified: false,
   holderName: null as string | null,
   badgeTokenIds: [] as string[],
+  paymentInProgress: false,
   autoStartPending: false,
   onCheckinScreen: false,
   holderFirstName: null as string | null,
@@ -265,6 +266,24 @@ describe("BridgeNfcRouter", () => {
     expect(mockNavigate).not.toHaveBeenCalled()
     expect(mockToastError).not.toHaveBeenCalled()
     expect(screen.queryByTestId("badge-purchase-stub")).toBeNull()
+  })
+
+  it("ignores a tap while a terminal payment runs (ADR-0051)", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      preservable: true,
+      identified: true,
+      paymentInProgress: true,
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await act(async () => {})
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "Bitte schliesse zuerst die Zahlung am Terminal ab.",
+    )
+    expect(mockProbeTag).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockResetSession).not.toHaveBeenCalled()
   })
 
   it("asks for confirmation instead of navigating when a session is active", async () => {

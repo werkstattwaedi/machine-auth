@@ -7,7 +7,11 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router"
-import { enabledPaymentMethods, type PaymentMethod } from "@oww/shared"
+import {
+  PAYMENT_TERMINAL_FEATURE,
+  enabledPaymentMethods,
+  type PaymentMethod,
+} from "@oww/shared"
 import { useBridge } from "@modules/lib/use-bridge"
 import { StepCheckout } from "@/components/checkout/step-checkout"
 import { useWizardContext } from "@/components/checkout/wizard-context"
@@ -33,6 +37,9 @@ export const Route = createFileRoute("/_wizard/checkout")({
 // open checkout exists, except right after this session committed one.
 function CheckoutRoute() {
   const ctx = useWizardContext()
+  if (ctx.terminal?.phase === "approved") {
+    return <TerminalDone amount={ctx.terminal.amount ?? 0} email={ctx.terminal.payerEmail} />
+  }
   if (ctx.paymentData && ctx.paymentChoice) {
     return <CheckoutDone paymentData={ctx.paymentData} choice={ctx.paymentChoice} />
   }
@@ -64,7 +71,13 @@ function CheckoutOpen() {
     ctx.kiosk ? "kiosk" : "web",
     { isMember: ctx.isMember },
   )
-  const methods: PaymentMethod[] = configured.length > 0 ? configured : ["rechnung"]
+  // The terminal card needs a kiosk build that drives a terminal; without
+  // one (the web, an older kiosk, a kiosk with no terminal configured) it
+  // would arm nothing.
+  const hasTerminal =
+    bridge.features.includes(PAYMENT_TERMINAL_FEATURE) && !!bridge.terminalPay
+  const offered = configured.filter((m) => m !== "wallee_terminal" || hasTerminal)
+  const methods: PaymentMethod[] = offered.length > 0 ? offered : ["rechnung"]
 
   const commit = async (choice: PaymentChoice) => {
     if (choice !== "raisenow") {
@@ -119,6 +132,9 @@ function CheckoutOpen() {
       paymentChoice={ctx.paymentChoice}
       onPaymentChoiceChange={ctx.setPaymentChoice}
       onCommit={commit}
+      terminal={ctx.terminal}
+      onStartTerminal={() => void ctx.startTerminalPayment()}
+      onAbortTerminal={ctx.abortTerminalPayment}
       onBack={() =>
         navigate({ to: "/visit", search: ctx.kiosk ? { kiosk: "" } : {} })
       }
@@ -193,6 +209,39 @@ function CheckoutDone({
         signedIn={ctx.isAccountLoggedIn}
         holdCountdown={qrHeld || (awaitsOverlay && !overlayDone)}
         onFinish={() => void finish()}
+      />
+    </div>
+  )
+}
+
+/**
+ * The terminal approved the payment (ADR-0051). Its result only drives this
+ * screen; Wallee's confirmation closes the checkout and mails the Quittung
+ * within seconds, whether or not anyone still looks at it. Kiosk only, so
+ * "Fertig" hands the kiosk to the next person after the countdown.
+ */
+function TerminalDone({ amount, email }: { amount: number; email: string }) {
+  const ctx = useWizardContext()
+  const isPhone = useIsPhone()
+  return (
+    <div className="flex flex-col flex-1 gap-6">
+      <PaymentFrame amount={amount} free={false}>
+        <PaymentConfirmation
+          choice="wallee_terminal"
+          paymentData={null}
+          copy={{ email, monthlyDate: firstOfNextMonth() }}
+          ownDevice={!ctx.kiosk}
+          isPhone={isPhone}
+          qrOpen={false}
+          onQrOpenChange={() => {}}
+        />
+      </PaymentFrame>
+      <div className="flex-1" />
+      <CheckoutFinishBar
+        kiosk={ctx.kiosk}
+        signedIn={ctx.isAccountLoggedIn}
+        holdCountdown={false}
+        onFinish={() => void ctx.startOver()}
       />
     </div>
   )

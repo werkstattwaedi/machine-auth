@@ -39,6 +39,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      paymentInProgress: false,
       ...NO_CHECKIN,
     })
     expect(isKioskSessionPreservable()).toBe(false)
@@ -50,6 +51,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [] as string[],
+      paymentInProgress: false,
     }
     cleanup = registerKioskSessionGuard(() => state)
     expect(isKioskSessionPreservable()).toBe(false)
@@ -58,6 +60,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      paymentInProgress: false,
     }
     expect(isKioskSessionPreservable()).toBe(true)
   })
@@ -68,12 +71,14 @@ describe("kiosk-session-guard", () => {
       identified: true,
       holderName: "Michael Schneider",
       badgeTokenIds: ["04aabbccddeeff"],
+      paymentInProgress: false,
     }))
     expect(getKioskSessionState()).toEqual({
       preservable: true,
       identified: true,
       holderName: "Michael Schneider",
       badgeTokenIds: ["04aabbccddeeff"],
+      paymentInProgress: false,
       ...NO_CHECKIN,
     })
   })
@@ -84,6 +89,7 @@ describe("kiosk-session-guard", () => {
       identified: true,
       holderName: "Fritz Muster",
       badgeTokenIds: [],
+      paymentInProgress: false,
     }))
     expect(isKioskSessionPreservable()).toBe(true)
     unregister()
@@ -92,6 +98,7 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      paymentInProgress: false,
       ...NO_CHECKIN,
     })
   })
@@ -102,12 +109,14 @@ describe("kiosk-session-guard", () => {
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      paymentInProgress: false,
     }))
     cleanup = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: false,
       holderName: null,
       badgeTokenIds: [],
+      paymentInProgress: false,
     }))
     unregisterOld()
     expect(isKioskSessionPreservable()).toBe(true)
@@ -120,6 +129,7 @@ describe("kiosk-session-guard", () => {
       identified: true,
       holderName: "Andrea Muster",
       badgeTokenIds: [],
+      paymentInProgress: false,
     }))
     const start = async () => "Andrea"
     const unregisterScreen = registerCheckinScreen({

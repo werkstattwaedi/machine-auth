@@ -1,0 +1,228 @@
+// Copyright Offene Werkstatt Wädenswil
+// SPDX-License-Identifier: MIT
+
+/**
+ * The terminal payment's screen state (ADR-0051): the server prices the
+ * attempt, the kiosk bridge drives the terminal, and its result only
+ * decides the phase — after a dropped connection the checkout document
+ * decides whether the payment went through.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { renderHook, act, cleanup } from "@testing-library/react"
+import type {
+  TerminalPaymentEvent,
+  TerminalPaymentRequest,
+  TerminalPaymentResult,
+} from "@oww/shared"
+
+const mockPrepare = vi.fn()
+vi.mock("@modules/lib/rpc", () => ({ rpcCallable: () => mockPrepare }))
+vi.mock("@modules/lib/firebase-context", () => ({
+  useDb: () => ({}),
+  useFunctions: () => ({}),
+}))
+vi.mock("@modules/lib/firestore-helpers", () => ({
+  checkoutRef: (_db: unknown, id: string) => ({ id }),
+}))
+type SnapshotListener = (snap: { data: () => unknown }) => void
+let snapshotListener: SnapshotListener | null = null
+vi.mock("firebase/firestore", () => ({
+  onSnapshot: (_ref: unknown, next: SnapshotListener) => {
+    snapshotListener = next
+    return () => {
+      snapshotListener = null
+    }
+  },
+}))
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+
+const { useTerminalPayment, phaseForResult, TERMINAL_CHECK_MS } = await import(
+  "./use-terminal-payment"
+)
+
+/** A kiosk bridge whose payment the test finishes by hand. */
+function fakeBridge() {
+  let finish: (r: TerminalPaymentResult) => void = () => {}
+  let emit: (e: TerminalPaymentEvent) => void = () => {}
+  const bridge = {
+    terminalPay: vi.fn(
+      (req: TerminalPaymentRequest) =>
+        new Promise<TerminalPaymentResult>((resolve) => {
+          finish = resolve
+          void req
+        }),
+    ),
+    onTerminalEvent: vi.fn((cb: (e: TerminalPaymentEvent) => void) => {
+      emit = cb
+      return () => {
+        emit = () => {}
+      }
+    }),
+    terminalAbort: vi.fn(async () => true),
+  }
+  return {
+    bridge,
+    finish: (outcome: TerminalPaymentResult["outcome"]) =>
+      finish({ outcome, reference: "P-co1-1" }),
+    emit: (e: TerminalPaymentEvent) => emit(e),
+  }
+}
+
+const payload = async () => ({ personsPayload: [{ name: "Max" }], summary: { tip: 0 } })
+
+function setup(fake = fakeBridge()) {
+  const hook = renderHook(() =>
+    useTerminalPayment({ checkoutId: "co1", bridge: fake.bridge, buildClosePayload: payload }),
+  )
+  return { ...fake, hook }
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+beforeEach(() => {
+  mockPrepare.mockResolvedValue({
+    data: {
+      checkoutId: "co1",
+      reference: "P-co1-1",
+      amount: 25,
+      amountRappen: 2500,
+      payerEmail: "max@example.com",
+    },
+  })
+})
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  mockPrepare.mockReset()
+})
+
+describe("phaseForResult", () => {
+  it("maps every terminal outcome", () => {
+    expect(phaseForResult({ outcome: "approved", reference: "r" }).phase).toBe("approved")
+    expect(phaseForResult({ outcome: "declined", reference: "r" }).phase).toBe("declined")
+    expect(phaseForResult({ outcome: "aborted", reference: "r" }).phase).toBe("declined")
+    expect(phaseForResult({ outcome: "timeout", reference: "r" }).phase).toBe("timeout")
+    expect(phaseForResult({ outcome: "unknown", reference: "r" }).phase).toBe("checking")
+    for (const outcome of ["error", "busy", "unavailable"] as const) {
+      const p = phaseForResult({ outcome, reference: "r" })
+      expect(p.phase).toBe("error")
+      expect(p.errorText).toBeTruthy()
+    }
+  })
+})
+
+describe("useTerminalPayment", () => {
+  it("prices the attempt, arms the terminal and shows its progress", async () => {
+    const { hook, bridge, emit, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+
+    expect(mockPrepare).toHaveBeenCalledWith({
+      checkoutId: "co1",
+      persons: [{ name: "Max" }],
+      summary: { tip: 0 },
+    })
+    expect(bridge.terminalPay).toHaveBeenCalledWith({ amountRappen: 2500, reference: "P-co1-1" })
+    expect(hook.result.current.terminal).toMatchObject({
+      phase: "waiting",
+      amount: 25,
+      payerEmail: "max@example.com",
+    })
+
+    act(() => emit({ type: "cardEntered", method: "card" }))
+    expect(hook.result.current.terminal?.phase).toBe("processing")
+
+    await act(async () => finish("approved"))
+    expect(hook.result.current.terminal?.phase).toBe("approved")
+  })
+
+  it("offers a retry after a decline with a fresh attempt", async () => {
+    const { hook, bridge, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    await act(async () => finish("declined"))
+    expect(hook.result.current.terminal?.phase).toBe("declined")
+
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    expect(mockPrepare).toHaveBeenCalledTimes(2)
+    expect(bridge.terminalPay).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.terminal?.phase).toBe("waiting")
+  })
+
+  it("stops the terminal on abort and ignores its late answer", async () => {
+    const { hook, bridge, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    await act(async () => {
+      await hook.result.current.abort()
+    })
+    expect(bridge.terminalAbort).toHaveBeenCalled()
+    expect(hook.result.current.terminal).toBeNull()
+
+    await act(async () => finish("aborted"))
+    expect(hook.result.current.terminal).toBeNull()
+  })
+
+  it("after a lost connection, a closed checkout means paid", async () => {
+    const { hook, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    await act(async () => finish("unknown"))
+    expect(hook.result.current.terminal?.phase).toBe("checking")
+
+    act(() => snapshotListener?.({ data: () => ({ status: "open" }) }))
+    expect(hook.result.current.terminal?.phase).toBe("checking")
+    act(() =>
+      snapshotListener?.({ data: () => ({ status: "closed", paymentMethod: "wallee_terminal" }) }),
+    )
+    expect(hook.result.current.terminal?.phase).toBe("approved")
+  })
+
+  it("after a lost connection, nothing arriving in time means unknown", async () => {
+    vi.useFakeTimers()
+    const { hook, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    await act(async () => finish("unknown"))
+    expect(hook.result.current.terminal?.phase).toBe("checking")
+    act(() => vi.advanceTimersByTime(TERMINAL_CHECK_MS + 1))
+    expect(hook.result.current.terminal?.phase).toBe("unknown")
+  })
+
+  it("shows the server's refusal instead of arming the terminal", async () => {
+    mockPrepare.mockRejectedValue(
+      Object.assign(new Error("Das Terminal ist nicht eingerichtet."), {
+        code: "functions/failed-precondition",
+      }),
+    )
+    const { hook, bridge } = setup()
+    await act(async () => {
+      await hook.result.current.start()
+    })
+    expect(bridge.terminalPay).not.toHaveBeenCalled()
+    expect(hook.result.current.terminal).toMatchObject({
+      phase: "error",
+      errorText: "Das Terminal ist nicht eingerichtet.",
+    })
+  })
+})

@@ -14,7 +14,10 @@ export interface WizardGateState {
   pendingCheckout: boolean
   /** A card was chosen on Check Out (step 4 in place). */
   paymentChosen: boolean
-  /** The commit answered: the page shows the confirmation. */
+  /**
+   * The commit answered (the page shows the confirmation), or a terminal
+   * payment is under way — its checkout closes on Wallee's confirmation.
+   */
   committed: boolean
   /** The commit (the close) is in flight. */
   submitting: boolean

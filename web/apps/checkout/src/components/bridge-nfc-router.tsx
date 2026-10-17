@@ -307,6 +307,12 @@ export function BridgeNfcRouter() {
         // can be honest about whether the open visit survives (identified
         // handoff) or is lost for good (anonymous upgrade — issue #468).
         const wizardSession = getKioskSessionState()
+        // The terminal is waiting for, or running, a payment: switching now
+        // would leave it running for a session that's gone (ADR-0051).
+        if (wizardSession.paymentInProgress) {
+          toast.info("Bitte schliesse zuerst die Zahlung am Terminal ab.")
+          return
+        }
         // Outside the wizard (e.g. /login, /checkout/$id) no guard is
         // registered; the signed-in principal itself still marks the
         // session identified.
