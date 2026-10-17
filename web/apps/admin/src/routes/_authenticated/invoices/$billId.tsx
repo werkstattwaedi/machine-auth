@@ -37,6 +37,7 @@ const PAID_VIA_LABELS: Record<PaidVia, string> = {
   raisenow: "TWINT (RaiseNow)",
   ebanking: "E-Banking",
   free: "Gratis",
+  wallee_terminal: "Karte/TWINT (Terminal)",
 }
 
 function BillDetailPage() {
