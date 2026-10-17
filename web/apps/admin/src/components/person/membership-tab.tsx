@@ -273,8 +273,10 @@ function ActiveMembershipView({
               label="Autom. Verlängerung"
               value={autoRenewOn ? "aktiv" : "beendet"}
             />
+            {/* `lastPaidAt` is stamped when the bill is committed, not when
+                it is paid (BIL-34) — whether it was paid is on the bill. */}
             <Fact
-              label="Letzte Zahlung"
+              label="Zuletzt verrechnet"
               value={
                 membership.lastPaidAt ? formatDate(membership.lastPaidAt) : "–"
               }

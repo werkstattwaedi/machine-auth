@@ -27,10 +27,16 @@ declare global {
       hide?: MarkerMethod
       setReporter?: MarkerMethod
       setCustomData?: MarkerMethod
+      on?: MarkerMethod
     }
     __Marker?: Record<string, unknown>
   }
 }
+
+// Marker's setReporter reads the project the widget fetches after the shim
+// loads. Replayed from the stub queue before that — a signed-in admin on a
+// fresh page load — it rejects uncaught, so the reporter waits for "load".
+let markerLoaded: Promise<void> | null = null
 
 export interface MarkerIOProps {
   /** Which web app reports come from — lands in the report's custom data. */
@@ -84,6 +90,9 @@ export function MarkerIO({ app }: MarkerIOProps) {
       }
     })
     window.Marker = stub
+    markerLoaded = new Promise((resolve) => {
+      window.Marker?.on?.("load", () => resolve())
+    })
 
     // Queued before the shim loads, so it replays before the launcher paints.
     if (!shouldShowMarkerLauncher(import.meta.env.VITE_MARKER_LAUNCHER_VISIBLE)) {
@@ -105,8 +114,17 @@ export function MarkerIO({ app }: MarkerIOProps) {
   const fullName = userDoc?.name || null
   useEffect(() => {
     window.Marker?.setCustomData?.({ app, sessionKind, kiosk })
-    if (sessionKind === "real" && email) {
-      window.Marker?.setReporter?.({ email, fullName: fullName ?? email })
+    if (sessionKind !== "real" || !email || !markerLoaded) return
+    let cancelled = false
+    // The pre-filled reporter is a convenience: a failure must not surface.
+    markerLoaded
+      .then(() => {
+        if (cancelled) return
+        return window.Marker?.setReporter?.({ email, fullName: fullName ?? email })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
   }, [app, sessionKind, kiosk, email, fullName])
 

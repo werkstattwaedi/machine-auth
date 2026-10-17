@@ -18,6 +18,15 @@ function queue(): unknown[][] {
   return (window.Marker as { __cs: unknown[][] }).__cs
 }
 
+/** Runs the widget's "load" listeners, as the real shim does once loaded. */
+async function fireMarkerLoad() {
+  for (const [method, event, listener] of queue()) {
+    if (method === "on" && event === "load") (listener as () => void)()
+  }
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 beforeEach(() => {
   mockAuth = { user: null, userDoc: null, sessionKind: null }
   mockBridgeAvailable = false
@@ -56,13 +65,16 @@ describe("MarkerIO", () => {
     expect(queue()).not.toContainEqual(["hide"])
   })
 
-  it("pre-fills the reporter for a signed-in member", () => {
+  it("pre-fills the reporter for a signed-in member once the widget loaded", async () => {
     mockAuth = {
       user: { uid: "u1", email: "mike@example.com" },
       userDoc: { name: "Mike Schneider" },
       sessionKind: "real",
     }
     render(<MarkerIO app="checkout" />)
+    // Before "load" the widget has no project yet and setReporter throws.
+    expect(queue().some(([m]) => m === "setReporter")).toBe(false)
+    await fireMarkerLoad()
     expect(queue()).toContainEqual([
       "setReporter",
       { email: "mike@example.com", fullName: "Mike Schneider" },
@@ -73,7 +85,23 @@ describe("MarkerIO", () => {
     ])
   })
 
-  it("does not set a reporter for kiosk badge sessions, but tags the report", () => {
+  it("swallows a rejected setReporter", async () => {
+    mockAuth = {
+      user: { uid: "u1", email: "mike@example.com" },
+      userDoc: { name: "Mike Schneider" },
+      sessionKind: "real",
+    }
+    render(<MarkerIO app="admin" />)
+    const rejection = vi.fn()
+    window.addEventListener("unhandledrejection", rejection)
+    window.Marker!.setReporter = () => Promise.reject(new Error("no project"))
+    await fireMarkerLoad()
+    await new Promise((r) => setTimeout(r, 0))
+    window.removeEventListener("unhandledrejection", rejection)
+    expect(rejection).not.toHaveBeenCalled()
+  })
+
+  it("does not set a reporter for kiosk badge sessions, but tags the report", async () => {
     mockAuth = {
       user: { uid: "u1", email: null },
       userDoc: { name: "Badge User", email: "badge@example.com" },
@@ -81,6 +109,7 @@ describe("MarkerIO", () => {
     }
     mockBridgeAvailable = true
     render(<MarkerIO app="checkout" />)
+    await fireMarkerLoad()
     expect(queue().some(([m]) => m === "setReporter")).toBe(false)
     expect(queue()).toContainEqual([
       "setCustomData",

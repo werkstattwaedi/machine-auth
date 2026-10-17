@@ -591,7 +591,9 @@
       "status": "active | expired | cancelled",
 
       // Period tracking
-      "lastPaidAt": "timestamp | null", // Most recent payment timestamp
+      // When the bill that added the current year was committed — despite the
+      // name not when it was paid; payments are only booked on the bill (BIL-34).
+      "lastPaidAt": "timestamp | null",
       "validUntil": "timestamp",        // Expiration (= lastPaidAt + 1 year, or extended)
 
       // Members
