@@ -29,6 +29,11 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 - **CHK-12** A second visit of the same account on one day charges no usage fee again for its account holder if they were already charged it that day; every other person pays it on every visit. — #268, ADR-0048, #747
 
+## Kosten
+
+- **CHK-28** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032
+- **CHK-29** On Kosten, a machine row (CHK-28) unfolds to list the sessions behind it — machine, start time, duration. — #214
+
 ## Usage type
 
 - **CHK-4** The person chooses the usage type on Check Out; it decides what the checkout bills — #284, #570:
@@ -98,6 +103,8 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - [NEEDS CLARIFICATION] A person added by name who returns the same day pays the usage fee again (CHK-12): without an account link there is nothing to match them on. Intended, or should the same name on the same account count?
 - [NEEDS CLARIFICATION] An identified person who only accompanies someone (a parent with a child) pays the usage fee too, since they stay on the check-in (CHK-10). A per-person accompaniment option is #605.
 - [NEEDS CLARIFICATION] After the commit (CHK-22) a reload, the browser's back or a deep link leaves Bezahlen for good: there is no open checkout, the person is sent to the check-in, and a guest has no way back to the PDF download (CHK-25) or the paylink (CHK-27) — the document is in the mail (BIL-26). Intended?
+- [NEEDS CLARIFICATION] The unfolded sessions (CHK-29) show each session's wall-clock duration, while the row's minutes (CHK-28) are the billed time, so on a machine billed by active time (ADR-0032) the sessions don't add up to the row. Intended, or should the list show billed time?
+- [NEEDS CLARIFICATION] Only the app keeps a machine row read-only (CHK-28); the server accepts an edit or delete of it from the checkout's owner. Should the server refuse?
 
 ## Retired
 
