@@ -586,6 +586,9 @@ test.describe("Checkout step screenshots", () => {
     await expect(free).toBeVisible()
     await expect(page.getByTestId("payment-option-rechnung")).toHaveCount(0)
     await page.locator("h1").first().click()
+    // Scroll to the bottom: the shot is of the card, and the select's
+    // close leaves the page at a position that varies between runs.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkout-payment-zero.png")
 
     await free.click()
