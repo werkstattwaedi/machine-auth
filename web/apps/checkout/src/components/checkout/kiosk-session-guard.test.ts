@@ -37,6 +37,7 @@ describe("kiosk-session-guard", () => {
     expect(getKioskSessionState()).toEqual({
       preservable: false,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [],
       ...NO_CHECKIN,
@@ -48,6 +49,7 @@ describe("kiosk-session-guard", () => {
     let state = {
       preservable: false,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [] as string[],
     }
@@ -56,6 +58,7 @@ describe("kiosk-session-guard", () => {
     state = {
       preservable: true,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [],
     }
@@ -66,12 +69,14 @@ describe("kiosk-session-guard", () => {
     cleanup = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: true,
+      committed: false,
       holderName: "Michael Schneider",
       badgeTokenIds: ["04aabbccddeeff"],
     }))
     expect(getKioskSessionState()).toEqual({
       preservable: true,
       identified: true,
+      committed: false,
       holderName: "Michael Schneider",
       badgeTokenIds: ["04aabbccddeeff"],
       ...NO_CHECKIN,
@@ -82,6 +87,7 @@ describe("kiosk-session-guard", () => {
     const unregister = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: true,
+      committed: false,
       holderName: "Fritz Muster",
       badgeTokenIds: [],
     }))
@@ -90,6 +96,7 @@ describe("kiosk-session-guard", () => {
     expect(getKioskSessionState()).toEqual({
       preservable: false,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [],
       ...NO_CHECKIN,
@@ -100,12 +107,14 @@ describe("kiosk-session-guard", () => {
     const unregisterOld = registerKioskSessionGuard(() => ({
       preservable: false,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [],
     }))
     cleanup = registerKioskSessionGuard(() => ({
       preservable: true,
       identified: false,
+      committed: false,
       holderName: null,
       badgeTokenIds: [],
     }))
@@ -118,6 +127,7 @@ describe("kiosk-session-guard", () => {
     const unregisterGuard = registerKioskSessionGuard(() => ({
       preservable: false,
       identified: true,
+      committed: false,
       holderName: "Andrea Muster",
       badgeTokenIds: [],
     }))
@@ -136,6 +146,7 @@ describe("kiosk-session-guard", () => {
     }
     expect(getKioskSessionState()).toMatchObject({
       identified: true,
+      committed: false,
       autoStartPending: true,
       holderFirstName: "Andrea",
     })
