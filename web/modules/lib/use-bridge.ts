@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useMemo } from "react"
+import type {
+  TerminalPaymentEvent,
+  TerminalPaymentRequest,
+  TerminalPaymentResult,
+} from "@oww/shared"
 
 // Mirrors checkout-kiosk/src/types.ts. The bridge is only exposed when the
 // page is loaded inside the OWW kiosk Electron build. In a regular browser
@@ -43,6 +48,16 @@ interface BridgeApi {
   // RaiseNow TWINT payment completed (#416). Optional so the web app keeps
   // working against older kiosk builds without this channel.
   onPaymentConfirmed?: (cb: (paymentUuid: string) => void) => () => void
+  // Wallee payment terminal (ADR-0048), on kiosk builds whose `features`
+  // include PAYMENT_TERMINAL_FEATURE. Optional: older kiosk builds lack them.
+  // `terminalPay` never rejects; a second call while one runs resolves
+  // `busy`. Subscribe to `onTerminalEvent` before calling it. Display only —
+  // the backend settles the payment from Wallee's webhook.
+  terminalPay?: (req: TerminalPaymentRequest) => Promise<TerminalPaymentResult>
+  onTerminalEvent?: (cb: (event: TerminalPaymentEvent) => void) => () => void
+  // True when the abort went out; once the card is read the terminal ignores
+  // it and `terminalPay` still resolves with the real outcome.
+  terminalAbort?: () => Promise<boolean>
 }
 
 interface UseBridgeResult {
@@ -60,6 +75,10 @@ interface UseBridgeResult {
   // Subscribe to the chrome "Neuer Checkout" button. No-op outside the bridge.
   onStartOverRequest: (cb: () => void) => () => void
   onPaymentConfirmed: (cb: (paymentUuid: string) => void) => () => void
+  // Payment terminal; undefined outside the kiosk or on builds without it.
+  terminalPay?: BridgeApi["terminalPay"]
+  onTerminalEvent?: BridgeApi["onTerminalEvent"]
+  terminalAbort?: BridgeApi["terminalAbort"]
 }
 
 function getBridge(): BridgeApi | undefined {
@@ -112,6 +131,9 @@ export function useBridge(): UseBridgeResult {
       onStartOverRequest: bridge.onStartOverRequest ?? (() => NO_OP_UNSUBSCRIBE),
       onPaymentConfirmed:
         bridge.onPaymentConfirmed ?? (() => NO_OP_UNSUBSCRIBE),
+      terminalPay: bridge.terminalPay,
+      onTerminalEvent: bridge.onTerminalEvent,
+      terminalAbort: bridge.terminalAbort,
     }
   }, [])
 }
