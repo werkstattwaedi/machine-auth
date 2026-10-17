@@ -87,7 +87,10 @@ service cloud.firestore {
     // co-members see each other's display names for the checkout roster
     // picker. Both docs must already have `activeMembership` populated by
     // the onMembershipWritten trigger; a single rules `get` on the caller's
-    // user doc is the per-evaluation cost.
+    // user doc is the per-evaluation cost. Trusting the pointer is only
+    // safe because no client may write it (see `users/{userId}` create and
+    // `activeMembershipUnchanged`) — otherwise anyone who learned a
+    // membership id could join that family's roster (issue #745).
     function shareActiveMembership(targetUserId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership != null &&
@@ -113,7 +116,8 @@ service cloud.firestore {
     // True when the user pointed to by `userIdRef` has a non-null
     // `activeMembership`. Used to gate the `paymentMethod: "monthly"`
     // write on a closed checkout — only Vereinsmitglieder may roll an
-    // open balance onto their monthly bill.
+    // open balance onto their monthly bill. The pointer is server-only
+    // (issue #745), so a client cannot forge its way past this check.
     function hasActiveMembership(userIdRef) {
       return userIdRef != null &&
         get(userIdRef).data.get('activeMembership', null) != null;
@@ -152,10 +156,16 @@ service cloud.firestore {
       // lock an existing member out (two docs share the e-mail → login
       // refuses). Anonymous sessions have no token e-mail and can therefore
       // only create an e-mail-less doc.
+      //
+      // `activeMembership` MUST be absent/null: only the server (Admin SDK —
+      // onMembershipWritten and the membership callables) sets it, and the
+      // pointer grants member prices, Sammelrechnung, a free badge and the
+      // family-roster read (issue #745).
       allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.roles == [] &&
                        request.resource.data.permissions == [] &&
                        request.resource.data.get('email', null) == request.auth.token.get('email', null) &&
+                       request.resource.data.get('activeMembership', null) == null &&
                        isValidUserProfile(request.resource.data);
 
       // `email` is the login lookup key and Firebase Auth follows it
@@ -166,6 +176,15 @@ service cloud.firestore {
       // directly is what used to split members in two (issue #633).
       function emailUnchanged() {
         return request.resource.data.get('email', null) == resource.data.get('email', null);
+      }
+
+      // `activeMembership` is server-only (issue #745): it is maintained by
+      // onMembershipWritten and the membership callables via the Admin SDK.
+      // Neither the owner nor an elevated kiosk session may set, change or
+      // clear it. Admins keep write access (admin tooling, e2e setup).
+      function activeMembershipUnchanged() {
+        return request.resource.data.get('activeMembership', null) ==
+               resource.data.get('activeMembership', null);
       }
 
       // Users can update their own doc but cannot change roles/permissions.
@@ -180,11 +199,13 @@ service cloud.firestore {
                         userId == request.auth.uid &&
                         request.resource.data.roles == resource.data.roles &&
                         request.resource.data.permissions == resource.data.permissions &&
+                        activeMembershipUnchanged() &&
                         isValidUserProfile(request.resource.data)) ||
                        (isElevatedActsAs() &&
                         actsAs() == userId &&
                         request.resource.data.roles == resource.data.roles &&
                         request.resource.data.permissions == resource.data.permissions &&
+                        activeMembershipUnchanged() &&
                         isValidUserProfile(request.resource.data)));
 
       allow delete: if isAdmin();

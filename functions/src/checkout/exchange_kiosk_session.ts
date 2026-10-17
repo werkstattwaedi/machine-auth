@@ -94,7 +94,7 @@ export async function handleExchangeKioskSession(
   );
   return {
     customToken,
-    ...buildKioskUserPayload(auth.uid, userDoc.data(), elevatedUntil),
+    ...(await buildKioskUserPayload(auth.uid, userDoc.data(), elevatedUntil)),
   };
 }
 

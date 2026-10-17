@@ -344,6 +344,45 @@ describe("handleUploadUsage (Integration)", () => {
     });
   });
 
+  // The member price needs an active membership that lists the user; the
+  // user doc's `activeMembership` pointer alone proves nothing (issue #745).
+  describe("member pricing", () => {
+    async function seedMembershipPricing(members: string[]): Promise<void> {
+      await seedBaseFixtures();
+      await seedCatalog(TEST_CATALOG_ID, {
+        name: "Tischkreissäge",
+        unitPrice: { none: 10, member: 6 },
+      });
+      const db = getFirestore();
+      const membershipRef = db.doc("memberships/m-1");
+      await membershipRef.set({
+        type: "family",
+        status: "active",
+        validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+        ownerUserId: db.doc(`users/${members[0]}`),
+        members: members.map((uid) => db.doc(`users/${uid}`)),
+        paymentCheckouts: [],
+      });
+      await db.doc(`users/${TEST_USER_ID}`).update({
+        activeMembership: membershipRef,
+      });
+    }
+
+    it("a member listed in the membership pays the member price", async () => {
+      await seedMembershipPricing([TEST_USER_ID]);
+      await handleUploadUsage(buildRequest([{}]), config);
+      const item = await getCheckoutItem();
+      expect(item!.data().unitPrice).to.equal(6);
+    });
+
+    it("a pointer to a membership that doesn't list the user pays the non-member price", async () => {
+      await seedMembershipPricing(["someone-else"]);
+      await handleUploadUsage(buildRequest([{}]), config);
+      const item = await getCheckoutItem();
+      expect(item!.data().unitPrice).to.equal(10);
+    });
+  });
+
   describe("xTool in-use billing", () => {
     const XTOOL_MACHINE_ID = "machine-laser";
     const XTOOL_CATALOG_ID = "catalog-holz-laserhour";

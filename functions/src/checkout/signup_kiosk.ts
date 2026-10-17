@@ -198,7 +198,7 @@ export async function handleSignupKiosk(
   return {
     customToken,
     emailSent,
-    ...buildKioskUserPayload(uid, docData, elevatedUntil),
+    ...(await buildKioskUserPayload(uid, docData, elevatedUntil)),
   };
 }
 

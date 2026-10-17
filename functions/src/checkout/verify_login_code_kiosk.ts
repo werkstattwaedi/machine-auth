@@ -72,7 +72,7 @@ export async function handleVerifyLoginCodeKiosk(
   );
   return {
     customToken,
-    ...buildKioskUserPayload(userDoc.id, userDoc.data(), elevatedUntil),
+    ...(await buildKioskUserPayload(userDoc.id, userDoc.data(), elevatedUntil)),
   };
 }
 

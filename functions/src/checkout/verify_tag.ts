@@ -250,7 +250,7 @@ export async function handleVerifyTagCheckout(
     tokenId,
     uid: uidHex,
     customToken,
-    ...buildKioskUserPayload(realUserId, userData),
+    ...(await buildKioskUserPayload(realUserId, userData)),
   };
 }
 
