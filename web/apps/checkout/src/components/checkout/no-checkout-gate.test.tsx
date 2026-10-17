@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * NoCheckoutGate — mounted by the wizard layout on /visit, /checkout,
- * /payment when no open checkout exists. Single-action dialog:
+ * NoCheckoutGate — mounted by the wizard layout on /visit and /checkout
+ * when no open checkout exists. Single-action dialog:
  *   - Always offers "Zum Check-In"
  *   - Preserves the kiosk flag when navigating
  *   - Escape key is locked (no dismiss); user must click the action

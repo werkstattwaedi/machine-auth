@@ -8,7 +8,7 @@ import { useWizardContext } from "./wizard-context"
 /**
  * Red/orange banner rendered across the wizard when the user's open
  * checkout predates today's 3:00 AM Europe/Zurich rollover. The banner
- * persists on /visit, /checkout and /payment — wherever the user is in
+ * persists on /visit and /checkout — wherever the user is in
  * the wizard, they should be reminded that yesterday's visit needs to
  * be settled before machines unlock (server-side machine lock is a
  * follow-up).

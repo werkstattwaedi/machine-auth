@@ -71,7 +71,10 @@ function renderStep(items: CheckoutItemLocal[]) {
       setUsageType={() => {}}
       tip={0}
       setTip={() => {}}
-      onSubmit={async () => {}}
+      paymentMethods={["rechnung"]}
+      paymentChoice={null}
+      onPaymentChoiceChange={() => {}}
+      onCommit={async () => {}}
       onBack={() => {}}
       submitting={false}
       items={items}

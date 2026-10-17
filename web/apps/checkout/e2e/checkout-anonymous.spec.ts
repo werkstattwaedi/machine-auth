@@ -66,34 +66,23 @@ test.describe("Anonymous checkout", () => {
     ).toHaveAttribute("aria-expanded", "true")
     await expect(page.getByText("Max Muster")).toBeVisible()
 
-    // Submit
-    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
+    // ── Step 3 → 4: choose the QR-Rechnung card; the checkout stays open
+    // until "Rechnung senden" (issue #750). ──
+    await page.getByTestId("payment-option-rechnung").click()
+    await expect(page.getByText("Zu bezahlen")).toBeVisible()
+    await page.getByRole("button", { name: "Rechnung senden" }).click()
 
-    // ── Payment result (Step 4 — Rechnung tab is selected by default) ──
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
-      timeout: 10_000,
-    })
-    // QR card + action buttons render once the bill is created server-side
-    // (onCheckoutCreatedClosed trigger) and getPaymentQrData resolves —
-    // emulator cold starts can take a few seconds.
-    await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({
+    // ── Confirmation inline: the guest's own device offers the PDF and
+    // says the window can be closed. ──
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({
       timeout: 30_000,
     })
-    // PDF download is the hero-level lightweight button (always visible).
-    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
-
-    // ── Commit the chosen payment method (records the customer's
-    // acknowledgement on the closed checkout doc, then the wizard resets) ──
-    await page
-      .getByRole("button", {
-        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
-      })
-      .click()
+    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
+    await expect(page.getByText("Du kannst dieses Fenster jetzt schliessen.")).toBeVisible()
 
     // ── Verify Firestore ──
-    // Wait for the bill ack write to land before reading the doc. The
-    // callable stamps both the checkout's paymentMethod and the bill's
-    // paymentMethodConfirmationTime / Source in one transaction.
+    // The close commits the method: the bill is minted acknowledged by
+    // the user and the checkout carries the method, in one transaction.
     await expect
       .poll(
         async () => {

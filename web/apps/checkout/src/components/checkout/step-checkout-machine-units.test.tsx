@@ -88,7 +88,10 @@ function Harness({ items }: { items: CheckoutItemLocal[] }) {
       setUsageType={setUsageType}
       tip={tip}
       setTip={setTip}
-      onSubmit={async () => {}}
+      paymentMethods={["rechnung"]}
+      paymentChoice={null}
+      onPaymentChoiceChange={() => {}}
+      onCommit={async () => {}}
       onBack={() => {}}
       submitting={false}
       submitError={null}

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { AlertDialogAction } from "@modules/components/ui/alert-dialog"
+import { Button } from "@modules/components/ui/button"
 
 interface AutoActionButtonProps {
   /** Time from mount until the action auto-fires. */
@@ -12,12 +13,17 @@ interface AutoActionButtonProps {
    * comes first. */
   onAction: () => void
   children: ReactNode
+  /**
+   * Render a plain button instead of an AlertDialog action — for a
+   * countdown on the page itself (the checkout's "Fertig", #750).
+   */
+  standalone?: boolean
 }
 
 /**
- * AlertDialog action button whose background fills while an auto-accept
- * timer drains — the MaCo terminal's "Beenden?" pattern. Shared by every
- * kiosk auto-dismiss flow (completion dialog, idle watcher) so they all look
+ * Action button whose background fills while an auto-accept timer drains —
+ * the MaCo terminal's "Beenden?" pattern. Shared by every kiosk auto-dismiss
+ * flow (the checkout's "Fertig", the idle watcher) so they all look
  * and behave identically; the check-in "Besuch starten" countdown reuses the
  * same fill technique (use-auto-start-countdown.ts).
  *
@@ -31,6 +37,7 @@ export function AutoActionButton({
   durationMs,
   onAction,
   children,
+  standalone = false,
 }: AutoActionButtonProps) {
   // false until the first paint committed width 0 — flipping to true then
   // starts the one full-duration transition to 100%.
@@ -61,8 +68,9 @@ export function AutoActionButton({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [durationMs])
 
+  const Action = standalone ? Button : AlertDialogAction
   return (
-    <AlertDialogAction onClick={fire} className="relative overflow-hidden">
+    <Action onClick={fire} className="relative overflow-hidden">
       <span
         aria-hidden
         data-testid="auto-action-progress"
@@ -75,6 +83,6 @@ export function AutoActionButton({
         }}
       />
       <span className="relative z-10">{children}</span>
-    </AlertDialogAction>
+    </Action>
   )
 }
