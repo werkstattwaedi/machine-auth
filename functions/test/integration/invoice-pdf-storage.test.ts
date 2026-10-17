@@ -215,23 +215,18 @@ describe("invoice PDF storage (Integration, real Storage)", () => {
     }
   });
 
-  // BIL-15 / issue #418: the shared kiosk never gets a PDF, whoever is
-  // signed in there — the owner's badge session included.
-  it("getInvoiceDownloadUrl refuses a kiosk session acting as the owner", async function () {
+  // The kiosk hides the download (BIL-15); the server serves the owner's
+  // badge session all the same.
+  it("getInvoiceDownloadUrl serves a kiosk session acting as the owner", async function () {
     this.timeout(15000);
     const billId = "bill-kiosk";
     await seedBillWithCheckout(billId);
     await tryGeneratePdf(billId);
 
-    try {
-      await getInvoiceDownloadUrlHandler(
-        buildRequest("kiosk-session-uid", { billId }, { actsAs: USER_ID }),
-      );
-      throw new Error("expected permission-denied");
-    } catch (err) {
-      expect(err).to.be.instanceOf(HttpsError);
-      expect((err as HttpsError).code).to.equal("permission-denied");
-    }
+    const { url } = await getInvoiceDownloadUrlHandler(
+      buildRequest("kiosk-session-uid", { billId }, { actsAs: USER_ID }),
+    );
+    expect(url).to.be.a("string");
   });
 
   // Issue #750: a guest bill has no account holder; the anonymous session

@@ -2130,12 +2130,19 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(checkout.paymentMethod).to.equal("rechnung");
     });
 
-    it("raisenow: refused — TWINT confirms after its paylink, not at close", async () => {
+    it("raisenow: the intent to pay by TWINT closes and commits; the paylink comes back", async () => {
       await seedUser(UID);
       await seedOpen();
 
-      await expectHttpsError(() => closeWith("raisenow"), "invalid-argument");
-      expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
+      const result = await closeWith("raisenow");
+      expect(result.paylinkUrl).to.contain("reference.creditor");
+
+      const [bill] = await listBills();
+      expect(bill.data.kind).to.equal("invoice");
+      expect(bill.data.paymentMethodConfirmationSource).to.equal("user");
+      const checkout = await getCheckout(CHECKOUT_ID);
+      expect(checkout.status).to.equal("closed");
+      expect(checkout.paymentMethod).to.equal("raisenow");
     });
 
     it("rejects an unknown paymentMethod", async () => {

@@ -641,10 +641,12 @@ interface CloseCheckoutRequest {
   summary: CheckoutSummaryEntity;
   /**
    * Commit this method together with the close (issue #750): the person
-   * confirmed it on the same screen, so the bill is minted committed. Only
-   * methods settled outside the checkout qualify — a method paid during the
-   * checkout (TWINT) needs the bill's reference for its paylink first, so
-   * it still closes without a method and confirms via `acknowledgeBill`.
+   * confirmed it on the same screen, so the bill is minted committed. The
+   * commit is the person's promise to pay, never proof of payment — for
+   * the TWINT paylink too, which the response carries (`paylinkUrl`) and
+   * which nothing can confirm afterwards. A payment terminal is different:
+   * its checkout must close only on an approved transaction, so it must
+   * not come through here.
    * Omitted: the bill stays unconfirmed, as before.
    */
   paymentMethod?: PaymentMethod;
@@ -688,12 +690,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (paymentMethod !== null) {
     if (!isPaymentMethod(paymentMethod)) {
       throw new HttpsError("invalid-argument", "invalid paymentMethod");
-    }
-    if (PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
-      throw new HttpsError(
-        "invalid-argument",
-        `paymentMethod ${paymentMethod} is confirmed after its payment, not at close`,
-      );
     }
   }
 

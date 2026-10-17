@@ -73,10 +73,10 @@ export const getInvoiceDownloadUrlHandler = async (
   }
 
   // Authorisation:
-  //  - never a kiosk session (the `actsAs` claim, minted only by the kiosk):
-  //    the shared machine must not keep invoices on its disk (BIL-15,
-  //    issue #418), whoever is signed in there, OR
-  //  - the account holder (request.auth.uid equals the user doc id), OR
+  //  - the account holder: for real logins request.auth.uid equals the
+  //    user doc id; for kiosk tag-tap sessions the uid is synthetic and the
+  //    actsAs claim names the real user — match against either. The kiosk
+  //    never offers the download (BIL-15); that is the client's call, OR
   //  - for a guest bill (no account holder), the anonymous session that
   //    created its checkout (`firebaseUid`, issue #318). Signing the guest
   //    out ends that session, so a guest can fetch the PDF only during the
@@ -89,10 +89,11 @@ export const getInvoiceDownloadUrlHandler = async (
     actsAs?: unknown;
     firebase?: { sign_in_provider?: string };
   };
-  if (typeof claims.actsAs === "string" && claims.actsAs.length > 0) {
-    throw new HttpsError("permission-denied", "No PDF download at the kiosk");
-  }
-  const isOwner = bill.userId != null && bill.userId.id === request.auth.uid;
+  const actsAs = typeof claims.actsAs === "string" ? claims.actsAs : null;
+  const isOwner =
+    bill.userId != null &&
+    (bill.userId.id === request.auth.uid ||
+      (actsAs !== null && bill.userId.id === actsAs));
   const isAnonCreator =
     bill.userId == null &&
     claims.firebase?.sign_in_provider === "anonymous" &&

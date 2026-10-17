@@ -6,7 +6,7 @@
  * places that do it on the person's behalf:
  *
  *  - `acknowledgeBill`: the bill was minted earlier, at close, and the
- *    person confirms a method afterwards (TWINT, once its paylink opened).
+ *    person confirms a method afterwards (the checkout before #750).
  *  - `closeCheckoutAndGetPayment` with a `paymentMethod`: the close and the
  *    confirmation are one action, so the bill is minted already committed.
  *

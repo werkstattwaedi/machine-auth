@@ -654,9 +654,9 @@ function DownloadButton({ billId }: { billId: string }) {
       })
   }
 
-  // A kiosk session (always a tag session, elevated or not) never gets the
-  // PDF: the shared machine must not keep invoices on its disk (BIL-15,
-  // issue #418). The server refuses it too.
+  // A kiosk session (always a tag session, elevated or not) never offers
+  // the PDF: the shared machine must not keep invoices on its disk (BIL-15,
+  // issue #418).
   if (sessionKind === "tag") return null
 
   return (
