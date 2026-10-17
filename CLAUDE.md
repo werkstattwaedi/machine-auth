@@ -246,6 +246,12 @@ Keep exactly one Playwright version in the tree — CI's `npx playwright install
 resolves `playwright` from the app dir independently of the `playwright-core`
 that `@playwright/test` uses, so a split silently installs the wrong browser.
 
+**After `npm audit fix`, run a plain `npm install` before committing the lock.**
+`audit fix` writes the esbuild/rolldown platform binaries and `tsx` as
+`"dev": true`, while `npm install`, Dependabot and every deploy (`deploy.sh`
+runs `npm install`) write them as `devOptional` / no flag — committing the
+audit-fix variant leaves a ~57-line flag-only diff after every deploy.
+
 ## Testing
 
 **The pre-commit hook** builds and unit-tests only the suites the staged files touch (`scripts/precommit-select.ts`; `test:hook:web` / `test:hook:functions`) — no emulators, no e2e. **CI** runs the full suite below plus the e2e matrix on every PR; run it locally when iterating on rules or integration-tested code:
