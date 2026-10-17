@@ -2043,6 +2043,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedOpen();
 
       const result = await closeWith("rechnung");
+      expect(result.paymentMethod).to.equal("rechnung");
       expect(result.payerEmail).to.equal(ADULT.email);
       expect(result.qrBillPayload).to.contain("SPC");
 
@@ -2167,7 +2168,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedUser(UID);
       await seedCheckout(CHECKOUT_ID, { ownerUid: UID, items: [] });
 
-      await closeWith("rechnung", { usageType: "intern" as UsageType });
+      const result = await closeWith("rechnung", { usageType: "intern" as UsageType });
+      expect(result.paymentMethod).to.equal(null);
 
       const [bill] = await listBills();
       expect(bill.data.amount).to.equal(0);
@@ -2204,7 +2206,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedOpen();
 
       await closeWith(undefined);
-      await closeWith("monthly");
+      const retry = await closeWith("monthly");
+      expect(retry.paymentMethod).to.equal("monthly");
 
       const bills = await listBills();
       expect(bills).to.have.length(1);
@@ -2221,7 +2224,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedOpen();
 
       await closeWith("rechnung");
-      await closeWith("monthly");
+      const retry = await closeWith("monthly");
+      expect(retry.paymentMethod).to.equal("rechnung");
 
       const bills = await listBills();
       expect(bills).to.have.length(1);

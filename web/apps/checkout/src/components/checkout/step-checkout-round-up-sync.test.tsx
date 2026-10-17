@@ -103,7 +103,10 @@ function Harness({
         onTipChange?.(n)
         setTip(n)
       }}
-      onSubmit={async () => {}}
+      paymentMethods={["rechnung"]}
+      paymentChoice={null}
+      onPaymentChoiceChange={() => {}}
+      onCommit={async () => {}}
       onBack={() => {}}
       submitting={false}
       submitError={null}

@@ -106,7 +106,7 @@ For real kiosk attestation we'd need TPM-anchored mTLS, a YubiKey/FIDO2 hardware
 Two reinforcing mechanisms:
 
 - **Web side:** `useTokenAuth` calls `setPersistence(auth, inMemoryPersistence)` before `signInWithCustomToken`. The Firebase Auth state lives in memory only — a closed tab is a closed session.
-- **Electron side:** the `<webview>` uses a dedicated `partition="persist:kiosk:volatile"`. The main process calls `session.fromPartition(...).clearStorageData()` on app start, on the "Neuer Checkout" button, and via IPC from the web app's inactivity (5 min) and post-payment (30 s) auto-reset. A force-killed kiosk process loses nothing on restart because the next app start wipes the partition before the webview attaches.
+- **Electron side:** the `<webview>` uses a dedicated `partition="persist:kiosk:volatile"`. The main process calls `session.fromPartition(...).clearStorageData()` on app start, on the "Neuer Checkout" button, and via IPC from the web app's inactivity (5 min) and post-payment ("Fertig", 8 s — #750) auto-reset. A force-killed kiosk process loses nothing on restart because the next app start wipes the partition before the webview attaches.
 
 Either layer alone would be insufficient (in-memory persistence resets only on explicit signOut; the Electron wipe handles the cases where the web app didn't get a chance to sign out cleanly).
 

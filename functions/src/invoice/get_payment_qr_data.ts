@@ -13,6 +13,7 @@ import { defineString } from "firebase-functions/params";
 import { getFirestore } from "firebase-admin/firestore";
 import { generateScorReference } from "./scor_reference";
 import { isPaymentMethodEnabled } from "../payments/config";
+import type { PaymentMethod } from "../types/firestore_entities";
 import { buildRaisenowPaylinkUrl } from "../payments/raisenow";
 import type { BillEntity } from "./types";
 import type { CheckoutEntity } from "../types/firestore_entities";
@@ -80,6 +81,10 @@ export interface PaymentData {
   payerEmail: string;
   amount: string;
   currency: string;
+  // Set by the close (issue #750): the method the bill is committed with,
+  // null while it is unconfirmed or free. A repeated close answers with
+  // the first committed method, not the one it asked for.
+  paymentMethod?: PaymentMethod | null;
 }
 
 export interface PaymentPayer {

@@ -15,10 +15,10 @@ import {
 import { type PricingConfig } from "@modules/lib/workshop-config"
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronRight,
   Coins,
   Heart,
-  Loader2,
   Package,
   Wrench,
 } from "lucide-react"
@@ -49,6 +49,15 @@ import {
 
 import { BadgeCheck, Nfc } from "lucide-react"
 import { UsageTypeSelect } from "./usage-type-select"
+import {
+  Fold,
+  PaymentFrame,
+  PaymentOptionCards,
+  PaymentStep,
+} from "./payment-options"
+import { firstOfNextMonth, type PaymentChoice } from "./payment-methods"
+import { useIsPhone } from "./use-is-phone"
+import type { PaymentMethod } from "@oww/shared"
 
 /**
  * Compute up to 4 sensible round-up total targets for the current base.
@@ -191,7 +200,22 @@ interface StepCheckoutProps {
   setUsageType: (t: UsageType) => void
   tip: number
   setTip: (n: number) => void
-  onSubmit: () => Promise<void>
+  /**
+   * The payment methods this person is offered, in configured order
+   * (client type + membership). A CHF 0 total offers the single "free"
+   * card instead.
+   */
+  paymentMethods: PaymentMethod[]
+  /** The card chosen on step 3; non-null shows step 4 in place. */
+  paymentChoice: PaymentChoice | null
+  onPaymentChoiceChange: (choice: PaymentChoice | null) => void
+  /**
+   * Closes the checkout, committing the choice (issue #750). Called
+   * synchronously from the commit click, so a caller may open a window
+   * before its first await (the TWINT paylink).
+   */
+  onCommit: (choice: PaymentChoice) => Promise<void>
+  /** Leaves step 3 for the visit page. */
   onBack: () => void
   submitting: boolean
   /** Inline alert after a failed submit (ADR-0025). */
@@ -374,7 +398,10 @@ export function StepCheckout({
   setUsageType,
   tip,
   setTip,
-  onSubmit,
+  paymentMethods,
+  paymentChoice,
+  onPaymentChoiceChange,
+  onCommit,
   onBack,
   submitting,
   submitError,
@@ -541,7 +568,7 @@ export function StepCheckout({
 
   // Membership invoice needs the buyer's postal address. Capture it inline in
   // the membership line item, bound to the primary person's billing fields
-  // (prefilled from their user doc). Validation blocks "Weiter zum Bezahlen".
+  // (prefilled from their user doc). Validation blocks choosing a payment.
   const hasMembership = membershipItems.length > 0
   const primary = persons[0]
   const requireCompany = primary?.userType === "firma"
@@ -604,7 +631,15 @@ export function StepCheckout({
     })
   }
 
-  const handleSubmitClick = async () => {
+  const isPhone = useIsPhone()
+  const free = total === 0
+  const choices: PaymentChoice[] = free ? ["free"] : paymentMethods
+  const copy = {
+    email: primary?.email ?? "",
+    monthlyDate: firstOfNextMonth(),
+  }
+
+  const handleChoose = (choice: PaymentChoice) => {
     if (hasMembership) {
       const errs = validateAddress(primaryAddress, { requireCompany })
       if (Object.keys(errs).length > 0) {
@@ -613,7 +648,10 @@ export function StepCheckout({
         return
       }
     }
-    await onSubmit()
+    onPaymentChoiceChange(choice)
+    // The free card's action is the commit itself: nothing to choose on a
+    // step 4 that would only repeat "Abschliessen".
+    if (choice === "free") void onCommit("free")
   }
 
   const totalMachineMinutes = timedMachineMinutes(nfcItems)
@@ -634,6 +672,10 @@ export function StepCheckout({
         </div>
       )}
 
+      {/* Step 3: the summary, the donation, the total and the payment
+          cards. Folds away once a card is chosen (step 4). */}
+      <Fold open={!paymentChoice}>
+      <div className="flex flex-col gap-6">
       {/* Block — Dein Besuch */}
       <SectionEyebrow>Dein Besuch</SectionEyebrow>
 
@@ -842,6 +884,7 @@ export function StepCheckout({
         roundUpDelta={effectiveRoundUp}
         onRoundUpToggle={handleRoundUpToggle}
         onRoundUpTarget={handleRoundUpTarget}
+        startCollapsed={isPhone}
       />
 
       {/* Total — gold-swash highlight under amount */}
@@ -861,26 +904,43 @@ export function StepCheckout({
         </div>
       </div>
 
+      <PaymentOptionCards
+        choices={choices}
+        onChoose={handleChoose}
+        disabled={submitting || total < 0}
+      />
+      </div>
+      </Fold>
+
+      {/* Step 4: the chosen card under the "Zu bezahlen" strip. */}
+      <Fold open={!!paymentChoice}>
+        {paymentChoice && (
+          <PaymentFrame amount={total} free={free}>
+            <PaymentStep
+              choice={paymentChoice}
+              copy={copy}
+              committing={submitting}
+              onCommit={() => void onCommit(paymentChoice)}
+            />
+          </PaymentFrame>
+        )}
+      </Fold>
+
       <div className="flex-1" />
 
       {/* Sticky bottom navigation */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-between">
+        {/* Until the commit "Zurück" leaves step 4 for an editable step 3
+            (the donation and round-up survive: this component stays
+            mounted); on step 3 it goes back to the visit. */}
         <button
           type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors"
-          onClick={onBack}
+          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
+          onClick={paymentChoice ? () => onPaymentChoiceChange(null) : onBack}
+          disabled={submitting}
         >
           <ArrowLeft className="h-4 w-4" />
           Zurück
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white bg-cog-teal rounded-[3px] hover:bg-cog-teal-dark transition-colors disabled:opacity-50"
-          onClick={handleSubmitClick}
-          disabled={submitting || total < 0}
-        >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          Weiter zum Bezahlen
         </button>
       </div>
     </div>
@@ -1017,6 +1077,11 @@ interface SpendeCardProps {
   roundUpDelta: number
   onRoundUpToggle: (enabled: boolean) => void
   onRoundUpTarget: (target: number) => void
+  /**
+   * Phone: start folded to one line (heart, title, the amount once set,
+   * chevron) so the payment options are in view; a tap opens it.
+   */
+  startCollapsed?: boolean
 }
 
 /** Permissive numeric pattern accepted while typing: digits with at most one
@@ -1034,7 +1099,9 @@ export function SpendeCard({
   roundUpDelta,
   onRoundUpToggle,
   onRoundUpTarget,
+  startCollapsed = false,
 }: SpendeCardProps) {
+  const [expanded, setExpanded] = useState(!startCollapsed)
   // Raw text the user is typing. Decoupled from `spende` so a keystroke like
   // "20" survives the parse-and-reformat round-trip that previously stripped
   // trailing zeros.
@@ -1052,6 +1119,25 @@ export function SpendeCard({
     const parsed = parseFloat(text.replace(",", ".")) || 0
     if (parsed !== spende) setText(canonical)
   }, [spende, text])
+
+  if (!expanded) {
+    const amount = spende + (roundUpEnabled ? roundUpDelta : 0)
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        aria-expanded={false}
+        className="w-full rounded-md border border-oww-gold-border bg-oww-gold-light px-5 py-3.5 flex items-center gap-2 text-left font-heading font-bold text-base text-oww-gold-text"
+      >
+        <Heart className="h-4 w-4 text-oww-gold-dark" />
+        <span className="flex-1">Trinkgeld/Spende</span>
+        {amount > 0 && (
+          <span className="text-sm font-semibold tabular-nums">{formatCHF(amount)}</span>
+        )}
+        <ChevronDown className="h-4 w-4 text-oww-gold-dark" />
+      </button>
+    )
+  }
 
   return (
     <div className="rounded-md border border-oww-gold-border bg-oww-gold-light p-5 sm:p-6 grid sm:grid-cols-[1fr_auto] gap-4 sm:gap-6 items-start">

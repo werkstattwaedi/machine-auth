@@ -874,11 +874,17 @@ async function closeExistingCheckout(
         const existingBill = existingBillDoc.data() as BillEntity;
         // A repeated close (double tap, retry after a lost response) that
         // carries a method still commits it, unless something already did.
+        // Either way the answer names the method the bill is committed
+        // with, which may differ from the one asked for: the first wins.
+        let committedMethod = isBillCommitted(existingBill)
+          ? (checkout.paymentMethod ?? null)
+          : null;
         if (
           args.paymentMethod &&
           !isBillCommitted(existingBill) &&
           !existingBill.cancelledAt
         ) {
+          committedMethod = args.paymentMethod;
           tx.update(
             checkout.billRef,
             billCommitFields(args.paymentMethod, Timestamp.now()),
@@ -893,6 +899,7 @@ async function closeExistingCheckout(
           bill: existingBill,
           billId: checkout.billRef.id,
           payer: payerFromPersons(checkout.persons ?? enforcedPersons),
+          committedMethod,
         };
       }
     }
@@ -949,10 +956,18 @@ async function closeExistingCheckout(
       billRef,
     });
 
-    return { bill, billId: billRef.id, payer: payerFromPersons(dedupedPersons) };
+    return {
+      bill,
+      billId: billRef.id,
+      payer: payerFromPersons(dedupedPersons),
+      committedMethod: commit.method,
+    };
   });
 
-  return buildPaymentData(result.bill, result.payer, result.billId, args.checkoutId);
+  return {
+    ...buildPaymentData(result.bill, result.payer, result.billId, args.checkoutId),
+    paymentMethod: result.committedMethod,
+  };
 }
 
 async function createAnonymousCheckout(
@@ -1122,7 +1137,10 @@ async function createAnonymousCheckout(
     return { bill, billId: billRef.id, payer: payerFromPersons(dedupedPersons) };
   });
 
-  return buildPaymentData(result.bill, result.payer, result.billId, checkoutRef.id);
+  return {
+    ...buildPaymentData(result.bill, result.payer, result.billId, checkoutRef.id),
+    paymentMethod: commit.method,
+  };
 }
 
 function payerFromPersons(

@@ -102,13 +102,12 @@ async function signIn(page: Page) {
 }
 
 /**
- * Sign in, go through checkout, submit, and wait for payment result.
+ * Sign in and go to the Check Out page (step 3) with an empty cart.
  *
- * Uses a logged-in user so the checkout updates an existing open doc
- * (open → closed), which fires the onCheckoutClosed trigger. Logged-in
- * users also have no auto-reset timer.
+ * Uses a logged-in user so the commit closes an existing open doc
+ * (open → closed). Logged-in users also have no auto-reset timer.
  */
-async function submitAndWaitForPaymentResult(page: Page) {
+async function goToSignedInSummary(page: Page) {
   await signIn(page)
 
   // Navigate to checkout — logged-in user sees pre-filled form
@@ -124,17 +123,24 @@ async function submitAndWaitForPaymentResult(page: Page) {
   await checkoutBtn.scrollIntoViewIfNeeded()
   await checkoutBtn.click()
   await expect(page.getByText("Dein Besuch")).toBeVisible()
+}
 
-  // Submit — step 3 no longer carries a payment-method picker; the user
-  // advances to step 4 where the picker lives.
-  const submitBtn = page.getByRole("button", { name: "Weiter zum Bezahlen" })
-  await submitBtn.scrollIntoViewIfNeeded()
-  await submitBtn.click()
-
-  // Wait for Step 4 (Bezahlen) — the picker defaults to QR-Rechnung, so
-  // the QR bill creditor block renders immediately.
-  await expect(page.getByText("Zu bezahlen")).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText("Konto / Zahlbar an")).toBeVisible({ timeout: 30_000 })
+/**
+ * Choose a payment card on step 3 and wait for step 4 in place (issue
+ * #750). The fold animates for ~420 ms; wait for the frame and then for the
+ * folded summary to be gone so the shot is stable.
+ */
+async function choosePayment(page: Page, testId: string) {
+  const card = page.getByTestId(testId)
+  await card.scrollIntoViewIfNeeded()
+  await card.click()
+  await expect(page.getByTestId("payment-frame")).toBeVisible()
+  // The folded block stays in the DOM (height 0, faded), so wait for the
+  // fold to finish rather than for it to vanish.
+  await expect(
+    page.locator("[aria-hidden='true']").filter({ hasText: "Dein Besuch" }),
+  ).toHaveCSS("opacity", "0")
+  await page.evaluate(() => window.scrollTo(0, 0))
 }
 
 test.describe("Checkout step screenshots", () => {
@@ -354,6 +360,9 @@ test.describe("Checkout step screenshots", () => {
     // Enter a fractional manual tip so the round-up row is still
     // exercised even when the seeded subtotal lands on a whole franc
     // (#204: whole-franc bases now hide round-up suggestions).
+    // On a phone the Spende box starts folded to one line (#750).
+    const collapsedSpende = page.getByRole("button", { name: /Trinkgeld\/Spende/ })
+    if (await collapsedSpende.count()) await collapsedSpende.click()
     const tipInput = page.getByRole("textbox", { name: "Trinkgeld/Spende" })
     await tipInput.fill("0.50")
 
@@ -528,50 +537,43 @@ test.describe("Checkout step screenshots", () => {
     await expect(page).toHaveScreenshot("checkout-summary-intern-discount.png")
   })
 
-  test("Step 4 · Rechnung tab (default) — QR bill + PDF download in hero", async ({ page }, testInfo) => {
+  test("Step 4 · QR-Rechnung chosen — the card opens under 'Zu bezahlen'", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-    await submitAndWaitForPaymentResult(page)
+    await goToSignedInSummary(page)
+    await choosePayment(page, "payment-option-rechnung")
 
-    // The Rechnung tab is selected by default; the lightweight PDF
-    // download button lives in the hero (visible regardless of tab).
-    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
-    // Commit button uses the rechnung-specific label.
-    await expect(
-      page.getByRole("button", {
-        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
-      }),
-    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "Rechnung senden" })).toBeVisible()
+    await expect(page).toHaveScreenshot("checkout-payment-rechnung.png")
+  })
 
-    // Mask the QR — its pixels encode the per-run bill ID and would
-    // otherwise produce a different image on every run.
-    await expect(page).toHaveScreenshot("checkout-payment-rechnung.png", {
+  test("Confirmation · QR-Rechnung sent — QR slip behind the disclosure", async ({ page }, testInfo) => {
+    testInfo.setTimeout(60_000)
+    await goToSignedInSummary(page)
+    await choosePayment(page, "payment-option-rechnung")
+    await page.getByRole("button", { name: "Rechnung senden" }).click()
+
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
+    // Desktop offers the QR slip; a phone never does.
+    const disclosure = page.getByRole("button", { name: /QR-Code anzeigen/ })
+    if (testInfo.project.name === "mobile-chrome") {
+      await expect(disclosure).toHaveCount(0)
+    } else {
+      await disclosure.click()
+      await expect(page.getByTestId("payment-qr")).toBeVisible()
+    }
+
+    // Mask the QR — its pixels encode the per-run bill reference.
+    await expect(page).toHaveScreenshot("checkout-confirmation-rechnung.png", {
       mask: [page.getByTestId("payment-qr")],
     })
   })
 
-  // Issue #237: zero-amount visit ("Interne Nutzung") must show the
-  // dedicated "nichts zu bezahlen" screen instead of the QR / Sammelrechnung
-  // / TWINT method picker. We switch usageType to "intern" on the summary
-  // step (which zeroes entry/machine/material costs server- and client-side)
-  // and assert step 4 renders the simplified screen.
-  test("Step 4 · zero amount (Interne Nutzung) — 'nichts zu bezahlen' screen", async ({ page }, testInfo) => {
+  // Issue #237 / #750: a CHF 0 visit ("Interne Nutzung") offers the single
+  // "Kostenlos" card instead of the payment methods; it closes at once.
+  test("Step 3 · zero amount (Interne Nutzung) — single 'Kostenlos' card, then done", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-
-    await signIn(page)
-
-    // Navigate to checkout — logged-in user sees pre-filled form
-    await page.goto("/")
-    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
-
-    // Advance to workshops
-    await page.getByRole("button", { name: "Weiter" }).click()
-    await expect(page.getByText("Werkstätten wählen")).toBeVisible()
-
-    // Go to summary (no items — keeps the total small if intern toggle ever fails)
-    const checkoutBtn = page.getByRole("button", { name: "Zum Checkout" })
-    await checkoutBtn.scrollIntoViewIfNeeded()
-    await checkoutBtn.click()
-    await expect(page.getByText("Dein Besuch")).toBeVisible()
+    await goToSignedInSummary(page)
 
     // Switch to "Interne Nutzung" (the section is open on arrival, #570).
     // This zeros entry + machine + material costs both client- and
@@ -580,99 +582,59 @@ test.describe("Checkout step screenshots", () => {
     await page.getByLabel("Nutzungsart").click()
     await page.getByRole("option", { name: "Interne Nutzung", exact: true }).click()
 
-    // Submit — wizard advances to step 4 (Bezahlen).
-    const submitBtn = page.getByRole("button", { name: "Weiter zum Bezahlen" })
-    await submitBtn.scrollIntoViewIfNeeded()
-    await submitBtn.click()
-
-    // Wait for the zero-amount screen.
-    await expect(page.getByText(/kostenlos/i)).toBeVisible({ timeout: 30_000 })
-
-    // QR / Sammelrechnung / TWINT tabs must NOT be present.
-    await expect(page.getByRole("tab", { name: /QR-Rechnung/ })).toBeHidden()
-    await expect(page.getByRole("tab", { name: /TWINT/ })).toBeHidden()
-    await expect(page.getByRole("tab", { name: /Sammelrechnung/ })).toBeHidden()
-
-    // The "Werkstatt verlassen" CTA is present.
-    await expect(page.getByRole("button", { name: /Werkstatt verlassen/ })).toBeVisible()
-
+    const free = page.getByTestId("payment-option-free")
+    await expect(free).toBeVisible()
+    await expect(page.getByTestId("payment-option-rechnung")).toHaveCount(0)
+    await page.locator("h1").first().click()
     await expect(page).toHaveScreenshot("checkout-payment-zero.png")
+
+    await free.click()
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({ timeout: 30_000 })
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(page).toHaveScreenshot("checkout-confirmation-zero.png")
   })
 
-  // Issue #245: the Sammelrechnung tab on Step 4 is gated by
-  // `activeMembership`. The original issue body called out this gap —
-  // no screenshot test ever rendered the member view, so the tab's
-  // German copy and layout had no pixel-regression coverage.
-  test("Step 4 · Sammelrechnung tab (member) — monthly notice, no QR bill", async ({
+  // Issue #245: the Sammelrechnung is offered to members only.
+  test("Step 4 · Sammelrechnung (member) — chosen, then confirmed", async ({
     page,
   }, testInfo) => {
     testInfo.setTimeout(60_000)
 
     // Stamp an active-single membership on the seeded auth user so the
-    // Sammelrechnung tab renders. Reset is handled by the describe-level
+    // Sammelrechnung card renders. Reset is handled by the describe-level
     // afterEach.
     const uid = process.env.E2E_AUTH_USER_UID
     test.skip(!uid, "E2E_AUTH_USER_UID not set (global-setup did not run)")
     await seedMembershipState(uid!, { kind: "active-single" })
 
-    await submitAndWaitForPaymentResult(page)
-
-    // Sammelrechnung tab should be visible only for members.
-    await page.getByRole("tab", { name: /Sammelrechnung/ }).click()
-
-    // Monthly panel copy: the QR is suppressed, the user reads the
-    // queue-for-next-month notice.
-    await expect(page.getByText(/am 1\. des nächsten Monats/)).toBeVisible({
-      timeout: 30_000,
+    await goToSignedInSummary(page)
+    await choosePayment(page, "payment-option-monthly")
+    // Mask the date: it is the first of next month and moves with the clock.
+    await expect(page).toHaveScreenshot("checkout-payment-monthly-member.png", {
+      mask: [page.getByTestId("monthly-date")],
     })
-    // Commit button label uses the Sammelrechnung-specific phrasing.
-    await expect(
-      page.getByRole("button", {
-        name: /Auf Sammelrechnung setzen & Werkstatt verlassen/,
-      }),
-    ).toBeVisible()
-    // QR creditor block must NOT render on the Sammelrechnung tab.
-    await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
-    // PDF download stays in the hero across all tabs.
-    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
 
-    await expect(page).toHaveScreenshot("checkout-payment-monthly-member.png")
+    await page.getByRole("button", { name: "Auf Sammelrechnung setzen" }).click()
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({ timeout: 30_000 })
+    await expect(page).toHaveScreenshot("checkout-confirmation-monthly.png", {
+      mask: [page.getByTestId("monthly-date")],
+    })
   })
 
-  test("Step 4 · TWINT tab — pay-link, no QR bill", async ({ page }, testInfo) => {
+  test("Step 4 · TWINT chosen — its pay button, nothing committed yet", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
-    await submitAndWaitForPaymentResult(page)
+    await goToSignedInSummary(page)
 
-    // The Sammelrechnung tab is gated by `activeMembership`. The preceding
+    // The Sammelrechnung card is gated by `activeMembership`. The preceding
     // member test seeds it and the describe-level afterEach resets it server-
     // side, but the client reflects that reset through an async user-doc
-    // listener (and the onMembershipWritten trigger). Wait for the non-member
-    // picker to settle before interacting/screenshotting, so a stale
-    // membership can't leak the Sammelrechnung tab into this shot (#448).
-    await expect(
-      page.getByRole("tab", { name: /Sammelrechnung/ }),
-    ).toBeHidden()
+    // listener. Wait for the non-member cards to settle before choosing (#448).
+    await expect(page.getByTestId("payment-option-monthly")).toHaveCount(0)
 
-    // Switch to the TWINT tab — the picker is on step 4 now.
-    await page.getByRole("tab", { name: /TWINT/ }).click()
-
-    // TWINT panel renders the dark pay-link as the only CTA.
-    await expect(page.getByRole("link", { name: /Mit TWINT bezahlen/ })).toBeVisible({
-      timeout: 30_000,
-    })
-    // Commit button label changes for TWINT, and it starts gated until the
-    // pay-link has been opened (#537) — an accidental commit here would leave
-    // the user unable to ever start the TWINT payment.
-    await expect(
-      page.getByRole("button", {
-        name: /Ich habe via TWINT bezahlt & Werkstatt verlassen/,
-      }),
-    ).toBeDisabled()
-    await expect(page.getByText("Starte zuerst die TWINT-Zahlung.")).toBeVisible()
-    // PDF download stays in the hero across all tabs.
-    await expect(page.getByRole("button", { name: /Rechnung als PDF/ })).toBeVisible()
-    await expect(page.getByText("Konto / Zahlbar an")).toBeHidden()
-
+    await choosePayment(page, "payment-option-raisenow")
+    // Clicking the pay button would close the checkout and open a window;
+    // the shot is of the step before.
+    await expect(page.getByRole("button", { name: /Mit TWINT bezahlen/ })).toBeVisible()
     await expect(page).toHaveScreenshot("checkout-payment-twint.png")
   })
 

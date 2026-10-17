@@ -2,25 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * UI side of the payment methods on Step 4 (Bezahlen): one entry per
- * `PaymentMethod` from `@oww/shared` with its tab icon, instruction panel
- * and commit label. Which methods a customer sees is decided by
- * `enabledPaymentMethods` (client type + membership), not here — adding an
- * integration means one shared table entry plus one entry below.
+ * UI side of the payment methods (issue #750): one entry per
+ * `PaymentMethod` from `@oww/shared` with the copy of its card on step 3,
+ * its instruction and commit button on step 4, and its confirmation.
+ * Which methods a customer sees is decided by `enabledPaymentMethods`
+ * (client type + membership), not here — adding an integration means one
+ * shared table entry plus one entry below.
  */
 
-import { useCallback, useEffect, useRef, type ReactNode } from "react"
-import { QRCodeSVG } from "qrcode.react"
-import { FileText } from "lucide-react"
+import type { ReactNode } from "react"
+import { CircleCheck, FileText } from "lucide-react"
 import { PAYMENT_METHOD_INFO, type PaymentMethod } from "@oww/shared"
-import { formatCHF } from "@modules/lib/format"
-import { useBridge } from "@modules/lib/use-bridge"
 
 export interface PaymentData {
   /** Doc id of the underlying bill — drives the PDF download action. */
   billId: string
-  /** Doc id of the checkout — used to record the customer's payment-method
-   *  acknowledgement once they pick a method and click the commit button. */
   checkoutId: string | null
   qrBillPayload: string
   /** RaiseNow PayLink; null when the integration is switched off server-side. */
@@ -36,7 +32,16 @@ export interface PaymentData {
   payerEmail: string
   amount: string
   currency: string
+  /**
+   * The method the bill is committed with; null when it is free. A repeated
+   * close answers with the first committed method, so the confirmation
+   * renders this, not what the client asked for.
+   */
+  paymentMethod?: PaymentMethod | null
 }
+
+/** A card on step 3: a payment method, or the single card of a CHF 0 visit. */
+export type PaymentChoice = PaymentMethod | "free"
 
 // Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec).
 export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
@@ -47,205 +52,112 @@ export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(
   '</svg>',
 )}`
 
-const TWINT_LOGO_URL = "https://assets.raisenow.io/twint-logo-dark.svg"
+export const TWINT_LOGO_URL = "https://assets.raisenow.io/twint-logo-dark.svg"
 
-export interface MethodPanelProps {
-  paymentData: PaymentData
-  totalPrice: number
-  /** Releases the commit gate (see `commitGateHint`). Sticky once called. */
-  onCommitUnlocked: () => void
+/** What the copy may mention: the payer's e-mail and the Sammelrechnung date. */
+export interface ChoiceCopyContext {
+  email: string
+  /** "1. November" — the first of next month, when the Sammelrechnung goes out. */
+  monthlyDate: string
 }
 
-export interface PaymentMethodUi {
+export interface PaymentChoiceUi {
   icon: ReactNode
-  /** Render the tab icon on the brand's dark chip (TWINT styleguide). */
+  /** Render the icon on the brand's dark chip (TWINT styleguide). */
   darkIconChip?: boolean
+  title: string
+  /** Step 3: one line under the title. */
+  description: string
+  /** Step 3: the teal action label on the right of the card. */
+  actionLabel: string
+  /** Step 4: the instruction above the commit button. */
+  instruction: (ctx: ChoiceCopyContext) => ReactNode
+  /** Step 4: the commit button. TWINT renders its own brand button. */
   commitLabel: string
-  Panel: (props: MethodPanelProps) => ReactNode
-  /**
-   * When set, the commit button stays disabled until the panel calls
-   * `onCommitUnlocked`, and this hint explains why.
-   */
-  commitGateHint?: string
-  /** False when the server sent nothing to pay with (integration off). */
-  isAvailable?: (paymentData: PaymentData) => boolean
+  /** After the commit: the status next to the check. */
+  doneStatus: string
+  /** After the commit: the green box; null when nothing was sent. */
+  doneBox: ((ctx: ChoiceCopyContext) => ReactNode) | null
 }
 
-export const PAYMENT_METHOD_UI: Record<PaymentMethod, PaymentMethodUi> = {
+export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   rechnung: {
     icon: <FileText className="h-5 w-5" strokeWidth={1.6} />,
-    commitLabel: "Ich zahle die QR-Rechnung & Werkstatt verlassen",
-    Panel: RechnungPanel,
+    title: PAYMENT_METHOD_INFO.rechnung.label,
+    description: "Rechnung per E-Mail, später mit der E-Banking-App bezahlen.",
+    actionLabel: "Rechnung erhalten",
+    instruction: ({ email }) =>
+      email ? (
+        <>
+          Wir schicken dir die Rechnung an <strong>{email}</strong>.
+        </>
+      ) : (
+        "Wir schicken dir die Rechnung per E-Mail."
+      ),
+    commitLabel: "Rechnung senden",
+    doneStatus: "Rechnung gesendet",
+    doneBox: ({ email }) =>
+      email ? (
+        <>
+          Die Rechnung haben wir dir an <strong>{email}</strong> gesendet.
+        </>
+      ) : null,
   },
   monthly: {
     icon: <CalendarMark />,
-    commitLabel: "Auf Sammelrechnung setzen & Werkstatt verlassen",
-    Panel: MonthlyPanel,
+    title: PAYMENT_METHOD_INFO.monthly.label,
+    description: "Kommt zu deinen offenen Posten, Rechnung am 1. des Monats.",
+    actionLabel: "Auf Sammelrechnung",
+    instruction: ({ monthlyDate }) => (
+      <>
+        Am <strong data-testid="monthly-date">{monthlyDate}</strong> kommt eine
+        Rechnung über alle offenen Posten.
+      </>
+    ),
+    commitLabel: "Auf Sammelrechnung setzen",
+    doneStatus: "Auf der Sammelrechnung",
+    doneBox: ({ email, monthlyDate }) =>
+      email ? (
+        <>
+          Die Sammelrechnung kommt am{" "}
+          <span data-testid="monthly-date">{monthlyDate}</span> an{" "}
+          <strong>{email}</strong>.
+        </>
+      ) : null,
   },
   raisenow: {
     icon: <img src={TWINT_LOGO_URL} alt="" className="h-5 w-auto" />,
     darkIconChip: true,
-    commitLabel: "Ich habe via TWINT bezahlt & Werkstatt verlassen",
-    Panel: RaisenowPanel,
-    // Issue #537: the TWINT pay-link and the commit button sit close
-    // together, and committing unmounts the picker — a user who hits "Ich
-    // habe via TWINT bezahlt" first is dropped on the completion screen
-    // with no way back to the paylink, so the payment can never be started.
-    //
-    // This gates on *intent*, not completion: we cannot observe whether the
-    // RaiseNow payment actually succeeded. The paylink opens on
-    // pay.raisenow.io, a foreign origin, so the same-origin policy forbids
-    // reading that tab's URL (the kiosk manages it only because Electron's
-    // main process sits outside the web sandbox — see
-    // shared/src/kiosk-navigation.ts + checkout-kiosk/src/main.ts), and
-    // RaiseNow's free plan offers no webhook (ADR-0020).
-    commitGateHint: "Starte zuerst die TWINT-Zahlung.",
-    isAvailable: (paymentData) => !!paymentData.paylinkUrl,
+    title: PAYMENT_METHOD_INFO.raisenow.label,
+    description: "Jetzt mit der TWINT-App bezahlen.",
+    actionLabel: "Mit TWINT bezahlen",
+    instruction: () => "Bezahle direkt in der TWINT-App.",
+    commitLabel: "Mit TWINT bezahlen",
+    doneStatus: "Bestätigt",
+    doneBox: ({ email }) =>
+      email ? (
+        <>
+          Die Quittung haben wir dir an <strong>{email}</strong> gesendet.
+        </>
+      ) : null,
+  },
+  free: {
+    icon: <CircleCheck className="h-5 w-5" strokeWidth={1.6} />,
+    title: "Kostenlos",
+    description: "Für diesen Besuch ist nichts zu bezahlen.",
+    actionLabel: "Abschliessen",
+    instruction: () => null,
+    commitLabel: "Abschliessen",
+    doneStatus: "Abgeschlossen",
+    // A CHF 0 bill sends no mail (BIL-8).
+    doneBox: null,
   },
 }
 
-/** Label for a method tab — the shared, brand-level label. */
-export function paymentMethodLabel(method: PaymentMethod): string {
-  return PAYMENT_METHOD_INFO[method].label
-}
-
-/**
- * Kiosk RaiseNow auto-confirm (#416): when the customer completes the TWINT
- * payment in the kiosk overlay, the Electron bridge fires
- * `onPaymentConfirmed`. `onConfirmed` then records the same customer-stated
- * acknowledgement the manual commit button would — it does not mark the
- * bill paid; `paidAt` only comes from the statement import. No-op in a
- * normal browser (no bridge) and while `enabled` is false.
- */
-export function useRaisenowKioskConfirm(
-  enabled: boolean,
-  onConfirmed: (paymentUuid: string) => void,
-) {
-  const bridge = useBridge()
-  // Stash the latest callback in a ref so the subscription stays keyed on
-  // the bridge only and doesn't re-subscribe per render.
-  const confirmRef = useRef(onConfirmed)
-  confirmRef.current = onConfirmed
-  const handle = useCallback((paymentUuid: string) => {
-    confirmRef.current(paymentUuid)
-  }, [])
-  useEffect(() => {
-    if (!enabled || !bridge.available) return
-    return bridge.onPaymentConfirmed(handle)
-  }, [enabled, bridge.available, bridge.onPaymentConfirmed, handle])
-}
-
-// ---------------------------------------------------------------------------
-// Method panels
-// ---------------------------------------------------------------------------
-
-function RechnungPanel({ paymentData, totalPrice }: MethodPanelProps) {
-  return (
-    <div className="space-y-5">
-      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-        Bezahle via die QR-Rechnung über{" "}
-        <strong className="text-foreground">{formatCHF(totalPrice)}</strong>,
-        welche wir dir
-        {paymentData.payerEmail && (
-          <>
-            {" "}
-            an{" "}
-            <strong className="text-foreground">
-              {paymentData.payerEmail}
-            </strong>
-          </>
-        )}{" "}
-        geschickt haben. Oder scanne den QR-Code gleich jetzt mit deiner
-        E-Banking App.
-      </p>
-
-      <div className="flex flex-col sm:flex-row gap-6">
-        <div
-          data-testid="payment-qr"
-          className="shrink-0 rounded-md border border-border p-3 bg-white self-start"
-        >
-          <QRCodeSVG
-            value={paymentData.qrBillPayload}
-            size={180}
-            level="M"
-            imageSettings={{
-              src: SWISS_CROSS_SVG,
-              height: 34,
-              width: 34,
-              excavate: true,
-            }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-4 text-sm min-w-0">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Konto / Zahlbar an
-            </p>
-            <p className="font-mono">{paymentData.creditor.iban}</p>
-            <p>{paymentData.creditor.name}</p>
-            {paymentData.creditor.street && (
-              <p className="text-muted-foreground">
-                {paymentData.creditor.street}
-              </p>
-            )}
-            <p className="text-muted-foreground">
-              {paymentData.creditor.location}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Referenz
-            </p>
-            <p className="font-mono">{paymentData.reference}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MonthlyPanel({ totalPrice }: MethodPanelProps) {
-  return (
-    <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-      Die <strong>{formatCHF(totalPrice)}</strong> werden deiner
-      Sammelrechnung hinzugefügt. Du erhältst am{" "}
-      <strong>1. des nächsten Monats</strong> eine QR-Rechnung über alle
-      offenen Posten.
-    </p>
-  )
-}
-
-function RaisenowPanel({
-  paymentData,
-  totalPrice,
-  onCommitUnlocked,
-}: MethodPanelProps) {
-  return (
-    <div className="space-y-5">
-      <p className="text-sm text-foreground leading-relaxed max-w-2xl">
-        Bezahle <strong>{formatCHF(totalPrice)}</strong> sofort vom Handy —
-        TWINT öffnet sich automatisch, bestätige die Zahlung in der App.
-      </p>
-
-      <a
-        href={paymentData.paylinkUrl ?? undefined}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onCommitUnlocked}
-        className="inline-flex items-center justify-center w-[270px] h-[56px] px-[35px] bg-[#262626] rounded-[6px] hover:bg-[#333333] active:bg-[#1a1a1a] transition-colors no-underline"
-      >
-        <img
-          src={TWINT_LOGO_URL}
-          alt=""
-          className="h-[36px] w-[32px] mr-[20px] shrink-0"
-        />
-        <span className="text-[17px] font-medium text-white whitespace-nowrap">
-          Mit TWINT bezahlen
-        </span>
-      </a>
-    </div>
-  )
+/** "1. November": the first of the month after `now`, in Swiss German. */
+export function firstOfNextMonth(now: Date = new Date()): string {
+  const first = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  return first.toLocaleDateString("de-CH", { day: "numeric", month: "long" })
 }
 
 // ---------------------------------------------------------------------------

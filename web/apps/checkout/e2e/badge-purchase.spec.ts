@@ -106,9 +106,10 @@ test.describe("Self-service badge purchase", () => {
     // ── 4. Close the checkout → association trigger fires ──
     await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
-    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
-      timeout: 10_000,
+    await page.getByTestId("payment-option-rechnung").click()
+    await page.getByRole("button", { name: "Rechnung senden" }).click()
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({
+      timeout: 30_000,
     })
 
     // tokens/{uid} now exists with the buyer's ref + the tap's counter.

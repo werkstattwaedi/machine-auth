@@ -3,7 +3,7 @@
 
 /**
  * The club's member roster needs a postal address, so the membership line
- * item shows a mandatory address sub-form and "Weiter zum Bezahlen" is
+ * item shows a mandatory address sub-form and choosing a payment is
  * blocked until it's filled (combined-signin refactor). A complete address
  * from the member's profile pre-fills the form and keeps the section
  * collapsed.
@@ -48,7 +48,7 @@ function membershipItem(): CheckoutItemLocal {
 
 function renderStep(
   p: CheckoutPerson,
-  onSubmit: () => Promise<void>,
+  onChoose: (choice: unknown) => void,
   opts: {
     profileBillingAddress?: {
       company?: string
@@ -67,7 +67,10 @@ function renderStep(
       setUsageType={() => {}}
       tip={0}
       setTip={() => {}}
-      onSubmit={onSubmit}
+      paymentMethods={["rechnung"]}
+      paymentChoice={null}
+      onPaymentChoiceChange={onChoose}
+      onCommit={async () => {}}
       onBack={() => {}}
       submitting={false}
       items={[membershipItem()]}
@@ -110,32 +113,30 @@ describe("StepCheckout — membership billing address gate", () => {
     expect(membershipSectionExpanded()).toBe(false)
   })
 
-  it("blocks Weiter zum Bezahlen when the address is missing", async () => {
-    const onSubmit = vi.fn(async () => {})
-    renderStep(person(), onSubmit)
+  it("blocks choosing a payment when the address is missing", async () => {
+    const onChoose = vi.fn()
+    renderStep(person(), onChoose)
 
-    fireEvent.click(screen.getByText("Weiter zum Bezahlen"))
+    fireEvent.click(screen.getByTestId("payment-option-rechnung"))
 
-    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onChoose).not.toHaveBeenCalled()
     expect(await screen.findByText("Strasse ist erforderlich")).toBeTruthy()
   })
 
-  it("submits once the address is complete", async () => {
-    const onSubmit = vi.fn(async () => {})
+  it("lets the payment be chosen once the address is complete", async () => {
+    const onChoose = vi.fn()
     renderStep(
       person({
         billingStreet: "Seestrasse 12",
         billingZip: "8820",
         billingCity: "Wädenswil",
       }),
-      onSubmit,
+      onChoose,
     )
 
-    fireEvent.click(screen.getByText("Weiter zum Bezahlen"))
+    fireEvent.click(screen.getByTestId("payment-option-rechnung"))
 
-    // Allow the async submit handler to resolve.
-    await Promise.resolve()
-    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onChoose).toHaveBeenCalledWith("rechnung")
   })
 
   it("auto-opens the section when the address is missing", () => {

@@ -20,7 +20,7 @@ interface NoCheckoutGateProps {
 
 /**
  * Mounted by the wizard layout when the visitor lands directly on
- * `/visit`, `/checkout` or `/payment` without an open checkout. The
+ * `/visit` or `/checkout` without an open checkout. The
  * layout suppresses the wizard chrome (progress indicator, "Schritt N"
  * header) for these gated routes so the dialog reads cleanly against
  * a blank page. The dialog has a single action — navigation to

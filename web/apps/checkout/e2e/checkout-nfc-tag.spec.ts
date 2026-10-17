@@ -81,22 +81,18 @@ test.describe("NFC tag checkout", () => {
     await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
-    // Submit
-    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
-
-    // ── Payment result (Step 4) ──
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
-      timeout: 10_000,
-    })
-
     // Issue #414: the seeded NFC user is a Vereinsmitglied, so the
-    // Sammelrechnung (monthly-bill) payment tab must be offered even though
-    // the tag-tap principal has no client-side user doc. Before the fix the
-    // tab was gated on `identifiedUserDoc?.activeMembership` (null for a tag
-    // tap) and the member only ever saw QR-Rechnung + TWINT.
-    await expect(
-      page.getByRole("tab", { name: "Sammelrechnung" }),
-    ).toBeVisible()
+    // Sammelrechnung (monthly-bill) card must be offered even though the
+    // tag-tap principal has no client-side user doc. Before the fix it was
+    // gated on `identifiedUserDoc?.activeMembership` (null for a tag tap)
+    // and the member only ever saw QR-Rechnung + TWINT.
+    await page.getByTestId("payment-option-monthly").click()
+
+    // ── Step 4: commit; the server accepts it for the member (#750) ──
+    await page.getByRole("button", { name: "Auf Sammelrechnung setzen" }).click()
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({
+      timeout: 30_000,
+    })
 
     // ── Verify Firestore ──
     const checkouts = await getCheckoutDocs()
@@ -104,6 +100,7 @@ test.describe("NFC tag checkout", () => {
 
     const checkout = checkouts[0] as Record<string, unknown>
     expect(checkout.status).toBe("closed")
+    expect(checkout.paymentMethod).toBe("monthly")
 
     // userId should reference the NFC user
     const userIdRef = checkout.userId as { path: string }

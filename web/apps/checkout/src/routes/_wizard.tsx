@@ -56,7 +56,6 @@ function stepForPathname(pathname: string): number | null {
   if (pathname.startsWith("/checkin")) return 0
   if (pathname.startsWith("/visit")) return 1
   if (pathname.startsWith("/checkout")) return 2
-  if (pathname.startsWith("/payment")) return 3
   return null
 }
 
@@ -202,8 +201,21 @@ function WizardChrome({
   kioskSession?: boolean
 }) {
   const { pathname } = useLocation()
-  const { openCheckout, pendingCheckout, paymentData } = useWizardContext()
-  const currentStep = stepForPathname(pathname)
+  const { openCheckout, pendingCheckout, paymentData, paymentChoice, clearPayment } =
+    useWizardContext()
+  // A finished checkout's confirmation must not greet the next visit: a
+  // signed-in person leaves it via "Fertig" without a reset, so forget it
+  // as soon as the wizard is anywhere but /checkout.
+  useEffect(() => {
+    if ((paymentData || paymentChoice) && !pathname.startsWith("/checkout")) {
+      clearPayment()
+    }
+  }, [pathname, paymentData, paymentChoice, clearPayment])
+  // /checkout is step 3 until a payment card is chosen, then step 4 in
+  // place (issue #750).
+  const pathStep = stepForPathname(pathname)
+  const currentStep =
+    pathStep === 2 && (paymentChoice || paymentData) ? 3 : pathStep
 
   const gateableRoute =
     pathname.startsWith("/visit") ||
@@ -213,12 +225,12 @@ function WizardChrome({
   // fresh doc and the onSnapshot listener surfacing it — without this
   // check /visit would briefly flash the no-checkout gate.
   //
-  // /payment's transition closes the checkout (status flips open →
-  // closed, so it falls out of the open-checkout query). paymentData
-  // is the post-submit handoff — when set on /payment, the user is
-  // legitimately on the payment screen and must not be gated.
+  // The commit on /checkout closes the checkout (status flips open →
+  // closed, so it falls out of the open-checkout query). paymentData is
+  // the commit's answer — when set, the page shows the confirmation and
+  // must not be gated.
   const justSubmittedPayment =
-    pathname.startsWith("/payment") && !!paymentData
+    pathname.startsWith("/checkout") && !!paymentData
   const showGate =
     gateableRoute && !openCheckout && !pendingCheckout && !justSubmittedPayment
 

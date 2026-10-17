@@ -69,7 +69,8 @@ import {
 } from "./use-checkout-state"
 import { hasPreservableState } from "./kiosk-inactivity-watcher"
 import { registerKioskSessionGuard } from "./kiosk-session-guard"
-import type { PaymentData } from "./payment-result"
+import type { PaymentMethod } from "@oww/shared"
+import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
 import { runStartOver } from "./start-over"
 
@@ -157,6 +158,15 @@ export interface WizardContextValue {
   setTip: (n: number) => void
   paymentData: PaymentData | null
   totalPrice: number
+  /**
+   * The card chosen on step 3 (issue #750); non-null turns the Check Out
+   * page into step 4 in place. Cleared by "Zurück" until the commit closes
+   * the checkout.
+   */
+  paymentChoice: PaymentChoice | null
+  setPaymentChoice: (choice: PaymentChoice | null) => void
+  /** Forget a finished checkout's confirmation (the wizard left /checkout). */
+  clearPayment: () => void
   // ----- search params -----
   picc?: string
   cmac?: string
@@ -188,10 +198,12 @@ export interface WizardContextValue {
    */
   persistPersons: (opts?: { usageType?: UsageType }) => Promise<void>
   /**
-   * Close the open checkout and return payment data. Called from /checkout's
-   * submit. Sets paymentData on success; the wizard navigates to /payment.
+   * Close the open checkout, committing `paymentMethod` with it (issue
+   * #750; omitted for a CHF 0 visit), and return payment data. Called from
+   * step 4's commit button. Sets paymentData on success, which turns the
+   * Check Out page into the confirmation.
    */
-  submitCheckout: () => Promise<PaymentData | null>
+  submitCheckout: (paymentMethod?: PaymentMethod) => Promise<PaymentData | null>
   submitting: boolean
   submitError: string | null
   // ----- item callbacks (shared with picker sub-routes) -----
@@ -276,6 +288,11 @@ export function WizardProvider({
   const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice | null>(null)
+  const clearPayment = useCallback(() => {
+    setPaymentData(null)
+    setPaymentChoice(null)
+  }, [])
   // Bumped by resetWizard so the logged-in pre-fill effect re-seeds the
   // roster after "Neuer Besuch starten". RESET clears persons but the user
   // stays logged in (userDoc.id unchanged), so a purely userDoc-keyed effect
@@ -707,6 +724,7 @@ export function WizardProvider({
     setUsageType("regular")
     setTip(0)
     setPaymentData(null)
+    setPaymentChoice(null)
     // Re-run the logged-in pre-fill against the freshly RESET roster so the
     // user's identity shows on /checkin without a reload.
     setPrefillNonce((n) => n + 1)
@@ -744,7 +762,9 @@ export function WizardProvider({
 
   // Submit: close checkout, get payment data. Used by /checkout's commit.
   const totalPriceRef = useRef(0)
-  const submitCheckout = useCallback(async (): Promise<PaymentData | null> => {
+  const submitCheckout = useCallback(async (
+    paymentMethod?: PaymentMethod,
+  ): Promise<PaymentData | null> => {
     // Compute the cost breakdown locally for the receipt (the server
     // recomputes authoritatively in closeCheckoutAndGetPayment). The
     // usage-type discount (issue #284) waives sections per
@@ -864,6 +884,7 @@ export function WizardProvider({
         usageType: string
         persons: typeof personsPayload
         summary: typeof summary
+        paymentMethod?: PaymentMethod
       },
       PaymentData
     >(functions, "billingCall", "closeCheckoutAndGetPayment")
@@ -877,6 +898,7 @@ export function WizardProvider({
             usageType,
             persons: personsPayload,
             summary,
+            ...(paymentMethod ? { paymentMethod } : {}),
           })
           return res.data
         })
@@ -903,6 +925,7 @@ export function WizardProvider({
             usageType,
             persons: personsPayload,
             summary,
+            ...(paymentMethod ? { paymentMethod } : {}),
           })
           return res.data
         })
@@ -962,6 +985,9 @@ export function WizardProvider({
     setTip,
     paymentData,
     totalPrice: totalPriceRef.current,
+    paymentChoice,
+    setPaymentChoice,
+    clearPayment,
     picc,
     cmac,
     kiosk,

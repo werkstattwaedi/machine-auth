@@ -4,7 +4,7 @@
 
 **Date:** 2026-04-12
 
-**Applies to:** `functions/src/invoice/get_payment_qr_data.ts`, `web/apps/checkout/src/components/checkout/payment-result.tsx`, `scripts/generate-env.ts`
+**Applies to:** `functions/src/invoice/get_payment_qr_data.ts`, `web/apps/checkout/src/components/checkout/payment-confirmation.tsx`, `scripts/generate-env.ts`
 
 ## Context
 

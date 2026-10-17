@@ -81,20 +81,16 @@ test.describe("Authenticated checkout", () => {
       page.locator("#nutzung-detail").getByText("E2E Testuser", { exact: true }),
     ).toBeVisible()
 
-    // Submit
-    await page.getByRole("button", { name: "Weiter zum Bezahlen" }).click()
+    // ── Step 3 → 4: choose the QR-Rechnung card, then commit it ──
+    await page.getByTestId("payment-option-rechnung").click()
+    await expect(page.getByText("Zu bezahlen")).toBeVisible()
+    await page.getByRole("button", { name: "Rechnung senden" }).click()
 
-    // ── Payment result (Step 4) ──
-    await expect(page.getByText("Zu bezahlen")).toBeVisible({
-      timeout: 10_000,
+    // ── Confirmation inline; signed in, "Fertig" leads to past visits ──
+    await expect(page.getByTestId("payment-confirmation")).toBeVisible({
+      timeout: 30_000,
     })
-
-    // ── Commit the chosen payment method (Rechnung is the default tab) ──
-    await page
-      .getByRole("button", {
-        name: /Ich zahle die QR-Rechnung & Werkstatt verlassen/,
-      })
-      .click()
+    await expect(page.getByRole("button", { name: "Fertig" })).toBeVisible()
 
     // ── Verify Firestore: checkout has userId as DocumentReference,
     //    and the linked bill carries the ack stamp. ──
