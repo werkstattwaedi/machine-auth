@@ -12,6 +12,45 @@ export interface ResetSessionDeps {
   clearSession: () => Promise<void>
   /** Hide the kiosk window back to the tray. */
   hideWindow: () => void
+  /**
+   * Stop a running terminal payment (absent when no terminal is
+   * configured). Resolves once the abort is on its way.
+   */
+  abortTerminalPayment?: () => Promise<unknown>
+}
+
+/**
+ * How long a reset waits for the terminal abort to go out. The abort is a
+ * single frame on an open socket, so this only bites when the socket is
+ * wedged — and a wedged terminal must not hold the session wipe hostage.
+ */
+export const TERMINAL_ABORT_CAP_MS = 1_500
+
+/**
+ * Ask the terminal to stop before the session goes away, so it doesn't keep
+ * waiting for a card nobody will present. Best effort and capped: if the
+ * card was already read the terminal ignores the abort anyway, and the
+ * payment is settled server-side from Wallee's webhook regardless of the
+ * kiosk.
+ */
+export async function abortTerminalBestEffort(
+  abort: (() => Promise<unknown>) | undefined,
+  capMs: number = TERMINAL_ABORT_CAP_MS
+): Promise<void> {
+  if (!abort) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      Promise.resolve()
+        .then(abort)
+        .catch(() => {}),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, capMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /**
@@ -26,6 +65,7 @@ export async function performSessionReset(
   deps: ResetSessionDeps,
   opts?: ResetSessionOptions
 ): Promise<void> {
+  await abortTerminalBestEffort(deps.abortTerminalPayment)
   await deps.clearSession()
   if (opts?.keepWindowOpen) return
   deps.hideWindow()
