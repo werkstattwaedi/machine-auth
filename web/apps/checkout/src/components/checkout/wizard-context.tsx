@@ -70,7 +70,6 @@ import {
   type PersonsAction,
   type SavedPersonEntry,
 } from "./use-checkout-state"
-import { isStartedVisit } from "./visit-state"
 import { hasPreservableState } from "./kiosk-inactivity-watcher"
 import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { PaymentMethod } from "@oww/shared"
@@ -215,18 +214,14 @@ export interface WizardContextValue {
   signInAnonymouslyIfNeeded: () => Promise<void>
   /**
    * Persist the current `persons` array to the open checkout doc, creating
-   * the doc if none exists. Called from /checkin's onAdvance. `startVisit`
-   * (kiosk "Besuch starten", KIO-18) also turns an existing purchase-only
-   * checkout into a visit by putting the identified person's line on
-   * Reguläre Nutzung. The derived visit type is written alongside, so the
-   * open checkout reads as a visit or a purchase (CHK-9) before the close.
+   * the doc if none exists. Called from /checkin's onAdvance and the kiosk
+   * "Besuch starten". The persons are written as entered — their types alone
+   * make the checkout a visit or a purchase (CHK-9) — with the derived visit
+   * type alongside, so the open checkout reads right before the close.
    * `persons` overrides the roster state (the result of `saveCompanions`,
    * issue #605).
    */
-  persistPersons: (opts?: {
-    startVisit?: boolean
-    persons?: CheckoutPerson[]
-  }) => Promise<void>
+  persistPersons: (opts?: { persons?: CheckoutPerson[] }) => Promise<void>
   /**
    * Close the open checkout, committing `paymentMethod` with it (issue
    * #750; omitted for a CHF 0 visit), and return payment data. Called from
@@ -581,24 +576,13 @@ export function WizardProvider({
 
   // Persist the current persons array to the open checkout doc.
   const persistPersons = useCallback(async (opts?: {
-    startVisit?: boolean
     persons?: CheckoutPerson[]
   }) => {
     const roster = opts?.persons ?? persons
-    // KIO-18: "Besuch starten" on a purchase-only checkout makes it a visit,
-    // and the identified person — seeded as Begleitung on that checkout —
-    // now works in the workshop.
-    const startsVisit =
-      !!opts?.startVisit && !!openCheckout && !isStartedVisit(openCheckout)
-    const visitRoster = roster.map((p): CheckoutPerson =>
-      startsVisit && !!ownerId && p.userId === ownerId
-        ? { ...p, usageType: "regular" }
-        : p,
-    )
-    const personDocs = visitRoster.map((p) => personLocalToDoc(p, db))
+    const personDocs = roster.map((p) => personLocalToDoc(p, db))
     // The server re-derives it at close; kept current while open because
     // it is what makes the checkout a visit or a purchase (CHK-9).
-    const usageType = deriveVisitUsageType(usagePersons(visitRoster, ownerId))
+    const usageType = deriveVisitUsageType(usagePersons(roster, ownerId))
     try {
       if (openCheckout) {
         await fsMutation.update(checkoutRef(db, openCheckout.id), {

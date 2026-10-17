@@ -289,7 +289,7 @@ describe("CheckinRoute — kiosk auto-start gating (issue #732)", () => {
     mockBridge.available = true
     const { ctx } = renderCheckin(badgeKiosk)
     await expect(startPendingVisit()).resolves.toBe("Andrea")
-    expect(ctx.persistPersons).toHaveBeenCalledWith({ startVisit: true, persons: linkedPersons })
+    expect(ctx.persistPersons).toHaveBeenCalledWith({ persons: linkedPersons })
     // Issue #605: ticked companions are saved on the hand-off path too.
     expect(ctx.saveCompanions).toHaveBeenCalledTimes(1)
     expect(ctx.startOver).not.toHaveBeenCalled()
@@ -322,7 +322,7 @@ describe("CheckinRoute — Besuch starten (issue #732)", () => {
     await waitFor(() =>
       expect(ctx.startOver).toHaveBeenCalledWith({ startedHint: "Andrea" }),
     )
-    expect(ctx.persistPersons).toHaveBeenCalledWith({ startVisit: true, persons: linkedPersons })
+    expect(ctx.persistPersons).toHaveBeenCalledWith({ persons: linkedPersons })
     // Issue #605: companions are saved before the roster is persisted, so
     // the persisted lines carry the link.
     expect(ctx.saveCompanions).toHaveBeenCalledTimes(1)

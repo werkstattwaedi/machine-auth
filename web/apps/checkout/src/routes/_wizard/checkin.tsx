@@ -128,13 +128,13 @@ function CheckinRoute() {
   const stalledRef = useRef<Promise<void> | null>(null)
   const persistVisit = useCallback((): Promise<void> => {
     if (!startRef.current) {
-      // "Besuch starten" also turns a purchase-only checkout into a visit
-      // (KIO-18). Ticked companions are saved first, so the persisted lines
-      // carry their saved person (#605) — the countdown, a click and a
-      // second badge's tap all end up here.
+      // Ticked companions are saved first, so the persisted lines carry
+      // their saved person (#605) — the countdown, a click and a second
+      // badge's tap all end up here. Over a purchase-only checkout the
+      // persons' types make it a visit (KIO-18).
       const p = ctx
         .saveCompanions()
-        .then((persons) => ctx.persistPersons({ startVisit: true, persons }))
+        .then((persons) => ctx.persistPersons({ persons }))
       startRef.current = p
       p.catch(() => {
         // persistPersons already toasted (ADR-0025); allow a retry.

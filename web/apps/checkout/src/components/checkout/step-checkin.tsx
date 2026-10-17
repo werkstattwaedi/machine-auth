@@ -208,10 +208,17 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     }
   }
 
+  // With everyone on Begleitung nobody works in the workshop: there is no
+  // visit to start, so "Material erfassen" becomes the default and "Besuch
+  // starten" is greyed out (KIO-21).
+  const nobodyWorks =
+    persons.length > 0 && persons.every((p) => p.usageType === "materialbezug")
+
   // Issue #732: the kiosk's default action after a badge tap. Fires the
   // same validated "Besuch starten" path as a click.
   const countdown = useAutoStartCountdown({
-    durationMs: onStartVisit && !visitStarted ? autoStartMs : undefined,
+    durationMs:
+      onStartVisit && !visitStarted && !nobodyWorks ? autoStartMs : undefined,
     onFire: () => void handleAction(onStartVisit),
     onCancel: onCountdownCancel,
   })
@@ -531,7 +538,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             <>
               <button
                 type="button"
-                className={FOOTER_SECONDARY}
+                className={nobodyWorks ? FOOTER_PRIMARY : FOOTER_SECONDARY}
                 onClick={() => handleAction(onAdvance)}
                 disabled={advancing}
               >
@@ -540,9 +547,12 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               </button>
               <button
                 type="button"
-                className={cn(FOOTER_PRIMARY, "relative overflow-hidden")}
+                className={cn(
+                  nobodyWorks ? FOOTER_SECONDARY : FOOTER_PRIMARY,
+                  "relative overflow-hidden",
+                )}
                 onClick={() => handleAction(onStartVisit)}
-                disabled={advancing}
+                disabled={advancing || nobodyWorks}
                 data-testid="checkin-start-visit"
                 data-countdown={countdown.running ? "running" : undefined}
               >

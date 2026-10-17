@@ -35,6 +35,7 @@ const tagPerson: CheckoutPerson = {
 }
 
 function renderCheckin(opts: {
+  persons?: CheckoutPerson[]
   onStartVisit?: () => Promise<void>
   onAdvance?: () => Promise<void>
   visitStarted?: boolean
@@ -43,7 +44,7 @@ function renderCheckin(opts: {
 }) {
   return render(
     <StepCheckin
-      persons={[tagPerson]}
+      persons={opts.persons ?? [tagPerson]}
       personsDispatch={vi.fn()}
       isAnonymous={false}
       kiosk
@@ -138,6 +139,45 @@ describe("StepCheckin kiosk footer", () => {
     })
     fireEvent.click(screen.getByRole("button", { name: /Material erfassen/ }))
     await waitFor(() => expect(onAdvance).toHaveBeenCalledOnce())
+  })
+
+  // KIO-21: with everyone on Begleitung there is no visit to start.
+  describe("everyone on Begleitung", () => {
+    const accompanying = { ...tagPerson, usageType: "materialbezug" as const }
+
+    it("greys out 'Besuch starten' and makes 'Material erfassen' the primary", () => {
+      renderCheckin({
+        persons: [accompanying],
+        onStartVisit: vi.fn().mockResolvedValue(undefined),
+        onAdvance: vi.fn().mockResolvedValue(undefined),
+      })
+      const start = screen.getByRole("button", { name: /Besuch starten/ })
+      expect(start).toHaveProperty("disabled", true)
+      expect(start.className).toContain("bg-white")
+      const material = screen.getByRole("button", { name: /Material erfassen/ })
+      expect(material.className).toContain("bg-cog-teal ")
+    })
+
+    it("runs no countdown", () => {
+      renderCheckin({
+        persons: [accompanying],
+        onStartVisit: vi.fn().mockResolvedValue(undefined),
+        autoStartMs: 5_000,
+      })
+      expect(
+        screen.getByTestId("checkin-start-visit").dataset.countdown,
+      ).toBeUndefined()
+    })
+
+    it("one person working in the workshop enables it again", () => {
+      renderCheckin({
+        persons: [accompanying, { ...tagPerson, id: "p2", firstName: "Mia" }],
+        onStartVisit: vi.fn().mockResolvedValue(undefined),
+      })
+      expect(
+        screen.getByRole("button", { name: /Besuch starten/ }),
+      ).toHaveProperty("disabled", false)
+    })
   })
 
   describe("auto-start countdown (issue #732)", () => {
