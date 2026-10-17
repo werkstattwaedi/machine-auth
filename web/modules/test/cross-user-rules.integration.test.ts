@@ -1133,6 +1133,76 @@ describe("cross-user: checkouts/{id}/items", () => {
       }),
     )
   })
+
+  // Issue #753: once its checkout is closed, the creating anonymous session
+  // can no longer change its items — the same freeze the identified
+  // principal already had. The bill is minted from the items at close, so
+  // later writes would leave items that were never billed (statistics
+  // export, ADR-0042 corrections, a regenerated PDF read them).
+  it("denies the creating anon session creating an item on its closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await assertCrossUserDenied(
+      "checkouts/{id}/items create on a CLOSED anon checkout (#753)",
+      "firestore.rules:items create (isAnonParentCreator + status open)",
+      () =>
+        setDoc(doc(anonAuthDb("anon-x"), "checkouts/co-anon/items/i-late"), {
+          workshop: "holz",
+          description: "after close",
+          origin: "manual",
+          catalogId: null,
+          created: serverTimestamp(),
+          quantity: 1,
+          unitPrice: 20,
+          totalPrice: 20,
+          formInputs: null,
+        }),
+    )
+  })
+
+  it("denies the creating anon session updating an item on its closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await seedCheckoutItem("co-anon", "i1")
+    await assertCrossUserDenied(
+      "checkouts/{id}/items update on a CLOSED anon checkout (#753)",
+      "firestore.rules:items update (isAnonParentCreator + status open)",
+      () =>
+        updateDoc(doc(anonAuthDb("anon-x"), "checkouts/co-anon/items/i1"), {
+          quantity: 2,
+          totalPrice: 40,
+        }),
+    )
+  })
+
+  it("denies the creating anon session deleting an item on its closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await seedCheckoutItem("co-anon", "i1")
+    await assertCrossUserDenied(
+      "checkouts/{id}/items delete on a CLOSED anon checkout (#753)",
+      "firestore.rules:items delete (isAnonParentCreator + status open)",
+      () => deleteDoc(doc(anonAuthDb("anon-x"), "checkouts/co-anon/items/i1")),
+    )
+  })
+
+  it("still lets the creating anon session read items on its closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await seedCheckoutItem("co-anon", "i1")
+    await assertSucceeds(
+      getDoc(doc(anonAuthDb("anon-x"), "checkouts/co-anon/items/i1")),
+    )
+  })
+
+  it("still lets the creating anon session change items on its open checkout", async () => {
+    await seedAnonCheckout("co-anon", "anon-x")
+    await seedCheckoutItem("co-anon", "i1")
+    const db = anonAuthDb("anon-x")
+    await assertSucceeds(
+      updateDoc(doc(db, "checkouts/co-anon/items/i1"), {
+        quantity: 2,
+        totalPrice: 40,
+      }),
+    )
+    await assertSucceeds(deleteDoc(doc(db, "checkouts/co-anon/items/i1")))
+  })
 })
 
 describe("cross-user: bills", () => {

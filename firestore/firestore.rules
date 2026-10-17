@@ -392,12 +392,19 @@ service cloud.firestore {
                  get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.get('firebaseUid', null) == request.auth.uid;
         }
 
+        // Items freeze when the parent closes: the bill is minted from them
+        // at close, so a later client write would leave items that were
+        // never billed (#753). Applies to the principal and the anon creator.
+        function parentIsOpen() {
+          return get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open";
+        }
+
         allow read: if isAdmin() ||
                        isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
                        isAnonParentCreator();
 
-        // Create / update / delete: principal of an open checkout, or an
-        // anonymous-auth session writing to a null-userId checkout. Field
+        // Create / update / delete: the principal of an open checkout, or the
+        // anonymous-auth session that created an open null-userId one. Field
         // validation rejects negative/zero quantities and negative prices
         // (defense-in-depth behind server-side recompute in
         // closeCheckoutAndGetPayment).
@@ -412,29 +419,25 @@ service cloud.firestore {
         allow create: if (
             isAdmin() ||
             (
-              (
-                (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
-                 get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-                isAnonParentCreator()
-              ) &&
+              (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
+               isAnonParentCreator()) &&
+              parentIsOpen() &&
               !request.resource.data.keys().hasAny(['tokenId', 'badgeSdmCounter'])
             )
           ) && hasValidItemPricing(request.resource.data);
         allow update: if (
             isAdmin() ||
             (
-              (
-                (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
-                 get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-                isAnonParentCreator()
-              ) &&
+              (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
+               isAnonParentCreator()) &&
+              parentIsOpen() &&
               !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tokenId', 'badgeSdmCounter'])
             )
           ) && hasValidItemPricing(request.resource.data);
         allow delete: if isAdmin() ||
-            (isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) &&
-             get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.status == "open") ||
-            isAnonParentCreator();
+            ((isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
+              isAnonParentCreator()) &&
+             parentIsOpen());
       }
     }
 

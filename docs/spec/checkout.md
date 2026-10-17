@@ -76,7 +76,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 ## Bezahlen
 
 - **CHK-21** Choosing a method opens Bezahlen for it, showing the amount to pay; until the commit (CHK-22) "Zurück" returns to Check Out with everything still editable and the donation and round-up kept. — #650, #750
-- **CHK-22** One action closes the checkout, issues its bill (BIL-16) and commits the payment method (BIL-36); from then on nothing on the checkout can be changed and there is no way back — #650, #750:
+- **CHK-22** One action closes the checkout, issues its bill (BIL-16) and commits the payment method (BIL-36); from then on nothing on the checkout can be changed and there is no way back — #650, #750, #753:
 
   | Method | The action |
   |---|---|
