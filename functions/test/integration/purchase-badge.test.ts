@@ -143,6 +143,7 @@ describe("addBadgeToCheckout (Integration)", () => {
       .get();
     expect(checkout.get("status")).to.equal("open");
     expect(checkout.get("usageType")).to.equal("materialbezug");
+    expect(checkout.get("persons")[0].usageType).to.equal("materialbezug");
     expect(checkout.get("userId").id).to.equal("member-1");
 
     const items = await itemsOf(res.checkoutId!);

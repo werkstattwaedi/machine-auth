@@ -7,9 +7,16 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import {
+  deriveVisitUsageType,
+  personUsageType,
+  type UsageType,
+} from "@oww/shared";
 import type {
   MachineEntity,
   CatalogEntity,
+  CheckoutEntity,
+  CheckoutPersonEntity,
   UserEntity,
   DiscountLevel,
 } from "../types/firestore_entities.js";
@@ -338,6 +345,9 @@ async function accumulateForUser(
         modifiedAt: Timestamp.now(),
       });
     }
+    if (ownerSwitchForMachineTime(checkoutData as CheckoutEntity)) {
+      await switchOwnerToRegular(db, checkoutRef);
+    }
   }
 
   // Find existing checkout item for this catalog entry
@@ -429,5 +439,58 @@ async function accumulateForUser(
     itemId: itemRef.id,
     totalHours,
     totalPrice,
+  });
+}
+
+/**
+ * Machine time means the owner worked in the workshop (CHK-40, ADR-0050): an
+ * owner line on Begleitung / nur Materialbezug moves to Reguläre Nutzung, and
+ * the stored visit type follows (which also ends a purchase-only checkout,
+ * CHK-9). Owner-only types (volunteering/intern) and other persons stay as
+ * they are. Returns the update, or null when nothing changes. Persons without
+ * their own type (pre-#605) get the one they read as today, so moving the
+ * checkout's type doesn't silently move theirs. Pure.
+ */
+export function ownerSwitchForMachineTime(
+  checkout: Pick<CheckoutEntity, "userId" | "persons" | "usageType">,
+): { persons: CheckoutPersonEntity[]; usageType: UsageType } | null {
+  const ownerId = checkout.userId?.id ?? null;
+  if (!ownerId) return null;
+  const fallback = (checkout.usageType ?? "regular") as UsageType;
+  const persons = checkout.persons ?? [];
+  const isOwner = (p: CheckoutPersonEntity) => p.userRef?.id === ownerId;
+  const owner = persons.find(isOwner);
+  if (!owner || personUsageType(owner, fallback) !== "materialbezug") return null;
+
+  const next = persons.map((p) => ({
+    ...p,
+    usageType: isOwner(p) ? "regular" : personUsageType(p, fallback),
+  }));
+  const usageType = deriveVisitUsageType(
+    next.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
+  );
+  return { persons: next, usageType };
+}
+
+/**
+ * Applies `ownerSwitchForMachineTime` in a transaction: the check-in screen
+ * writes `persons` too, so the switch re-reads them instead of overwriting a
+ * concurrent edit with the roster read earlier.
+ */
+async function switchOwnerToRegular(
+  db: admin.firestore.Firestore,
+  checkoutRef: admin.firestore.DocumentReference,
+): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(checkoutRef);
+    const checkout = snap.data() as CheckoutEntity | undefined;
+    if (!checkout || checkout.status !== "open") return;
+    const update = ownerSwitchForMachineTime(checkout);
+    if (!update) return;
+    tx.update(checkoutRef, { ...update, modifiedAt: Timestamp.now() });
+    logger.info("Machine time switched the owner to regular use", {
+      checkoutId: checkoutRef.id,
+      usageType: update.usageType,
+    });
   });
 }

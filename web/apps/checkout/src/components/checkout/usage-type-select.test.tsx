@@ -2,33 +2,40 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Issue #628: „Nur Materialbezug" is rejected by the server whenever the
- * cart holds a machine item, yet the Nutzungsart control offered it and the
- * submit then failed with a generic toast. With `hasMachineUsage` the option
- * stays visible but is disabled, explains why, and never fires `onChange`.
+ * Issue #605: each person picks a Nutzungsart on the check-in. The
+ * owner-only types (Freiwilligengruppe, Interne Nutzung) are offered on the
+ * identified person's own line only, and stay visible but disabled while
+ * anyone else is on the visit.
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest"
 import { render, screen, cleanup, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { UsageTypeSelect } from "./usage-type-select"
-import { MATERIALBEZUG_MACHINE_REASON } from "@modules/lib/pricing"
+import {
+  OWNER_ONLY_OTHERS_REASON,
+  USAGE_TYPE_LABELS,
+  USAGE_TYPE_ORDER,
+} from "@modules/lib/pricing"
 
 afterEach(cleanup)
 
-async function renderOpen(hasMachineUsage: boolean) {
+async function renderOpen(props: {
+  isOwner: boolean
+  anonymous?: boolean
+  othersPresent?: boolean
+}) {
   const onChange = vi.fn()
   render(
-    <>
-      <label htmlFor="usage-type">Nutzungsart</label>
-      <UsageTypeSelect
-        id="usage-type"
-        value="regular"
-        onChange={onChange}
-        anonymous={false}
-        hasMachineUsage={hasMachineUsage}
-      />
-    </>,
+    <UsageTypeSelect
+      id="usage-type"
+      value="regular"
+      onChange={onChange}
+      ariaLabel="Nutzungsart"
+      anonymous={props.anonymous ?? false}
+      isOwner={props.isOwner}
+      othersPresent={props.othersPresent ?? false}
+    />,
   )
   const user = userEvent.setup()
   await act(async () => {
@@ -37,49 +44,53 @@ async function renderOpen(hasMachineUsage: boolean) {
   return { user, onChange }
 }
 
-describe("UsageTypeSelect — machine usage disables Materialbezug (#628)", () => {
-  it("renders Nur Materialbezug disabled with the reason and ignores clicks", async () => {
-    const { user, onChange } = await renderOpen(true)
+const VOL = USAGE_TYPE_LABELS.volunteering
+const INTERN = USAGE_TYPE_LABELS.intern
 
-    const option = screen.getByRole("option", { name: "Nur Materialbezug" })
+function optionNames(): string[] {
+  return screen
+    .getAllByRole("option")
+    .map((o) => o.querySelector("span")?.textContent ?? "")
+}
+
+describe("UsageTypeSelect (#605)", () => {
+  it("lists every type, owner-only last, on the owner's line", async () => {
+    await renderOpen({ isOwner: true })
+    expect(optionNames()).toEqual(USAGE_TYPE_ORDER.map((t) => USAGE_TYPE_LABELS[t]))
+    expect(optionNames().slice(-2)).toEqual([VOL, INTERN])
+  })
+
+  it("hides the owner-only types on another person's line", async () => {
+    await renderOpen({ isOwner: false })
+    expect(optionNames()).not.toContain(VOL)
+    expect(optionNames()).not.toContain(INTERN)
+  })
+
+  it("hides the owner-only types for a guest check-in", async () => {
+    await renderOpen({ isOwner: true, anonymous: true })
+    expect(optionNames()).not.toContain(VOL)
+  })
+
+  it("disables the owner-only types while others are present", async () => {
+    const { user, onChange } = await renderOpen({
+      isOwner: true,
+      othersPresent: true,
+    })
+    const option = screen.getByRole("option", { name: VOL })
     expect(option).toHaveAttribute("aria-disabled", "true")
-    expect(option.textContent).toContain(MATERIALBEZUG_MACHINE_REASON)
-    // The reason replaces the price-effect line on that option only.
-    expect(option.textContent).not.toContain(
-      "Nutzungsgebühr wird nicht verrechnet",
-    )
-    expect(
-      screen.getByRole("option", { name: "Hangenmoos AG" }).textContent,
-    ).toContain("Nutzungsgebühr wird nicht verrechnet")
-
+    expect(option.textContent).toContain(OWNER_ONLY_OTHERS_REASON)
     await act(async () => {
       await user.click(option)
     })
     expect(onChange).not.toHaveBeenCalled()
-
-    // Every other option is still selectable.
-    for (const name of [
-      "Ermässigte Nutzung (KulturLegi)",
-      "Hangenmoos AG",
-      "Freiwilligengruppe",
-      "Interne Nutzung",
-    ]) {
-      expect(screen.getByRole("option", { name })).not.toHaveAttribute(
-        "aria-disabled",
-        "true",
-      )
-    }
   })
 
-  it("keeps Nur Materialbezug selectable without machine usage", async () => {
-    const { user, onChange } = await renderOpen(false)
-
-    const option = screen.getByRole("option", { name: "Nur Materialbezug" })
-    expect(option).not.toHaveAttribute("aria-disabled", "true")
-    expect(screen.queryByTestId("usage-type-disabled-reason")).toBeNull()
-
+  it("selects a type", async () => {
+    const { user, onChange } = await renderOpen({ isOwner: false })
     await act(async () => {
-      await user.click(option)
+      await user.click(
+        screen.getByRole("option", { name: USAGE_TYPE_LABELS.materialbezug }),
+      )
     })
     expect(onChange).toHaveBeenCalledWith("materialbezug")
   })

@@ -149,17 +149,24 @@ still passes a different wrong promise.
 
 **Things**
 - **Badge** — a person's NFC tag.
-- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout.
+- **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
+  it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was
   paid.
 - **Day** (today, an earlier day) — the workshop day: 03:00 to 03:00 the
   next morning, Swiss time.
 - **Complete profile** — a profile with first and last name, accepted terms
   and, for a company, its address.
-- **Purchase-only checkout** — a checkout opened for a membership or badge
-  bought without a visit.
+- **Purchase-only checkout** — a checkout on which nobody works in the
+  workshop: everyone on it is on *Begleitung / nur Materialbezug*.
 - **Usage fee** (*Nutzungsgebühr*) — the per-visit fee for using the
   workshop.
+- **User type** — whether a person is an adult, a child or a company.
+- **Usage type** (*Nutzungsart*) — what a person's presence on a visit
+  counts as, from *Reguläre Nutzung* to *Interne Nutzung*; the visit's type
+  is the one derived from its persons.
+- **Saved person** — a further person, by name and user type, that an
+  account keeps from an earlier check-in.
 - **Restricted session** — a kiosk session started by a badge tap.
 
 **Billing documents**

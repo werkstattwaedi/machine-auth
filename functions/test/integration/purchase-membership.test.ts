@@ -112,6 +112,7 @@ describe("purchaseMembership (Integration)", () => {
     expect(checkout.workshopsVisited).to.deep.equal([]);
     expect(checkout.persons).to.have.lengthOf(1);
     expect(checkout.persons[0].userType).to.equal("erwachsen");
+    expect(checkout.persons[0].usageType).to.equal("materialbezug");
 
     const itemsSnap = await checkoutSnap.ref.collection("items").get();
     expect(itemsSnap.size).to.equal(1);

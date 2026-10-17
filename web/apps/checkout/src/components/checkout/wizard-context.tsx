@@ -25,11 +25,15 @@ import {
   orderBy,
   serverTimestamp,
   arrayUnion,
+  Timestamp,
   type DocumentReference,
 } from "firebase/firestore"
 import { rpcCallable, prewarm } from "@modules/lib/rpc"
+import { businessDayStart } from "@oww/shared"
 import {
   userRef,
+  savedPersonRef,
+  savedPersonsCollection,
   catalogRef,
   catalogReferencesRef,
   checkoutRef,
@@ -55,8 +59,8 @@ import type {
   CheckoutPersonDoc,
 } from "@modules/lib/firestore-entities"
 import {
-  isMachineItem,
-  resolveUsageType,
+  deriveVisitUsageType,
+  isOwnerOnlyUsage,
   type UserType,
   type UsageType,
 } from "@modules/lib/pricing"
@@ -66,18 +70,20 @@ import {
   usePersonsState,
   type CheckoutPerson,
   type PersonsAction,
+  type SavedPersonEntry,
 } from "./use-checkout-state"
 import { hasPreservableState } from "./kiosk-inactivity-watcher"
 import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { PaymentMethod } from "@oww/shared"
 import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
+import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
 import { runStartOver } from "./start-over"
 
 /**
  * `closeCheckoutAndGetPayment` throws `failed-precondition` with a
- * user-facing German reason (e.g. „Materialbezug ist nicht möglich, wenn
- * Maschinen genutzt wurden."); the generic „Bitte erneut versuchen" would
+ * user-facing German reason (e.g. „Maschinen wurden genutzt, aber alle
+ * Personen sind als … erfasst."); the generic „Bitte erneut versuchen" would
  * hide it and is wrong advice — retrying cannot succeed (issue #628).
  * Module-level so `useAsyncMutation`'s `mutate` keeps a stable identity.
  */
@@ -152,8 +158,32 @@ export interface WizardContextValue {
   // ----- mutable wizard state -----
   persons: CheckoutPerson[]
   personsDispatch: React.Dispatch<PersonsAction>
-  usageType: UsageType
-  setUsageType: (t: UsageType) => void
+  /**
+   * The visit's usage type, derived from the persons' own types (issue
+   * #605, `deriveVisitUsageType`). Decides machine time and material.
+   */
+  visitUsageType: UsageType
+  /**
+   * `persons` with the same-day usage-fee waiver previewed (ADR-0050) — what
+   * the Check Out summary prices. The server decides again on close.
+   */
+  feePersons: PricedPerson[]
+  /**
+   * The identified person's saved persons (issue #605), by first name;
+   * empty for a guest check-in.
+   */
+  savedPersons: SavedPersonEntry[]
+  /**
+   * Save the typed-in persons ticked "Für nächstes Mal speichern" — unless
+   * a saved person with the same name and user type exists — and link
+   * their lines to it. Resolves to the roster with the links applied, to
+   * hand to `persistPersons` (React state hasn't updated yet). Never
+   * rejects: a failed save is toasted by the mutation hook and must not
+   * block the check-in — that person then goes on unlinked.
+   */
+  saveCompanions: () => Promise<CheckoutPerson[]>
+  /** Stop suggesting a saved person; rejects when the delete failed (already toasted). */
+  deleteSavedPerson: (saved: SavedPersonEntry) => Promise<void>
   tip: number
   setTip: (n: number) => void
   paymentData: PaymentData | null
@@ -192,11 +222,14 @@ export interface WizardContextValue {
   signInAnonymouslyIfNeeded: () => Promise<void>
   /**
    * Persist the current `persons` array to the open checkout doc, creating
-   * the doc if none exists. Called from /checkin's onAdvance. `usageType`
-   * (kiosk "Besuch starten") also turns an existing purchase-only
-   * `materialbezug` checkout into a visit.
+   * the doc if none exists. Called from /checkin's onAdvance and the kiosk
+   * "Besuch starten". The persons are written as entered — their types alone
+   * make the checkout a visit or a purchase (CHK-9) — with the derived visit
+   * type alongside, so the open checkout reads right before the close.
+   * `persons` overrides the roster state (the result of `saveCompanions`,
+   * issue #605).
    */
-  persistPersons: (opts?: { usageType?: UsageType }) => Promise<void>
+  persistPersons: (opts?: { persons?: CheckoutPerson[] }) => Promise<void>
   /**
    * Close the open checkout, committing `paymentMethod` with it (issue
    * #750; omitted for a CHF 0 visit), and return payment data. Called from
@@ -285,7 +318,6 @@ export function WizardProvider({
   const fsMutation = useFirestoreMutation()
   const { add, update, remove } = fsMutation
   const { persons, dispatch: personsDispatch } = usePersonsState()
-  const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null)
   const [paymentChoice, setPaymentChoice] = useState<PaymentChoice | null>(null)
@@ -436,14 +468,59 @@ export function WizardProvider({
   // was offered neither the monthly-bill option nor the badge (issue #414).
   const isMember = deriveIsMember(identifiedUserDoc, tokenUser)
 
-  // Sync usageType from open checkout
-  useEffect(() => {
-    if (openCheckout?.usageType) {
-      setUsageType(openCheckout.usageType as UsageType)
-    }
-  }, [openCheckout?.usageType])
+  // Issue #605: each person carries their own usage type; the visit's is
+  // derived from them (the owner's Freiwilligengruppe / Interne Nutzung,
+  // else Begleitung when everyone accompanies, else regular).
+  const ownerId = identifiedUserRef?.id ?? null
+  const visitUsageType = useMemo(
+    () => deriveVisitUsageType(usagePersons(persons, ownerId)),
+    [persons, ownerId],
+  )
 
-  useUsageTypeFallback(usageType, items, setUsageType)
+  // Same-day usage-fee waiver preview (issue #268, ADR-0050): the owner's
+  // visits closed since the start of this visit's opening business day —
+  // an earlier visit opened that day can't have closed before it. Same
+  // index as the account usage page (userId, status, closedAt desc). The
+  // rules let both a signed-in member and a badge (`actsAs`) session list
+  // their own checkouts.
+  const openedAtMs = openCheckout?.created?.toMillis?.() ?? null
+  const [fallbackOpenedAt] = useState(() => Date.now())
+  const openedAt = useMemo(
+    () => new Date(openedAtMs ?? fallbackOpenedAt),
+    [openedAtMs, fallbackOpenedAt],
+  )
+  const openingDayStartMs = businessDayStart(openedAt).getTime()
+  const { data: closedToday } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "closed"),
+          where("closedAt", ">=", Timestamp.fromMillis(openingDayStartMs)),
+          orderBy("closedAt", "desc"),
+        ]
+      : []),
+  )
+  const feePersons = useMemo(
+    () => withSameDayWaiver(persons, ownerId, openedAt, closedToday, checkoutId),
+    [persons, ownerId, openedAt, closedToday, checkoutId],
+  )
+
+  // Saved persons of the identified principal (account login or badge tap).
+  const { data: savedPersonDocs } = useCollection(
+    ownerId ? savedPersonsCollection(db, ownerId) : null,
+    orderBy("firstName"),
+  )
+  const savedPersons = useMemo<SavedPersonEntry[]>(
+    () =>
+      savedPersonDocs.map((d) => ({
+        id: d.id,
+        firstName: d.firstName,
+        lastName: d.lastName,
+        userType: d.userType,
+      })),
+    [savedPersonDocs],
+  )
 
   // Pre-fill primary person for logged-in users
   usePreFillPerson(identifiedUserDoc, personsDispatch, persons, prefillNonce)
@@ -467,10 +544,10 @@ export function WizardProvider({
       rehydratedRef.current = openCheckout.id
       return
     }
-    const rehydrated = openCheckout.persons.map((p) => personDocToLocal(p))
+    const rehydrated = rehydratePersons(openCheckout, ownerId)
     personsDispatch({ type: "REPLACE_PERSONS", persons: rehydrated })
     rehydratedRef.current = openCheckout.id
-  }, [openCheckout, personsDispatch])
+  }, [openCheckout, personsDispatch, ownerId])
 
   // Publish "does this session hold anything worth protecting?" to the
   // module-level kiosk session guard so BridgeNfcRouter (mounted at the
@@ -535,16 +612,19 @@ export function WizardProvider({
   )
 
   // Persist the current persons array to the open checkout doc.
-  const persistPersons = useCallback(async (opts?: { usageType?: UsageType }) => {
-    const personDocs = persons.map((p) => personLocalToDoc(p, db))
+  const persistPersons = useCallback(async (opts?: {
+    persons?: CheckoutPerson[]
+  }) => {
+    const roster = opts?.persons ?? persons
+    const personDocs = roster.map((p) => personLocalToDoc(p, db))
+    // The server re-derives it at close; kept current while open because
+    // it is what makes the checkout a visit or a purchase (CHK-9).
+    const usageType = deriveVisitUsageType(usagePersons(roster, ownerId))
     try {
       if (openCheckout) {
         await fsMutation.update(checkoutRef(db, openCheckout.id), {
           persons: personDocs,
-          ...(opts?.usageType &&
-          openCheckout.usageType !== opts.usageType
-            ? { usageType: opts.usageType }
-            : {}),
+          usageType,
         })
       } else {
         setPendingCheckout(true)
@@ -553,7 +633,7 @@ export function WizardProvider({
           fsMutation.add(checkoutsCollection(db), {
             userId: identifiedUserRef ?? null,
             status: "open",
-            usageType: opts?.usageType ?? usageType,
+            usageType,
             created: serverTimestamp() as unknown as CheckoutDoc["created"],
             workshopsVisited: [],
             persons: personDocs,
@@ -573,7 +653,7 @@ export function WizardProvider({
     }
   }, [
     persons,
-    usageType,
+    ownerId,
     openCheckout,
     fsMutation,
     db,
@@ -581,6 +661,40 @@ export function WizardProvider({
     auth,
     runCheckoutCreate,
   ])
+
+  // Issue #605: keep ticked companions for next time. Called BEFORE the
+  // roster is persisted, so the open checkout already records each line's
+  // saved person (CHK-11). Dedupes against the saved persons and within
+  // the batch.
+  const saveCompanions = useCallback(async (): Promise<CheckoutPerson[]> => {
+    if (!ownerId) return persons
+    const links = await saveTickedCompanions(persons, savedPersons, async (data) => {
+      const ref = await add(savedPersonsCollection(db, ownerId), {
+        ...data,
+        createdAt: serverTimestamp(),
+      })
+      return ref.id
+    })
+    for (const { personId, savedPersonId } of links) {
+      personsDispatch({
+        type: "UPDATE_PERSON",
+        id: personId,
+        updates: { savedPersonId, saveForLater: false },
+      })
+    }
+    return applySavedLinks(persons, links)
+  }, [ownerId, savedPersons, persons, add, db, personsDispatch])
+
+  const deleteSavedPerson = useCallback(
+    async (saved: SavedPersonEntry) => {
+      if (!ownerId) return
+      const name = `${saved.firstName} ${saved.lastName}`.trim()
+      await remove(savedPersonRef(db, ownerId, saved.id), {
+        successMessage: `${name} wird nicht mehr vorgeschlagen`,
+      })
+    },
+    [ownerId, remove, db],
+  )
 
   // Workshop attribution policy for non-workshop picker scopes.
   const visitedWorkshopSet = useMemo(() => {
@@ -635,7 +749,7 @@ export function WizardProvider({
               add(checkoutsCollection(db), {
                 userId: identifiedUserRef ?? null,
                 status: "open",
-                usageType,
+                usageType: visitUsageType,
                 created: serverTimestamp(),
                 workshopsVisited: [item.workshop],
                 persons: persons.map((p) => personLocalToDoc(p, db)),
@@ -677,7 +791,7 @@ export function WizardProvider({
     [
       checkoutId,
       identifiedUserRef,
-      usageType,
+      visitUsageType,
       auth,
       workshopsVisitedKey,
       runCheckoutCreate,
@@ -721,7 +835,6 @@ export function WizardProvider({
   // Reset wizard: clear local state, sign out tag/anon, navigate to /checkin.
   const resetWizard = useCallback(async () => {
     personsDispatch({ type: "RESET" })
-    setUsageType("regular")
     setTip(0)
     setPaymentData(null)
     setPaymentChoice(null)
@@ -781,8 +894,9 @@ export function WizardProvider({
       machineCostNet,
       materialCostNet,
     } = computeCheckoutCosts({
-      persons,
-      usageType,
+      // With the previewed same-day waiver, as StepCheckout shows it.
+      persons: feePersons,
+      usageType: visitUsageType,
       items,
       config: pricingConfig,
       membershipCatalogId,
@@ -814,6 +928,10 @@ export function WizardProvider({
       email: p.email,
       userType: p.userType,
       userId: p.userId ?? null,
+      // Issue #605: authoritative per person; the server derives the
+      // visit's type from these.
+      usageType: p.usageType,
+      ...(p.savedPersonId ? { savedPersonId: p.savedPersonId } : {}),
       ...(hasBillingFields(p)
         ? {
             billingAddress: {
@@ -881,7 +999,6 @@ export function WizardProvider({
             pricingModel?: string | null
           }[]
         }
-        usageType: string
         persons: typeof personsPayload
         summary: typeof summary
         paymentMethod?: PaymentMethod
@@ -895,7 +1012,6 @@ export function WizardProvider({
         data = await submit.mutate(async () => {
           const res = await closeCheckoutAndGetPayment({
             checkoutId,
-            usageType,
             persons: personsPayload,
             summary,
             ...(paymentMethod ? { paymentMethod } : {}),
@@ -922,7 +1038,6 @@ export function WizardProvider({
         data = await submit.mutate(async () => {
           const res = await closeCheckoutAndGetPayment({
             newCheckout,
-            usageType,
             persons: personsPayload,
             summary,
             ...(paymentMethod ? { paymentMethod } : {}),
@@ -941,11 +1056,12 @@ export function WizardProvider({
     identifiedUserRef,
     items,
     persons,
+    feePersons,
     pricingConfig,
     membershipCatalogId,
     badgeCatalogId,
     tip,
-    usageType,
+    visitUsageType,
     functions,
     submit,
     update,
@@ -979,8 +1095,11 @@ export function WizardProvider({
     badgeCatalogId,
     persons,
     personsDispatch,
-    usageType,
-    setUsageType,
+    visitUsageType,
+    feePersons,
+    savedPersons,
+    saveCompanions,
+    deleteSavedPerson,
     tip,
     setTip,
     paymentData,
@@ -1146,29 +1265,6 @@ export function usePreFillPerson(
  *
  * Exported for unit testing (see wizard-prefill-tag.test.tsx).
  */
-/**
- * Keep the selected usage type submittable (issue #628): „Nur Materialbezug"
- * is rejected by the server once the cart holds a machine item, so a
- * selection that becomes invalid — rehydrated from the open doc before the
- * items arrived, an NFC session syncing in, manual hours added on the visit
- * page — falls back to `regular`. A state change rather than a derived
- * value on purpose: removing the last machine item re-enables the option
- * but does not silently re-apply the waiver; the visitor re-selects it.
- * The open doc is not written — its `usageType` is set authoritatively by
- * the server at close from the value the wizard submits.
- */
-export function useUsageTypeFallback(
-  usageType: UsageType,
-  items: readonly { type?: string | null }[],
-  setUsageType: (t: UsageType) => void,
-): void {
-  const hasMachineUsage = items.some(isMachineItem)
-  useEffect(() => {
-    const resolved = resolveUsageType(usageType, { hasMachineUsage })
-    if (resolved !== usageType) setUsageType(resolved)
-  }, [usageType, hasMachineUsage, setUsageType])
-}
-
 export function usePreFillTagPerson(
   tokenUser: TokenUser | null,
   dispatch: React.Dispatch<PersonsAction>,
@@ -1234,6 +1330,10 @@ export function personLocalToDoc(
     name: `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(),
     email: p.email ?? "",
     userType: p.userType,
+    usageType: p.usageType,
+  }
+  if (p.savedPersonId) {
+    doc.savedPersonId = p.savedPersonId
   }
   if (p.userId) {
     doc.userRef = userRef(db, p.userId)
@@ -1249,7 +1349,30 @@ export function personLocalToDoc(
   return doc
 }
 
-export function personDocToLocal(p: CheckoutPersonDoc): CheckoutPerson {
+/**
+ * The persons of an open checkout as the roster holds them. A person
+ * without their own usage type (checkouts from before issue #605) takes the
+ * checkout's — Freiwilligengruppe / Interne Nutzung only on the owner's
+ * line while they are alone (CHK-32), everyone else on Reguläre Nutzung.
+ */
+export function rehydratePersons(
+  checkout: Pick<CheckoutDoc, "persons" | "usageType">,
+  ownerId: string | null,
+): CheckoutPerson[] {
+  const legacy = (checkout.usageType as UsageType | undefined) ?? "regular"
+  const alone = checkout.persons.length === 1
+  return checkout.persons.map((p) => {
+    const isOwner = !!ownerId && p.userRef?.id === ownerId
+    const fallback: UsageType =
+      isOwnerOnlyUsage(legacy) && !(isOwner && alone) ? "regular" : legacy
+    return personDocToLocal(p, fallback)
+  })
+}
+
+export function personDocToLocal(
+  p: CheckoutPersonDoc,
+  fallbackUsageType: UsageType = "regular",
+): CheckoutPerson {
   const name = (p.name ?? "").trim()
   const spaceIdx = name.indexOf(" ")
   const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name
@@ -1268,6 +1391,79 @@ export function personDocToLocal(p: CheckoutPersonDoc): CheckoutPerson {
     billingStreet: p.billingAddress?.street ?? "",
     billingZip: p.billingAddress?.zip ?? "",
     billingCity: p.billingAddress?.city ?? "",
+    usageType: (p.usageType as UsageType | undefined) ?? fallbackUsageType,
+    ...(p.savedPersonId ? { savedPersonId: p.savedPersonId } : {}),
   }
+}
+
+/** The roster as `deriveVisitUsageType` / `machineUsageBlocked` see it. */
+export function usagePersons(
+  persons: readonly CheckoutPerson[],
+  ownerId: string | null,
+): { usageType: UsageType; isOwner: boolean }[] {
+  return persons.map((p) => ({
+    usageType: p.usageType,
+    isOwner: !!ownerId && p.userId === ownerId,
+  }))
+}
+
+/**
+ * Issue #605: save the typed-in persons ticked "Für nächstes Mal speichern"
+ * through `addSaved` (name + user type only — never the usage type). A
+ * person matching a saved one — or one saved earlier in the same batch — by
+ * first name, last name and user type is not saved again but linked to it.
+ * A failed save skips that person (the mutation hook toasted) and never
+ * rejects: saving must not block the check-in. Returns which line now
+ * belongs to which saved person.
+ */
+export async function saveTickedCompanions(
+  persons: readonly CheckoutPerson[],
+  savedPersons: readonly SavedPersonEntry[],
+  addSaved: (data: Omit<SavedPersonEntry, "id">) => Promise<string>,
+): Promise<{ personId: string; savedPersonId: string }[]> {
+  const known = [...savedPersons]
+  const links: { personId: string; savedPersonId: string }[] = []
+  for (const p of persons) {
+    if (!p.saveForLater || p.savedPersonId || p.userId) continue
+    // Saved persons are adults or children (CHK-28).
+    if (p.userType === "firma") continue
+    const firstName = p.firstName.trim()
+    const lastName = p.lastName.trim()
+    if (!firstName || !lastName) continue
+    const userType = p.userType
+    const match = known.find(
+      (s) =>
+        sameName(s.firstName, firstName) &&
+        sameName(s.lastName, lastName) &&
+        s.userType === userType,
+    )
+    let savedPersonId = match?.id
+    if (!savedPersonId) {
+      try {
+        savedPersonId = await addSaved({ firstName, lastName, userType })
+      } catch {
+        continue
+      }
+      known.push({ id: savedPersonId, firstName, lastName, userType })
+    }
+    links.push({ personId: p.id, savedPersonId })
+  }
+  return links
+}
+
+/** The roster with `saveTickedCompanions`' links applied. */
+export function applySavedLinks(
+  persons: readonly CheckoutPerson[],
+  links: readonly { personId: string; savedPersonId: string }[],
+): CheckoutPerson[] {
+  return persons.map((p) => {
+    const link = links.find((l) => l.personId === p.id)
+    return link ? { ...p, savedPersonId: link.savedPersonId, saveForLater: false } : p
+  })
+}
+
+/** Saved-person dedup: same name regardless of case and surrounding space. */
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 

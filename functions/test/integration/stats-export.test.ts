@@ -186,6 +186,8 @@ describe("stats export (integration)", function () {
     expect(visit.is_member).to.equal(true);
     expect(visit.visit_date).to.equal("2026-07-18");
     expect(visit.closed_at).to.equal("2026-07-18T15:00:00.000Z");
+    // Legacy person without its own type → the visit's (issue #605).
+    expect(visit.person_usage_types).to.deep.equal(["regular"]);
     expect(sink.tableRows("visit_items")).to.have.length(2);
     expect(sink.tableRows("bills")).to.have.length(1);
     expect(sink.tableRows("bills")[0].doc_id).to.equal("b-paid");

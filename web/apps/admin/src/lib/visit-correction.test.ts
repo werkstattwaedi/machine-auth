@@ -49,6 +49,7 @@ function draft(): CorrectionDraft {
   return draftFromCheckout(
     {
       usageType: "regular",
+      userId: ref("u-anna") as never,
       persons: [
         { name: "Anna", email: "anna@example.com", userType: "erwachsen", userRef: ref("u-anna") as never },
         { name: "Kid", email: "", userType: "kind", entryFeeWaivedToday: true },
@@ -62,10 +63,10 @@ function draft(): CorrectionDraft {
 describe("draftFromCheckout", () => {
   it("maps persons (userRef → userId, waiver) and items (catalogId ref → id, type default material)", () => {
     const d = draft()
-    expect(d.usageType).toBe("regular")
+    expect(d.ownerId).toBe("u-anna")
     expect(d.persons).toEqual([
-      { name: "Anna", email: "anna@example.com", userType: "erwachsen", userId: "u-anna", entryFeeWaivedToday: false, billingAddress: null },
-      { name: "Kid", email: "", userType: "kind", userId: null, entryFeeWaivedToday: true, billingAddress: null },
+      { name: "Anna", email: "anna@example.com", userType: "erwachsen", userId: "u-anna", entryFeeWaivedToday: false, usageType: "regular", billingAddress: null },
+      { name: "Kid", email: "", userType: "kind", userId: null, entryFeeWaivedToday: true, usageType: "regular", billingAddress: null },
     ])
     expect(d.items.map((i) => [i.key, i.type, i.catalogId, i.variantId])).toEqual([
       ["i1", "machine", null, null],
@@ -75,7 +76,63 @@ describe("draftFromCheckout", () => {
   })
 
   it("falls back to regular for an unknown usage type", () => {
-    expect(draftFromCheckout({ usageType: "membership", persons: [], summary: undefined }, []).usageType).toBe("regular")
+    const d = draftFromCheckout(
+      { usageType: "membership", persons: [{ name: "A", email: "", userType: "erwachsen" }], summary: undefined },
+      [],
+    )
+    expect(d.persons[0].usageType).toBe("regular")
+  })
+
+  it("prefers each person's own usage type (#605)", () => {
+    const d = draftFromCheckout(
+      {
+        usageType: "regular",
+        persons: [
+          { name: "A", email: "", userType: "erwachsen", usageType: "materialbezug" },
+          { name: "B", email: "", userType: "kind" },
+        ],
+        summary: undefined,
+      },
+      [],
+    )
+    expect(d.persons.map((p) => p.usageType)).toEqual(["materialbezug", "regular"])
+  })
+
+  it("seeds a legacy owner-only type only on the owner alone (#605)", () => {
+    const owner = { name: "A", email: "", userType: "erwachsen" as const, userRef: ref("u-a") as never }
+    const alone = draftFromCheckout(
+      { usageType: "volunteering", userId: ref("u-a") as never, persons: [owner], summary: undefined },
+      [],
+    )
+    expect(alone.persons[0].usageType).toBe("volunteering")
+    const withKid = draftFromCheckout(
+      {
+        usageType: "intern",
+        userId: ref("u-a") as never,
+        persons: [owner, { name: "K", email: "", userType: "kind" }],
+        summary: undefined,
+      },
+      [],
+    )
+    expect(withKid.persons.map((p) => p.usageType)).toEqual(["regular", "regular"])
+  })
+
+  it("keeps a guest's savedPersonId, not one on an account line (#605)", () => {
+    const d = draftFromCheckout(
+      {
+        usageType: "regular",
+        userId: ref("u-a") as never,
+        persons: [
+          { name: "A", email: "", userType: "erwachsen", userRef: ref("u-a") as never, savedPersonId: "sp-x" },
+          { name: "K", email: "", userType: "kind", savedPersonId: "sp-kid" },
+          { name: "L", email: "", userType: "kind" },
+        ],
+        summary: undefined,
+      },
+      [],
+    )
+    expect(d.persons.map((p) => p.savedPersonId)).toEqual([undefined, "sp-kid", undefined])
+    expect(d.persons[2]).not.toHaveProperty("savedPersonId")
   })
 })
 
@@ -108,10 +165,25 @@ describe("validateDraft", () => {
     expect(errors).toContain("Trinkgeld darf nicht negativ sein.")
   })
 
-  it("rejects materialbezug with machine rows", () => {
+  it("rejects machine rows when everyone only accompanies (CHK-8)", () => {
     const d = draft()
-    d.usageType = "materialbezug"
-    expect(validateDraft(d)).toEqual(["Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden."])
+    d.persons.forEach((p) => (p.usageType = "materialbezug"))
+    expect(validateDraft(d)).toHaveLength(1)
+    d.persons[1].usageType = "regular"
+    expect(validateDraft(d)).toEqual([])
+  })
+
+  it("allows an owner-only type only on the owner alone (CHK-32)", () => {
+    const d = draft()
+    d.persons[0].usageType = "volunteering"
+    // Owner, but not alone.
+    expect(validateDraft(d)).toHaveLength(1)
+    d.persons = [d.persons[0]]
+    expect(validateDraft(d)).toEqual([])
+    // Not the owner.
+    const e = draft()
+    e.persons[1].usageType = "intern"
+    expect(validateDraft(e).length).toBeGreaterThan(0)
   })
 })
 
@@ -137,6 +209,9 @@ describe("isUnchanged", () => {
     const d = draft()
     d.items.push(newItemRow("holz", "new-1"))
     expect(isUnchanged(a, d)).toBe(false)
+    const e = draft()
+    e.persons[1].usageType = "ermaessigt"
+    expect(isUnchanged(a, e)).toBe(false)
   })
 })
 
@@ -147,6 +222,15 @@ describe("estimateSummary", () => {
     expect(s.machineCost).toBe(45)
     expect(s.materialCost).toBe(28)
     expect(s.totalPrice).toBe(88)
+  })
+
+  it("charges each person their own type's fee (#605)", () => {
+    const d = draft()
+    d.persons[0].usageType = "materialbezug"
+    d.persons[1].entryFeeWaivedToday = false
+    const s = estimateSummary(d, (ut) => FEES[ut] ?? null)!
+    // Adult accompanies (0), the child pays 7.50; machines stay billed.
+    expect(s.totalPrice).toBe(7.5 + 45 + 28)
   })
 
   it("is null while a fee row is missing", () => {
@@ -218,7 +302,28 @@ describe("toWireEntry", () => {
       userType: "kind",
       userId: null,
       entryFeeWaivedToday: true,
+      usageType: "regular",
       billingAddress: null,
     })
+    expect(entry.replacement).not.toHaveProperty("usageType")
+  })
+
+  it("sends each person's type, no visit-wide one (#605)", () => {
+    const d = draft()
+    d.persons[0].usageType = "volunteering"
+    d.persons = [d.persons[0]]
+    const entry = toWireEntry("co-1", d)
+    expect(entry.replacement?.persons[0].usageType).toBe("volunteering")
+    expect(entry.replacement?.persons[0].userId).toBe("u-anna")
+    expect(entry.replacement).not.toHaveProperty("usageType")
+  })
+
+  it("carries a guest's savedPersonId, never on an account line (#605)", () => {
+    const d = draft()
+    d.persons[1].savedPersonId = "sp-kid"
+    d.persons[0].savedPersonId = "sp-bogus"
+    const entry = toWireEntry("co-1", d)
+    expect(entry.replacement?.persons[1].savedPersonId).toBe("sp-kid")
+    expect(entry.replacement?.persons[0]).not.toHaveProperty("savedPersonId")
   })
 })

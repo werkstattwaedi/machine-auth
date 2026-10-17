@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "vitest"
-import { classifyBillKind, classifyCheckoutKind } from "./checkout-kind"
+import { classifyBillKind, classifyCheckoutKind, isPurchaseOnly } from "./checkout-kind"
 
 const membershipCatalogId = "membership-sku"
 const membership = { catalogId: "membership-sku" }
@@ -30,6 +30,16 @@ describe("classifyCheckoutKind", () => {
       ).toBe(kind)
     })
   }
+})
+
+// Issue #605: purchase-only is derived — every person on Begleitung.
+describe("isPurchaseOnly (issue #605)", () => {
+  it("is the materialbezug visit type", () => {
+    expect(isPurchaseOnly({ usageType: "materialbezug" })).toBe(true)
+    expect(isPurchaseOnly({ usageType: "regular" })).toBe(false)
+    expect(isPurchaseOnly({ usageType: "intern" })).toBe(false)
+    expect(isPurchaseOnly({})).toBe(false)
+  })
 })
 
 describe("classifyBillKind", () => {

@@ -87,11 +87,29 @@ describe("privacy report (integration)", function () {
           name: "Guest Person",
           email: "guest@example.com",
           userType: "kind",
+          usageType: "regular",
           billingAddress: { company: "", street: "Gasse 2", zip: "8820", city: "Wädenswil" },
         },
       ],
       modifiedBy: null,
       modifiedAt: ts("2026-07-01T12:00:00Z"),
+    });
+    // A companion Erika saved for the next check-in (issue #605).
+    await db.doc("users/u1/savedPersons/sp1").set({
+      firstName: "Kim",
+      lastName: "Muster",
+      userType: "kind",
+      createdAt: ts("2026-07-01T09:00:00Z"),
+      modifiedBy: "u1",
+      modifiedAt: ts("2026-07-01T09:00:00Z"),
+    });
+    await db.doc("users/u2/savedPersons/sp2").set({
+      firstName: "Not",
+      lastName: "Erikas",
+      userType: "erwachsen",
+      createdAt: ts("2026-07-01T09:00:00Z"),
+      modifiedBy: "u2",
+      modifiedAt: ts("2026-07-01T09:00:00Z"),
     });
     await db.doc("checkouts/co-own/items/i1").set({
       workshop: "holz",
@@ -199,6 +217,8 @@ describe("privacy report (integration)", function () {
     expect((report.authAccount as { email: string }).email).to.equal("u1@example.com");
     expect((report.user as { firstName: string }).firstName).to.equal("Erika");
     expect(report.tokens).to.have.length(1);
+    const saved = report.savedPersons as Array<{ id: string; firstName: string }>;
+    expect(saved.map((p) => [p.id, p.firstName])).to.deep.equal([["sp1", "Kim"]]);
     const checkouts = report.checkouts as Array<{
       id: string;
       items: unknown[];
@@ -211,7 +231,7 @@ describe("privacy report (integration)", function () {
     // to their userType — no guest names/emails/addresses in the export.
     expect(checkouts[0].persons).to.deep.equal([
       { name: "Erika Muster", email: "u1@example.com", userType: "erwachsen" },
-      { userType: "kind", redacted: true },
+      { userType: "kind", usageType: "regular", redacted: true },
     ]);
     const checkoutsJson = JSON.stringify(checkouts);
     expect(checkoutsJson).to.not.include("guest@example.com");

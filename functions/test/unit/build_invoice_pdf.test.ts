@@ -23,6 +23,7 @@ import {
   membershipRenewalInvoice,
   volunteeringDiscountInvoice,
   internDiscountInvoice,
+  perPersonUsageInvoice,
 } from "./invoice_test_fixtures";
 
 // pdf-parse needs firebase-admin initialized for Timestamp usage in fixtures
@@ -148,12 +149,27 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("15.00");
   });
 
-  // Issue #583: the waived-entry discount line uses the "Nutzungsgebühr"
-  // terminology, not the old "Eintritt" wording.
-  it("waived entry discount: uses Nutzungsgebühr terminology, not Eintritt (#583)", async () => {
+  // Issue #605 (BIL-38): the waived usage fee shows on the person's own row,
+  // named by their usage type — no separate entry-discount row (and never
+  // the old "Eintritt" wording, #583).
+  it("waived usage fee: the person's row names the usage type, no discount row (#605)", async () => {
     const text = await pdfText(volunteeringDiscountInvoice());
-    expect(text).to.include("Nutzungsgebühr wird nicht verrechnet");
+    expect(text).to.include("Vera Freiwillig (Erwachsen) · Freiwilligengruppe");
+    expect(text).to.not.include("Nutzungsgebühr wird nicht verrechnet");
     expect(text).to.not.include(": Eintritt ");
+    // The machine waiver row still follows the visit's type.
+    expect(text).to.include("Freiwilligengruppe: keine Maschinengebühren");
+  });
+
+  it("per-person usage types: each row shows that person's net fee (#605)", async () => {
+    const text = await pdfText(perPersonUsageInvoice());
+    expect(text).to.include("Paula Begleitung (Erwachsen) · Begleitung / nur Materialbezug");
+    // Regular rows carry no usage-type suffix.
+    expect(text).to.include("Kim Begleitung (Kind (u. 18))");
+    expect(text).to.not.include("Kim Begleitung (Kind (u. 18)) ·");
+    expect(text).to.include("7.50");
+    expect(text).to.not.include("15.00");
+    expect(text).to.not.include("Ermässigung");
   });
 
   // Issue #685: services (Keramik-Brennen) share the material bucket; the

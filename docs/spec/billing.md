@@ -28,6 +28,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-10** Only a Rechnung or Sammelrechnung with an amount due carries a QR slip; a Beleg says its amount is added to the next Sammelrechnung. — ADR-0044
 - **BIL-11** A Quittung names the payment method but never states that the payment was received.
 - **BIL-12** On a document, line items are grouped by workshop with a subtotal each, a membership is listed first, and a donation is listed as such. — #262, #464
+- **BIL-38** A document lists every person on the checkout with their user type, their usage type unless regular — *Nur Materialbezug* on a purchase-only checkout (CHK-9) — and the usage fee they pay, then one row per waived machine or material section naming the visit's type (CHK-29); a person whose usage fee is waived for an earlier visit that day (CHK-37) is listed at CHF 0 with the reason. — #284, #268, #269, ADR-0050, #605
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
 - **BIL-14** A document is addressed to the company for a company account, else the account holder, else the name given at check-in, and shows the postal address only when it is complete. — #269, #658
 - **BIL-35** A checkout produces one bill, to its account holder; the other persons on the visit are lines on that bill (CHK-11) and are never billed themselves. — ADR-0048, #747

@@ -1,15 +1,19 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { Checkbox } from "@modules/components/ui/checkbox"
 import { Label } from "@modules/components/ui/label"
+import { formatCHF } from "@modules/lib/format"
 import {
   USER_TYPE_LABELS,
+  type UsageType,
   type UserType,
 } from "@modules/lib/pricing"
 import { X } from "lucide-react"
 import { useId } from "react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import { ErrorBadge, FIELD_INPUT_OK, FIELD_INPUT_ERR } from "./field-error"
+import { UsageTypeSelect } from "./usage-type-select"
 
 /**
  * Shared remove (X) affordance for a person on /checkin. Used by both the
@@ -36,6 +40,68 @@ export function RemovePersonButton({
   )
 }
 
+/** What a person's Nutzungsart control needs to know (issue #605). */
+export interface PersonUsageProps {
+  /** Guest check-in: the owner-only types are offered to nobody. */
+  anonymous: boolean
+  /** Anyone besides this person is on the visit. */
+  othersPresent: boolean
+  /** Live usage fee for this person; null while the pricing config is missing. */
+  fee: number | null
+}
+
+const COLUMN_LABEL = "text-sm font-bold"
+
+/**
+ * The Nutzungsart and Nutzungsgebühr columns of one person on the check-in
+ * (issue #605). Shared by the identity strip and the guest card so both sit
+ * in the same three-column grid. Two grid cells — the caller owns the grid.
+ */
+export function PersonUsageColumns({
+  person,
+  index,
+  isOwner,
+  usage,
+  onChange,
+}: {
+  person: CheckoutPerson
+  index: number
+  isOwner: boolean
+  usage: PersonUsageProps
+  onChange: (t: UsageType) => void
+}) {
+  const id = useId()
+  const who = `${person.firstName} ${person.lastName}`.trim() || `Person ${index + 1}`
+  return (
+    <>
+      <div className="min-w-0 space-y-1.5">
+        <Label htmlFor={`${id}-usage`} className={COLUMN_LABEL}>
+          Nutzungsart
+        </Label>
+        <UsageTypeSelect
+          id={`${id}-usage`}
+          // Says whose it is: several persons each have one (issue #663).
+          ariaLabel={`Nutzungsart ${who}`}
+          value={person.usageType}
+          onChange={onChange}
+          anonymous={usage.anonymous}
+          isOwner={isOwner}
+          othersPresent={usage.othersPresent}
+        />
+      </div>
+      <div className="flex items-baseline gap-3 sm:block sm:space-y-1.5">
+        <div className={COLUMN_LABEL}>Nutzungsgebühr</div>
+        <div
+          data-testid="person-usage-fee"
+          className="text-sm tabular-nums sm:flex sm:h-[34px] sm:items-center"
+        >
+          {usage.fee === null ? "–" : formatCHF(usage.fee)}
+        </div>
+      </div>
+    </>
+  )
+}
+
 interface PersonCardProps {
   person: CheckoutPerson
   index: number
@@ -57,6 +123,18 @@ interface PersonCardProps {
    *  correctable; identity-linked pre-fills (signed-in user, family
    *  member) leave it false and render read-only. */
   editable?: boolean
+  /**
+   * Offer Firma among the user types. Only the first person of a guest
+   * check-in can be a company (CHK-28); further persons are adult or child.
+   */
+  allowFirma?: boolean
+  /** The person's Nutzungsart + fee columns (issue #605). */
+  usage?: PersonUsageProps
+  /**
+   * Offer "Für nächstes Mal speichern": an identified session's typed-in
+   * person (issue #605).
+   */
+  canSave?: boolean
 }
 
 function showError(
@@ -89,11 +167,20 @@ export function PersonCard({
   onSignOut,
   onRemove,
   editable,
+  allowFirma = true,
+  usage,
+  canSave = false,
 }: PersonCardProps) {
   const update = (updates: Partial<CheckoutPerson>) =>
     dispatch({ type: "UPDATE_PERSON", id: person.id, updates })
 
   const showBillingAddress = person.userType === "firma"
+  // A rehydrated company keeps its type even where Firma isn't offered.
+  const userTypeOptions = (
+    Object.entries(USER_TYPE_LABELS) as [UserType, string][]
+  ).filter(
+    ([value]) => allowFirma || value !== "firma" || person.userType === "firma",
+  )
   // Identity-linked pre-fills render read-only; anonymous walk-ins pass
   // `editable` so a rehydrated person can still be corrected in place.
   const readOnly = person.isPreFilled && !editable
@@ -216,19 +303,26 @@ export function PersonCard({
         </div>
       )}
 
-      {!readOnly && (
-        <div className="space-y-1">
-          <Label id={fieldId("userType-label")} className="text-sm font-bold">
-            {cardName}
-            Nutzer:in
-          </Label>
-          <div
-            role="radiogroup"
-            aria-labelledby={fieldId("userType-label")}
-            className="flex gap-3 pt-1"
-          >
-            {(Object.entries(USER_TYPE_LABELS) as [UserType, string][]).map(
-              ([value, label]) => (
+      {/* Nutzer:in | Nutzungsart | Nutzungsgebühr — the same three
+          columns as the identity strip (issue #605). */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {readOnly ? (
+          <div className="space-y-1">
+            <Label className="text-sm font-bold">Nutzer:in</Label>
+            <p className="text-sm">{USER_TYPE_LABELS[person.userType]}</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Label id={fieldId("userType-label")} className="text-sm font-bold">
+              {cardName}
+              Nutzer:in
+            </Label>
+            <div
+              role="radiogroup"
+              aria-labelledby={fieldId("userType-label")}
+              className="flex flex-wrap gap-x-3 gap-y-1 pt-1"
+            >
+              {userTypeOptions.map(([value, label]) => (
                 <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
                   <span
                     className={`inline-flex items-center justify-center h-4 w-4 rounded-full border ${
@@ -250,8 +344,40 @@ export function PersonCard({
                   />
                   {label}
                 </label>
-              )
-            )}
+              ))}
+            </div>
+          </div>
+        )}
+        {usage && (
+          <PersonUsageColumns
+            person={person}
+            index={index}
+            isOwner={false}
+            usage={usage}
+            onChange={(usageType) => update({ usageType })}
+          />
+        )}
+      </div>
+
+      {canSave && (
+        <div className="flex items-start gap-3 border-t border-border/60 pt-4">
+          <Checkbox
+            id={fieldId("save")}
+            className="mt-0.5 bg-white"
+            checked={person.saveForLater === true}
+            onCheckedChange={(checked) =>
+              update({ saveForLater: checked === true })
+            }
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor={fieldId("save")} className="text-sm font-normal">
+              {cardName}
+              Für nächstes Mal speichern
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Gespeichert werden nur Name und Nutzer:in. Du kannst die Person
+              jederzeit wieder löschen.
+            </p>
           </div>
         </div>
       )}

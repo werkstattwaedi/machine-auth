@@ -179,8 +179,7 @@ async function seedSammelrechnung(): Promise<void> {
 
 function replacement(overrides: Partial<CorrectCheckoutReplacement> = {}): CorrectCheckoutReplacement {
   return {
-    usageType: "regular",
-    persons: [{ name: "Alice Adult", email: "alice@example.com", userType: "erwachsen", userId: null, entryFeeWaivedToday: false }],
+    persons: [{ name: "Alice Adult", email: "alice@example.com", userType: "erwachsen", userId: null, entryFeeWaivedToday: false, usageType: "regular" }],
     items: [{ workshop: "holz", description: "Sperrholz", type: "material", catalogId: null, quantity: 2, unitPrice: 5, totalPrice: 10 }],
     tip: 0,
     ...overrides,
@@ -246,7 +245,7 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       expect(() => bad({ items: [{ ...replacement().items[0], quantity: -1 }] })).to.throw(HttpsError, /items/);
       expect(() => bad({ items: [{ ...replacement().items[0], unitPrice: 2_000_000 }] })).to.throw(HttpsError, /items/);
       expect(() => bad({ persons: [] })).to.throw(HttpsError, /persons/);
-      expect(() => bad({ usageType: "gratis" as never })).to.throw(HttpsError, /usageType/);
+      expect(() => bad({ persons: [{ ...replacement().persons[0], usageType: "gratis" as never }] })).to.throw(HttpsError, /persons/);
     });
   });
 
@@ -464,6 +463,92 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       expect(nb.amount).to.equal(10);
       const nc = await checkout(result.replacementCheckoutIds[0]);
       expect(nc.persons[0].entryFeeWaivedToday).to.be.true;
+    });
+
+    it("waives a person already on an earlier visit opened the same day, never the other way round (ADR-0050)", async () => {
+      await seedUser("u-alice");
+      // Two visits opened the same business day (2026-08-12, Zurich), both
+      // listing Alice by name; the morning one closed first.
+      const morning = Timestamp.fromDate(new Date("2026-08-12T07:00:00Z"));
+      const afternoon = Timestamp.fromDate(new Date("2026-08-12T13:00:00Z"));
+      await seedCheckout("co-am", { ownerUid: "u-alice", billId: "bill-am", created: morning });
+      await seedCheckout("co-pm", { ownerUid: "u-alice", billId: "bill-pm", created: afternoon });
+      await seedBill("bill-am", { ownerUid: "u-alice", checkoutIds: ["co-am"], referenceNumber: 42000010, amount: 25, acked: true });
+      await seedBill("bill-pm", { ownerUid: "u-alice", checkoutIds: ["co-pm"], referenceNumber: 42000020, amount: 25, acked: true });
+
+      // The afternoon visit's correction is covered by the morning one…
+      const pm = await correctCheckoutsHandler(
+        request({ reason: "Menge", corrections: [{ checkoutId: "co-pm", replacement: replacement() }] }),
+      );
+      expect((await checkout(pm.replacementCheckoutIds[0])).persons[0].entryFeeWaivedToday).to.be.true;
+      expect((await bill(pm.replacementBillIds[0])).amount).to.equal(10);
+
+      // …but the morning visit's is not covered by the (later) afternoon one.
+      const am = await correctCheckoutsHandler(
+        request({ reason: "Menge", corrections: [{ checkoutId: "co-am", replacement: replacement() }] }),
+      );
+      expect((await checkout(am.replacementCheckoutIds[0])).persons[0].entryFeeWaivedToday).to.not.equal(true);
+      expect((await bill(am.replacementBillIds[0])).amount).to.equal(25);
+    });
+
+    it("prices per-person usage types and derives the visit's (issue #605)", async () => {
+      await seedVisit();
+      const result = await correctCheckoutsHandler(
+        request({
+          reason: "Begleitung vergessen",
+          corrections: [{
+            checkoutId: "co-1",
+            replacement: {
+              persons: [
+                { ...replacement().persons[0], usageType: "materialbezug" },
+                { name: "Kim Kind", email: "", userType: "kind", userId: null, entryFeeWaivedToday: false, usageType: "regular" },
+              ],
+              items: [],
+              tip: 0,
+            },
+          }],
+        }),
+      );
+      const nc = await checkout(result.replacementCheckoutIds[0]);
+      expect(nc.usageType).to.equal("regular");
+      expect(nc.persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
+      expect(nc.summary?.entryFees).to.equal(22.5);
+      expect(nc.summary?.totalPrice).to.equal(7.5);
+    });
+
+    it("refuses an owner-only type on a companion line (issue #605)", async () => {
+      await seedVisit();
+      try {
+        await correctCheckoutsHandler(
+          request({
+            reason: "Falsch erfasst",
+            corrections: [{
+              checkoutId: "co-1",
+              replacement: {
+                persons: [
+                  { ...replacement().persons[0], userId: "u-alice", usageType: "regular" },
+                  { name: "Kim Kind", email: "", userType: "kind", userId: null, entryFeeWaivedToday: false, usageType: "volunteering" },
+                ],
+                items: [],
+                tip: 0,
+              },
+            }],
+          }),
+        );
+        expect.fail("expected invalid-argument");
+      } catch (err) {
+        expect((err as HttpsError).code).to.equal("invalid-argument");
+      }
+    });
+
+    it("rejects a person without a usage type", () => {
+      const { usageType: _omitted, ...noType } = replacement().persons[0];
+      expect(() =>
+        parseCorrectCheckoutsRequest({
+          reason: "Falsch",
+          corrections: [{ checkoutId: "x", replacement: replacement({ persons: [noType as never] }) }],
+        }),
+      ).to.throw(HttpsError, /persons/);
     });
   });
 

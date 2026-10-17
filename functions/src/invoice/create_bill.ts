@@ -301,8 +301,13 @@ export async function createBillForCheckout(
     // Apply the usage-type discount per section (issue #284). calculateEntryFee
     // already scales the entry fee by its discount multiplier.
     const discount = usageDiscount(checkout.usageType as UsageType);
+    // Each person's own type discounts their fee (issue #605).
     const entryFees = checkout.persons.reduce(
-      (sum, p) => sum + calculateEntryFee(p.userType, checkout.usageType, configFees),
+      (sum, p) =>
+        sum +
+        (p.entryFeeWaivedToday
+          ? 0
+          : calculateEntryFee(p.userType, p.usageType ?? checkout.usageType, configFees)),
       0,
     );
     const machineCost =

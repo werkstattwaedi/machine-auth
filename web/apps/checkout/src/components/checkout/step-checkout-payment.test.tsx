@@ -42,6 +42,7 @@ const persons: CheckoutPerson[] = [
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    usageType: "regular",
   },
 ]
 
@@ -58,14 +59,12 @@ function Harness({
   onBack?: () => void
   onChoice?: (choice: PaymentChoice | null) => void
 }) {
-  const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   const [choice, setChoice] = useState<PaymentChoice | null>(null)
   return (
     <StepCheckout
       persons={persons}
-      usageType={usageType}
-      setUsageType={setUsageType}
+      visitUsageType="regular"
       tip={tip}
       setTip={setTip}
       paymentMethods={methods}
@@ -167,8 +166,7 @@ describe("StepCheckout — the commit's hand-off", () => {
   it("keeps the amount being paid while the close empties the cart", () => {
     const base = {
       persons,
-      usageType: "regular" as UsageType,
-      setUsageType: () => {},
+      visitUsageType: "regular" as UsageType,
       tip: 0,
       setTip: () => {},
       paymentMethods: ["rechnung"] as PaymentMethod[],

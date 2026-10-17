@@ -8,6 +8,16 @@ import {
 import { isMachineItem } from "./pricing"
 import type { CheckoutKind } from "./email-contract"
 
+/**
+ * A checkout with no visit behind it: nobody works in the workshop, every
+ * person is on Begleitung / nur Materialbezug (CHK-9) — the stored visit type
+ * `deriveVisitUsageType` writes. The server's badge, membership and renewal
+ * checkouts have no persons and store `materialbezug` directly.
+ */
+export function isPurchaseOnly(checkout: { usageType?: string | null }): boolean {
+  return checkout.usageType === "materialbezug"
+}
+
 export interface CheckoutKindInput {
   usageType: string
   items: readonly (MembershipClassifiableItem & { type?: string | null })[]
@@ -17,19 +27,19 @@ export interface CheckoutKindInput {
 /**
  * What a checkout was, for wording on bills and mails (issue #660) — see
  * `CHECKOUT_KINDS`. A membership or badge bought at the kiosk is a
- * `materialbezug` checkout with no visit behind it, so it must not read
- * "Danke für deinen Besuch".
+ * purchase-only checkout (`isPurchaseOnly`) with no visit behind it, so it
+ * must not read "Danke für deinen Besuch".
  *
- * Every usage type but `materialbezug` means the person was in the
- * workshop — even when the net entry fee is 0 (intern, a fee already paid
- * earlier that day). A machine item is a visit whatever the usage type.
+ * Every other checkout means the person was in the workshop — even when the
+ * net entry fee is 0 (intern, Begleitung, a fee already paid earlier that
+ * day). A machine item is a visit regardless.
  */
 export function classifyCheckoutKind({
   usageType,
   items,
   membershipCatalogId,
 }: CheckoutKindInput): CheckoutKind {
-  if (usageType !== "materialbezug") return "visit"
+  if (!isPurchaseOnly({ usageType })) return "visit"
   if (items.some((item) => isMachineItem(item))) return "visit"
   if (
     items.length > 0 &&

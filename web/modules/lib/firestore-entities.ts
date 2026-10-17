@@ -89,6 +89,21 @@ export interface UserDoc extends AuditFields {
   billingAddress?: BillingAddressDoc | null
 }
 
+// ── users/{uid}/savedPersons ─────────────────────────────────────────────
+
+/**
+ * A person the account holder checks in with now and then, offered under
+ * "Person hinzufügen" (issue #605). Only name and user type — never the
+ * usage type. Create and delete only; owned by the account, not the
+ * membership.
+ */
+export interface SavedPersonDoc extends AuditFields {
+  firstName: string
+  lastName: string
+  userType: "erwachsen" | "kind"
+  createdAt: Timestamp
+}
+
 // ── permission ───────────────────────────────────────────────────────────
 
 export interface PermissionDoc extends AuditFields {
@@ -269,6 +284,13 @@ export interface CheckoutPersonDoc {
   userRef?: DocumentReference<UserDoc> | null
   /** Already paid the daily usage fee earlier the same business day (issue #268). */
   entryFeeWaivedToday?: boolean
+  /**
+   * The person's own usage type, chosen on the check-in (issue #605). Older
+   * checkouts lack it; readers fall back to the checkout's `usageType`.
+   */
+  usageType?: CheckoutUsageType
+  /** The saved person this line was added from (`users/{owner}/savedPersons`, issue #605). */
+  savedPersonId?: string
 }
 
 export interface CheckoutSummaryDoc {
@@ -315,6 +337,12 @@ export interface CheckoutDoc extends AuditFields {
   supersededByCheckoutRef?: DocumentReference<CheckoutDoc> | null
   supersedesCheckoutRef?: DocumentReference<CheckoutDoc> | null
 
+  /**
+   * The visit's usage type. Since issue #605 derived from the persons'
+   * types (`deriveVisitUsageType`) and re-derived by the server on close;
+   * it decides machine time and material. `materialbezug` — nobody works
+   * in the workshop — marks a purchase-only checkout (CHK-9, `isPurchaseOnly`).
+   */
   usageType: CheckoutUsageType | string
   created: Timestamp
   workshopsVisited: string[]

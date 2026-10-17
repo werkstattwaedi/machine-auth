@@ -22,6 +22,33 @@ const config: PricingConfig = {
 }
 
 describe("computeCheckoutCosts", () => {
+  // Issue #605: each person's usage fee follows their own type; machines
+  // and material follow the visit's.
+  it("charges each person their own type's usage fee", () => {
+    const result = computeCheckoutCosts({
+      persons: [
+        { userType: "erwachsen", usageType: "materialbezug" },
+        { userType: "kind", usageType: "regular" },
+      ],
+      usageType: "regular",
+      items: [{ origin: "nfc", type: "machine", totalPrice: 18 }],
+      config,
+    })
+    expect(result.personFees).toBe(22.5) // raw: 15 + 7.5
+    expect(result.personFeesNet).toBe(7.5) // the accompanying adult pays nothing
+    expect(result.machineCostNet).toBe(18)
+  })
+
+  it("falls back to the visit's type for persons without their own", () => {
+    const result = computeCheckoutCosts({
+      persons: [{ userType: "erwachsen" }, { userType: "kind", usageType: "regular" }],
+      usageType: "ermaessigt",
+      items: [],
+      config,
+    })
+    expect(result.personFeesNet).toBe(7.5 + 7.5)
+  })
+
   // Regression for issue #284: `computeCheckoutCosts` now returns BOTH raw
   // (standard) and net (post-discount) section amounts. The displayed
   // total mirrors the server-side `recomputeSummary` net.
@@ -67,7 +94,7 @@ describe("computeCheckoutCosts", () => {
     expect(result.materialCostNet).toBe(12)
   })
 
-  // Issue #685: a kiln-firing pickup („Nur Materialbezug" + Keramik-Brennen,
+  // Issue #685: a kiln-firing pickup („Begleitung / nur Materialbezug" + Keramik-Brennen,
   // a service, at the CHF amount on the slip) bills just the firing.
   it("bills a service under materialbezug without entry fee", () => {
     const result = computeCheckoutCosts({

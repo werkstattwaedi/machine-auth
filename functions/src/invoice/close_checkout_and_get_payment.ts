@@ -37,10 +37,18 @@ import type {
 import {
   PAYMENT_METHOD_INFO,
   computeCheckoutSummary,
+  deriveVisitUsageType,
   isMachineItem,
+  isOwnerOnlyUsage,
   isPaymentMethod,
-  isSameBusinessDay,
+  machineUsageBlocked,
+  sameDayCoveredPersons,
+  samedayPersonKey,
+  type SameDayCheckout,
+  USAGE_TYPE_DISCOUNTS,
+  USAGE_TYPE_LABELS,
   usageDiscount,
+  type UsagePerson,
 } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { buildPaymentData, type PaymentData } from "./get_payment_qr_data";
@@ -156,8 +164,10 @@ export function entryFeeFor(
  * amount is authoritative here — a client could otherwise post a usage
  * type that waives charges it shouldn't.
  *
- *  - `materialbezug` ("only picking up material") cannot coexist with
- *    machine usage: if you ran a machine, it's not a pure material pickup.
+ *  - Machine usage cannot be billed when every person is `materialbezug`
+ *    (Begleitung / nur Materialbezug, CHK-8): the visit's type would waive
+ *    it. `persons` carry their own types (issue #605); without them the
+ *    visit's `usageType` stands in for one person.
  *  - `intern` (everything on the house) cannot coexist with buying a
  *    membership: a paid membership must not be zeroed out.
  *  - `intern` cannot coexist with a PAID badge either (same zeroing
@@ -170,16 +180,14 @@ export function entryFeeFor(
 export function assertUsageTypeAllowed(
   usageType: UsageType,
   opts: {
+    persons?: readonly UsagePerson[];
     hasMachineUsage: boolean;
     hasMembershipItem: boolean;
     hasPaidBadgeItem?: boolean;
   },
 ): void {
-  if (usageType === "materialbezug" && opts.hasMachineUsage) {
-    throw new HttpsError(
-      "failed-precondition",
-      "Materialbezug ist nicht möglich, wenn Maschinen genutzt wurden.",
-    );
+  if (machineUsageBlocked(opts.persons ?? [{}], opts.hasMachineUsage, usageType)) {
+    throw new HttpsError("failed-precondition", MACHINE_USAGE_BLOCKED_MESSAGE);
   }
   if (usageType === "intern" && opts.hasMembershipItem) {
     throw new HttpsError(
@@ -257,6 +265,7 @@ export function assertMembershipBillingAddress(
  */
 export function priceCheckoutItems(args: {
   persons: CheckoutPersonEntity[];
+  /** The visit's type (`resolvePersonUsageTypes`). */
   usageType: UsageType;
   items: CheckoutItemEntity[];
   configFees: Record<string, Record<string, number>> | null;
@@ -270,6 +279,7 @@ export function priceCheckoutItems(args: {
   const items = args.items.filter(isValidItem);
   const membershipPresent = hasMembershipItem(items, args.membershipCatalogId);
   assertUsageTypeAllowed(args.usageType, {
+    persons: args.persons,
     hasMachineUsage: hasMachineUsage(items),
     hasMembershipItem: membershipPresent,
     hasPaidBadgeItem: items.some((i) => isBadgeItem(i) && i.totalPrice > 0),
@@ -354,6 +364,107 @@ function logSummaryDivergence(
   }
 }
 
+/** The close's refusal when machine time meets an all-Begleitung visit (CHK-8). */
+export const MACHINE_USAGE_BLOCKED_MESSAGE =
+  "Maschinen wurden genutzt, aber alle Personen sind als „Begleitung / nur Materialbezug“ erfasst.";
+
+/** True iff `t` names a usage type. */
+export function isUsageType(t: unknown): t is UsageType {
+  return typeof t === "string" && Object.prototype.hasOwnProperty.call(USAGE_TYPE_DISCOUNTS, t);
+}
+
+/**
+ * Check every person's usage type and derive the visit's (issue #605,
+ * ADR-0050). Shared by the close and the admin correction.
+ *
+ * - Every person must carry a valid `usageType` (`invalid-argument`
+ *   otherwise) — there is no visit-wide fallback for writes; only readers
+ *   of historical docs fall back to `checkout.usageType`.
+ * - An owner-only type (Freiwilligengruppe / Interne Nutzung) is refused on
+ *   any line but the owner's (`userRef.id === ownerId`) and while anyone
+ *   else is on the visit (CHK-32).
+ *
+ * The visit's type is `deriveVisitUsageType` over the persons. Pure.
+ */
+export function resolvePersonUsageTypes(
+  persons: CheckoutPersonEntity[],
+  ownerId: string | null,
+): { persons: CheckoutPersonEntity[]; usageType: UsageType } {
+  if (!persons.every((p) => isUsageType(p.usageType))) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Bitte Seite neu laden: Nutzungsart pro Person fehlt.",
+    );
+  }
+  const isOwner = (p: CheckoutPersonEntity) =>
+    ownerId !== null && p.userRef?.id === ownerId;
+
+  for (const p of persons) {
+    const t = p.usageType as UsageType;
+    if (!isOwnerOnlyUsage(t)) continue;
+    if (!isOwner(p)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${USAGE_TYPE_LABELS[t]} ist nur für die angemeldete Person möglich.`,
+      );
+    }
+    if (persons.length > 1) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${USAGE_TYPE_LABELS[t]} ist nicht möglich, solange weitere Personen erfasst sind.`,
+      );
+    }
+  }
+
+  const usageType = deriveVisitUsageType(
+    persons.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
+  );
+  return { persons, usageType };
+}
+
+/**
+ * Keep a line's `savedPersonId` only when it names one of the owner's saved
+ * persons (issue #605), so a line never links a doc that isn't theirs (the
+ * same-day waiver matches by name, ADR-0050 — the id is a plain link). Dropped with a warning — never failing the
+ * payment — when there is no owner, the doc doesn't exist, the line is the
+ * owner's own (it has a `userRef`), or the id repeats an earlier line. One
+ * `getAll` for all ids.
+ */
+export async function verifySavedPersonIds(
+  db: FirebaseFirestore.Firestore,
+  persons: CheckoutPersonEntity[],
+  ownerId: string | null,
+  context: string,
+): Promise<CheckoutPersonEntity[]> {
+  if (!persons.some((p) => p.savedPersonId)) return persons;
+
+  const drop = (p: CheckoutPersonEntity, why: string): CheckoutPersonEntity => {
+    logger.warn(`${context}: dropped savedPersonId (${why})`, {
+      savedPersonId: p.savedPersonId,
+    });
+    const { savedPersonId: _dropped, ...rest } = p;
+    return rest;
+  };
+
+  if (!ownerId) return persons.map((p) => (p.savedPersonId ? drop(p, "no owner") : p));
+
+  const ids = [...new Set(persons.map((p) => p.savedPersonId).filter((id): id is string => !!id))];
+  const collection = db.collection("users").doc(ownerId).collection("savedPersons");
+  const snaps = await db.getAll(...ids.map((id) => collection.doc(id)));
+  const existing = new Set(snaps.filter((s) => s.exists).map((s) => s.id));
+
+  const seen = new Set<string>();
+  return persons.map((p) => {
+    const id = p.savedPersonId;
+    if (!id) return p;
+    if (p.userRef) return drop(p, "owner line");
+    if (!existing.has(id)) return drop(p, "not found");
+    if (seen.has(id)) return drop(p, "repeated");
+    seen.add(id);
+    return p;
+  });
+}
+
 const ALLOWED_USER_TYPES = ["erwachsen", "kind", "firma"] as const;
 type CanonicalUserType = (typeof ALLOWED_USER_TYPES)[number];
 
@@ -420,99 +531,73 @@ async function enforceAccountHolderUserType(
 }
 
 /**
- * Daily usage-fee dedup (issue #268).
+ * Same-day usage-fee waiver (issue #268, ADR-0050).
  *
- * The entry ("Nutzungs-") fee is billed at most once per Zurich business
- * day (boundary 03:00) per *named* person. A named person is one carrying a
- * `userRef` — they map to a real account. Anonymous / guest persons (no
- * `userRef`) are always charged.
+ * A person pays the usage fee at most once per Zurich business day
+ * (boundary 03:00) of an account: the owner by account id, everyone else
+ * by normalized name + person type. They are covered when they appear on
+ * another closed, non-cancelled visit of the same owner *opened* on the
+ * same business day as this one, on a usage type whose fee is at least
+ * theirs now — they pay the difference (CHK-37).
+ * Guests (no owner) are always charged. The rule itself lives in
+ * `@oww/shared` (`sameDayCoveredPersons`) so the checkout wizard previews
+ * the same answer; this is the authoritative Firestore read.
  *
- * For each named person we ask: did an *earlier* closed checkout on the same
- * business day already bill them the entry fee? "Earlier closed checkout"
- * means a `checkouts` doc with `status == "closed"`, owned by — or listing —
- * that person, whose close instant falls on the same business day and which
- * billed a non-zero entry fee for them.
- *
- * Query strategy: rather than a per-person Firestore query (persons can be
- * arbitrary family members), we read the closed checkouts the *current
- * checkout's owner* already closed today and collect the set of person
- * userRef ids that were charged an entry fee in any of them. Family members
- * are billed inside the account holder's checkout (persons[] carries their
- * userRef), so the owner's same-day history is the authoritative record of
- * "who already paid today" for this account. The owner falls out naturally:
- * they appear as persons[0] with their own userRef.
+ * `openedAt` is the business day of the visit being billed (its `created`).
+ * `excludeCheckoutId` skips that visit itself; a correction also passes
+ * `closedBefore` (see `sameDayCoveredPersons`).
  *
  * Returns a copy of `persons` with `entryFeeWaivedToday: true` set on each
- * person already charged today. Pure read; performs no writes.
+ * covered person (an existing `true` is kept). Pure read; performs no writes.
  */
 export async function markEntryFeeWaivedToday(
   db: FirebaseFirestore.Firestore,
   persons: CheckoutPersonEntity[],
   ownerRef: DocumentReference | null,
-  closeAt: Date,
-  currentCheckoutId: string | null,
-  configFees: Record<string, Record<string, number>> | null,
+  openedAt: Date,
+  opts: { excludeCheckoutId?: string | null; closedBefore?: Date | null } = {},
 ): Promise<CheckoutPersonEntity[]> {
   // Truly anonymous checkout (no owner) — nobody to dedup against.
   if (!ownerRef) return persons;
-  // No named persons → nothing to waive.
-  if (!persons.some((p) => p.userRef)) return persons;
+  if (!persons.some((p) => samedayPersonKey(p, ownerRef.id) !== null)) {
+    return persons;
+  }
 
-  // All closed checkouts this account owns. Filtered to the same business
-  // day in memory (Firestore can't express the 03:00 boundary in a range
-  // query without a precomputed key, and the per-account volume is tiny).
+  // All closed checkouts this account owns, filtered to the opening
+  // business day in memory (Firestore can't express the 03:00 boundary
+  // without a precomputed key, and the per-account volume is tiny).
+  // `status == "closed"` excludes cancelled visits (ADR-0042).
   const priorSnap = await db
     .collection("checkouts")
     .where("userId", "==", ownerRef)
     .where("status", "==", "closed")
     .get();
 
-  // Collect userRef ids that were billed a NON-ZERO entry fee on the same
-  // business day in any *other* closed checkout.
-  const chargedTodayUserIds = new Set<string>();
-  for (const doc of priorSnap.docs) {
-    if (currentCheckoutId && doc.id === currentCheckoutId) continue;
-    const prior = doc.data() as CheckoutEntity;
-    // Use the close instant; fall back to created for older docs.
-    const priorInstant = (prior.closedAt ?? prior.created)?.toDate?.();
-    if (!priorInstant) continue;
-    if (!isSameBusinessDay(priorInstant, closeAt)) continue;
+  const earlierCheckouts: SameDayCheckout[] = priorSnap.docs.map((doc) => {
+    const c = doc.data() as CheckoutEntity;
+    return {
+      id: doc.id,
+      status: c.status,
+      cancelledAt: c.cancelledAt ?? null,
+      usageType: c.usageType,
+      created: c.created?.toDate?.() ?? null,
+      closedAt: c.closedAt?.toDate?.() ?? null,
+      persons: c.persons ?? [],
+    };
+  });
 
-    const priorDiscount = usageDiscount(prior.usageType);
-    for (const person of prior.persons ?? []) {
-      if (!person.userRef) continue;
-      // The person was actually charged iff their fee was neither
-      // dedup-waived nor usage-type-waived (entryFee multiplier 0).
-      if (person.entryFeeWaivedToday) continue;
-      if (priorDiscount.entryFee === 0) continue;
-      const standard = safeStandardEntryFee(person.userType, configFees);
-      if (standard <= 0) continue;
-      chargedTodayUserIds.add(person.userRef.id);
-    }
-  }
-
-  if (chargedTodayUserIds.size === 0) return persons;
-
-  return persons.map((p) =>
-    p.userRef && chargedTodayUserIds.has(p.userRef.id)
-      ? { ...p, entryFeeWaivedToday: true }
-      : p,
+  const covered = sameDayCoveredPersons({
+    persons,
+    ownerId: ownerRef.id,
+    openedAt,
+    earlierCheckouts,
+    currentCheckoutId: opts.excludeCheckoutId ?? null,
+    closedBefore: opts.closedBefore ?? null,
+  });
+  if (!covered.some(Boolean)) return persons;
+  return persons.map((p, i) =>
+    covered[i] ? { ...p, entryFeeWaivedToday: true } : p,
   );
-}
-
-/**
- * Standard entry fee that never throws — returns 0 when the config row is
- * missing. Used only by the dedup scan, where a missing row means "no fee
- * was charged" and must not abort the close. The authoritative billing path
- * (`standardEntryFeeFor` / `entryFeeFor`) still fails loud (issue #149).
- */
-function safeStandardEntryFee(
-  userType: string,
-  configFees: Record<string, Record<string, number>> | null,
-): number {
-  const row = configFees?.[userType];
-  const standard = row && "regular" in row ? row["regular"] : undefined;
-  return typeof standard === "number" ? standard : 0;
 }
 
 interface NewCheckoutItemInput {
@@ -556,6 +641,10 @@ export interface ClosePersonInput {
   } | null;
   /** users/{id} the person was pre-filled from (owner, family roster). */
   userId?: string | null;
+  /** The person's own usage type (issue #605); required on every line. */
+  usageType?: string | null;
+  /** users/{owner}/savedPersons/{id} the line was added from (issue #605). */
+  savedPersonId?: string | null;
 }
 
 function isClosePersonInput(p: unknown): p is ClosePersonInput {
@@ -567,7 +656,10 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
     typeof x.userType === "string" &&
     (x.billingAddress == null ||
       (typeof x.billingAddress === "object" && !Array.isArray(x.billingAddress))) &&
-    (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0))
+    (x.userId == null || (typeof x.userId === "string" && x.userId.length > 0)) &&
+    (x.usageType == null || isUsageType(x.usageType)) &&
+    (x.savedPersonId == null ||
+      (typeof x.savedPersonId === "string" && x.savedPersonId.length > 0))
   );
 }
 
@@ -580,7 +672,9 @@ function isClosePersonInput(p: unknown): p is ClosePersonInput {
  * the same-day dedup, both of which key on `userRef`.
  *
  * - Only allowlisted fields are kept: server-derived fields such as
- *   `entryFeeWaivedToday` are never taken from the client.
+ *   `entryFeeWaivedToday` are never taken from the client. `usageType` and
+ *   `savedPersonId` are copied as sent; `resolvePersonUsageTypes` and
+ *   `verifySavedPersonIds` check them.
  * - A `userId` becomes a `userRef` only for the checkout owner: a roster
  *   holds the owner plus guests by name (ADR-0048) — anyone with an account
  *   of their own checks in on it. Anything else is dropped with a warning
@@ -613,6 +707,8 @@ export function resolveClosePersons(
         city: String(a.city ?? ""),
       };
     }
+    if (p.usageType) person.usageType = p.usageType as UsageType;
+    if (p.savedPersonId) person.savedPersonId = p.savedPersonId;
     if (p.userId) {
       if (p.userId !== ownerId) {
         logger.warn(`${context}: dropped non-owner person userId`, {
@@ -636,7 +732,6 @@ interface CloseCheckoutRequest {
   checkoutId?: string;
   /** Data for the anonymous flow that creates a closed checkout in one shot. */
   newCheckout?: NewCheckoutInput;
-  usageType: UsageType;
   persons: ClosePersonInput[];
   summary: CheckoutSummaryEntity;
   /**
@@ -676,7 +771,7 @@ export const closeCheckoutAndGetPaymentHandler = async (
   request: CallableRequest<CloseCheckoutRequest>
 ) => {
   const data = request.data ?? ({} as CloseCheckoutRequest);
-  const { checkoutId, newCheckout, usageType, persons, summary } = data;
+  const { checkoutId, newCheckout, persons, summary } = data;
   const paymentMethod = data.paymentMethod ?? null;
 
   if (!Array.isArray(persons) || persons.length === 0) {
@@ -684,9 +779,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   }
   if (!persons.every(isClosePersonInput)) {
     throw new HttpsError("invalid-argument", "persons[] must be valid");
-  }
-  if (!usageType) {
-    throw new HttpsError("invalid-argument", "usageType is required");
   }
   if (paymentMethod !== null) {
     if (!isPaymentMethod(paymentMethod)) {
@@ -707,7 +799,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (checkoutId) {
     return closeExistingCheckout(callerUid, isAnonymous, {
       checkoutId,
-      usageType,
       persons,
       clientSummary: summary,
       paymentMethod,
@@ -716,7 +807,6 @@ export const closeCheckoutAndGetPaymentHandler = async (
   if (newCheckout) {
     return createAnonymousCheckout(callerUid, firebaseAuthUid, {
       newCheckout,
-      usageType,
       persons,
       clientSummary: summary,
       paymentMethod,
@@ -733,7 +823,6 @@ async function closeExistingCheckout(
   isAnonymous: boolean,
   args: {
     checkoutId: string;
-    usageType: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -789,12 +878,13 @@ async function closeExistingCheckout(
   const ownerId = stored
     ? (stored.userId?.id ?? null)
     : (isAnonymous ? null : callerUid);
-  const persons = resolveClosePersons(
-    db,
-    args.persons,
+  const context = `closeExistingCheckout ${args.checkoutId}`;
+  const typed = resolvePersonUsageTypes(
+    resolveClosePersons(db, args.persons, ownerId, context),
     ownerId,
-    `closeExistingCheckout ${args.checkoutId}`,
   );
+  const visitUsageType = typed.usageType;
+  const persons = await verifySavedPersonIds(db, typed.persons, ownerId, context);
 
   if (args.paymentMethod) {
     await assertPaymentMethodAllowed(
@@ -807,7 +897,7 @@ async function closeExistingCheckout(
     db,
     persons,
     userRef,
-    `closeExistingCheckout ${args.checkoutId}`,
+    context,
   );
 
   // The buyer's billing address (used to backstop membership invoices below).
@@ -819,8 +909,8 @@ async function closeExistingCheckout(
         | undefined) ?? null
     : null;
 
-  // Daily usage-fee dedup (issue #268): waive the entry fee for any named
-  // person who already paid it earlier on the same Zurich business day.
+  // Same-day usage-fee waiver (issue #268, ADR-0050): waive the fee for
+  // anyone already on another visit of this account opened the same day.
   // The owner is the checkout's userId; for the truly-anon path userRef is
   // null and the dedup is a no-op. Read outside the transaction — it's a
   // historical scan that doesn't participate in the close's atomicity.
@@ -828,9 +918,9 @@ async function closeExistingCheckout(
     db,
     enforcedPersons,
     userRef,
-    new Date(),
-    args.checkoutId,
-    configFees,
+    // The visit's opening business day decides (ADR-0050), not the close.
+    stored?.created?.toDate?.() ?? new Date(),
+    { excludeCheckoutId: args.checkoutId },
   );
 
   const result = await db.runTransaction(async (tx) => {
@@ -918,7 +1008,7 @@ async function closeExistingCheckout(
 
     const { items, summary, membershipPresent } = priceCheckoutItems({
       persons: dedupedPersons,
-      usageType: args.usageType,
+      usageType: visitUsageType,
       items: rawItems,
       configFees,
       membershipCatalogId,
@@ -946,7 +1036,7 @@ async function closeExistingCheckout(
     tx.update(checkoutRef, {
       ...(commit.method ? { paymentMethod: commit.method } : {}),
       status: "closed",
-      usageType: args.usageType,
+      usageType: visitUsageType,
       persons: dedupedPersons,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
@@ -975,7 +1065,6 @@ async function createAnonymousCheckout(
   firebaseAuthUid: string | null,
   args: {
     newCheckout: NewCheckoutInput;
-    usageType: UsageType;
     persons: ClosePersonInput[];
     clientSummary?: CheckoutSummaryEntity;
     paymentMethod: PaymentMethod | null;
@@ -1007,16 +1096,25 @@ async function createAnonymousCheckout(
     });
   }
 
-  // Loophole guard (issue #284): materialbezug cannot coexist with machine
-  // usage. The membership guard is a no-op on this path — the anonymous
-  // create input carries no variantId, and memberships are bought through
-  // purchaseMembership (which closes via closeExistingCheckout).
-  assertUsageTypeAllowed(args.usageType, {
+  const db = getFirestore();
+
+  // Only the owner's own line keeps its identity (issue #741, ADR-0048).
+  const typed = resolvePersonUsageTypes(
+    resolveClosePersons(db, args.persons, effectiveUserId ?? null, "createAnonymousCheckout"),
+    effectiveUserId ?? null,
+  );
+  const visitUsageType = typed.usageType;
+
+  // Loophole guard (issue #284): machine usage needs someone who isn't only
+  // accompanying. The membership guard is a no-op on this path — the
+  // anonymous create input carries no variantId, and memberships are bought
+  // through purchaseMembership (which closes via closeExistingCheckout).
+  assertUsageTypeAllowed(visitUsageType, {
+    persons: typed.persons,
     hasMachineUsage: hasMachineUsage(validItems),
     hasMembershipItem: false,
   });
 
-  const db = getFirestore();
   const pricingDoc = await db.doc("config/pricing").get();
   const configFees =
     (pricingDoc.data() as { entryFees?: Record<string, Record<string, number>> } | undefined)
@@ -1032,10 +1130,9 @@ async function createAnonymousCheckout(
     await assertPaymentMethodAllowed(args.paymentMethod, userIdRef);
   }
 
-  // Only the owner's own line keeps its identity (issue #741, ADR-0048).
-  const persons = resolveClosePersons(
+  const persons = await verifySavedPersonIds(
     db,
-    args.persons,
+    typed.persons,
     effectiveUserId ?? null,
     "createAnonymousCheckout",
   );
@@ -1054,21 +1151,20 @@ async function createAnonymousCheckout(
 
   // Daily usage-fee dedup (issue #268): a registered user / tag-tap session
   // landing here (no open checkout existed) may already have closed a
-  // checkout earlier the same Zurich business day. Waive the entry fee for
-  // any named person already charged today. Truly-anon (userIdRef === null)
-  // is a no-op.
+  // checkout earlier the same Zurich business day. Waive the fee for anyone
+  // already on such a visit (ADR-0050). Truly-anon (userIdRef === null) is
+  // a no-op.
   const dedupedPersons = await markEntryFeeWaivedToday(
     db,
     enforcedPersons,
     userIdRef,
+    // Created and closed at once: opened now.
     new Date(),
-    null,
-    configFees,
   );
 
   const summary = recomputeSummary(
     dedupedPersons,
-    args.usageType,
+    visitUsageType,
     validItems,
     configFees,
     args.clientSummary?.tip ?? 0,
@@ -1099,7 +1195,7 @@ async function createAnonymousCheckout(
     tx.set(checkoutRef, {
       userId: userIdRef,
       status: "closed",
-      usageType: args.usageType,
+      usageType: visitUsageType,
       created: now,
       workshopsVisited: args.newCheckout.workshopsVisited,
       persons: dedupedPersons,

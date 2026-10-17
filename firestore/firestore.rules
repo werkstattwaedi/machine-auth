@@ -188,6 +188,35 @@ service cloud.firestore {
                         isValidUserProfile(request.resource.data)));
 
       allow delete: if isAdmin();
+
+      // Saved persons (issue #605, ADR-0050): companions the account holder
+      // saved on a check-in to pick again next time — name and user type
+      // only, never the usage type. The account holder (real login or kiosk
+      // badge session acting on them) creates, reads and deletes; nobody
+      // updates (a changed person is a new one). Admins read for support.
+      // Deleted with the account (privacy engine), not trimmed.
+      match /savedPersons/{savedPersonId} {
+        function isSavedPersonsOwner() {
+          return (isSignedIn() && request.auth.uid == userId) ||
+                 (actsAs() != '' && actsAs() == userId);
+        }
+
+        allow read: if isAdmin() || isSavedPersonsOwner();
+        allow create: if isSavedPersonsOwner() &&
+          request.resource.data.keys().hasOnly([
+            'firstName', 'lastName', 'userType', 'createdAt', 'modifiedBy', 'modifiedAt'
+          ]) &&
+          request.resource.data.keys().hasAll(['firstName', 'lastName', 'userType']) &&
+          request.resource.data.firstName is string &&
+          request.resource.data.firstName.size() > 0 &&
+          request.resource.data.firstName.size() <= 100 &&
+          request.resource.data.lastName is string &&
+          request.resource.data.lastName.size() > 0 &&
+          request.resource.data.lastName.size() <= 100 &&
+          request.resource.data.userType in ['erwachsen', 'kind'];
+        allow update: if false;
+        allow delete: if isSavedPersonsOwner();
+      }
     }
 
     // Permission collection

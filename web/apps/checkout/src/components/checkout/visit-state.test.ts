@@ -10,7 +10,7 @@ describe("isStartedVisit", () => {
     expect(isStartedVisit(undefined)).toBe(false)
   })
 
-  it("is false for a purchase-only (materialbezug) checkout", () => {
+  it("is false for a purchase-only checkout (everyone on Begleitung)", () => {
     expect(isStartedVisit({ usageType: "materialbezug" })).toBe(false)
   })
 

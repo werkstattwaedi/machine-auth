@@ -261,6 +261,7 @@ export async function handleAddBadgeToCheckout(
             email: user.email ?? "",
             userType: user.userType ?? "erwachsen",
             userRef: callerRef as DocumentReference,
+            usageType: "materialbezug",
           },
         ],
         modifiedBy: callerRef.id,

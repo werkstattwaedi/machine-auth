@@ -2,23 +2,25 @@
 // SPDX-License-Identifier: MIT
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
 import {
   USAGE_TYPE_LABELS,
   USAGE_DISCOUNT_LABELS,
   USER_TYPE_LABELS,
-  calculateFee,
+  machineUsageBlocked,
   standardFee,
+  usageDeclaration,
   usageDiscount,
 } from "@modules/lib/pricing"
 import { type PricingConfig } from "@modules/lib/workshop-config"
 import {
+  AlertCircle,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
   Coins,
   Heart,
+  Info,
   Package,
   Wrench,
 } from "lucide-react"
@@ -31,6 +33,7 @@ import {
   type AddressErrors,
 } from "@modules/lib/address"
 import type { CheckoutPerson } from "./use-checkout-state"
+import type { PricedPerson } from "./same-day-waiver"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import {
   PositionTable,
@@ -44,11 +47,12 @@ import {
   partitionBadge,
   isMachineItem,
   materialSectionLabels,
+  personEntryFee,
   rawSections,
+  type SummaryPerson,
 } from "@oww/shared"
 
 import { BadgeCheck, Nfc } from "lucide-react"
-import { UsageTypeSelect } from "./usage-type-select"
 import {
   Fold,
   PaymentFrame,
@@ -194,10 +198,26 @@ export function roundUpOptionLabel(
   return `${target.toFixed(0)} Franken`
 }
 
+/** Same wording as the invoice PDF's waived usage-fee row. */
+const WAIVED_TODAY_LABEL = "heute bereits erfasst"
+
 interface StepCheckoutProps {
-  persons: CheckoutPerson[]
-  usageType: UsageType
-  setUsageType: (t: UsageType) => void
+  /**
+   * The roster, with `entryFeeWaivedToday` previewed for anyone already on
+   * a visit of the account opened the same business day (ADR-0050).
+   */
+  persons: PricedPerson[]
+  /**
+   * The visit's usage type, derived from the persons' own (issue #605). It
+   * decides machine time and material; each person's usage fee follows
+   * their own type.
+   */
+  visitUsageType: UsageType
+  /**
+   * User-doc id of the identified principal: their line reads in du-form
+   * in the confirmation box; null for a guest check-in.
+   */
+  ownerUserId?: string | null
   tip: number
   setTip: (n: number) => void
   /**
@@ -235,15 +255,10 @@ interface StepCheckoutProps {
   onPrimaryBillingChange?: (updates: Partial<CheckoutPerson>) => void
   /**
    * Section ids (`"nutzung"`, `"maschinen"`, `"material"`, …) that start
-   * expanded. The wizard opens Nutzungsgebühren when the visitor arrives
-   * from the material step (issue #570) so the Nutzungsart is in view.
+   * expanded. The wizard opens Nutzungsgebühren when any person has a
+   * discounted usage type (CHK-31), so what is confirmed is in view.
    */
   initialOpenSections?: readonly string[]
-  /**
-   * Anonymous checkout: the account-only usage types (Freiwilligengruppe,
-   * Interne Nutzung) are not offered (issue #570).
-   */
-  anonymous?: boolean
   /**
    * The identified user's profile `billingAddress`, if any. Used to pre-fill
    * the membership address when the primary person carries no billing fields —
@@ -305,7 +320,9 @@ export function computeCheckoutCosts({
   membershipCatalogId,
   badgeCatalogId,
 }: {
-  persons: { userType: string }[]
+  /** Each with their own usage type (issue #605); absent = `usageType`. */
+  persons: SummaryPerson[]
+  /** The visit's usage type (`deriveVisitUsageType`): machines and material. */
   usageType: UsageType
   items: {
     origin: string
@@ -342,11 +359,12 @@ export function computeCheckoutCosts({
   // Section arithmetic is shared with the server's recomputeSummary and the
   // admin correction editor (@oww/shared, ADR-0042); membership + badge are
   // split out beforehand so only the display buckets differ.
+  const standardEntryFee = (userType: string) =>
+    standardFee(userType as Parameters<typeof standardFee>[0], config) ?? 0
   const raw = rawSections({
     persons,
     items: [...items.filter((i) => isMachineItem(i)), ...otherItems],
-    standardEntryFee: (userType) =>
-      standardFee(userType as Parameters<typeof standardFee>[0], config) ?? 0,
+    standardEntryFee,
   })
   const membershipCost = membershipItems.reduce((s, i) => s + i.totalPrice, 0)
   const badgeCost = badgeItems.reduce((s, i) => s + i.totalPrice, 0)
@@ -356,7 +374,11 @@ export function computeCheckoutCosts({
     materialCost: raw.materialCost,
     membershipCost,
     badgeCost,
-    personFeesNet: raw.entryFees * discount.entryFee,
+    // Each person's fee after their own type's discount (issue #605).
+    personFeesNet: persons.reduce(
+      (sum, p) => sum + personEntryFee(p, usageType, standardEntryFee),
+      0,
+    ),
     machineCostNet: raw.machineCost * discount.machine,
     materialCostNet: raw.materialCost * discount.material,
   }
@@ -394,8 +416,8 @@ export function machineRowFromItem(item: CheckoutItemLocal): PositionRow {
 
 export function StepCheckout({
   persons,
-  usageType,
-  setUsageType,
+  visitUsageType: usageType,
+  ownerUserId = null,
   tip,
   setTip,
   paymentMethods,
@@ -412,7 +434,6 @@ export function StepCheckout({
   onPrimaryBillingChange,
   profileBillingAddress,
   initialOpenSections,
-  anonymous = false,
 }: StepCheckoutProps) {
   // Display NET (billed) section amounts — what the customer actually pays
   // after the usage-type discount (issue #284). `membershipCost` renders the
@@ -436,6 +457,19 @@ export function StepCheckout({
   const discountLabel = USAGE_DISCOUNT_LABELS[usageType]
   // Machine usage = NFC-tracked or manually-entered hours (issue #105).
   const nfcItems = useMemo(() => items.filter((i) => isMachineItem(i)), [items])
+  // CHK-8: machine time with everyone on Begleitung can't be billed — the
+  // visit's type would waive it. Fixed on the check-in, so no payment here.
+  const machinesBlocked = machineUsageBlocked(persons, nfcItems.length > 0)
+  // CHK-30: one sentence per person with a discounted type, du-form for the
+  // identified person, by first name for everyone else.
+  const declarations = persons
+    .map((p) =>
+      usageDeclaration(p.usageType, {
+        firstName: p.firstName,
+        isSelf: !!ownerUserId && p.userId === ownerUserId,
+      }),
+    )
+    .filter((d): d is string => d !== null)
   // Issue #262/#263: split the non-machine items into the Vereinsmitgliedschaft
   // bucket and everything else, so membership renders as its own first-position
   // section instead of being lumped under Materialbezug.
@@ -558,6 +592,15 @@ export function StepCheckout({
   const [openSections, setOpenSections] = useState<Set<string>>(
     () => new Set(initialOpenSections),
   )
+  // The CHK-8 error lives in Maschinen; open it so the reason the payment
+  // methods are disabled is in view.
+  useEffect(() => {
+    if (machinesBlocked) {
+      setOpenSections((prev) =>
+        prev.has("maschinen") ? prev : new Set(prev).add("maschinen"),
+      )
+    }
+  }, [machinesBlocked])
   const toggle = (id: string) =>
     setOpenSections((prev) => {
       const next = new Set(prev)
@@ -786,42 +829,39 @@ export function StepCheckout({
           title="Nutzungsgebühren"
           summary={`${persons.length} ${
             persons.length === 1 ? "Person" : "Personen"
-          } · ${USAGE_TYPE_LABELS[usageType]}`}
+          }`}
           amount={personFeesNet}
           open={openSections.has("nutzung")}
           onToggle={() => toggle("nutzung")}
         >
-          <div className="mb-4 flex flex-col gap-1.5">
-            <Label
-              htmlFor="usage-type"
-              className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Nutzungsart
-            </Label>
-            <UsageTypeSelect
-              id="usage-type"
-              value={usageType}
-              onChange={setUsageType}
-              anonymous={anonymous}
-              hasMachineUsage={nfcItems.length > 0}
-            />
-          </div>
-
-          <DetailLabel>Personen</DetailLabel>
-          <ul className="flex flex-col mt-1">
+          {/* Read-only: the Nutzungsart is chosen per person on the
+              check-in (issue #605). */}
+          <ul className="flex flex-col">
             {persons.map((p) => {
-              // Billed (net) fee per person after the usage-type discount.
-              const fee = calculateFee(p.userType, usageType, config) ?? 0
+              const standard = standardFee(p.userType, config)
+              const fee =
+                standard === null
+                  ? 0
+                  : personEntryFee(p, usageType, () => standard)
               return (
                 <li
                   key={p.id}
-                  className="grid grid-cols-[1fr_auto_auto] items-baseline gap-3 py-1.5 text-sm border-b border-dotted border-border last:border-b-0"
+                  data-testid="usage-fee-person"
+                  className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 text-sm border-b border-dotted border-border last:border-b-0"
                 >
-                  <span className="font-medium text-foreground truncate">
-                    {p.firstName} {p.lastName}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {USER_TYPE_LABELS[p.userType]}
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground truncate">
+                      {p.firstName} {p.lastName}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {USER_TYPE_LABELS[p.userType]} ·{" "}
+                      {USAGE_TYPE_LABELS[p.usageType]}
+                      {p.entryFeeWaivedToday && (
+                        <span data-testid="usage-fee-waived-today">
+                          {" "}· {WAIVED_TODAY_LABEL}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <span className="font-medium tabular-nums text-right min-w-[70px]">
                     {formatCHF(fee)}
@@ -830,6 +870,25 @@ export function StepCheckout({
               )
             })}
           </ul>
+          {declarations.length > 0 && (
+            <div
+              data-testid="usage-type-declaration"
+              className="mt-4 flex items-start gap-[9px] rounded-[6px] border border-oww-gold-border bg-oww-gold-light px-[13px] py-[11px] text-[13px] leading-normal text-oww-gold-text"
+            >
+              <Info
+                className="mt-0.5 size-[15px] flex-none text-oww-gold-dark"
+                aria-hidden
+              />
+              <div className="text-pretty">
+                <p>Mit dem Abschluss bestätigst du:</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {declarations.map((d) => (
+                    <li key={d}>{d}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </ExpandableSection>
 
         <ExpandableSection
@@ -857,11 +916,28 @@ export function StepCheckout({
                 firstColLabel="Akkumulierte Nutzungszeit"
                 rows={nfcItems.map(machineRowFromItem)}
               />
-              {discount.machine < 1 && discountLabel && (
-                <SectionDiscountNote
-                  label={discountLabel}
-                  text="Maschinengebühren werden nicht verrechnet"
-                />
+              {machinesBlocked ? (
+                <div
+                  role="alert"
+                  data-testid="machine-usage-blocked"
+                  className="mt-3 flex items-start gap-2 rounded-[6px] border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive"
+                >
+                  <AlertCircle className="mt-0.5 size-[15px] flex-none" aria-hidden />
+                  <span>
+                    Maschinen wurden genutzt, aber alle Personen sind als „
+                    {USAGE_TYPE_LABELS.materialbezug}“ erfasst. Wähle beim
+                    Check-In für mindestens eine Person eine andere
+                    Nutzungsart.
+                  </span>
+                </div>
+              ) : (
+                discount.machine < 1 &&
+                discountLabel && (
+                  <SectionDiscountNote
+                    label={discountLabel}
+                    text="Maschinengebühren werden nicht verrechnet"
+                  />
+                )
               )}
             </>
           )}
@@ -939,7 +1015,7 @@ export function StepCheckout({
       <PaymentOptionCards
         choices={choices}
         onChoose={handleChoose}
-        disabled={submitting || total < 0}
+        disabled={submitting || total < 0 || machinesBlocked}
       />
       </div>
       </Fold>
@@ -990,14 +1066,6 @@ function SectionEyebrow({ children }: { children: React.ReactNode }) {
     <div className="text-[13px] font-heading font-bold uppercase tracking-[0.08em] text-cog-teal-dark">
       {children}
     </div>
-  )
-}
-
-function DetailLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {children}
-    </span>
   )
 }
 

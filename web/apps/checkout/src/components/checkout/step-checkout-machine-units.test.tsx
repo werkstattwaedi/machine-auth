@@ -21,7 +21,6 @@ import {
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 import type { PricingConfig } from "@modules/lib/workshop-config"
-import type { UsageType } from "@modules/lib/pricing"
 
 afterEach(cleanup)
 
@@ -45,6 +44,7 @@ const persons: CheckoutPerson[] = [
     userType: "erwachsen",
     termsAccepted: true,
     isPreFilled: false,
+    usageType: "regular",
   },
 ]
 
@@ -79,13 +79,11 @@ const perPieceMachine: CheckoutItemLocal = {
 }
 
 function Harness({ items }: { items: CheckoutItemLocal[] }) {
-  const [usageType, setUsageType] = useState<UsageType>("regular")
   const [tip, setTip] = useState(0)
   return (
     <StepCheckout
       persons={persons}
-      usageType={usageType}
-      setUsageType={setUsageType}
+      visitUsageType="regular"
       tip={tip}
       setTip={setTip}
       paymentMethods={["rechnung"]}

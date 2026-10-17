@@ -44,7 +44,12 @@ import { SummaryField } from "@/components/visit/summary-fields"
 import { VisitStatusBadge } from "@/components/visit/visit-status-badge"
 import { CancelVisitDialog } from "@/components/visit/cancel-visit-dialog"
 import { correctionBlockedReason } from "@/lib/visit-correction"
+import { USAGE_TYPE_LABELS, type UsageType } from "@oww/shared"
 import { Ban, Loader2, MoveRight, Pencil, Trash2, X } from "lucide-react"
+
+function usageTypeLabel(t: string): string {
+  return USAGE_TYPE_LABELS[t as UsageType] ?? t
+}
 
 export const Route = createFileRoute("/_authenticated/visits/$checkoutId")({
   component: VisitDetailPage,
@@ -221,7 +226,17 @@ function VisitDetailPage() {
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <VisitStatusBadge status={visit.status} />
-        <Badge variant="outline">{visit.usageType}</Badge>
+        {/* Issue #605: the usage type is per person; older visits carry
+            only the visit's, which then stands for everyone. */}
+        {visit.persons?.length ? (
+          visit.persons.map((p, i) => (
+            <Badge key={`${p.name}-${i}`} variant="outline" data-testid="person-usage-type">
+              {p.name}: {usageTypeLabel(p.usageType ?? visit.usageType)}
+            </Badge>
+          ))
+        ) : (
+          <Badge variant="outline">{usageTypeLabel(visit.usageType)}</Badge>
+        )}
         <span className="text-muted-foreground">
           Beginn {formatDateTime(visit.created)}
           {visit.closedAt ? ` · abgeschlossen ${formatDateTime(visit.closedAt)}` : ""}

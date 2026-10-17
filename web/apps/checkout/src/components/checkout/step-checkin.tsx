@@ -3,11 +3,29 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { Checkbox } from "@modules/components/ui/checkbox"
-import { PersonCard, RemovePersonButton } from "./person-card"
+import {
+  PersonCard,
+  PersonUsageColumns,
+  RemovePersonButton,
+  type PersonUsageProps,
+} from "./person-card"
 import { NfcBadgeAffordance } from "./nfc-badge-affordance"
 import { CheckinSignin } from "./checkin-signin"
-import { Plus, ArrowRight, Check, Info, User, Users } from "lucide-react"
-import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
+import { AddPersonMenu } from "./add-person-menu"
+import { ArrowRight, Check, Info, User, Users } from "lucide-react"
+import type {
+  CheckoutPerson,
+  PersonsAction,
+  SavedPersonEntry,
+} from "./use-checkout-state"
+import {
+  USAGE_TYPE_LABELS,
+  USER_TYPE_LABELS,
+  isOwnerOnlyUsage,
+  standardFee,
+} from "@modules/lib/pricing"
+import { personEntryFee } from "@oww/shared"
+import type { PricingConfig } from "@modules/lib/workshop-config"
 import { validatePerson } from "./validation"
 import { cn } from "@modules/lib/utils"
 import { useAutoStartCountdown } from "./use-auto-start-countdown"
@@ -81,6 +99,16 @@ interface StepCheckinProps {
    * only). This is the checkout owner, whose line can't be removed.
    */
   ownerUserId?: string | null
+  /** Pricing config for the live per-person usage fee; null = not loaded. */
+  config?: PricingConfig | null
+  /**
+   * The identified person's saved persons (issue #605); offered under
+   * "Person hinzufügen" unless already on the visit. Empty / omitted for a
+   * guest check-in.
+   */
+  savedPersons?: readonly SavedPersonEntry[]
+  /** Stop suggesting a saved person; rejects when the delete failed. */
+  onDeleteSavedPerson?: (saved: SavedPersonEntry) => Promise<void>
 }
 
 // Footer buttons (design handoff): 42px teal primary / outline-teal
@@ -90,7 +118,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, config = null, savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -180,10 +208,17 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     }
   }
 
+  // With everyone on Begleitung nobody works in the workshop: there is no
+  // visit to start, so "Material erfassen" becomes the default and "Besuch
+  // starten" is greyed out (KIO-21).
+  const nobodyWorks =
+    persons.length > 0 && persons.every((p) => p.usageType === "materialbezug")
+
   // Issue #732: the kiosk's default action after a badge tap. Fires the
   // same validated "Besuch starten" path as a click.
   const countdown = useAutoStartCountdown({
-    durationMs: onStartVisit && !visitStarted ? autoStartMs : undefined,
+    durationMs:
+      onStartVisit && !visitStarted && !nobodyWorks ? autoStartMs : undefined,
     onFire: () => void handleAction(onStartVisit),
     onCancel: onCountdownCancel,
   })
@@ -192,6 +227,40 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
     setSubmitted(false)
     personsDispatch({ type: "ADD_PERSON" })
   }
+  const handleAddSaved = (saved: SavedPersonEntry) => {
+    setSubmitted(false)
+    personsDispatch({ type: "ADD_SAVED_PERSON", saved })
+  }
+
+  // Issue #605: every person picks their own Nutzungsart, and the fee
+  // beside it follows live.
+  const othersPresent = persons.length > 1
+  const usageFor = (person: CheckoutPerson): PersonUsageProps => {
+    const standard = standardFee(person.userType, config)
+    return {
+      anonymous: isAnonymous,
+      othersPresent,
+      fee:
+        standard === null
+          ? null
+          : personEntryFee(person, "regular", () => standard),
+    }
+  }
+  const setUsage = (person: CheckoutPerson) => (usageType: CheckoutPerson["usageType"]) =>
+    personsDispatch({ type: "UPDATE_PERSON", id: person.id, updates: { usageType } })
+
+  // Freiwilligengruppe / Interne Nutzung on the owner's line: everyone
+  // checks in on their own then, so nobody can be added (CHK-32).
+  const ownerPerson = owner ? persons.find((p) => p.userId === owner) : undefined
+  const addDisabledReason =
+    ownerPerson && isOwnerOnlyUsage(ownerPerson.usageType)
+      ? `Bei „${USAGE_TYPE_LABELS[ownerPerson.usageType]}“ checkt jede Person selbst ein.`
+      : undefined
+  const savedOffered = isAnonymous
+    ? []
+    : savedPersons.filter(
+        (s) => !persons.some((p) => p.savedPersonId === s.id),
+      )
 
   // The person list renders in the guest section (anonymous) and in the
   // signed-in view (identified). Kept as one block: identity strips only
@@ -210,14 +279,38 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
         // ADR-0048) render as the compact identity strip — there's nothing
         // to edit. Anonymous / kiosk first-time
         // entries fall through to the full PersonCard form.
-        if (isSignedInUser || (person.isPreFilled && person.userId)) {
+        // Issue #605: a saved person has nothing to type either.
+        const isSaved = !isAnonymous && !!person.savedPersonId
+        if (isSignedInUser || (person.isPreFilled && person.userId) || isSaved) {
+          const isOwnerLine = !!person.userId && person.userId === owner
           return (
             <IdentityStrip
               key={person.id}
               person={person}
               index={i}
-              email={isSignedInUser ? (signedInEmail ?? person.email) : person.email}
-              suffix={isSignedInUser && isMember ? "Vereinsmitglied" : null}
+              email={
+                isSaved
+                  ? null
+                  : isSignedInUser
+                    ? (signedInEmail ?? person.email)
+                    : person.email
+              }
+              suffix={
+                isSaved
+                  ? USER_TYPE_LABELS[person.userType]
+                  : isSignedInUser && isMember
+                    ? "Vereinsmitglied"
+                    : null
+              }
+              usage={
+                <PersonUsageColumns
+                  person={person}
+                  index={i}
+                  isOwner={isOwnerLine}
+                  usage={usageFor(person)}
+                  onChange={setUsage(person)}
+                />
+              }
               onRemove={
                 canRemovePerson(person)
                   ? () =>
@@ -242,6 +335,13 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             touched={touched[person.id]}
             submitted={submitted}
             onBlur={(field) => handleBlur(person.id, field)}
+            // Only the first person of a guest check-in can be a company
+            // (CHK-28).
+            allowFirma={i === 0 && isAnonymous}
+            usage={usageFor(person)}
+            // Issue #605: an identified session can keep a typed-in person
+            // for next time.
+            canSave={!isAnonymous && !person.userId && !person.savedPersonId}
             onRemove={
               canRemovePerson(person)
                 ? () =>
@@ -256,14 +356,17 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 
   const addPersonBlock = (
     <div className="flex flex-col items-start gap-3">
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-md border border-cog-teal bg-white px-4 py-2.5 text-sm font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light"
-          onClick={handleAddPerson}
-        >
-          <Plus className="h-4 w-4" />
-          Person hinzufügen
-        </button>
+        <AddPersonMenu
+          savedPersons={savedOffered}
+          onAddNew={handleAddPerson}
+          onAddSaved={handleAddSaved}
+          onDeleteSaved={async (saved) => {
+            await onDeleteSavedPerson?.(saved)
+          }}
+          disabledReason={addDisabledReason}
+          // Opening the menu is a touch: the kiosk countdown stops (#732).
+          onOpen={onCountdownCancel}
+        />
 
         {isAnonymous && (
           <div className="space-y-3 pt-2">
@@ -435,7 +538,7 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
             <>
               <button
                 type="button"
-                className={FOOTER_SECONDARY}
+                className={nobodyWorks ? FOOTER_PRIMARY : FOOTER_SECONDARY}
                 onClick={() => handleAction(onAdvance)}
                 disabled={advancing}
               >
@@ -444,9 +547,12 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               </button>
               <button
                 type="button"
-                className={cn(FOOTER_PRIMARY, "relative overflow-hidden")}
+                className={cn(
+                  nobodyWorks ? FOOTER_SECONDARY : FOOTER_PRIMARY,
+                  "relative overflow-hidden",
+                )}
                 onClick={() => handleAction(onStartVisit)}
-                disabled={advancing}
+                disabled={advancing || nobodyWorks}
                 data-testid="checkin-start-visit"
                 data-countdown={countdown.running ? "running" : undefined}
               >
@@ -507,12 +613,15 @@ function IdentityStrip({
   index,
   email,
   suffix,
+  usage,
   onRemove,
 }: {
   person: CheckoutPerson
   index: number
   email: string | null
   suffix: string | null
+  /** The Nutzungsart + fee columns (issue #605). */
+  usage: React.ReactNode
   onRemove?: () => void
 }) {
   const name = `${person.firstName} ${person.lastName}`.trim() || "—"
@@ -520,19 +629,28 @@ function IdentityStrip({
   return (
     <div
       data-testid="identity-strip"
-      className="flex items-center gap-4 rounded-[10px] bg-[#f6f6f5] px-4 py-4 sm:px-6 sm:py-5 animate-in fade-in duration-200"
+      // Name | Nutzungsart | Nutzungsgebühr (| remove) — the three columns
+      // stack on a phone, with the remove button staying top-right.
+      className="relative grid grid-cols-1 gap-4 rounded-[10px] bg-[#f6f6f5] px-4 py-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start sm:px-6 sm:py-5 animate-in fade-in duration-200"
     >
-      <div className="min-w-0 flex-1">
+      <div className={cn("min-w-0", onRemove && "pr-10 sm:pr-0")}>
         <div className="truncate font-heading text-lg font-bold text-foreground">
           {name}
         </div>
         {subtitleParts.length > 0 && (
-          <div className="mt-0.5 truncate text-sm text-muted-foreground">
+          <div className="mt-0.5 text-sm text-muted-foreground sm:truncate">
             {subtitleParts.join(" · ")}
           </div>
         )}
       </div>
-      {onRemove && <RemovePersonButton index={index} onRemove={onRemove} />}
+      {usage}
+      {onRemove ? (
+        <div className="absolute right-3 top-3 sm:static">
+          <RemovePersonButton index={index} onRemove={onRemove} />
+        </div>
+      ) : (
+        <span className="hidden sm:block sm:w-8" aria-hidden />
+      )}
     </div>
   )
 }

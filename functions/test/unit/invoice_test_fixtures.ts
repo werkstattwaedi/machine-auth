@@ -107,7 +107,7 @@ export function membershipOnlyInvoice(): InvoiceData {
         // materialbezug waiver lives in the discount multiplier. The
         // membership-only carve-out must key off the NET fee, so a non-zero
         // raw fee here is what guards that gate.
-        personEntryFees: [{ name: "Marco Mitglied", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Marco Mitglied", userType: "erwachsen", fee: 15, usageType: "materialbezug", netFee: 0 }],
         items: [makeMembershipItem("Mitgliedschaft — Einzel", 80)],
         workshopsVisited: ["diverses"],
         entryFees: 15,
@@ -140,7 +140,7 @@ export function badgeOnlyInvoice(): InvoiceData {
       {
         ...base.checkouts[0],
         persons: [{ name: "Bea Badge", email: "bea@example.com", userType: "erwachsen" }],
-        personEntryFees: [{ name: "Bea Badge", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Bea Badge", userType: "erwachsen", fee: 15, usageType: "materialbezug", netFee: 0 }],
         items: [
           makeItem({
             description: "Badge — Standard",
@@ -202,7 +202,7 @@ export function membershipMixedInvoice(): InvoiceData {
         persons: [
           { name: "Nina Neu", email: "nina@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Nina Neu", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Nina Neu", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [
           makeMembershipItem("Mitgliedschaft — Einzel", 80),
           makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", pricingModel: "area", quantity: 0.5, unitPrice: 25, totalPrice: 12.5 }),
@@ -272,7 +272,7 @@ export function singleCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Max Mustermann", email: "max@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Max Mustermann", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Max Mustermann", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [
           makeItem({ description: "Stationäre Maschinen", workshop: "holz", pricingModel: "time", quantity: 0.5, unitPrice: 50, totalPrice: 25 }),
           makeItem({ description: "Sperrholz Birke 4mm", workshop: "holz", pricingModel: "area", quantity: 0.5, unitPrice: 25, totalPrice: 12.50 }),
@@ -317,7 +317,7 @@ export function firmaCheckoutInvoice(): InvoiceData {
             billingAddress: { company: "Muster AG", street: "Industriestrasse 42", zip: "8001", city: "Zürich" },
           },
         ],
-        personEntryFees: [{ name: "Hans Firma", userType: "firma", fee: 30 }],
+        personEntryFees: [{ name: "Hans Firma", userType: "firma", fee: 30, usageType: "regular", netFee: 30 }],
         items: [
           makeItem({ description: "CNC Fräse", workshop: "holz", pricingModel: "time", quantity: 2, unitPrice: 40, totalPrice: 80 }),
         ],
@@ -356,7 +356,7 @@ export function multiCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [
           makeItem({ description: "Stationäre Maschinen", workshop: "holz", pricingModel: "time", quantity: 0.25, unitPrice: 60, totalPrice: 15 }),
         ],
@@ -373,7 +373,7 @@ export function multiCheckoutInvoice(): InvoiceData {
         persons: [
           { name: "Lisa Beispiel", email: "lisa@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Lisa Beispiel", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [
           makeItem({ description: "Schweissen", workshop: "metall", pricingModel: "time", quantity: 1, unitPrice: 40, totalPrice: 40 }),
           makeItem({ description: "Stahl 2mm", workshop: "metall", pricingModel: "weight", quantity: 2, unitPrice: 4, totalPrice: 8 }),
@@ -435,8 +435,8 @@ export function longInvoice(): InvoiceData {
           { name: "Anna Müller", email: "anna@schreinerei-mueller.ch", userType: "erwachsen" },
         ],
         personEntryFees: [
-          { name: "Peter Müller", userType: "firma", fee: 30 },
-          { name: "Anna Müller", userType: "erwachsen", fee: 15 },
+          { name: "Peter Müller", userType: "firma", fee: 30, usageType: "regular", netFee: 30 },
+          { name: "Anna Müller", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 },
         ],
         items: [
           // time
@@ -469,7 +469,7 @@ export function longInvoice(): InvoiceData {
             billingAddress: { company: "Schreinerei Müller GmbH", street: "Werkgasse 17", zip: "8820", city: "Wädenswil" },
           },
         ],
-        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30 }],
+        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30, usageType: "regular", netFee: 30 }],
         items: [
           // time
           makeItem({ description: "Schweissplatz", workshop: "metall", pricingModel: "time", quantity: 2, unitPrice: 40, totalPrice: 80 }),
@@ -497,7 +497,7 @@ export function longInvoice(): InvoiceData {
             billingAddress: { company: "Schreinerei Müller GmbH", street: "Werkgasse 17", zip: "8820", city: "Wädenswil" },
           },
         ],
-        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30 }],
+        personEntryFees: [{ name: "Peter Müller", userType: "firma", fee: 30, usageType: "regular", netFee: 30 }],
         items: [
           makeItem({ description: "Lasercutter", workshop: "makerspace", pricingModel: "time", quantity: 0.75, unitPrice: 60, totalPrice: 45 }),
           makeItem({ description: "Acrylglas 3mm transparent", workshop: "makerspace", pricingModel: "area", quantity: 0.3, unitPrice: 50, totalPrice: 15 }),
@@ -609,7 +609,7 @@ export function freeZeroAmountInvoice(): InvoiceData {
         ],
         // Intern usageType zeros entry fees server-side, so the per-person
         // line is rendered with fee=0.
-        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 0 }],
+        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 0, usageType: "intern", netFee: 0 }],
         items: [],
         workshopsVisited: ["holz"],
         entryFees: 0,
@@ -654,7 +654,7 @@ export function volunteeringDiscountInvoice(): InvoiceData {
           { name: "Vera Freiwillig", email: "vera@example.com", userType: "erwachsen" },
         ],
         // RAW fee — the renderer waives it via the discount line (issue #284).
-        personEntryFees: [{ name: "Vera Freiwillig", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Vera Freiwillig", userType: "erwachsen", fee: 15, usageType: "volunteering", netFee: 0 }],
         items: [
           // Machine usage — waived for volunteering.
           makeItem({ description: "Stationäre Maschinen", workshop: "holz", origin: "nfc", pricingModel: "time", quantity: 1, unitPrice: 25, totalPrice: 25 }),
@@ -704,7 +704,7 @@ export function internDiscountInvoice(): InvoiceData {
         persons: [
           { name: "Ines Intern", email: "ines@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Ines Intern", userType: "erwachsen", fee: 15, usageType: "intern", netFee: 0 }],
         items: [
           makeItem({ description: "Laser", workshop: "makerspace", origin: "nfc", pricingModel: "time", quantity: 0.5, unitPrice: 60, totalPrice: 30 }),
           makeItem({ description: "MDF 10mm", workshop: "makerspace", pricingModel: "area", quantity: 4, unitPrice: 11.25, totalPrice: 45 }),
@@ -752,7 +752,7 @@ export function registeredUserInvoice(): InvoiceData {
         persons: [
           { name: "Mike Schneider", email: "mike@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Mike Schneider", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Mike Schneider", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [
           makeItem({ description: "Tischfräse", workshop: "holz", pricingModel: "time", quantity: 1, unitPrice: 25, totalPrice: 25 }),
         ],
@@ -792,7 +792,7 @@ export function zeroItemsInvoice(): InvoiceData {
         persons: [
           { name: "Erika Nur-Eintritt", email: "erika@example.com", userType: "erwachsen" },
         ],
-        personEntryFees: [{ name: "Erika Nur-Eintritt", userType: "erwachsen", fee: 15 }],
+        personEntryFees: [{ name: "Erika Nur-Eintritt", userType: "erwachsen", fee: 15, usageType: "regular", netFee: 15 }],
         items: [],
         workshopsVisited: ["holz"],
         entryFees: 15,
@@ -806,6 +806,53 @@ export function zeroItemsInvoice(): InvoiceData {
       holz: { label: "Holzwerkstatt", order: 1 },
     },
     grandTotal: 15,
+    currency: "CHF",
+  };
+}
+
+/**
+ * Issue #605: per-person usage types. The parent only accompanies
+ * (Begleitung / nur Materialbezug, no fee), the child pays the regular
+ * child fee. Each row names its usage type unless regular and shows what
+ * that person pays; there is no separate entry-discount row.
+ */
+export function perPersonUsageInvoice(): InvoiceData {
+  return {
+    referenceNumber: 520,
+    invoiceDate: zurich(2025, 8, 6),
+    billingAddress: {
+      company: "",
+      street: "Seeweg 2",
+      zip: "8820",
+      city: "Wädenswil",
+    },
+    recipientName: "Paula Begleitung",
+    checkouts: [
+      {
+        date: zurich(2025, 8, 6, 14, 0),
+        usageType: "regular",
+        persons: [
+          { name: "Paula Begleitung", email: "paula@example.com", userType: "erwachsen", usageType: "materialbezug" },
+          { name: "Kim Begleitung", email: "", userType: "kind", usageType: "regular" },
+        ],
+        personEntryFees: [
+          { name: "Paula Begleitung", userType: "erwachsen", fee: 15, usageType: "materialbezug", netFee: 0 },
+          { name: "Kim Begleitung", userType: "kind", fee: 7.5, usageType: "regular", netFee: 7.5 },
+        ],
+        items: [],
+        workshopsVisited: ["holz"],
+        // RAW section: both standard fees.
+        entryFees: 22.5,
+        machineCost: 0,
+        materialCost: 0,
+        tip: 0,
+        totalPrice: 7.5,
+      },
+    ],
+    workshops: {
+      holz: { label: "Holzwerkstatt", order: 1 },
+    },
+    grandTotal: 7.5,
     currency: "CHF",
   };
 }

@@ -276,6 +276,74 @@ describe("handleUploadUsage (Integration)", () => {
     });
   });
 
+  // CHK-40 (ADR-0050): machine time means the owner worked in the
+  // workshop — an owner on Begleitung moves to Reguläre Nutzung.
+  describe("owner usage type", () => {
+    it("switches an owner on Begleitung to regular; companions stay", async () => {
+      await seedBaseFixtures();
+      const db = getFirestore();
+      const ownerRef = db.doc(`users/${TEST_USER_ID}`);
+      await db.collection("checkouts").doc("co-po").set({
+        userId: ownerRef,
+        status: "open",
+        usageType: "materialbezug",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [
+          {
+            name: "Alice Adult",
+            email: "alice@example.com",
+            userType: "erwachsen",
+            userRef: ownerRef,
+            usageType: "materialbezug",
+          },
+          { name: "Kim Kid", email: "", userType: "kind", usageType: "materialbezug" },
+        ],
+        modifiedBy: null,
+        modifiedAt: Timestamp.now(),
+      });
+
+      await handleUploadUsage(buildRequest([{}]), config);
+
+      const checkout = (await db.collection("checkouts").doc("co-po").get()).data()!;
+      expect(checkout.usageType).to.equal("regular");
+      expect(checkout.persons.map((p: { usageType: string }) => p.usageType)).to.deep.equal([
+        "regular",
+        "materialbezug",
+      ]);
+    });
+
+    it("leaves an owner on Interne Nutzung untouched", async () => {
+      await seedBaseFixtures();
+      const db = getFirestore();
+      const ownerRef = db.doc(`users/${TEST_USER_ID}`);
+      await db.collection("checkouts").doc("co-intern").set({
+        userId: ownerRef,
+        status: "open",
+        usageType: "intern",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [
+          {
+            name: "Alice Adult",
+            email: "alice@example.com",
+            userType: "erwachsen",
+            userRef: ownerRef,
+            usageType: "intern",
+          },
+        ],
+        modifiedBy: null,
+        modifiedAt: Timestamp.now(),
+      });
+
+      await handleUploadUsage(buildRequest([{}]), config);
+
+      const checkout = (await db.collection("checkouts").doc("co-intern").get()).data()!;
+      expect(checkout.usageType).to.equal("intern");
+      expect(checkout.persons[0].usageType).to.equal("intern");
+    });
+  });
+
   describe("xTool in-use billing", () => {
     const XTOOL_MACHINE_ID = "machine-laser";
     const XTOOL_CATALOG_ID = "catalog-holz-laserhour";

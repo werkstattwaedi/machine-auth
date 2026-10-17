@@ -52,7 +52,20 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
     erasure: "special",
     notes:
       "Deleted in one batch with the user's tokens (badge-in hard-rejects a " +
-      "token pointing at a missing user), then the Firebase Auth account.",
+      "token pointing at a missing user), then the Firebase Auth account. " +
+      "Its savedPersons subcollection is deleted first (see users/savedPersons).",
+  },
+  {
+    collection: "users/savedPersons",
+    piiFields: ["firstName", "lastName", "userType"],
+    legalBasis: "Contract (workshop usage — companions the account holder saved for the next check-in)",
+    retention: "Until erasure request (or the account holder removes the person)",
+    erasure: "delete",
+    notes:
+      "Third-party data the account holder entered (issue #605): name and " +
+      "user type only, never the usage type. Deleted with the owning users " +
+      "doc; the account holder deletes single entries in the check-in. " +
+      "Closed checkouts keep only the savedPersonId link.",
   },
   {
     collection: "tokens",

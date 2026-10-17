@@ -145,7 +145,7 @@ test.describe("Check-in step screenshots", () => {
     await expect(page).toHaveScreenshot("checkin-empty.png")
   })
 
-  test("two persons with company type", async ({ page }) => {
+  test("two persons, the first a company", async ({ page }) => {
     await goToCheckin(page)
     await openGuestSection(page)
 
@@ -153,12 +153,12 @@ test.describe("Check-in step screenshots", () => {
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
     await expect(page.getByRole("heading", { name: "Person 2" })).toBeVisible()
 
-    // Set second person to Firma
-    const person2 = page.getByTestId("person-card").nth(1)
-    await person2.getByText("Firma").click()
+    // Only the first person of a guest check-in can be a company (CHK-28)
+    const person1 = page.getByTestId("person-card").nth(0)
+    await person1.getByText("Firma").click()
 
     // Wait for billing address fields to appear
-    await expect(person2.getByText("Rechnungsadresse")).toBeVisible()
+    await expect(person1.getByText("Rechnungsadresse")).toBeVisible()
 
     await expect(page).toHaveScreenshot("checkin-two-persons-company.png")
   })

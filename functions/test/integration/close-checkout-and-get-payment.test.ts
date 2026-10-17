@@ -152,6 +152,8 @@ interface SeedOpenCheckoutOpts {
   persons?: CheckoutPersonEntity[];
   status?: "open" | "closed";
   billRef?: FirebaseFirestore.DocumentReference;
+  /** When the visit was opened; defaults to now. */
+  created?: Timestamp;
   closedAt?: Timestamp;
   summary?: CheckoutSummaryEntity;
 }
@@ -173,7 +175,7 @@ async function seedCheckout(
     userId: userRef as unknown as FirebaseFirestore.DocumentReference,
     status: opts.status ?? "open",
     usageType: "regular",
-    created: now,
+    created: opts.created ?? now,
     workshopsVisited: opts.workshopsVisited ?? ["holz"],
     persons: opts.persons ?? [ADULT],
     modifiedBy: opts.ownerUid,
@@ -269,6 +271,23 @@ interface CallOptions {
   data: Record<string, unknown>;
 }
 
+/**
+ * Test shorthand: most cases write the visit's type once as `data.usageType`.
+ * The callable takes a type per person only (ADR-0050), so it is stamped onto
+ * every person that has none and dropped from the request — what the wizard
+ * sends when everyone shares one type.
+ */
+function perPersonUsageType(data: Record<string, unknown>): Record<string, unknown> {
+  const { usageType, ...rest } = data;
+  if (usageType == null || !Array.isArray(rest.persons)) return data;
+  return {
+    ...rest,
+    persons: (rest.persons as Array<Record<string, unknown>>).map((p) =>
+      p.usageType != null ? p : { ...p, usageType },
+    ),
+  };
+}
+
 function buildRequest(opts: CallOptions): CallableRequest<unknown> {
   const auth =
     opts.uid != null
@@ -283,7 +302,7 @@ function buildRequest(opts: CallOptions): CallableRequest<unknown> {
         }
       : undefined;
   return {
-    data: opts.data,
+    data: perPersonUsageType(opts.data),
     auth,
     rawRequest: {},
     acceptsStreaming: false,
@@ -295,7 +314,7 @@ async function call(
 ): ReturnType<typeof closeCheckoutAndGetPaymentHandler> {
   return closeCheckoutAndGetPaymentHandler(
     // The handler is typed against the request schema, but for tests we want
-    // to also exercise invalid shapes (missing persons / usageType / both
+    // to also exercise invalid shapes (missing persons / per-person usageType / both
     // checkoutId+newCheckout). Cast to any to bypass the narrowed type.
     buildRequest(opts) as unknown as Parameters<
       typeof closeCheckoutAndGetPaymentHandler
@@ -845,7 +864,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       );
     });
 
-    it("rejects when usageType is missing", async () => {
+    it("rejects a person without a usage type", async () => {
       await expectHttpsError(
         () =>
           call({
@@ -1434,7 +1453,9 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId,
           usageType: "intern" as UsageType,
-          persons: [ADULT],
+          // Interne Nutzung is the owner's alone (CHK-32, issue #605): the
+          // owner line carries their id, as the client sends it (#741).
+          persons: [{ ...wire(ADULT), userId: uid }],
           summary: {
             totalPrice: 0,
             entryFees: 0,
@@ -1490,16 +1511,15 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
   });
 
   // -----------------------------------------------------------------------
-  // Issue #268: the daily usage fee is billed at most once per Zurich
-  // business day (boundary 03:00) per named person. These tests exercise
-  // the full server close path (markEntryFeeWaivedToday + recomputeSummary)
-  // against prior closed checkouts seeded with controlled close instants.
-  //
-  // They must FAIL on the pre-fix code (which always recharged the fee).
+  // Issue #268 / ADR-0050: the usage fee is billed at most once per Zurich
+  // business day (boundary 03:00) per person of an account — the owner by
+  // account, everyone else by name + person type — keyed on the day each
+  // visit was OPENED. These tests exercise the full server close path
+  // (markEntryFeeWaivedToday + recomputeSummary) against prior closed
+  // checkouts seeded with controlled open/close instants.
   // -----------------------------------------------------------------------
-  describe("issue #268: daily usage-fee dedup", () => {
-    // A person carrying a userRef is "named" (maps to a real account); only
-    // named persons are deduped. Build one for a given uid.
+  describe("issue #268: same-day usage-fee waiver", () => {
+    // The owner's own line carries a userRef (ADR-0048).
     function namedPerson(
       uid: string,
       base: CheckoutPersonEntity,
@@ -1509,15 +1529,17 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
     }
 
     /**
-     * Seed a CLOSED checkout that already billed `persons` an entry fee on a
-     * given instant. Used as the "prior visit today" the dedup checks
-     * against.
+     * Seed a CLOSED checkout listing `persons`, opened at `created`
+     * (default: `closedAt`) and closed at `closedAt`. Used as the "prior
+     * visit" the waiver checks against.
      */
     async function seedPriorClosedCheckout(args: {
       checkoutId: string;
       ownerUid: string;
       persons: CheckoutPersonEntity[];
       closedAt: Date;
+      created?: Date;
+      status?: "closed" | "cancelled";
       usageType?: UsageType;
       entryFees?: number;
     }): Promise<void> {
@@ -1525,9 +1547,9 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       const ts = Timestamp.fromDate(args.closedAt);
       const checkout: CheckoutEntity = {
         userId: db.collection("users").doc(args.ownerUid),
-        status: "closed",
+        status: args.status ?? "closed",
         usageType: args.usageType ?? "regular",
-        created: ts,
+        created: Timestamp.fromDate(args.created ?? args.closedAt),
         workshopsVisited: ["holz"],
         persons: args.persons,
         modifiedBy: args.ownerUid,
@@ -1682,8 +1704,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         },
       });
 
-      // The fee is waived iff the prior close shares a business day with the
-      // actual close instant ("now"). Compute the expectation from the same
+      // The fee is waived iff the prior visit's opening shares a business
+      // day with the current one's (seeded "now"). Compute the expectation from the same
       // `@oww/shared` helper the production code uses so the assertion is
       // deterministic in every wall-clock window. The previous hand-rolled
       // `nowZurichHour >= 3` heuristic was wrong whenever "now"'s Zurich
@@ -1698,35 +1720,39 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       }
     });
 
-    it("(d) always charges an anonymous person without a userRef", async () => {
-      const uid = "dedup-anon-person";
+    it("(d) waives a companion by name and person type, not by link", async () => {
+      const uid = "dedup-by-name";
       await seedUser(uid, "erwachsen");
-      // The owner is a real account, but the PERSON on the checkout has no
-      // userRef (a guest the account holder vouches for). Even with a prior
-      // same-day close for an anonymous person, the guest is always charged.
+      // A companion typed in by name (no userRef, never saved) was on an
+      // earlier visit of the same account today.
       await seedPriorClosedCheckout({
-        checkoutId: "co-prior-anon",
+        checkoutId: "co-prior-by-name",
         ownerUid: uid,
-        persons: [ADULT], // no userRef
+        persons: [ADULT, CHILD],
         closedAt: hoursAgoSameBusinessDay(4),
       });
 
-      await seedCheckout("co-guest", { ownerUid: uid, persons: [ADULT] });
+      await seedCheckout("co-by-name", { ownerUid: uid, persons: [ADULT, CHILD] });
 
       const result = await call({
         uid,
         data: {
-          checkoutId: "co-guest",
+          checkoutId: "co-by-name",
           usageType: "regular" as UsageType,
-          persons: [ADULT], // no userRef -> never deduped
+          persons: [
+            // Same person, words swapped and re-cased.
+            { ...wire(ADULT), name: "  adult  ALICE " },
+            // Same name, other person type: someone else.
+            { ...wire(CHILD), userType: "erwachsen" },
+          ],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
 
       expect(result.amount).to.equal("15.00");
-      const checkout = await getCheckout("co-guest");
-      expect(checkout.summary?.entryFees).to.equal(15);
-      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+      const checkout = await getCheckout("co-by-name");
+      expect(checkout.persons[0].entryFeeWaivedToday).to.equal(true);
+      expect(checkout.persons[1].entryFeeWaivedToday).to.not.equal(true);
     });
 
     it("(e) mixed group: waives the already-charged member, charges the new one", async () => {
@@ -1768,34 +1794,125 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(checkout.persons[1].entryFeeWaivedToday).to.not.equal(true); // kid
     });
 
-    it("does not waive when the prior same-day checkout itself waived the fee (no double-count chain)", async () => {
-      const uid = "dedup-chain";
+    // CHK-37: they pay the difference to what they paid today — here all of it.
+    it("charges the full fee after a Hangenmoos morning that cost nothing", async () => {
+      const uid = "dedup-any-fee";
       await seedUser(uid, "erwachsen");
       const person = namedPerson(uid, ADULT);
 
-      // A prior same-day checkout where the person was ALREADY waived
-      // (entryFeeWaivedToday) and billed 0 must not count as "paid today".
+      // The morning visit charged no usage fee at all.
       await seedPriorClosedCheckout({
-        checkoutId: "co-prior-waived",
+        checkoutId: "co-prior-hangenmoos",
         ownerUid: uid,
-        persons: [{ ...person, entryFeeWaivedToday: true }],
+        persons: [{ ...person, usageType: "hangenmoos" }],
+        usageType: "hangenmoos",
         closedAt: hoursAgoSameBusinessDay(4),
         entryFees: 0,
       });
 
-      await seedCheckout("co-after-waived", { ownerUid: uid, persons: [person] });
+      await seedCheckout("co-after-hangenmoos", { ownerUid: uid, persons: [person] });
 
       const result = await call({
         uid,
         data: {
-          checkoutId: "co-after-waived",
+          checkoutId: "co-after-hangenmoos",
           usageType: "regular" as UsageType,
           persons: [wire(person)],
           summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
         },
       });
 
-      // No genuine payment happened earlier, so the fee is charged now.
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-after-hangenmoos");
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+    });
+
+    it("ignores a cancelled visit", async () => {
+      const uid = "dedup-cancelled";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-cancelled",
+        ownerUid: uid,
+        persons: [person],
+        closedAt: hoursAgoSameBusinessDay(4),
+        status: "cancelled",
+      });
+
+      await seedCheckout("co-after-cancelled", { ownerUid: uid, persons: [person] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-after-cancelled",
+          usageType: "regular" as UsageType,
+          persons: [wire(person)],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      expect(result.amount).to.equal("15.00");
+    });
+
+    it("compares opening days: a visit opened yesterday doesn't cover today's", async () => {
+      const uid = "dedup-opened-yesterday";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      // Opened ~28h ago (a previous business day), closed only just now.
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-overnight",
+        ownerUid: uid,
+        persons: [person],
+        created: new Date(Date.now() - 28 * 3600 * 1000),
+        closedAt: hoursAgoSameBusinessDay(0),
+      });
+
+      await seedCheckout("co-today-fresh", { ownerUid: uid, persons: [person] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-today-fresh",
+          usageType: "regular" as UsageType,
+          persons: [wire(person)],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
+      expect(result.amount).to.equal("15.00");
+    });
+
+    it("compares opening days: a visit opened yesterday and closed today isn't covered by today's", async () => {
+      const uid = "dedup-current-yesterday";
+      await seedUser(uid, "erwachsen");
+      const person = namedPerson(uid, ADULT);
+
+      await seedPriorClosedCheckout({
+        checkoutId: "co-prior-today",
+        ownerUid: uid,
+        persons: [person],
+        closedAt: hoursAgoSameBusinessDay(0),
+      });
+
+      // The visit being closed now was opened the previous business day.
+      await seedCheckout("co-left-open", {
+        ownerUid: uid,
+        persons: [person],
+        created: Timestamp.fromDate(new Date(Date.now() - 28 * 3600 * 1000)),
+      });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-left-open",
+          usageType: "regular" as UsageType,
+          persons: [wire(person)],
+          summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+        },
+      });
+
       expect(result.amount).to.equal("15.00");
     });
   });
@@ -2031,7 +2148,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: opts.checkoutId ?? CHECKOUT_ID,
           usageType: opts.usageType ?? ("regular" as UsageType),
-          persons: [ADULT],
+          // An owner-only type needs the owner's line (CHK-32, ADR-0050).
+          persons: [opts.usageType === "intern" ? { ...wire(ADULT), userId: UID } : ADULT],
           summary: ZERO_SUMMARY,
           ...(paymentMethod !== undefined ? { paymentMethod } : {}),
         },
@@ -2301,6 +2419,216 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         expect(await listBills()).to.have.length(0);
         expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
       });
+    });
+  });
+
+  // Issue #605 (ADR-0050): each person carries their own usage type; the
+  // server derives the visit's and validates the owner-only types.
+  describe("per-person usage types (issue #605)", () => {
+    const EMPTY_SUMMARY = { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 };
+
+    function sameDayInstant(): Date {
+      const minuteAgo = new Date(Date.now() - 60_000);
+      return isSameBusinessDay(minuteAgo, new Date()) ? minuteAgo : new Date();
+    }
+
+    async function seedSavedPerson(ownerUid: string, id: string): Promise<void> {
+      await getFirestore()
+        .collection("users").doc(ownerUid)
+        .collection("savedPersons").doc(id)
+        .set({
+          firstName: "Kim",
+          lastName: "Kind",
+          userType: "kind",
+          createdAt: Timestamp.now(),
+          modifiedBy: ownerUid,
+          modifiedAt: Timestamp.now(),
+        });
+    }
+
+    it("bills each person by their own type and persists it", async () => {
+      const uid = "ppu-mixed";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      const owner = { ...ADULT, userRef: db.collection("users").doc(uid) };
+      await seedCheckout("co-ppu-mixed", { ownerUid: uid, persons: [owner, CHILD] });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-mixed",
+          persons: [
+            { ...wire(owner), usageType: "materialbezug" },
+            { ...wire(CHILD), usageType: "regular" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      // Accompanying adult free, child pays the regular child fee.
+      expect(result.amount).to.equal("7.50");
+      const checkout = await getCheckout("co-ppu-mixed");
+      expect(checkout.usageType).to.equal("regular");
+      expect(checkout.persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
+      expect(checkout.summary?.entryFees).to.equal(22.5);
+      expect(checkout.summary?.totalPrice).to.equal(7.5);
+    });
+
+    it("refuses machine time when every person is Begleitung", async () => {
+      const uid = "ppu-machine";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-machine", {
+        ownerUid: uid,
+        items: [{ origin: "nfc", type: "machine", quantity: 1, unitPrice: 25, totalPrice: 25 }],
+      });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-machine",
+              persons: [
+                { ...wire(ADULT), userId: uid, usageType: "materialbezug" },
+                { ...wire(CHILD), usageType: "materialbezug" },
+              ],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "failed-precondition",
+      );
+    });
+
+    it("refuses an owner-only type while others are on the visit", async () => {
+      const uid = "ppu-intern-group";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-intern-group", { ownerUid: uid });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-intern-group",
+              persons: [
+                { ...wire(ADULT), userId: uid, usageType: "intern" },
+                { ...wire(CHILD), usageType: "regular" },
+              ],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("refuses an owner-only type on a guest check-in", async () => {
+      await expectHttpsError(
+        () =>
+          call({
+            uid: null,
+            data: {
+              newCheckout: { userId: null, workshopsVisited: ["holz"], items: [] },
+              persons: [{ ...wire(ADULT), usageType: "volunteering" }],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("rejects an unknown per-person usage type", async () => {
+      const uid = "ppu-unknown";
+      await seedUser(uid, "erwachsen");
+      await seedCheckout("co-ppu-unknown", { ownerUid: uid });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-unknown",
+              persons: [{ ...wire(ADULT), userId: uid, usageType: "gratis" }],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("keeps a savedPersonId only when the owner's saved person exists", async () => {
+      const uid = "ppu-saved";
+      await seedUser(uid, "erwachsen");
+      await seedSavedPerson(uid, "kim");
+      await seedSavedPerson("someone-else", "theirs");
+      await seedCheckout("co-ppu-saved", { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-saved",
+          persons: [
+            { ...wire(ADULT), userId: uid, usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), name: "Repeat", usageType: "regular", savedPersonId: "kim" },
+            { ...wire(CHILD), name: "Forged", usageType: "regular", savedPersonId: "theirs" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      const checkout = await getCheckout("co-ppu-saved");
+      // The owner's own line never carries one; repeats and other owners'
+      // ids are dropped.
+      expect(checkout.persons.map((p) => p.savedPersonId ?? null)).to.deep.equal([
+        null,
+        "kim",
+        null,
+        null,
+      ]);
+    });
+
+    it("waives everyone who already paid on a visit opened the same day, saved or not", async () => {
+      const uid = "ppu-same-day-names";
+      const db = getFirestore();
+      await seedUser(uid, "erwachsen");
+      await seedSavedPerson(uid, "kim");
+      const at = Timestamp.fromDate(sameDayInstant());
+      await db.collection("checkouts").doc("co-ppu-names-prior").set({
+        userId: db.collection("users").doc(uid),
+        status: "closed",
+        usageType: "regular",
+        created: at,
+        closedAt: at,
+        workshopsVisited: ["holz"],
+        persons: [
+          // Owner only accompanied — no fee paid, so none covered (CHK-37).
+          { ...ADULT, userRef: db.collection("users").doc(uid), usageType: "materialbezug" },
+          { ...CHILD, savedPersonId: "kim", usageType: "regular" },
+        ],
+        modifiedBy: uid,
+        modifiedAt: at,
+        summary: { totalPrice: 7.5, entryFees: 22.5, machineCost: 0, materialCost: 0, tip: 0, discountAmount: 15 },
+      });
+      await seedCheckout("co-ppu-names-second", { ownerUid: uid });
+
+      const result = await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-names-second",
+          persons: [
+            { ...wire(ADULT), userId: uid, usageType: "regular" },
+            // Typed in again, not picked from the saved persons.
+            { ...wire(CHILD), name: "Kid Charlie", usageType: "regular" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+
+      // The owner pays the full fee now; the child already paid this morning.
+      expect(result.amount).to.equal("15.00");
+      const checkout = await getCheckout("co-ppu-names-second");
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
+      expect(checkout.persons[1].entryFeeWaivedToday).to.equal(true);
     });
   });
 });

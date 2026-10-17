@@ -3,6 +3,7 @@
 
 import { initializeApp, getApps, type App } from "firebase-admin/app"
 import {
+  FieldValue,
   getFirestore,
   Timestamp,
   type Firestore,
@@ -708,3 +709,49 @@ export async function openHeaderMenuEntry(
  * run tests (and screenshots) a screen that cannot exist.
  */
 export const KIOSK_DESKTOP_ONLY = "kiosk runs on a desktop-sized terminal only"
+
+/** Remove every saved person of a user (issue #605) — they outlive visits. */
+export async function clearSavedPersons(uid: string): Promise<void> {
+  const db = getAdminFirestore()
+  const snap = await db.collection("users").doc(uid).collection("savedPersons").get()
+  if (snap.empty) return
+  const batch = db.batch()
+  snap.docs.forEach((d) => batch.delete(d.ref))
+  await batch.commit()
+}
+
+/** Seed one saved person for `uid` (issue #605); returns its id. */
+export async function seedSavedPerson(
+  uid: string,
+  person: { firstName: string; lastName: string; userType: "erwachsen" | "kind" },
+): Promise<string> {
+  const db = getAdminFirestore()
+  const ref = await db
+    .collection("users")
+    .doc(uid)
+    .collection("savedPersons")
+    .add({
+      ...person,
+      createdAt: FieldValue.serverTimestamp(),
+      modifiedBy: uid,
+      modifiedAt: FieldValue.serverTimestamp(),
+    })
+  return ref.id
+}
+
+/** The saved persons of `uid`, by first name. */
+export async function getSavedPersons(uid: string) {
+  const db = getAdminFirestore()
+  const snap = await db
+    .collection("users")
+    .doc(uid)
+    .collection("savedPersons")
+    .orderBy("firstName")
+    .get()
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as {
+    id: string
+    firstName: string
+    lastName: string
+    userType: string
+  })
+}

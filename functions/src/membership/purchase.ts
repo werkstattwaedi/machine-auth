@@ -183,6 +183,7 @@ export async function handlePurchaseMembership(
           email: user.email ?? "",
           userType: user.userType ?? "erwachsen",
           userRef: callerRef as DocumentReference,
+          usageType: "materialbezug",
         },
       ],
       modifiedBy: callerRef.id,

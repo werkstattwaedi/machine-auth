@@ -73,6 +73,8 @@ export function buildVisitRow(
     workshops,
     person_count: persons.length,
     user_types: persons.map((p) => p.userType),
+    // REPEATED columns can't hold NULL; every checkout carries a usageType.
+    person_usage_types: persons.map((p) => p.usageType ?? checkout.usageType ?? "regular"),
     is_member: isMember,
     total_price: summary?.totalPrice ?? null,
     entry_fees: summary?.entryFees ?? null,

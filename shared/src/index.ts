@@ -13,6 +13,7 @@ export * from "./billing"
 export * from "./payment-methods"
 export * from "./checkout-summary"
 export * from "./checkout-kind"
+export * from "./same-day-fee"
 
 export * from "./rejection"
 export * from "./log-triage"

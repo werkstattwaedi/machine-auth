@@ -55,6 +55,7 @@ import {
   billMail,
   classifyBillKind,
   classifyCheckoutKind,
+  usageDiscount,
   type CheckoutKind,
   type MailName,
 } from "@oww/shared";
@@ -207,15 +208,25 @@ async function assembleInvoiceData(
     // day, so the close path zeroed their contribution to the bill total.
     // Re-derive their fee as 0 here too so the PDF's per-person breakdown
     // stays consistent with the billed amount; `waivedToday` lets the
-    // renderer annotate the row ("heute bereits abgerechnet").
-    const personEntryFees: PersonEntryFee[] = data.persons.map((person) => ({
-      name: person.name,
-      userType: person.userType,
-      fee: person.entryFeeWaivedToday
+    // renderer annotate the row ("heute bereits erfasst").
+    //
+    // Each person's own usage type discounts their fee (issue #605); older
+    // checkouts carry only the visit's. `fee` stays RAW so `entryFees`
+    // matches the summary's raw section; `netFee` is what the row shows.
+    const personEntryFees: PersonEntryFee[] = data.persons.map((person) => {
+      const usageType = person.usageType ?? data.usageType;
+      const fee = person.entryFeeWaivedToday
         ? 0
-        : calculateEntryFee(person.userType, data.usageType, configFees),
-      waivedToday: person.entryFeeWaivedToday === true,
-    }));
+        : calculateEntryFee(person.userType, usageType, configFees);
+      return {
+        name: person.name,
+        userType: person.userType,
+        fee,
+        usageType,
+        netFee: Math.round(fee * usageDiscount(usageType).entryFee * 100) / 100,
+        waivedToday: person.entryFeeWaivedToday === true,
+      };
+    });
     const entryFees = personEntryFees.reduce((sum, pf) => sum + pf.fee, 0);
 
     const machineCost = data.summary?.machineCost ?? 0;

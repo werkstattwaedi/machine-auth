@@ -21,6 +21,7 @@ the map wins on conflict):
 | Data | Where | Legal basis | Retention |
 |---|---|---|---|
 | Account (name, email, address) | `users`, Firebase Auth | Contract | Until erasure |
+| Saved persons — companions an account holder saved for the next check-in (name, user type; issue #605) | `users/{uid}/savedPersons` | Contract | Until the holder removes them or the account is erased |
 | NFC badge (tag UID) | `tokens`, `items.tokenId` | Contract | Until erasure |
 | Visits incl. guests' names/emails; admin cancellation reason (ADR-0042) | `checkouts` (+ `persons[]`) | Contract | 3 years (cancelled visits age out the same way) |
 | Machine usage | `usage_machine` | Contract | 3 years |
@@ -54,7 +55,8 @@ FIREBASE_PROJECT_ID=oww-maco npx tsx scripts/privacy-cli.ts report \
 ```
 
 The JSON contains the full subject graph (auth account, user doc, badges,
-visits incl. items, appearances in other people's checkouts — the
+saved persons, visits incl. items (co-visitors reduced to user type and
+usage type), appearances in other people's checkouts — the
 subject's own entry only —, invoices + PDF list, machine usage,
 memberships, invites, login codes, machine reports, audit-log counts), the
 statistics disclosure, this processor list, and the residuals. Manual
@@ -77,7 +79,8 @@ npx tsx scripts/privacy-cli.ts erase --email person@example.com \
 
 The engine flushes unexported stats first, deletes the subject graph,
 moves invoice PDFs to the escrow archive, redacts the person out of other
-people's checkouts, deletes the Auth account, and purges the audit log —
+people's checkouts (keeping only user type and usage type), deletes the
+saved persons together with the account, deletes the Auth account, and purges the audit log —
 then the CLI waits ~60s and repeats the purge until the async audit
 triggers stop producing entries. The receipt (`erasures/{subjectId}`,
 PII-free) is the proof of erasure; keep it.
@@ -131,6 +134,11 @@ invoice PDFs remain in a locked archive for the legal 10 years.
 - **Free text**: `operations_log.message` (error payloads can embed
   emails) and `machine_reports.message` (self-disclosed details) persist
   until the 3-year trim; redact manually on request.
+- **Saved persons as data subjects**: a saved person carries no e-mail,
+  so the tools can't find one from their own request. Look them up by
+  name across the `savedPersons` subcollections by hand (there is no index
+  for it) and delete the matching docs; closed checkouts keep only an opaque `savedPersonId`, which
+  resolves to nothing afterwards.
 - **Dangling identifiers**: paths/UIDs in receipts and old references
   resolve to nothing after erasure (`resolveRef` falls back to the raw
   id).

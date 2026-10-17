@@ -42,6 +42,7 @@ import type {
   PrintJobDoc,
   PriceListDoc,
   PricingConfigDoc,
+  SavedPersonDoc,
   TokenDoc,
   UsageMachineDoc,
   UserDoc,
@@ -55,6 +56,32 @@ export function usersCollection(db: Firestore): CollectionReference<UserDoc> {
 
 export function userRef(db: Firestore, id: string): DocumentReference<UserDoc> {
   return doc(db, "users", id) as DocumentReference<UserDoc>
+}
+
+export function savedPersonsCollection(
+  db: Firestore,
+  userId: string,
+): CollectionReference<SavedPersonDoc> {
+  return collection(
+    db,
+    "users",
+    userId,
+    "savedPersons",
+  ) as CollectionReference<SavedPersonDoc>
+}
+
+export function savedPersonRef(
+  db: Firestore,
+  userId: string,
+  savedPersonId: string,
+): DocumentReference<SavedPersonDoc> {
+  return doc(
+    db,
+    "users",
+    userId,
+    "savedPersons",
+    savedPersonId,
+  ) as DocumentReference<SavedPersonDoc>
 }
 
 // ── machine ──────────────────────────────────────────────────────────────

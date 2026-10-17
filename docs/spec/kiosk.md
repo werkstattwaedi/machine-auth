@@ -29,12 +29,13 @@ TWINT, and when the kiosk resets. The check-in itself follows
 - **KIO-17** A stopped countdown does not start again on that check-in. — #732
 - **KIO-3** "Material erfassen" continues to Kosten on the kiosk, like "Weiter" on an own device (CHK-3). — #463
 - **KIO-5** A person with a started visit (CHK-9) sees only "Material erfassen" on the kiosk check-in. — #465, #732
-- **KIO-18** A person with an open purchase-only checkout (CHK-5) sees both buttons, and they act on that checkout — #666, #732:
+- **KIO-21** While every person on the kiosk check-in is on *Begleitung / nur Materialbezug*, "Besuch starten" can't be pressed and runs no countdown (KIO-10), and "Material erfassen" is the emphasised button instead; as soon as one person is on another usage type, "Besuch starten" is back as before. — ADR-0050, #758
+- **KIO-18** A person with an open purchase-only checkout (CHK-9) sees both buttons, and they act on that checkout with the persons and usage types as entered on the check-in (CHK-4) — #666, #732, ADR-0050, #605:
 
   | Button | The purchase-only checkout |
   |---|---|
-  | "Besuch starten" | becomes a visit of type *Reguläre Nutzung* |
-  | "Material erfassen" | stays as it is; the usage type is chosen on Check Out (CHK-4) |
+  | "Besuch starten" | becomes a visit by those types (CHK-9) — it can be pressed only once someone is on another usage type than *Begleitung / nur Materialbezug* (KIO-21) |
+  | "Material erfassen" | continues to Kosten; it is a purchase-only checkout or a visit by those types (CHK-9) |
 
 ## Second badge
 

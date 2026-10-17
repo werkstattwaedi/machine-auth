@@ -222,15 +222,25 @@ export interface CheckoutPersonEntity {
   // checkouts may link a login-less family member (ADR-0029).
   userRef?: DocumentReference | null;
 
-  // True when this (named) person already paid the daily usage fee on the
-  // same Zurich business day (boundary 03:00) via an earlier closed
-  // checkout, so their entry fee is waived for this one (issue #268). Only
-  // ever set for persons that carry a `userRef` (anonymous/guest persons
-  // are always charged). Derived authoritatively at checkout-close time
-  // from prior bills — there is no separate denormalized "charged today"
-  // record. The invoice PDF reads this flag so the per-person fee it
-  // re-derives stays consistent with the billed total.
+  // True when this person was already on another closed visit of the same
+  // account opened on the same Zurich business day (boundary 03:00), so
+  // their usage fee is waived for this one (issue #268, ADR-0050): the
+  // owner matched by account, everyone else by name + person type. Never
+  // set on a guest checkout. Derived authoritatively at close time from
+  // the account's closed checkouts — there is no separate denormalized
+  // "charged today" record. The invoice PDF reads this flag so the
+  // per-person fee it re-derives stays consistent with the billed total.
   entryFeeWaivedToday?: boolean;
+
+  // The person's own usage type (issue #605, ADR-0050): decides their usage
+  // fee. Absent on checkouts closed before #605 — readers fall back to the
+  // checkout's top-level `usageType` (`person.usageType ?? checkout.usageType`).
+  usageType?: UsageType;
+
+  // users/{owner}/savedPersons/{id} this line was added from (issue #605).
+  // Kept only when that doc exists at close; a plain link — the same-day
+  // waiver matches by name (ADR-0050).
+  savedPersonId?: string;
 }
 
 export interface CheckoutSummaryEntity {
@@ -257,6 +267,10 @@ export interface CheckoutSummaryEntity {
 export interface CheckoutEntity {
   userId: DocumentReference; // Reference to /users/{userId}
   status: CheckoutStatus;
+  // The visit's type (issue #605): derived from the persons at close
+  // (`deriveVisitUsageType`); decides machine time and material.
+  // `materialbezug` — nobody works in the workshop — marks a purchase-only
+  // checkout (CHK-9, `isPurchaseOnly`).
   usageType: UsageType;
   created: Timestamp;
   workshopsVisited: string[];
@@ -385,4 +399,18 @@ export interface MembershipInviteEntity {
   resolvedAt: Timestamp | null;
   resolvedUserId?: DocumentReference | null;
   ttlAt: Timestamp;
+}
+
+/**
+ * users/{uid}/savedPersons/{id} (issue #605): a companion the account holder
+ * saved on a check-in to pick again next time. Name and user type only —
+ * never the usage type. Create and delete only; deleted with the owner.
+ */
+export interface SavedPersonEntity {
+  firstName: string;
+  lastName: string;
+  userType: "erwachsen" | "kind";
+  createdAt: Timestamp;
+  modifiedBy: string | null;
+  modifiedAt: Timestamp;
 }

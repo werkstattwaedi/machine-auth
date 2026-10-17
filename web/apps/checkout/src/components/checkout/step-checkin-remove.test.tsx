@@ -24,6 +24,7 @@ const self: CheckoutPerson = {
   userType: "erwachsen",
   termsAccepted: true,
   isPreFilled: true,
+  usageType: "regular",
   userId: "u-self",
 }
 const kid: CheckoutPerson = {
@@ -34,6 +35,7 @@ const kid: CheckoutPerson = {
   userType: "kind",
   termsAccepted: true,
   isPreFilled: true,
+  usageType: "regular",
   userId: "u-kid",
 }
 const guest: CheckoutPerson = {
@@ -44,6 +46,7 @@ const guest: CheckoutPerson = {
   userType: "erwachsen",
   termsAccepted: false,
   isPreFilled: false,
+  usageType: "regular",
 }
 
 function renderCheckin(persons: CheckoutPerson[]) {

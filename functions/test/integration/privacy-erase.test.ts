@@ -156,7 +156,7 @@ describe("privacy erase (integration)", function () {
       workshopsVisited: [],
       persons: [
         { name: "Other Person", email: "u2@example.com", userType: "erwachsen" },
-        { name: "Erika Muster", email: "u1@example.com", userType: "erwachsen", userRef: u1 },
+        { name: "Erika Muster", email: "u1@example.com", userType: "erwachsen", userRef: u1, usageType: "materialbezug" },
       ],
       modifiedBy: null,
       modifiedAt: ts("2026-07-02T12:00:00Z"),
@@ -234,6 +234,15 @@ describe("privacy erase (integration)", function () {
       resolvedAt: null,
       ttlAt: ts("2025-01-01T00:00:00Z"),
     });
+    // A companion Erika saved for the next check-in (issue #605).
+    await db.doc("users/u1/savedPersons/sp1").set({
+      firstName: "Kim",
+      lastName: "Muster",
+      userType: "kind",
+      createdAt: ts("2026-07-01T09:00:00Z"),
+      modifiedBy: "u1",
+      modifiedAt: ts("2026-07-01T09:00:00Z"),
+    });
     await db.collection("loginCodes").add({
       email: "u1@example.com",
       codeHash: "x",
@@ -288,6 +297,7 @@ describe("privacy erase (integration)", function () {
 
     // Identity + owned data gone.
     expect((await db.doc("users/u1").get()).exists).to.equal(false);
+    expect((await db.doc("users/u1/savedPersons/sp1").get()).exists).to.equal(false);
     expect((await db.doc("tokens/aabbccdd").get()).exists).to.equal(false);
     expect((await db.doc("checkouts/co-own").get()).exists).to.equal(false);
     expect((await db.doc("checkouts/co-own/items/i1").get()).exists).to.equal(false);
@@ -313,6 +323,8 @@ describe("privacy erase (integration)", function () {
     expect(other.persons[1].name).to.equal("");
     expect(other.persons[1].email).to.equal("");
     expect(other.persons[1].userRef).to.equal(null);
+    // The usage type is a stats dimension, not identity (issue #605).
+    expect(other.persons[1].usageType).to.equal("materialbezug");
     const badge = (await db.doc("checkouts/co-other/items/badge").get()).data()!;
     expect(badge.tokenId).to.equal(null);
     expect(badge.badgeSdmCounter).to.equal(null);
@@ -503,6 +515,7 @@ describe("privacy erase (integration)", function () {
     expect(outcome.counts.checkouts).to.equal(1);
     expect(outcome.counts.tokens).to.equal(1);
     expect(outcome.counts.users).to.equal(1);
+    expect(outcome.counts["users/savedPersons"]).to.equal(1);
     expect(outcome.actions.length).to.be.greaterThan(5);
     expect((await db.doc("users/u1").get()).exists).to.equal(true);
     expect((await db.doc("erasures/u1").get()).exists).to.equal(false);

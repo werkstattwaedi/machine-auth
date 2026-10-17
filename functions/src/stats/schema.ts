@@ -58,6 +58,7 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "workshops", type: "STRING", mode: "REPEATED", description: "Distinct workshops across items (fallback workshopsVisited)" },
       { name: "person_count", type: "INT64" },
       { name: "user_types", type: "STRING", mode: "REPEATED", description: "persons[].userType, one entry per person" },
+      { name: "person_usage_types", type: "STRING", mode: "REPEATED", description: "Each person's usage type (persons[].usageType, the visit's usage_type before #605), aligned with user_types" },
       { name: "is_member", type: "BOOL", description: "Active membership at export time (T+1 approximation)" },
       { name: "total_price", type: "NUMERIC" },
       { name: "entry_fees", type: "NUMERIC" },

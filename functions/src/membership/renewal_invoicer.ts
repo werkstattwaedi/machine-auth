@@ -228,6 +228,7 @@ export async function runRenewalInvoicer(
           email: owner.email ?? "",
           userType: owner.userType ?? "erwachsen",
           userRef: ownerRef,
+          usageType: "materialbezug",
         },
       ],
       // The renewal is a real QR-Rechnung; mark the method up front so the
