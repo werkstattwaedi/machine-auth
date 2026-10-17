@@ -225,30 +225,36 @@ export function useTerminalPayment(args: {
   }, [])
 
   // After a dropped connection: Wallee closes the checkout within a second
-  // of a payment that went through. Watch it before calling it lost.
-  const watchedCheckoutId = terminal?.phase === "checking" ? terminal.checkoutId : null
+  // of a payment that went through. Watch it before calling it lost — and
+  // keep watching while "unknown" is shown, so a late confirmation still
+  // turns the screen to paid instead of offering to pay again.
+  const watchedCheckoutId =
+    terminal?.phase === "checking" || terminal?.phase === "unknown"
+      ? terminal.checkoutId
+      : null
   useEffect(() => {
     if (!watchedCheckoutId) return
     const run = runRef.current
-    const timer = setTimeout(() => update(run, { phase: "unknown" }), TERMINAL_CHECK_MS)
-    const unsubscribe = onSnapshot(
+    return onSnapshot(
       checkoutRef(db, watchedCheckoutId),
       (snap) => {
         const doc = snap.data()
         if (doc && doc.status !== "open" && doc.paymentMethod === "wallee_terminal") {
-          clearTimeout(timer)
           update(run, { phase: "approved" })
         }
       },
       () => {
-        // A read error proves nothing either way: let the timer decide.
+        // A read error proves nothing either way: the timer decides.
       },
     )
-    return () => {
-      clearTimeout(timer)
-      unsubscribe()
-    }
   }, [watchedCheckoutId, db, update])
+  const checking = terminal?.phase === "checking"
+  useEffect(() => {
+    if (!checking) return
+    const run = runRef.current
+    const timer = setTimeout(() => update(run, { phase: "unknown" }), TERMINAL_CHECK_MS)
+    return () => clearTimeout(timer)
+  }, [checking, update])
 
   return { terminal, start, abort, clear }
 }
