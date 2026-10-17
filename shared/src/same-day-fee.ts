@@ -12,14 +12,20 @@
  *   and person type — so a companion typed in again (or added from the
  *   saved persons) is recognised without being saved.
  * - Covered when the person is on another closed, non-cancelled visit of the
- *   same account that was *opened* on the same business day — whatever that
- *   line's usage type or fee was (a morning Hangenmoos visit covers the
- *   regular afternoon one).
+ *   same account that was *opened* on the same business day, on a usage
+ *   type whose fee is at least this line's — they pay the difference, which
+ *   for every combination that can occur is all or nothing. A morning on
+ *   Begleitung or Hangenmoos AG (no fee) covers nothing, so the regular
+ *   afternoon is charged; a regular morning covers a regular afternoon.
+ *   The person type is part of the identity, so comparing the usage types'
+ *   fee multipliers compares the fees.
+ * - A line that costs nothing anyway is never marked.
  * - Guests (no owner account) are never covered.
  */
 
 import { isSameBusinessDay } from "./business-day"
 import { isPurchaseOnly } from "./checkout-kind"
+import { personUsageType, usageDiscount, type UsageType } from "./pricing"
 
 /** A roster line as the waiver sees it (Firestore entity or wizard person). */
 export interface SameDayPerson {
@@ -27,6 +33,8 @@ export interface SameDayPerson {
   userType: string
   /** Set on the owner's own line (ADR-0048); older lines may link others. */
   userRef?: { id: string } | null
+  /** The line's own usage type (issue #605); older lines use the visit's. */
+  usageType?: UsageType | null
 }
 
 /** An earlier checkout of the same account. */
@@ -34,7 +42,7 @@ export interface SameDayCheckout {
   id: string
   status?: string | null
   cancelledAt?: unknown
-  usageType?: string | null
+  usageType?: UsageType | null
   /** When the visit was opened — decides its business day. */
   created?: Date | null
   /** When it was closed (legacy docs lack it: `created` stands in). */
@@ -73,9 +81,10 @@ export function samedayPersonKey(
 }
 
 /**
- * Which of `persons` (index-aligned) already appeared on another closed,
- * non-cancelled visit of `ownerId` opened on the same business day as
- * `openedAt`.
+ * Which of `persons` (index-aligned) already paid at least their fee here:
+ * they appeared on another closed, non-cancelled visit of `ownerId` opened
+ * on the same business day as `openedAt`, on a usage type whose fee is at
+ * least theirs now. A line without its own `usageType` counts as regular.
  *
  * `currentCheckoutId` is skipped (the visit being closed or corrected).
  * `closedBefore` limits the earlier visits to those closed before that
@@ -94,7 +103,9 @@ export function sameDayCoveredPersons(input: {
   const none = persons.map(() => false)
   if (!ownerId) return none
 
-  const seen = new Set<string>()
+  // Per person: the highest usage-fee multiplier they were on today. With
+  // "pay the difference" that is what they have paid in all.
+  const paid = new Map<string, number>()
   for (const c of input.earlierCheckouts) {
     if (input.currentCheckoutId && c.id === input.currentCheckoutId) continue
     // `status == "closed"` already excludes cancelled visits (ADR-0042);
@@ -109,13 +120,21 @@ export function sameDayCoveredPersons(input: {
     }
     for (const p of c.persons ?? []) {
       const key = samedayPersonKey(p, ownerId)
-      if (key) seen.add(key)
+      if (!key) continue
+      const m = feeMultiplier(p, c.usageType ?? "regular")
+      paid.set(key, Math.max(paid.get(key) ?? 0, m))
     }
   }
-  if (seen.size === 0) return none
+  if (paid.size === 0) return none
 
   return persons.map((p) => {
     const key = samedayPersonKey(p, ownerId)
-    return key !== null && seen.has(key)
+    if (key === null) return false
+    const due = feeMultiplier(p, "regular")
+    return due > 0 && (paid.get(key) ?? 0) >= due
   })
+}
+
+function feeMultiplier(person: SameDayPerson, visitUsageType: UsageType): number {
+  return usageDiscount(personUsageType(person, visitUsageType)).entryFee
 }

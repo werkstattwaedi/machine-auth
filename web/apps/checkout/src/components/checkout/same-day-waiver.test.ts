@@ -64,12 +64,12 @@ function closed(overrides: Partial<CheckoutDoc> = {}): CheckoutDoc & { id: strin
     id: "co-morning",
     userId: ref(OWNER),
     status: "closed",
-    usageType: "hangenmoos",
+    usageType: "regular",
     created: ts(morning),
     closedAt: ts(morning),
     workshopsVisited: ["holz"],
     persons: [
-      { name: "Max Muster", email: "", userType: "erwachsen", userRef: ref(OWNER), usageType: "hangenmoos" },
+      { name: "Max Muster", email: "", userType: "erwachsen", userRef: ref(OWNER), usageType: "regular" },
       { name: "keller  NOAH", email: "", userType: "kind", usageType: "regular" },
     ],
     ...overrides,
@@ -80,6 +80,18 @@ describe("withSameDayWaiver", () => {
   it("marks the owner and a companion by name already on a visit opened today", () => {
     const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [closed()], "co-open")
     expect(out.map((p) => p.entryFeeWaivedToday ?? false)).toEqual([true, true])
+  })
+
+  // CHK-37: a morning that cost nothing covers nothing in the afternoon.
+  it("leaves the owner unmarked after a Hangenmoos morning", () => {
+    const hangenmoos = closed({
+      usageType: "hangenmoos",
+      persons: [
+        { name: "Max Muster", email: "", userType: "erwachsen", userRef: ref(OWNER), usageType: "hangenmoos" },
+      ],
+    })
+    const out = withSameDayWaiver([owner], OWNER, openedAt, [hangenmoos], "co-open")
+    expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
   it("leaves a companion with another person type unmarked", () => {

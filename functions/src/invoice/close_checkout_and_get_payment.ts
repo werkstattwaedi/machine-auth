@@ -537,7 +537,8 @@ async function enforceAccountHolderUserType(
  * (boundary 03:00) of an account: the owner by account id, everyone else
  * by normalized name + person type. They are covered when they appear on
  * another closed, non-cancelled visit of the same owner *opened* on the
- * same business day as this one — whatever that line's usage type or fee.
+ * same business day as this one, on a usage type whose fee is at least
+ * theirs now — they pay the difference (CHK-37).
  * Guests (no owner) are always charged. The rule itself lives in
  * `@oww/shared` (`sameDayCoveredPersons`) so the checkout wizard previews
  * the same answer; this is the authoritative Firestore read.

@@ -97,12 +97,40 @@ describe("sameDayCoveredPersons", () => {
     expect(covered([{ name: "Bob Beta", userType: "kind" }], [visit()])).toEqual([false])
   })
 
-  it("covers regardless of the earlier line's usage type or fee", () => {
+  // CHK-37: they pay the difference to what they already paid today.
+  it("does not cover a fee the earlier line didn't pay (Begleitung, Hangenmoos)", () => {
+    for (const usageType of ["materialbezug", "hangenmoos"] as const) {
+      const earlier = visit({
+        usageType: "regular",
+        persons: [{ ...owner, usageType }, { ...anna, usageType: "regular" }],
+      })
+      expect(covered([{ ...owner, usageType: "regular" }], [earlier])).toEqual([false])
+    }
+  })
+
+  it("covers an earlier line that was itself waived — the fee was paid before", () => {
     const earlier = visit({
-      usageType: "hangenmoos",
-      persons: [{ ...owner, usageType: "hangenmoos", entryFeeWaivedToday: true } as SameDayPerson],
+      persons: [{ ...owner, usageType: "regular", entryFeeWaivedToday: true } as SameDayPerson],
     })
-    expect(covered([owner], [earlier])).toEqual([true])
+    expect(covered([{ ...owner, usageType: "regular" }], [earlier])).toEqual([true])
+  })
+
+  it("a regular fee covers a reduced one, not the other way round", () => {
+    const regular = visit({ persons: [{ ...owner, usageType: "regular" }] })
+    const reduced = visit({ persons: [{ ...owner, usageType: "ermaessigt" }] })
+    expect(covered([{ ...owner, usageType: "ermaessigt" }], [regular])).toEqual([true])
+    expect(covered([{ ...owner, usageType: "regular" }], [reduced])).toEqual([false])
+  })
+
+  it("never marks a line that costs nothing anyway", () => {
+    const earlier = visit({ persons: [{ ...owner, usageType: "regular" }] })
+    expect(covered([{ ...owner, usageType: "hangenmoos" }], [earlier])).toEqual([false])
+  })
+
+  it("an earlier line without its own type counts as the visit's", () => {
+    const legacy = visit({ usageType: "hangenmoos", persons: [owner] })
+    expect(covered([{ ...owner, usageType: "regular" }], [legacy])).toEqual([false])
+    expect(covered([{ ...owner, usageType: "regular" }], [visit({ usageType: "regular", persons: [owner] })])).toEqual([true])
   })
 
   it("compares opening days: a visit opened yesterday and closed today does not count", () => {

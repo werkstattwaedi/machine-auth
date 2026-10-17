@@ -9,7 +9,11 @@
  * close — this only previews it.
  */
 
-import { sameDayCoveredPersons, type SameDayCheckout } from "@oww/shared"
+import {
+  sameDayCoveredPersons,
+  type SameDayCheckout,
+  type UsageType,
+} from "@oww/shared"
 import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 import type { CheckoutPerson } from "./use-checkout-state"
 
@@ -21,7 +25,9 @@ function toSameDayCheckout(c: CheckoutDoc & { id: string }): SameDayCheckout {
     id: c.id,
     status: c.status,
     cancelledAt: c.cancelledAt ?? null,
-    usageType: c.usageType,
+    // Typed as a plain string on the doc; an unknown value prices as
+    // regular (`usageDiscount`).
+    usageType: c.usageType as UsageType,
     created: c.created?.toDate?.() ?? null,
     closedAt: c.closedAt?.toDate?.() ?? null,
     persons: c.persons ?? [],
@@ -46,6 +52,7 @@ export function withSameDayWaiver(
       name: `${p.firstName} ${p.lastName}`,
       userType: p.userType,
       userRef: p.userId ? { id: p.userId } : null,
+      usageType: p.usageType,
     })),
     ownerId,
     openedAt,

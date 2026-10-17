@@ -1794,7 +1794,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(checkout.persons[1].entryFeeWaivedToday).to.not.equal(true); // kid
     });
 
-    it("waives whatever the earlier line paid (Hangenmoos in the morning)", async () => {
+    // CHK-37: they pay the difference to what they paid today — here all of it.
+    it("charges the full fee after a Hangenmoos morning that cost nothing", async () => {
       const uid = "dedup-any-fee";
       await seedUser(uid, "erwachsen");
       const person = namedPerson(uid, ADULT);
@@ -1821,9 +1822,9 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         },
       });
 
-      expect(result.amount).to.equal("0.00");
+      expect(result.amount).to.equal("15.00");
       const checkout = await getCheckout("co-after-hangenmoos");
-      expect(checkout.persons[0].entryFeeWaivedToday).to.equal(true);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
     });
 
     it("ignores a cancelled visit", async () => {
@@ -2586,7 +2587,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       ]);
     });
 
-    it("waives everyone already on a visit opened the same day, saved or not", async () => {
+    it("waives everyone who already paid on a visit opened the same day, saved or not", async () => {
       const uid = "ppu-same-day-names";
       const db = getFirestore();
       await seedUser(uid, "erwachsen");
@@ -2600,7 +2601,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         closedAt: at,
         workshopsVisited: ["holz"],
         persons: [
-          // Owner only accompanied — no fee charged, still covered (ADR-0050).
+          // Owner only accompanied — no fee paid, so none covered (CHK-37).
           { ...ADULT, userRef: db.collection("users").doc(uid), usageType: "materialbezug" },
           { ...CHILD, savedPersonId: "kim", usageType: "regular" },
         ],
@@ -2623,9 +2624,10 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         },
       });
 
-      expect(result.amount).to.equal("0.00");
+      // The owner pays the full fee now; the child already paid this morning.
+      expect(result.amount).to.equal("15.00");
       const checkout = await getCheckout("co-ppu-names-second");
-      expect(checkout.persons[0].entryFeeWaivedToday).to.equal(true);
+      expect(checkout.persons[0].entryFeeWaivedToday).to.not.equal(true);
       expect(checkout.persons[1].entryFeeWaivedToday).to.equal(true);
     });
   });
