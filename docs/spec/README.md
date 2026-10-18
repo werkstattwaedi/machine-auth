@@ -173,8 +173,7 @@ still passes a different wrong promise.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
-- **Quittung** — a receipt for a verified payment made during checkout (the
-  Wallee terminal); also the document of a RaiseNow bill issued before #763.
+- **Quittung** — a receipt for a payment made during checkout.
 - **RaiseNow** — the payment method paid through RaiseNow's TWINT paylink, a
   promise to pay.
 - **Beleg** — a per-checkout document that lists what was used or bought

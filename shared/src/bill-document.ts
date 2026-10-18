@@ -135,8 +135,9 @@ export function billDocumentOf(
   if (!isPaymentMethod(legacyCheckoutMethod)) return "rechnung"
   const info = PAYMENT_METHOD_INFO[legacyCheckoutMethod]
   // An invoice whose checkouts name the Sammelrechnung method is the
-  // Sammelrechnung itself (monthlyBillRun output).
-  if (info.isAggregated) return "sammelrechnung"
+  // Sammelrechnung itself (monthlyBillRun output). One collecting a single
+  // visit was printed "Rechnung" before ADR-0052 and stays so.
+  if (info.isAggregated) return "rechnung"
   if (info.paidDuringCheckout) return "quittung"
   return "rechnung"
 }

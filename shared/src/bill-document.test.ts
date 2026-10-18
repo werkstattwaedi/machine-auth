@@ -51,7 +51,8 @@ describe("billDocumentOf", () => {
 
   it("derives a legacy bill's document as before ADR-0052", () => {
     expect(billDocumentOf({ kind: "beleg" })).toBe("beleg")
-    expect(billDocumentOf({ kind: "invoice" }, "monthly")).toBe("sammelrechnung")
+    // A one-visit Sammelrechnung was printed "Rechnung" and stays so.
+    expect(billDocumentOf({ kind: "invoice", checkouts: [{}] }, "monthly")).toBe("rechnung")
     expect(billDocumentOf({ kind: "invoice", checkouts: [{}, {}] }, null)).toBe("sammelrechnung")
     expect(billDocumentOf({ kind: "invoice" }, "raisenow")).toBe("quittung")
     expect(billDocumentOf({ kind: "invoice" }, "rechnung")).toBe("rechnung")

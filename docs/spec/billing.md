@@ -78,7 +78,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-29** Only an admin books payments, by hand or by importing a bank (camt.053) or RaiseNow statement — except a verified payment, booked as its bill is issued (BIL-39); booking skips bills already paid. — ADR-0051, #735
 - **BIL-30** A statement import matches payments by QR reference and lists unmatched, duplicate and cancelled-bill payments for manual handling; a payment with a different amount is booked with a warning.
 - **BIL-31** Booking a payment sends no mail and changes no document.
-- **BIL-34** Nothing but a verified payment (BIL-39) waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked; unpaid bills are followed up at reconciliation. — #746, ADR-0051
+- **BIL-34** Nothing but a verified payment (BIL-39) waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked, or at issue for a CHF 0 bill (BIL-45); unpaid bills are followed up at reconciliation. — #746, ADR-0051
 - **BIL-41** In these cases a payment at the Wallee terminal changes no checkout or bill, and the money is handled by hand — ADR-0051, #735:
 
   | Case | What stays |

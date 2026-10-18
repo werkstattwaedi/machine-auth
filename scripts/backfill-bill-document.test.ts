@@ -23,9 +23,17 @@ test("a TWINT bill stays a Quittung (BIL-46)", () => {
 });
 
 test("the Sammelrechnung is paid by QR slip", () => {
-  assert.deepEqual(backfillFields({ kind: "invoice", ...acked }, "monthly"), {
+  const checkouts = [{}, {}] as unknown as FirebaseFirestore.DocumentReference[];
+  assert.deepEqual(backfillFields({ kind: "invoice", checkouts, ...acked }, "monthly"), {
     paymentMethod: "rechnung",
     document: "sammelrechnung",
+  });
+});
+
+test("a one-visit Sammelrechnung stays the Rechnung it was printed as", () => {
+  assert.deepEqual(backfillFields({ kind: "invoice", ...acked }, "monthly"), {
+    paymentMethod: "rechnung",
+    document: "rechnung",
   });
 });
 

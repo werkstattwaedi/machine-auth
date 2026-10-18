@@ -53,7 +53,8 @@ document: "rechnung" | "sammelrechnung" | "beleg" | "quittung"
   during the checkout (the RaiseNow TWINT paylink), or because nothing is
   due. A **Quittung** confirms a payment the provider verified
   (`confirmsPayment`: the Wallee terminal, ADR-0051). File name and title both use the label; every
-  Sammelrechnung, one visit included, is titled and named "Sammelrechnung".
+  Sammelrechnung, one visit included, is titled and named "Sammelrechnung"
+  (one printed "Rechnung" before keeps that, like every issued document).
 - **One derivation, `documentFor(choice, { isSammelrechnung })`**, takes a
   `PaymentChoice` (`PaymentMethod | "free"`). The server calls it at mint
   (every bill is committed at mint since #757) and when a repeated close

@@ -1213,17 +1213,21 @@ describe("bill processing triggers (Integration)", () => {
         // than sharing the per-visit Beleg's "charge queued" template — the
         // copy is wrong for a "this IS your invoice" email. Per-visit Belege
         // use bill-beleg, covered separately below (#405).
+        // A pre-ADR-0052 aggregate over two visits (a one-visit one keeps
+        // the "Rechnung" it was printed as).
         const billId = "bill-sammelrechnung";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
           paymentMethod: "monthly",
         });
+        await seedCheckout("co-2", { paymentMethod: "monthly" });
         await seedBill(billId, {
           storagePath: "invoices/bill-sammelrechnung.pdf",
           referenceNumber: 120,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "auto",
           kind: "invoice",
+          checkoutIds: ["co-default", "co-2"],
         });
 
         await trySendEmail(billId);

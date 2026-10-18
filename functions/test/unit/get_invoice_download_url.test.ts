@@ -122,10 +122,18 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
         makeBill({ referenceNumber: 140, paymentMethod: "rechnung", document: "sammelrechnung" }),
       ).responseDisposition,
     ).to.equal('attachment; filename="Sammelrechnung_RE-000014.pdf"');
+    const twoVisits = [{}, {}] as unknown as BillEntity["checkouts"];
+    expect(
+      buildDownloadOptions(
+        makeBill({ referenceNumber: 140, kind: "invoice", checkouts: twoVisits }),
+        "monthly",
+      ).responseDisposition,
+    ).to.equal('attachment; filename="Sammelrechnung_RE-000014.pdf"');
+    // A one-visit one issued before ADR-0052 was printed as a Rechnung.
     expect(
       buildDownloadOptions(makeBill({ referenceNumber: 140, kind: "invoice" }), "monthly")
         .responseDisposition,
-    ).to.equal('attachment; filename="Sammelrechnung_RE-000014.pdf"');
+    ).to.equal('attachment; filename="Rechnung_RE-000014.pdf"');
   });
 
   it("Beleg kind wins over any payment method", () => {
