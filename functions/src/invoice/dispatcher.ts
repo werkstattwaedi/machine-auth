@@ -13,7 +13,7 @@ import { dispatchRpc, type RpcHandler } from "../rpc/dispatch";
 import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
 import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
-import { prepareTerminalPaymentHandler } from "./terminal_payment";
+import { prepareTerminalPaymentHandler, reportTerminalApprovalHandler } from "./terminal_payment";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
 import { correctCheckoutsHandler } from "./correct_checkouts";
 import { addBadgeToCheckoutHandler } from "../badge/purchase";
@@ -30,6 +30,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   // Prices a Wallee terminal attempt; reads params only, no Wallee secret.
   prepareTerminalPayment: prepareTerminalPaymentHandler,
+  // The terminal approved: parks the checkout until Wallee confirms (#812).
+  reportTerminalApproval: reportTerminalApprovalHandler,
   adminMarkBillsPaid: adminMarkBillsPaidHandler,
   correctCheckouts: correctCheckoutsHandler,
 

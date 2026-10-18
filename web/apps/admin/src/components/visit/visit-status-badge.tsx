@@ -4,12 +4,23 @@
 import { Badge } from "@modules/components/ui/badge"
 import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 
-/** offen / abgerechnet / storniert (ADR-0042) — shared by list and detail. */
+/**
+ * offen / Zahlung ausstehend / abgerechnet / storniert (ADR-0042, #812) —
+ * shared by list and detail.
+ */
 export function VisitStatusBadge({ status }: { status: CheckoutDoc["status"] }) {
   if (status === "open") {
     return (
       <Badge className="bg-oww-gold-light text-oww-gold-text border-oww-gold-border">
         offen
+      </Badge>
+    )
+  }
+  if (status === "awaiting_payment") {
+    // The Wallee terminal approved; Wallee hasn't confirmed it yet.
+    return (
+      <Badge variant="outline" className="border-oww-gold-border text-oww-gold-text">
+        Zahlung ausstehend
       </Badge>
     )
   }

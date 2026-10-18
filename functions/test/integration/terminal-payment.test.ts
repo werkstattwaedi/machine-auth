@@ -42,7 +42,12 @@ import {
   getFirestore,
 } from "../emulator-helper";
 import {
+  APPROVAL_REPORT_WINDOW_MS,
+  UNCONFIRMED_GRACE_MS,
+  UNCONFIRMED_REALERT_MS,
+  alertUnconfirmedApprovals,
   prepareTerminalPaymentHandler,
+  reportTerminalApprovalHandler,
   settleTerminalPayment,
   type PrepareTerminalPaymentResponse,
 } from "../../src/invoice/terminal_payment";
@@ -206,6 +211,10 @@ async function prepare(checkoutId: string, tip = 0): Promise<PrepareTerminalPaym
   );
 }
 
+async function report(checkoutId: string, attempt: number, uid: string | null = OWNER) {
+  return reportTerminalApprovalHandler(request({ checkoutId, attempt }, uid) as never);
+}
+
 async function checkout(id: string): Promise<CheckoutEntity> {
   return (await getFirestore().collection("checkouts").doc(id).get()).data() as CheckoutEntity;
 }
@@ -352,6 +361,132 @@ describe("Wallee terminal payment (Integration)", () => {
       } finally {
         process.env.PAYMENT_METHODS_KIOSK = prev;
       }
+    });
+  });
+
+  describe("reportTerminalApproval (#812)", () => {
+    it("parks the checkout as awaiting payment, without a bill", async () => {
+      await seedOpenCheckout("co1");
+      const { attempt } = await prepare("co1");
+
+      expect(await report("co1", attempt)).to.deep.equal({ status: "awaiting_payment" });
+
+      const co = await checkout("co1");
+      expect(co.status).to.equal("awaiting_payment");
+      expect(co.terminalApproval?.attempt).to.equal(attempt);
+      expect(co.terminalApproval?.reportedBy).to.equal(OWNER);
+      expect(co.paymentMethod).to.equal(undefined);
+      expect(co.billRef).to.equal(undefined);
+      expect(co.closedAt).to.equal(undefined);
+      expect(await bills()).to.have.length(0);
+      // A retry changes nothing.
+      expect(await report("co1", attempt)).to.deep.equal({ status: "awaiting_payment" });
+    });
+
+    it("is a no-op when Wallee's confirmation came first", async () => {
+      await seedOpenCheckout("co1");
+      const { attempt, reference } = await prepare("co1");
+      wallee.pay(9001, reference, 25);
+      await settleTerminalPayment(9001, "webhook");
+      expect(await report("co1", attempt)).to.deep.equal({ status: "closed" });
+      expect((await checkout("co1")).terminalApproval).to.equal(undefined);
+    });
+
+    it("refuses a stranger, an earlier attempt and a late report", async () => {
+      await seedOpenCheckout("co1");
+      const first = await prepare("co1");
+      await expectRejects(report("co1", first.attempt, "someone-else"), "permission-denied");
+      const second = await prepare("co1");
+      await expectRejects(report("co1", first.attempt), "failed-precondition");
+      await expectRejects(report("co1", 99), "failed-precondition");
+
+      const late = Timestamp.fromMillis(Date.now() - APPROVAL_REPORT_WINDOW_MS - 1000);
+      await getFirestore().collection("checkouts").doc("co1").update({
+        [`terminalAttempts.${second.attempt}.createdAt`]: late,
+      });
+      await expectRejects(report("co1", second.attempt), "failed-precondition");
+      expect((await checkout("co1")).status).to.equal("open");
+    });
+
+    it("refuses a checkout closed another way", async () => {
+      await seedOpenCheckout("co1", { status: "closed" });
+      await expectRejects(report("co1", 1), "failed-precondition");
+    });
+
+    it("shows a payment start on a parked checkout as paid", async () => {
+      await seedOpenCheckout("co1");
+      const { attempt } = await prepare("co1");
+      await report("co1", attempt);
+      try {
+        await prepare("co1");
+        expect.fail("expected a refusal");
+      } catch (err) {
+        const e = err as { code?: string; details?: unknown };
+        expect(e.code).to.equal("failed-precondition");
+        expect(e.details).to.deep.equal({
+          reason: "checkout-closed",
+          paidAtTerminal: true,
+          amount: 25,
+          payerEmail: "alice@example.com",
+        });
+      }
+    });
+
+    it("lets the close callable not close a parked checkout", async () => {
+      await seedOpenCheckout("co1");
+      const { attempt } = await prepare("co1");
+      await report("co1", attempt);
+      await expectRejects(
+        closeCheckoutAndGetPaymentHandler(
+          request({ checkoutId: "co1", persons: wirePersons, paymentMethod: "rechnung" }) as never,
+        ),
+        "failed-precondition",
+      );
+    });
+
+    it("settles a parked checkout like an open one, also from an earlier attempt", async () => {
+      await seedOpenCheckout("co1");
+      const first = await prepare("co1");
+      const second = await prepare("co1");
+      await report("co1", second.attempt);
+      wallee.pay(9001, first.reference, 25);
+      expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+      const co = await checkout("co1");
+      expect(co.status).to.equal("closed");
+      expect(co.terminalApproval).to.equal(undefined);
+      expect(co.terminalAttempts).to.equal(undefined);
+      // The approved attempt's own money is then a double charge.
+      wallee.pay(9002, second.reference, 25);
+      expect(await settleTerminalPayment(9002, "webhook")).to.equal("double-charge");
+    });
+  });
+
+  describe("alertUnconfirmedApprovals (#812)", () => {
+    async function park(id: string, reportedAgoMs: number) {
+      await seedOpenCheckout(id);
+      const { attempt } = await prepare(id);
+      await report(id, attempt);
+      await getFirestore().collection("checkouts").doc(id).update({
+        "terminalApproval.reportedAt": Timestamp.fromMillis(Date.now() - reportedAgoMs),
+      });
+    }
+
+    it("alerts after the grace period, once a week, and not once settled", async () => {
+      await park("late", UNCONFIRMED_GRACE_MS + 60_000);
+      await park("fresh", 60_000);
+
+      expect(await alertUnconfirmedApprovals()).to.deep.equal(["late"]);
+      expect((await checkout("late")).terminalApproval?.alertedAt).to.not.equal(null);
+      expect(await alertUnconfirmedApprovals()).to.deep.equal([]);
+
+      const nextWeek = new Date(Date.now() + UNCONFIRMED_REALERT_MS + 60_000);
+      expect((await alertUnconfirmedApprovals(nextWeek)).sort()).to.deep.equal(["fresh", "late"]);
+
+      const late = await checkout("late");
+      wallee.pay(9001, late.terminalAttempts!["1"].reference, 25);
+      await settleTerminalPayment(9001, "webhook");
+      const later = new Date(nextWeek.getTime() + UNCONFIRMED_REALERT_MS + 60_000);
+      expect(await alertUnconfirmedApprovals(later)).to.deep.equal(["fresh"]);
     });
   });
 

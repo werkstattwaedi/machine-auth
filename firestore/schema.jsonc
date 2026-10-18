@@ -154,7 +154,9 @@
       // stays as the as-billed record; the corrected re-issue is a NEW
       // closed checkout linked via supersededByCheckoutRef. Legacy docs
       // lack the cancellation fields — never filter on `== null`.
-      "status": "open | closed | cancelled",
+      // awaiting_payment (#812, server-only): the Wallee terminal approved,
+      // Wallee hasn't confirmed — no bill, no closedAt, not the open visit.
+      "status": "open | awaiting_payment | closed | cancelled",
       // The visit's usage type (issue #605, ADR-0050): derived by the close
       // from persons[].usageType — the owner's volunteering/intern, else
       // materialbezug when every person has it, else regular. Decides machine
@@ -281,6 +283,14 @@
         }
       },
       "terminalAttemptCount": "number",      // last attempt number handed out
+      // The kiosk's report that the terminal approved one (#812): moves the
+      // checkout to awaiting_payment. Deleted at close.
+      "terminalApproval": {
+        "attempt": "number",
+        "reportedAt": "timestamp",
+        "reportedBy": "string",              // principal
+        "alertedAt": "timestamp | null"      // last terminal_payment_unconfirmed alert
+      },
       "walleeTransactionId": "number | null", // the payment that closed it
 
       "items": {

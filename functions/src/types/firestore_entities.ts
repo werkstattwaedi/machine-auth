@@ -209,7 +209,13 @@ export interface CatalogEntity {
 // checkout linked via `supersededByCheckoutRef` / `supersedesCheckoutRef`.
 // Legacy docs lack the cancellation fields entirely — never filter on
 // `== null`; the `status == "closed"` queries exclude cancelled docs.
-export type CheckoutStatus = "open" | "closed" | "cancelled";
+//
+// "awaiting_payment" (#812): the Wallee terminal approved a payment for it
+// and Wallee hasn't confirmed it yet. Server-only. No bill, no
+// `paymentMethod`, no `closedAt` — only Wallee's confirmation closes it —
+// but it is no longer the person's open checkout: the `status == "open"`
+// lookups skip it, so the next visit starts a new one.
+export type CheckoutStatus = "open" | "awaiting_payment" | "closed" | "cancelled";
 
 export interface CheckoutPersonEntity {
   name: string;
@@ -332,8 +338,21 @@ export interface CheckoutEntity {
   terminalAttempts?: Record<string, TerminalAttemptEntity>;
   // Last attempt number handed out; only ever grows.
   terminalAttemptCount?: number;
+  // The kiosk's report that the terminal approved an attempt, which moved
+  // the checkout to "awaiting_payment" (#812). Deleted at close.
+  terminalApproval?: TerminalApprovalEntity;
   // The Wallee transaction whose payment closed this checkout.
   walleeTransactionId?: number | null;
+}
+
+/** The kiosk's word that the terminal approved an attempt (#812): not money. */
+export interface TerminalApprovalEntity {
+  attempt: number;
+  reportedAt: Timestamp;
+  /** The principal that reported it (the attempt's `preparedBy`, normally). */
+  reportedBy: string;
+  /** Last `terminal_payment_unconfirmed` alert; re-alerted after a week. */
+  alertedAt?: Timestamp | null;
 }
 
 /**

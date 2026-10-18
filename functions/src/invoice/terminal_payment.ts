@@ -22,7 +22,13 @@
  *     priced state and reported for a person to follow up.
  *
  * The client never tells the backend that something is paid; only Wallee
- * does. A faked approval in the kiosk UI leaves the checkout open.
+ * does. What the kiosk does report (#812) is the terminal's approval:
+ * `reportTerminalApproval` moves the checkout from "open" to
+ * "awaiting_payment", so the person who was told "paid" no longer finds an
+ * open visit — still without a bill, and Wallee's confirmation closes it
+ * from there as from "open". The report is audited, not trusted: it can
+ * hide a checkout from "open" but never make it paid, and an approval
+ * Wallee doesn't confirm is alerted (`alertUnconfirmedTerminalPayments`).
  */
 
 import * as logger from "firebase-functions/logger";
@@ -79,6 +85,13 @@ export const MAX_TERMINAL_ATTEMPTS = 10;
  * kiosk then shows the payment as done instead of an error.
  */
 export const CHECKOUT_CLOSED_REASON = "checkout-closed";
+
+/**
+ * How long after an attempt was prepared the kiosk may still report its
+ * approval. Longer than the terminal waits for a card plus the payment
+ * itself; a report this late isn't the kiosk reacting to the terminal.
+ */
+export const APPROVAL_REPORT_WINDOW_MS = 10 * 60 * 1000;
 
 export interface PrepareTerminalPaymentRequest {
   checkoutId?: string;
@@ -147,15 +160,22 @@ export const prepareTerminalPaymentHandler = async (
     const checkout = snap.data() as CheckoutEntity;
     assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
     if (checkout.status !== "open") {
-      const paidAtTerminal = checkout.paymentMethod === "wallee_terminal";
+      // Awaiting payment: the terminal approved, so the kiosk shows it as
+      // paid like a confirmed one (KIO-26). It has no summary yet; the
+      // approved attempt holds what was priced.
+      const approved = checkout.status === "awaiting_payment"
+        ? approvedAttempt(checkout)
+        : null;
+      const paidAtTerminal = checkout.paymentMethod === "wallee_terminal" || approved !== null;
       throw new HttpsError("failed-precondition", "Dieser Besuch ist bereits abgeschlossen.", {
         reason: CHECKOUT_CLOSED_REASON,
         paidAtTerminal,
         // For the paid screen, which may not have priced an attempt yet.
         ...(paidAtTerminal
           ? {
-            amount: checkout.summary?.totalPrice ?? null,
-            payerEmail: payerFromPersons(checkout.persons ?? [])?.email ?? null,
+            amount: approved?.amount ?? checkout.summary?.totalPrice ?? null,
+            payerEmail:
+              payerFromPersons(approved?.persons ?? checkout.persons ?? [])?.email ?? null,
           }
           : {}),
       });
@@ -224,6 +244,145 @@ export const prepareTerminalPaymentHandler = async (
     };
   });
 };
+
+/** The attempt the kiosk reported approved, if it is still on the checkout. */
+function approvedAttempt(checkout: CheckoutEntity): TerminalAttemptEntity | null {
+  const n = checkout.terminalApproval?.attempt;
+  return n === undefined ? null : checkout.terminalAttempts?.[String(n)] ?? null;
+}
+
+export interface ReportTerminalApprovalRequest {
+  checkoutId?: string;
+  attempt?: number;
+}
+
+export interface ReportTerminalApprovalResponse {
+  /** The checkout's status after the report. */
+  status: "awaiting_payment" | "closed";
+}
+
+/**
+ * Callable (`billingCall`): the kiosk's report that the terminal approved
+ * attempt `n` (#812). Moves the open checkout to "awaiting_payment" — no
+ * bill, nothing paid; only `settleTerminalPayment` closes it.
+ *
+ * `prepareTerminalPayment` isn't kiosk-only, so anyone could call this for
+ * their own checkout to drop it out of "open" (reminders, the next-day
+ * badge-in block). It therefore only takes the latest attempt, shortly
+ * after it was prepared, and the unconfirmed alert names who reported it.
+ */
+export const reportTerminalApprovalHandler = async (
+  request: CallableRequest<ReportTerminalApprovalRequest>,
+): Promise<ReportTerminalApprovalResponse> => {
+  const { checkoutId, attempt } = request.data ?? {};
+  if (typeof checkoutId !== "string" || !checkoutId) {
+    throw new HttpsError("invalid-argument", "checkoutId is required");
+  }
+  if (typeof attempt !== "number" || !Number.isInteger(attempt) || attempt < 1) {
+    throw new HttpsError("invalid-argument", "attempt is required");
+  }
+  const callerUid = effectiveUid(request);
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "Sign-in required");
+  }
+  const isAnonymous = isAnonymousCaller(request);
+  const checkoutRef = getFirestore().collection("checkouts").doc(checkoutId);
+
+  return getFirestore().runTransaction(async (tx) => {
+    const snap = await tx.get(checkoutRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", `Checkout ${checkoutId} not found`);
+    }
+    const checkout = snap.data() as CheckoutEntity;
+    assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
+    const logFields = { checkoutId, attempt, reportedBy: callerUid };
+
+    // Wallee's webhook usually beats the kiosk (~0.3 s), and the kiosk
+    // retries: both leave nothing to do.
+    if (checkout.status === "closed" && checkout.paymentMethod === "wallee_terminal") {
+      return { status: "closed" as const };
+    }
+    if (checkout.status === "awaiting_payment") {
+      return { status: "awaiting_payment" as const };
+    }
+    if (checkout.status !== "open") {
+      throw new HttpsError("failed-precondition", "Dieser Besuch ist bereits abgeschlossen.");
+    }
+    const entry = checkout.terminalAttempts?.[String(attempt)];
+    if (!entry || attempt !== checkout.terminalAttemptCount) {
+      logger.warn("terminal_approval_refused", { event: "terminal_approval_refused", reason: "not-latest", ...logFields });
+      throw new HttpsError("failed-precondition", "Unbekannter Zahlungsversuch.");
+    }
+    if (Date.now() - entry.createdAt.toMillis() > APPROVAL_REPORT_WINDOW_MS) {
+      logger.warn("terminal_approval_refused", { event: "terminal_approval_refused", reason: "too-late", ...logFields });
+      throw new HttpsError("failed-precondition", "Der Zahlungsversuch ist abgelaufen.");
+    }
+
+    tx.update(checkoutRef, {
+      status: "awaiting_payment",
+      terminalApproval: {
+        attempt,
+        reportedAt: Timestamp.now(),
+        reportedBy: callerUid,
+        alertedAt: null,
+      },
+      modifiedAt: FieldValue.serverTimestamp(),
+    });
+    logger.info("terminal_approval_reported", { event: "terminal_approval_reported", ...logFields });
+    return { status: "awaiting_payment" as const };
+  });
+};
+
+/** After the report, how long Wallee has before the team is alerted. */
+export const UNCONFIRMED_GRACE_MS = 30 * 60 * 1000;
+/** While a checkout keeps awaiting payment, the alert repeats this often. */
+export const UNCONFIRMED_REALERT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Alerts every checkout the terminal approved that Wallee hasn't confirmed
+ * after the grace period (#812) — the kiosk said "paid", no money arrived.
+ * Needs no Wallee call, so it still runs while Wallee is unreachable.
+ * Resolution is by hand: close it (no money came) or wait for Wallee —
+ * never just reopen it, as a newer open checkout may exist by then.
+ * Returns the ids it alerted, for tests.
+ */
+export async function alertUnconfirmedApprovals(now: Date = new Date()): Promise<string[]> {
+  const db = getFirestore();
+  // A handful of docs at most: equality on one field, no index needed.
+  const awaiting = await db.collection("checkouts").where("status", "==", "awaiting_payment").get();
+  const alerted: string[] = [];
+  for (const doc of awaiting.docs) {
+    const checkout = doc.data() as CheckoutEntity;
+    const approval = checkout.terminalApproval;
+    if (!approval) continue;
+    const reportedAt = approval.reportedAt.toMillis();
+    if (now.getTime() - reportedAt < UNCONFIRMED_GRACE_MS) continue;
+    const lastAlert = approval.alertedAt?.toMillis();
+    if (lastAlert !== undefined && now.getTime() - lastAlert < UNCONFIRMED_REALERT_MS) continue;
+    const attempt = approvedAttempt(checkout);
+    logger.error("terminal_payment_unconfirmed", {
+      event: "terminal_payment_unconfirmed",
+      checkoutId: doc.id,
+      attempt: approval.attempt,
+      reference: attempt?.reference ?? null,
+      amount: attempt?.amount ?? null,
+      preparedBy: attempt?.preparedBy ?? null,
+      reportedBy: approval.reportedBy,
+      reportedAt: approval.reportedAt.toDate().toISOString(),
+    });
+    // A failed write means a repeat next hour, which beats a missed alert.
+    try {
+      await doc.ref.update({ "terminalApproval.alertedAt": Timestamp.fromDate(now) });
+    } catch (err) {
+      logger.warn("terminal_unconfirmed_mark_failed", {
+        checkoutId: doc.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    alerted.push(doc.id);
+  }
+  return alerted;
+}
 
 /** What a settlement did, for logs and tests. */
 export type SettleOutcome =
@@ -427,6 +586,7 @@ export async function settleTransaction(
       billRef,
       walleeTransactionId: transaction.id,
       terminalAttempts: FieldValue.delete(),
+      terminalApproval: FieldValue.delete(),
     });
     return "settled";
   });
@@ -529,7 +689,9 @@ function judgeCheckout(
   attemptNumber: number,
 ): SettleOutcome | { checkout: CheckoutEntity; attempt: TerminalAttemptEntity } {
   if (!checkout) return "unmatched";
-  if (checkout.status !== "open") {
+  // Awaiting payment settles like open: any of its attempts (an earlier
+  // one's money may still arrive), not only the one the kiosk reported.
+  if (checkout.status !== "open" && checkout.status !== "awaiting_payment") {
     return checkout.walleeTransactionId === transaction.id ? "already-settled" : "double-charge";
   }
   const attempt = checkout.terminalAttempts?.[String(attemptNumber)];

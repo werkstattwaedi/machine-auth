@@ -431,6 +431,8 @@ describe("Checkout update: payment method and terminal fields are server-only (#
   it.each([
     ["terminalAttempts", { "1": { reference: "P-x-1", amount: 0.01 } }],
     ["terminalAttemptCount", 7],
+    ["terminalApproval", { attempt: 1, reportedBy: "u1" }],
+    ["status", "awaiting_payment"],
     ["walleeTransactionId", 123],
     ["paymentMethod", "wallee_terminal"],
     ["paymentMethod", "rechnung"],
@@ -499,6 +501,80 @@ describe("Checkout update: payment method and terminal fields are server-only (#
     })
     await assertFails(
       updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "rechnung" }),
+    )
+  })
+})
+
+describe("Checkout awaiting payment is server-only and locked (#812)", () => {
+  async function seedAwaiting(id: string, owner: string | null, anonUid?: string) {
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore()
+      await setDoc(doc(db, "checkouts", id), {
+        userId: owner ? doc(db, "users", owner) : null,
+        status: "awaiting_payment",
+        usageType: "regular",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: owner ?? anonUid ?? null,
+        modifiedAt: Timestamp.now(),
+        firebaseUid: owner ?? anonUid ?? null,
+        terminalApproval: { attempt: 1, reportedAt: Timestamp.now(), reportedBy: owner ?? anonUid },
+      })
+    })
+  }
+
+  it("owner can't edit it, reopen it or add items", async () => {
+    await seedAwaiting("co-await1", "u1")
+    const db = authedDb("u1")
+    await assertFails(updateDoc(doc(db, "checkouts", "co-await1"), { notes: "Holz" }))
+    await assertFails(updateDoc(doc(db, "checkouts", "co-await1"), { status: "open" }))
+    await assertFails(
+      addDoc(collection(db, "checkouts", "co-await1", "items"), {
+        workshop: "holz",
+        description: "Brett",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: 10,
+        totalPrice: 10,
+      }),
+    )
+  })
+
+  it("its anonymous creator can't edit it or add items", async () => {
+    await seedAwaiting("co-await2", null, "anon-await")
+    const anonDb = anonAuthDb("anon-await")
+    await assertFails(updateDoc(doc(anonDb, "checkouts", "co-await2"), { notes: "Holz" }))
+    await assertFails(
+      addDoc(collection(anonDb, "checkouts", "co-await2", "items"), {
+        workshop: "holz",
+        description: "Brett",
+        origin: "manual",
+        catalogId: null,
+        created: serverTimestamp(),
+        quantity: 1,
+        unitPrice: 10,
+        totalPrice: 10,
+      }),
+    )
+  })
+
+  it("a client can't create a checkout awaiting payment", async () => {
+    const db = authedDb("u1")
+    await assertFails(
+      setDoc(doc(db, "checkouts", "co-await3"), {
+        userId: doc(db, "users", "u1"),
+        status: "awaiting_payment",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: "u1",
+        modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
+      }),
     )
   })
 })

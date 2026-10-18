@@ -32,12 +32,13 @@ import {
 import { Card } from "@modules/components/ui/card"
 import { EmptyState } from "@modules/components/empty-state"
 import { ClipboardList, MoveRight } from "lucide-react"
+import { awaitingPaymentAmount } from "@modules/lib/awaiting-payment"
 
-type StatusFilter = "all" | "open" | "closed" | "cancelled"
+type StatusFilter = "all" | "open" | "awaiting_payment" | "closed" | "cancelled"
 
 interface VisitsSearch {
   user?: string
-  status?: "open" | "closed" | "cancelled"
+  status?: Exclude<StatusFilter, "all">
 }
 
 export const Route = createFileRoute("/_authenticated/visits/")({
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/_authenticated/visits/")({
     user: typeof search.user === "string" ? search.user : undefined,
     status:
       search.status === "open" ||
+      search.status === "awaiting_payment" ||
       search.status === "closed" ||
       search.status === "cancelled"
         ? search.status
@@ -77,6 +79,7 @@ function VisitsPage() {
           options={[
             { value: "all", label: "Alle" },
             { value: "open", label: "Offen" },
+            { value: "awaiting_payment", label: "Zahlung ausstehend" },
             { value: "closed", label: "Abgerechnet" },
             { value: "cancelled", label: "Storniert" },
           ]}
@@ -171,7 +174,9 @@ function VisitsTable({
               <TableCell className="text-right tabular-nums">
                 {visit.summary?.totalPrice != null
                   ? formatCHF(visit.summary.totalPrice)
-                  : "–"}
+                  : awaitingPaymentAmount(visit) != null
+                    ? formatCHF(awaitingPaymentAmount(visit)!)
+                    : "–"}
               </TableCell>
               <TableCell className="text-right">
                 <Link

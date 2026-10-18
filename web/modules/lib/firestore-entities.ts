@@ -333,7 +333,14 @@ export interface CheckoutDoc extends AuditFields {
   // as the as-billed record and the corrected re-issue is a NEW closed
   // checkout (`supersededByCheckoutRef`). `status == "closed"` queries
   // exclude cancelled visits automatically.
-  status: "open" | "closed" | "cancelled"
+  // "awaiting_payment" (#812, server-only): the Wallee terminal approved a
+  // payment, Wallee hasn't confirmed it — no bill, no closedAt, no summary
+  // yet, and not the person's open checkout any more.
+  status: "open" | "awaiting_payment" | "closed" | "cancelled"
+  /** The approved attempt while awaiting payment (#812). */
+  terminalApproval?: { attempt: number; reportedAt: Timestamp } | null
+  /** Priced terminal attempts by number (ADR-0051); the approved one's amount is what is due. */
+  terminalAttempts?: Record<string, { amount: number; reference: string }> | null
   cancelledAt?: Timestamp | null
   cancelledBy?: string | null
   cancellationReason?: string | null

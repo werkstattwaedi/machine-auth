@@ -379,6 +379,41 @@ describe("addBadgeToCheckout (Integration)", () => {
     );
   });
 
+  it("treats a badge on a checkout awaiting payment as pending (#812)", async () => {
+    const db = getFirestore();
+    await seedMember("member-await");
+    const first = await handleAddBadgeToCheckout(
+      { badgeVoucher: voucherFor(TOKEN_ID) },
+      kioskCaller("member-await"),
+      MASTER_KEY
+    );
+    expect(first.free).to.equal(true);
+    // Paid at the Wallee terminal, not yet confirmed by Wallee.
+    await db.collection("checkouts").doc(first.checkoutId!).update({
+      status: "awaiting_payment",
+    });
+
+    // The same badge can't go onto the new checkout...
+    await expectHttpsError(
+      () =>
+        handleAddBadgeToCheckout(
+          { badgeVoucher: voucherFor(TOKEN_ID, 8) },
+          kioskCaller("member-await"),
+          MASTER_KEY
+        ),
+      "failed-precondition",
+      "anderen Checkout"
+    );
+    // ...and a second badge isn't the free first one any more.
+    const second = await handleAddBadgeToCheckout(
+      { badgeVoucher: voucherFor("04c339aa1e1891") },
+      kioskCaller("member-await"),
+      MASTER_KEY
+    );
+    expect(second.free).to.equal(false);
+    expect(second.checkoutId).to.not.equal(first.checkoutId);
+  });
+
   it("rejects an invalid/expired voucher", async () => {
     await seedUser("plain-4");
     await expectHttpsError(

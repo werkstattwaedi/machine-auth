@@ -260,10 +260,12 @@ export {
   retryBillProcessing,
 } from "./invoice/bill_triggers";
 // Wallee terminal (ADR-0051): the signed webhook settles a terminal
-// payment; the nightly job settles what a lost delivery missed.
+// payment; the nightly job settles what a lost delivery missed; the hourly
+// one alerts approvals Wallee never confirmed (#812).
 export {
   walleeWebhook,
   reconcileTerminalPayments,
+  alertUnconfirmedTerminalPayments,
 } from "./payments/wallee_webhook";
 export { monthlyBillRun } from "./invoice/monthly_bill_run";
 

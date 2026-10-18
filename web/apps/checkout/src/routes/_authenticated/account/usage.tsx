@@ -32,6 +32,7 @@ import {
 } from "@modules/components/ui/tooltip"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { cn } from "@modules/lib/utils"
+import { awaitingPaymentAmount } from "@modules/lib/awaiting-payment"
 import { workshopColor } from "@modules/lib/workshop-config"
 import {
   History,
@@ -95,6 +96,17 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
     where("userId", "==", ref),
     where("status", "==", "closed"),
     orderBy("closedAt", "desc"),
+  )
+  // Paid at the Wallee terminal, not yet confirmed by Wallee (#812, ACC-6):
+  // no closedAt yet, so the closed query above can't hold them.
+  const { data: awaitingCheckouts } = useCollection(
+    checkoutsCollection(db),
+    where("userId", "==", ref),
+    where("status", "==", "awaiting_payment"),
+  )
+  const sessions = useMemo(
+    () => [...awaitingCheckouts, ...closedCheckouts],
+    [awaitingCheckouts, closedCheckouts],
   )
 
   const [tab, setTab] = useState<TabKey>("invoices")
@@ -201,7 +213,7 @@ function UsageContent({ userDoc }: { userDoc: UserDoc }) {
       )}
 
       {tab === "sessions" && (
-        <SessionsPanel checkouts={closedCheckouts} />
+        <SessionsPanel checkouts={sessions} />
       )}
     </div>
   )
@@ -478,14 +490,15 @@ function SessionsPanel({
       </div>
       <ul className="flex flex-col">
         {checkouts.map((co) => {
-          const closed = toJsDate(co.closedAt)
+          const awaitingAmount = awaitingPaymentAmount(co)
+          const closed = toJsDate(co.closedAt ?? co.terminalApproval?.reportedAt)
           const created = toJsDate(co.created)
           const date = closed ?? created ?? new Date()
           const durationMs =
             closed && created ? closed.getTime() - created.getTime() : 0
           const minutes = Math.max(0, Math.round(durationMs / 60000))
           const workshops = co.workshopsVisited ?? []
-          const total = co.summary?.totalPrice ?? 0
+          const total = co.summary?.totalPrice ?? awaitingAmount ?? 0
           return (
             <li
               key={co.id}
@@ -493,14 +506,19 @@ function SessionsPanel({
             >
               <div className="flex flex-col">
                 <span className="font-semibold tabular-nums">
-                  {formatDate(co.closedAt ?? co.created)}
+                  {formatDate(co.closedAt ?? co.terminalApproval?.reportedAt ?? co.created)}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {formatTime(date)}
                 </span>
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex flex-wrap items-center gap-2">
                 <WorkshopChips workshops={workshops} />
+                {co.status === "awaiting_payment" && (
+                  <Badge variant="outline" data-testid="session-awaiting-payment">
+                    Zahlung wird bestätigt
+                  </Badge>
+                )}
               </div>
               <div className="text-muted-foreground tabular-nums whitespace-nowrap">
                 {formatDuration(minutes)}

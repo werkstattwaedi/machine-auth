@@ -361,21 +361,22 @@ service cloud.firestore {
       // or closed. A client-set method would contradict the bill already
       // minted from it, and `wallee_terminal` is set only by Wallee's
       // confirmation together with the paid bill. Closed and cancelled
-      // checkouts take no client writes at all. The terminal attempt
-      // fields are server-only too.
+      // checkouts take no client writes at all, nor does one awaiting
+      // payment (#812: the terminal approved, Wallee hasn't confirmed).
+      // The terminal attempt and approval fields are server-only too.
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent',
-           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'terminalApproval', 'walleeTransactionId'
          ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent',
-           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'terminalApproval', 'walleeTransactionId'
          ]));
       allow delete: if isAdmin();
 
