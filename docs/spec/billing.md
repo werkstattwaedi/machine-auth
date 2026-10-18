@@ -84,6 +84,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | it arrives for a checkout already closed — by an earlier payment at the Wallee terminal or another method — or cancelled | the checkout and its bill as they are |
   | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
   | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
+- **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document says that nothing is to be paid. — #237
 
 ## Retention
 
