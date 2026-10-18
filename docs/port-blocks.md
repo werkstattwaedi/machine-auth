@@ -120,6 +120,13 @@ emulator-exec test paths.
 | `ci-4` | +40000  | 44040     | 48180     | 49199  | 45101     |
 | `ci-5` | +50000  | 54040     | 58180     | 59199  | 55101     |
 
+Each block also pins the emulator hub to 4410+offset and the logging
+emulator to 4510+offset. These are deliberately not firebase's defaults
+(4400/4500): ci-1's logging port would then be 14500, the default port
+of xpra, whose `xpra-server.socket` listens there wherever xpra is
+installed and makes every ci-1 run fail with "Logging Emulator, port
+taken".
+
 Block list is in [`scripts/port-blocks.json`](../scripts/port-blocks.json) —
 add more blocks there if you need higher concurrency.
 
@@ -132,7 +139,7 @@ When a block is acquired, the wrapped command sees these env vars:
 | `PORT_BLOCK` | `ci-1` | Logging, debugging |
 | `PORT_OFFSET` | `10000` | Anything that needs the raw offset |
 | `FIREBASE_E2E_CONFIG` | `firebase.runtime.ci-1.json` | `scripts/emulator-exec.sh`, `functions/test:integration` |
-| `EMULATOR_KILL_PORTS` | `15101,18180,19199,14400,14500` | `scripts/emulator-exec.sh` |
+| `EMULATOR_KILL_PORTS` | `14410,14510,15101,18180,19199` | `scripts/emulator-exec.sh` |
 | `EMULATOR_AUTH_PORT` | `19199` | Functions / scripts |
 | `EMULATOR_FIRESTORE_PORT` | `18180` | Functions / scripts |
 | `EMULATOR_FUNCTIONS_PORT` | `15101` | Functions / scripts |
