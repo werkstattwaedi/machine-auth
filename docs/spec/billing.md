@@ -22,7 +22,16 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung and its account holder is an active member (BIL-4), otherwise as a QR-Rechnung. — #251, #302, #761, #745
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill issued without a committed method that nobody confirms is committed overnight (BIL-7). — #251, #302
 - **BIL-39** A checkout paid at the payment terminal stays open until Wallee confirms the payment to the server — right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
-- **BIL-40** The bill of a terminal payment (BIL-39) is issued already paid, as of the time Wallee authorised the payment, for the persons, donation and amount priced when that payment was started. — ADR-0051, #735
+- **BIL-40** A terminal payment (BIL-39) closes the checkout with exactly the persons and their usage types, the items, the donation and the amount priced when that payment was started, and its bill is issued already paid, as of the time Wallee authorised the payment. — ADR-0051, #735, #788
+- **BIL-42** A change made to the checkout after its terminal payment was started doesn't hold the payment up: Wallee's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to follow up the difference by hand — ADR-0051, #788:
+
+  | Changed after the start | On the closed checkout |
+  |---|---|
+  | an item added or removed, or a quantity changed | the items and quantities as priced |
+  | a person added or removed, or a usage type changed (CHK-4, CHK-40) | the persons and usage types as priced |
+  | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows as priced; the sessions that arrived later are taken off the checkout and land on the person's open checkout with their next session on a machine of that type (CHK-44) |
+
+- **BIL-43** A checkout takes at most ten payments started at the payment terminal (KIO-22), each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
 
 ## Documents
@@ -74,7 +83,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   |---|---|
   | it arrives for a checkout already closed — by an earlier terminal payment or another method — or cancelled | the checkout and its bill as they are |
   | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
-  | the checkout's items changed after it was started | the checkout stays open |
   | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
 
 ## Retention
