@@ -145,9 +145,19 @@ test.describe("Check-in step screenshots", () => {
     await expect(page).toHaveScreenshot("checkin-empty.png")
   })
 
-  test("two persons, the first a company", async ({ page }) => {
+  test("two persons, the first a company", async ({ page, isMobile }) => {
     await goToCheckin(page)
     await openGuestSection(page)
+
+    // The scroll position is set explicitly: whether a click's own
+    // actionability scroll moves the page differs between hosts (issue
+    // #793). These are the positions the baselines were captured at —
+    // scrolled to the page bottom, where "Person hinzufügen" sits under
+    // the sticky footer, and on mobile the "Firma" radio centred.
+    await settleLayout(page)
+    await page.evaluate(() =>
+      window.scrollTo(0, document.documentElement.scrollHeight),
+    )
 
     // Add second person
     await page.getByRole("button", { name: "Person hinzufügen" }).click()
@@ -155,10 +165,16 @@ test.describe("Check-in step screenshots", () => {
 
     // Only the first person of a guest check-in can be a company (CHK-28)
     const person1 = page.getByTestId("person-card").nth(0)
-    await person1.getByText("Firma").click()
+    const firma = person1.getByText("Firma")
+    if (isMobile) {
+      await settleLayout(page)
+      await firma.evaluate((el) => el.scrollIntoView({ block: "center" }))
+    }
+    await firma.click()
 
     // Wait for billing address fields to appear
     await expect(person1.getByText("Rechnungsadresse")).toBeVisible()
+    await settleLayout(page)
 
     await expect(page).toHaveScreenshot("checkin-two-persons-company.png")
   })
