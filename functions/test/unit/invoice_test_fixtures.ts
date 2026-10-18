@@ -574,6 +574,21 @@ export function legacyQuittungInvoice(): InvoiceData {
 }
 
 /**
+ * A payment Wallee confirmed at the terminal (ADR-0051): a Quittung, born
+ * paid, carrying Wallee's cardholder receipt.
+ */
+export function walleeTerminalInvoice(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 140;
+  base.paymentMethod = "wallee_terminal";
+  base.document = "quittung";
+  base.paidAt = zurich(2025, 5, 16);
+  base.paidVia = "wallee_terminal";
+  base.terminalReceiptText = "Trm-Id: 12345678\nVISA ****1234\nAuth: 654321";
+  return base;
+}
+
+/**
  * Issue #251: Sammelrechnung-method invoice. The customer routed this
  * checkout onto their monthly bill, so the PDF shows a "Zahlweise:
  * Sammelrechnung" notice and omits the QR payment slip.

@@ -586,7 +586,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     // The per-checkout mails word a membership or badge purchase differently
     // from a visit (issue #660); the others have no such dimension.
     const dims =
-      mail === "bill-invoice" || mail === "bill-receipt" || mail === "bill-beleg"
+      mail === "bill-invoice" ||
+      mail === "bill-receipt" ||
+      mail === "bill-paid-beleg" ||
+      mail === "bill-beleg"
         ? { kind: await loadBillKind(bill) }
         : {};
     const template = templateRef(

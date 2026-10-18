@@ -177,8 +177,9 @@ export function awaitsSammelrechnung(bill: BillDocumentFields): boolean {
 
 /**
  * The mail that announces a bill (ADR-0046). A Beleg for the Sammelrechnung
- * ("charge queued") and one paid during the checkout ("paid by TWINT") say
- * different things, and neither may share a template with the payable
+ * ("charge queued"), one for a payment the customer made during the
+ * checkout ("you paid by TWINT") and a Quittung ("payment received") say
+ * different things, and none may share a template with the payable
  * Sammelrechnung (#502). Reads properties only, never a method id.
  */
 export function billMailFor(
@@ -194,7 +195,9 @@ export function billMailFor(
     case "rechnung":
       return "invoice"
     case "beleg":
-      if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) return "receipt"
+      if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
+        return "paid-beleg"
+      }
       return "beleg"
   }
 }

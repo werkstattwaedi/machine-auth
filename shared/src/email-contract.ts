@@ -26,10 +26,9 @@ export type EmailEnv = (typeof EMAIL_ENVS)[number]
  * the bill's document and payment-method *properties*, never from a method
  * id — new payment integrations must not add templates. Not the document
  * itself (`BillDocumentType`): a Beleg for the Sammelrechnung and a Beleg
- * paid during the checkout say different things. "receipt" is the alias of
- * the latter's template, kept from when that document was a Quittung.
+ * for a payment the customer made during the checkout say different things.
  */
-export const BILL_MAILS = ["invoice", "receipt", "beleg", "sammelrechnung"] as const
+export const BILL_MAILS = ["invoice", "receipt", "paid-beleg", "beleg", "sammelrechnung"] as const
 export type BillMail = (typeof BILL_MAILS)[number]
 
 /**
@@ -69,10 +68,25 @@ export const EMAIL_CONTRACT = {
     dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY"],
   },
-  // Beleg for a method paid during the checkout (`paidDuringCheckout`), no QR
-  // slip; the alias keeps "receipt" from when the document was a Quittung.
+  // Quittung for a payment the provider confirmed during the checkout
+  // (`confirmsPayment`), no QR slip — and for an earlier RaiseNow bill.
   // PAYMENT_LABEL is the method's brand ("TWINT"), never part of the alias.
   "bill-receipt": {
+    dims: { kind: CHECKOUT_KINDS },
+    variables: [
+      "RECIPIENT_NAME",
+      "CHECKOUT_DATE",
+      "INVOICE_NUMBER",
+      "AMOUNT",
+      "CURRENCY",
+      "KASSE_EMAIL",
+      "PAYMENT_LABEL",
+    ],
+  },
+  // Beleg for a payment the customer says they made during the checkout
+  // (`paidDuringCheckout` without `confirmsPayment`, #763): no QR slip, and
+  // the copy never says the payment was received (BIL-6).
+  "bill-paid-beleg": {
     dims: { kind: CHECKOUT_KINDS },
     variables: [
       "RECIPIENT_NAME",

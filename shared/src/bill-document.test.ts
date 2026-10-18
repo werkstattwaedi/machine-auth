@@ -111,10 +111,11 @@ describe("isCollectedBeleg / awaitsSammelrechnung", () => {
 describe("billMailFor", () => {
   it("tells the two Belege apart", () => {
     expect(billMailFor("beleg", "monthly")).toBe("beleg")
-    expect(billMailFor("beleg", "raisenow")).toBe("receipt")
+    expect(billMailFor("beleg", "raisenow")).toBe("paid-beleg")
   })
 
-  it("keeps the earlier Quittung on the receipt mail", () => {
+  it("sends every Quittung the receipt mail", () => {
+    expect(billMailFor("quittung", "wallee_terminal")).toBe("receipt")
     expect(billMailFor("quittung", "raisenow")).toBe("receipt")
   })
 

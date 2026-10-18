@@ -15,6 +15,7 @@ import {
   paidInvoice,
   raisenowMethodInvoice,
   legacyQuittungInvoice,
+  walleeTerminalInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
@@ -327,6 +328,15 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Quittung Self-Checkout");
     expect(text).to.include("Rechnungsnummer: RE-000010");
     expect(text).to.include("Zahlweise: TWINT");
+    expect(text).to.not.include("Zahlteil");
+  });
+
+  it("Wallee terminal payment is a Quittung with its RE- number and the terminal receipt", async () => {
+    const text = await pdfText(walleeTerminalInvoice());
+    expect(text).to.include("Quittung Self-Checkout");
+    expect(text).to.include("Rechnungsnummer: RE-000014");
+    expect(text).to.include("Bezahlt via Karte/TWINT (Terminal)");
+    expect(text).to.include("VISA ****1234");
     expect(text).to.not.include("Zahlteil");
   });
 

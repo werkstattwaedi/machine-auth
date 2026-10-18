@@ -1082,7 +1082,7 @@ describe("bill processing triggers (Integration)", () => {
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
       });
 
-      it("mails a TWINT Beleg on the receipt template, attached as Beleg-BL-… (#763)", async () => {
+      it("mails a TWINT Beleg on its own template, attached as Beleg-BL-… (#763)", async () => {
         const billId = "bill-twint-beleg";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -1104,7 +1104,7 @@ describe("bill processing triggers (Integration)", () => {
             attachments: Array<{ filename: string }>;
           },
         ];
-        expect(entity.template.id).to.equal("test-bill-receipt-visit");
+        expect(entity.template.id).to.equal("test-bill-paid-beleg-visit");
         expectContractVariables(entity.template);
         expect(entity.attachments[0].filename).to.equal("Beleg-BL-000011.pdf");
       });

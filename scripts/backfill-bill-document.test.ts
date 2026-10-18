@@ -42,3 +42,10 @@ test("an unconfirmed bill ignores the tab last tapped", () => {
     document: "rechnung",
   });
 });
+
+test("a Wallee terminal bill stays a Quittung", () => {
+  assert.deepEqual(backfillFields({ kind: "invoice", ...acked }, "wallee_terminal"), {
+    paymentMethod: "wallee_terminal",
+    document: "quittung",
+  });
+});
