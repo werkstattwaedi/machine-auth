@@ -341,8 +341,8 @@ async function sendDigestMail(
 }
 
 /**
- * 07:00 Europe/Zurich: after the nightly crons (03:00 auto-ack, 04:00
- * membership maintenance, 06:00 monthly bill run) so their warnings land in
+ * 07:00 Europe/Zurich: after the nightly crons (04:00 membership
+ * maintenance, 06:00 monthly bill run) so their warnings land in
  * the same day's digest rather than the next one's.
  */
 export const dailyLogDigest = onSchedule(

@@ -77,7 +77,6 @@ const FUNCTIONS_RESEND: VarMapping[] = [
   // Empty falls back to the built-in "1,7" default at read time.
   { envVar: "CHECKOUT_REMINDER_OFFSET_DAYS", jsonPath: "functions.checkoutReminderOffsetDays" },
   { envVar: "KASSE_EMAIL", jsonPath: "functions.kasseEmail" },
-  { envVar: "AUTO_ACK_MIN_AGE_HOURS", jsonPath: "functions.autoAckMinAgeHours" },
   // Recipient of the daily WARNING-and-above log digest. Empty disables the
   // send (the job still runs and logs what it would have reported).
   { envVar: "LOG_DIGEST_EMAIL", jsonPath: "functions.logDigestEmail" },
@@ -114,7 +113,7 @@ const VITE_DEPLOYMENT: VarMapping[] = [
   // Payment methods offered per client type, comma-separated ids in tab
   // order (shared/src/payment-methods.ts). Absent key → empty → today's
   // default "rechnung,monthly,raisenow". Same keys feed the functions
-  // params (FUNCTIONS_PAYMENT) so UI and acknowledgeBill agree.
+  // params (FUNCTIONS_PAYMENT) so UI and the close callable agree.
   { envVar: "VITE_PAYMENT_METHODS_KIOSK", jsonPath: "web.paymentMethodsKiosk" },
   { envVar: "VITE_PAYMENT_METHODS_WEB", jsonPath: "web.paymentMethodsWeb" },
 ];
@@ -194,7 +193,6 @@ const TEST_FIXTURE_CONFIG: Record<string, unknown> = {
     resendFromEmail: "OWW CI <ci@test.localhost>",
     resendTemplateEnv: "test",
     kasseEmail: "kasse@test.localhost",
-    autoAckMinAgeHours: "1",
     logDigestEmail: "ops@test.localhost",
     statsDataset: "stats",
   },

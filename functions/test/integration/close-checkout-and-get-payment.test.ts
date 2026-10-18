@@ -39,7 +39,7 @@ process.env.RAISENOW_PAYLINK_SOLUTION_ID =
 
 import { expect } from "chai";
 import { isSameBusinessDay } from "@oww/shared";
-import { Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import {
   setupEmulator,
@@ -312,6 +312,12 @@ function buildRequest(opts: CallOptions): CallableRequest<unknown> {
 async function call(
   opts: CallOptions
 ): ReturnType<typeof closeCheckoutAndGetPaymentHandler> {
+  // A close that costs something must name a method (BIL-44). Tests that
+  // aren't about the method get the QR-Rechnung; a test that wants none
+  // passes the key with `undefined`.
+  if (opts.data && typeof opts.data === "object" && !("paymentMethod" in opts.data)) {
+    opts = { ...opts, data: { ...opts.data, paymentMethod: "rechnung" } };
+  }
   return closeCheckoutAndGetPaymentHandler(
     // The handler is typed against the request schema, but for tests we want
     // to also exercise invalid shapes (missing persons / per-person usageType / both
@@ -2159,8 +2165,26 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
           // An owner-only type needs the owner's line (CHK-32, ADR-0050).
           persons: [opts.usageType === "intern" ? { ...wire(ADULT), userId: UID } : ADULT],
           summary: ZERO_SUMMARY,
-          ...(paymentMethod !== undefined ? { paymentMethod } : {}),
+          paymentMethod,
         },
+      });
+    }
+
+    /**
+     * A bill closed before #750, still waiting for its method: minted
+     * unconfirmed with no method on the checkout. Today's close can't
+     * produce one (BIL-44), so the close's commit is undone by hand.
+     */
+    async function seedLegacyUnconfirmedClose(): Promise<void> {
+      await closeWith("rechnung");
+      const db = getFirestore();
+      const [bill] = await listBills();
+      await db.collection("bills").doc(bill.id).update({
+        paymentMethodConfirmationTime: null,
+        paymentMethodConfirmationSource: null,
+      });
+      await db.collection("checkouts").doc(CHECKOUT_ID).update({
+        paymentMethod: FieldValue.delete(),
       });
     }
 
@@ -2278,16 +2302,120 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await expectHttpsError(() => closeWith("bitcoin"), "invalid-argument");
     });
 
-    it("without a method the bill stays unconfirmed, as before", async () => {
+    it("without a method a close that costs something is refused (BIL-44)", async () => {
       await seedUser(UID);
       await seedOpen();
 
-      await closeWith(undefined);
+      await expectHttpsError(() => closeWith(undefined), "failed-precondition");
+
+      expect(await listBills()).to.have.length(0);
+      const checkout = await getCheckout(CHECKOUT_ID);
+      expect(checkout.status).to.equal("open");
+      expect(checkout.paymentMethod ?? null).to.equal(null);
+    });
+
+    it("without a method a guest's create-and-close is refused (BIL-44)", async () => {
+      await expectHttpsError(
+        () =>
+          call({
+            uid: "anon-commit",
+            anonymous: true,
+            data: {
+              newCheckout: {
+                userId: null,
+                workshopsVisited: ["holz"],
+                items: [
+                  { workshop: "holz", description: "Schraubensatz", origin: "manual", catalogId: null, quantity: 1, unitPrice: 5, totalPrice: 5 },
+                ],
+              },
+              usageType: "regular" as UsageType,
+              persons: [ADULT],
+              summary: ZERO_SUMMARY,
+              paymentMethod: undefined,
+            },
+          }),
+        "failed-precondition",
+      );
+      expect(await listBills()).to.have.length(0);
+      expect((await getFirestore().collection("checkouts").get()).empty).to.equal(true);
+    });
+
+    it("a CHF 0 checkout closes without a method (BIL-8)", async () => {
+      await seedUser(UID);
+      await seedCheckout(CHECKOUT_ID, { ownerUid: UID, items: [] });
+
+      await closeWith(undefined, { usageType: "intern" as UsageType });
 
       const [bill] = await listBills();
-      expect(bill.data.paymentMethodConfirmationTime).to.equal(null);
-      expect(bill.data.kind).to.equal("invoice");
-      expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
+      expect(bill.data.paidVia).to.equal("free");
+      expect((await getCheckout(CHECKOUT_ID)).status).to.equal("closed");
+    });
+
+    // The pre-rename id was migrated away (ADR-0044); accepting it again
+    // would let a stale client re-introduce it.
+    it("rejects the retired 'twint' id", async () => {
+      await seedUser(UID);
+      await seedOpen();
+      await expectHttpsError(() => closeWith("twint"), "invalid-argument");
+      expect(await listBills()).to.have.length(0);
+    });
+
+    it("monthly: refused when the pointer's membership doesn't list the account holder (#745)", async () => {
+      await seedUser(UID);
+      const db = getFirestore();
+      const membershipRef = db.collection("memberships").doc("m-forged");
+      await membershipRef.set({
+        type: "family",
+        status: "active",
+        validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+        ownerUserId: db.collection("users").doc("someone-else"),
+        members: [db.collection("users").doc("someone-else")],
+        paymentCheckouts: [],
+      });
+      await db.collection("users").doc(UID).update({ activeMembership: membershipRef });
+      await seedOpen();
+
+      await expectHttpsError(() => closeWith("monthly"), "failed-precondition");
+      expect(await listBills()).to.have.length(0);
+      expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
+    });
+
+    // Ops can switch an integration off for every client type (e.g. RaiseNow
+    // once the Wallee terminal replaces it); a stale tab must not keep using it.
+    describe("with raisenow disabled for every client type", () => {
+      const saved = {
+        kiosk: process.env.PAYMENT_METHODS_KIOSK,
+        web: process.env.PAYMENT_METHODS_WEB,
+      };
+      beforeEach(() => {
+        process.env.PAYMENT_METHODS_KIOSK = "rechnung,monthly";
+        process.env.PAYMENT_METHODS_WEB = "rechnung";
+      });
+      afterEach(() => {
+        for (const [key, value] of [
+          ["PAYMENT_METHODS_KIOSK", saved.kiosk],
+          ["PAYMENT_METHODS_WEB", saved.web],
+        ] as const) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      });
+
+      it("refuses raisenow with failed-precondition", async () => {
+        await seedUser(UID);
+        await seedOpen();
+        await expectHttpsError(() => closeWith("raisenow"), "failed-precondition");
+        expect(await listBills()).to.have.length(0);
+        expect((await getCheckout(CHECKOUT_ID)).status).to.equal("open");
+      });
+
+      it("still accepts a method enabled for only one client type", async () => {
+        await seedMember(UID);
+        await seedOpen();
+        await closeWith("monthly");
+        const [bill] = await listBills();
+        expect(bill.data.kind).to.equal("beleg");
+      });
     });
 
     it("a CHF 0 checkout ignores the method and closes as free (BIL-8)", async () => {
@@ -2308,7 +2436,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedUser(UID);
       await seedOpen();
 
-      await closeWith(undefined);
+      await seedLegacyUnconfirmedClose();
       const [unconfirmed] = await listBills();
       expect(unconfirmed.data.paymentMethodConfirmationTime).to.equal(null);
 
@@ -2331,7 +2459,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedMember(UID);
       await seedOpen();
 
-      await closeWith(undefined);
+      await seedLegacyUnconfirmedClose();
       const retry = await closeWith("monthly");
       expect(retry.paymentMethod).to.equal("monthly");
 
@@ -2364,7 +2492,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedUser(UID);
       await seedOpen();
 
-      await closeWith(undefined);
+      await seedLegacyUnconfirmedClose();
       const [bill] = await listBills();
       await getFirestore().collection("bills").doc(bill.id).update({ cancelledAt: Timestamp.now() });
 
@@ -2380,7 +2508,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       await seedUser("user-intruder");
       await seedOpen();
 
-      await closeWith(undefined);
+      await seedLegacyUnconfirmedClose();
       await expectHttpsError(
         () => closeWith("rechnung", { uid: "user-intruder" }),
         "permission-denied",

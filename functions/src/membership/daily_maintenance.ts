@@ -8,8 +8,7 @@
  * (billed per job) instead of two. The fixed cron time matters: the renewal
  * invoicer's `[now+28d, now+30d)` slice relies on stable ~24h tick spacing —
  * "every 24 hours" scheduling can shift on redeploy, a fixed cron cannot.
- * 04:00 runs after `autoAcknowledgeBills` (03:00) and before `monthlyBillRun`
- * (06:00).
+ * 04:00 runs before `monthlyBillRun` (06:00).
  */
 
 import * as logger from "firebase-functions/logger";

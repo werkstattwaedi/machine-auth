@@ -4,8 +4,8 @@
 /**
  * Sammelrechnung aggregation cron (issue #245).
  *
- * Belege — per-visit Sammelrechnung records, written by `acknowledgeBill`
- * and `autoAcknowledgeBills` when the user picks the monthly tab — accumulate
+ * Belege — per-visit Sammelrechnung records, minted by the close when the
+ * member commits the Sammelrechnung (#750) — accumulate
  * through the month. This job rolls each member's Belege from prior
  * months into a single `kind: "invoice"` Sammelrechnung with a Swiss
  * QR-bill PDF, then triggers the standard PDF + email path.

@@ -169,8 +169,8 @@ export function isPaymentMethodEnabledAnywhere(
  * What a bill document is, for the mail that carries it (ADR-0046): a Beleg
  * queued for the Sammelrechnung, the Sammelrechnung itself (an aggregated
  * invoice whose checkouts were paid "monthly"), a receipt for a method paid
- * during the checkout, or a payable QR-bill invoice — also when no method
- * was picked (auto-ack). Reads method properties only, so a new payment
+ * during the checkout, or a payable QR-bill invoice — also for a legacy
+ * bill whose checkout names no method. Reads method properties only, so a new payment
  * integration needs no new template.
  */
 export function billDocument(

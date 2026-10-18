@@ -392,12 +392,13 @@
       // skipped). Clear it manually to re-arm the send, e.g. after an
       // admin adds an e-mail to a login-less account.
       "emailSkippedReason": "no-recipient | null",
-      // The customer-stated "I'll pay this" ack. Server-only — written by
-      // the acknowledgeBill callable / the close (source: "user"), the
-      // autoAcknowledgeBills cron (source: "auto") or a Wallee-confirmed
-      // terminal payment (source: "terminal", bill born paid). The email
-      // and membership-activation triggers key off this transitioning from
-      // null to set, or off a bill born committed.
+      // The "I'll pay this" ack. Server-only, written when the bill is
+      // minted — by the close (source: "user"), a Wallee-confirmed terminal
+      // payment ("terminal", bill born paid) or the server itself ("auto":
+      // CHF 0, monthly Sammelrechnung, renewal, correction; before #757
+      // also the overnight job). Null only on a legacy bill nobody
+      // committed. The email and membership-activation triggers key off a
+      // bill born committed, or off this transitioning from null to set.
       "paymentMethodConfirmationTime": "timestamp | null",
       "paymentMethodConfirmationSource": "user | auto | terminal | null",
       // Terminal payments only (ADR-0051), server-only: the Wallee

@@ -19,8 +19,8 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
 - **BIL-6** Confirming RaiseNow is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
-- **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung and its account holder is an active member (BIL-4), otherwise as a QR-Rechnung. — #251, #302, #761, #745
-- **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill issued without a committed method that nobody confirms is committed overnight (BIL-7). — #251, #302
+- **BIL-36** Confirming a payment method commits the bill at once and can't be undone. — #251, #302, #757
+- **BIL-44** A checkout totalling more than CHF 0 can't be closed without a payment method. — #757
 - **BIL-39** A checkout paid by a verified payment stays open until the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) already paid and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
 - **BIL-40** A verified payment (BIL-39) closes the checkout with exactly the persons and their usage types, the items, the donation and the amount priced when that payment was started, and its bill is paid as of the time the provider authorised the payment. — ADR-0051, #735, #788
 - **BIL-42** A change made to the checkout after a verified payment was started for it doesn't hold the payment up: the provider's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to the difference — ADR-0051, #788:
@@ -61,7 +61,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-21** Only an admin can cancel or correct a closed checkout, and never a paid bill, a Beleg whose Sammelrechnung is paid, a membership renewal, or a checkout containing a membership or badge. — ADR-0042
 - **BIL-22** A cancelled checkout and its bill stay visible as cancelled with their original PDF; a correction is a new checkout whose document names the one it replaces, the date and the reason. — ADR-0042
 - **BIL-23** Correcting a Beleg that is part of a Sammelrechnung re-issues the whole Sammelrechnung as one revision, or cancels it when no Beleg is left. — ADR-0042
-- **BIL-24** A cancelled bill can no longer be confirmed, committed overnight, collected into a Sammelrechnung or booked as paid. — ADR-0042
+- **BIL-24** A cancelled bill can no longer be collected into a Sammelrechnung or booked as paid. — ADR-0042
 
 ## Mail
 
@@ -87,7 +87,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Retention
 
-- **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive; a renewal bill that is not yet committed (MEM-35) is never deleted. — ADR-0038
+- **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive. — ADR-0038
 - **BIL-33** A person's data can't be erased while they have an unpaid bill. — ADR-0038
 
 ## Open questions
@@ -101,3 +101,4 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 <!-- `- BIL-n — <PR that retired it>` -->
 - BIL-18 — #743 (bill-number migration; a one-off transition, not the product)
 - BIL-5 — #761 (the RaiseNow confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)
+- BIL-7 — #757 (the overnight commit of bills nobody confirmed; a renewal bill is committed when it is issued, MEM-24, and a close needs a payment method, BIL-44)

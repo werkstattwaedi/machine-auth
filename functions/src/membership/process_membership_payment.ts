@@ -9,9 +9,10 @@
  * stamping `users/{uid}.activeMembership` before the user had even
  * picked a payment method. That made the Sammelrechnung tab pop in
  * mid-flow for a first-time membership purchase. Now activation runs
- * from the unified `onBillUpdate` trigger — i.e. when the user (or the
- * autoAcknowledgeBills cron) sets `paymentMethodConfirmationTime` on
- * the bill.
+ * once the bill's payment method is committed — from `onBillCreate` for
+ * a bill minted committed (the close, the renewal invoicer), from
+ * `onBillUpdate` when a legacy bill's `paymentMethodConfirmationTime`
+ * flips from null to set.
  *
  * Idempotency: each membership records `paymentCheckouts:
  * DocumentReference[]`. If the helper sees a checkout already in that

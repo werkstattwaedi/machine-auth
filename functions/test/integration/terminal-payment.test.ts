@@ -47,7 +47,6 @@ import {
   type PrepareTerminalPaymentResponse,
 } from "../../src/invoice/terminal_payment";
 import { closeCheckoutAndGetPaymentHandler } from "../../src/invoice/close_checkout_and_get_payment";
-import { runAutoAcknowledgeBills } from "../../src/invoice/acknowledge_bill";
 import { isCommittedAtClose } from "../../src/invoice/bill_triggers";
 import {
   handleWalleeWebhook,
@@ -594,35 +593,6 @@ describe("Wallee terminal payment (Integration)", () => {
       // Money that still arrives for the attempt is a double charge.
       wallee.pay(9001, reference, 25);
       expect(await settleTerminalPayment(9001, "webhook")).to.equal("double-charge");
-    });
-
-    it("commits an unconfirmed bill that names the terminal as a QR-Rechnung", async () => {
-      // Only reachable through a hand edit or an old client — the rules
-      // refuse the value — but the overnight job must never mail a
-      // Quittung for money nobody received.
-      const db = getFirestore();
-      await seedOpenCheckout("co1", {
-        status: "closed",
-        paymentMethod: "wallee_terminal",
-        billRef: db.collection("bills").doc("b1"),
-      });
-      await db.collection("bills").doc("b1").set({
-        userId: db.collection("users").doc(OWNER),
-        checkouts: [db.collection("checkouts").doc("co1")],
-        referenceNumber: 10,
-        amount: 25,
-        currency: "CHF",
-        storagePath: null,
-        created: Timestamp.fromMillis(Date.now() - 48 * 3600 * 1000),
-        paidAt: null,
-        paidVia: null,
-        pdfGeneratedAt: null,
-        emailSentAt: null,
-        paymentMethodConfirmationTime: null,
-        paymentMethodConfirmationSource: null,
-      });
-      await runAutoAcknowledgeBills();
-      expect((await checkout("co1")).paymentMethod).to.equal("rechnung");
     });
   });
 

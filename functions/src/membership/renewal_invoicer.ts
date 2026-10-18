@@ -25,11 +25,11 @@
  *     `paymentCheckouts`) all work without renewal-specific branches.
  *  3. Stamp `pendingRenewalBill` on the membership so re-runs skip it.
  *
- * From there the standard pipeline takes over: `onBillCreate` renders the
- * PDF; the `autoAcknowledgeBills` cron (or a future explicit payment
- * receipt) flips `paymentMethodConfirmationTime`, which fires
- * `trySendEmail` + `processMembershipForAckedBill` → `applyMembershipPayment`
- * extends `validUntil` by one year and clears `pendingRenewalBill`.
+ * The bill is minted committed (ack source "auto", #757), so
+ * `onBillCreate` runs the commit side effects at once
+ * (`isCommittedAtClose`): the PDF, `trySendEmail` (the renewal letter) and
+ * `processMembershipForAckedBill` → `applyMembershipPayment`, which extends
+ * `validUntil` by one year and clears `pendingRenewalBill`.
  *
  * Idempotency:
  *  - The `pendingRenewalBill == null` query filter means a second tick on
@@ -283,6 +283,9 @@ export async function runRenewalInvoicer(
           amount: sku.unitPrice,
           billRef,
           source: "membership-renewal",
+          // Committed at issue (MEM-24): onBillCreate mails the renewal
+          // letter and adds the year (MEM-35) — nobody confirms a renewal.
+          preAck: { source: "auto" },
         });
         tx.set(checkoutRef, checkout);
         tx.set(itemRef, item);

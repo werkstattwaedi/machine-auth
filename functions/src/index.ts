@@ -249,9 +249,8 @@ export { logClientError } from "./util/log_client_error";
 // clientError records the web app reports — actually get looked at.
 export { dailyLogDigest } from "./util/log_digest";
 
-// Export bill lifecycle triggers + the daily auto-ack cron (#251).
-export { onCheckoutClosed, onCheckoutCreatedClosed } from "./invoice/create_bill";
-
+// Bill lifecycle triggers. Every close mints its bill itself, committed
+// (#750, #757), so there is no checkout trigger or overnight commit.
 // Self-service badge purchase: associate tokens on checkout close. The
 // callable (addBadgeToCheckout) is grouped into billingCall.
 export { onCheckoutClosedAssociateBadges } from "./badge/associate_on_close";
@@ -260,7 +259,6 @@ export {
   onBillUpdate,
   retryBillProcessing,
 } from "./invoice/bill_triggers";
-export { autoAcknowledgeBills } from "./invoice/acknowledge_bill";
 // Wallee terminal (ADR-0051): the signed webhook settles a terminal
 // payment; the nightly job settles what a lost delivery missed.
 export {

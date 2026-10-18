@@ -324,9 +324,10 @@ service cloud.firestore {
       // SDK writes bypass rules and may leave `firebaseUid` null.
       // Clients create open checkouts only: every close goes through
       // closeCheckoutAndGetPayment, which prices it on the server. A
-      // client-created closed checkout would get a bill for whatever
-      // `summary.totalPrice` it carried (onCheckoutCreatedClosed) and
-      // count as a visit in the statistics export.
+      // client-created closed checkout would have no bill (or, while the
+      // onCheckoutCreatedClosed trigger existed, one for whatever
+      // `summary.totalPrice` it carried) and count as a visit in the
+      // statistics export.
       allow create: if request.resource.data.status == 'open'
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',

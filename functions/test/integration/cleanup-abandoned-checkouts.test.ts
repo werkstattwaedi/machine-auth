@@ -432,8 +432,8 @@ describe("cleanupAbandonedCheckouts (Integration)", () => {
   });
 
   it("keeps a closed anonymous checkout even before its bill is linked", async () => {
-    // Closed-but-not-yet-billed is a transient state between the close
-    // and `onCheckoutCreatedClosed` — status alone must protect it.
+    // A closed checkout without a bill link (legacy data, or a hand edit)
+    // must survive too — status alone protects it.
     await seedAnonUser("anon-closing", ANON_USER_RETENTION_HOURS + 1);
     await seedCheckout("co-closing", {
       status: "closed",

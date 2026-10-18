@@ -259,7 +259,8 @@ async function assembleInvoiceData(
   );
 
   // Read the customer's chosen payment method from the first checkout.
-  // Null at bill-create time; set after acknowledgeBill / the cron lands.
+  // Written with the commit (the close, the renewal invoicer); null on a
+  // CHF 0 checkout or a legacy one nobody committed.
   // Gates whether the QR-bill payment slip is rendered (#251).
   // For the monthly aggregated bill (kind "invoice" with paymentMethod
   // "monthly" on every linked checkout): the bill IS the Sammelrechnung,
@@ -413,10 +414,8 @@ export async function tryGeneratePdf(
  * keyed by the bill document, read from payment-method properties — never
  * from a method id, so a new payment integration needs no new template.
  *
- * The method is the checkout's last-selected one: an auto-ack on a user who
- * tapped a paid-during-checkout tab but didn't commit still gets the
- * receipt (it doesn't claim the payment was verified), and an auto-ack
- * without any selection gets the payable QR-Rechnung. A per-visit Beleg
+ * The method is the one committed on the checkout; a legacy bill whose
+ * checkout names none gets the payable QR-Rechnung. A per-visit Beleg
  * ("charge queued") and the aggregated Sammelrechnung ("please pay") must
  * never share a template (issue #502).
  */
@@ -464,8 +463,8 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   }
 
   // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
-  // its kind transition (acknowledgeBill / autoAcknowledgeBills flip it to
-  // "beleg", or the close mints it as one, #750) and never carries a
+  // its kind (the close mints it as one, #750; before that a later commit
+  // flipped it to "beleg") and never carries a
   // payment-method ack stamp. The member still wants an emailed receipt for
   // the visit — just not a payable invoice
   // (issue #405). So Belege bypass the ack gate; real invoices stay gated
@@ -474,10 +473,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // from tests / one-off scripts — keep the guard.
   if (!isBeleg && !bill.paymentMethodConfirmationTime) return false;
 
-  // Free bills are auto-acked at creation to keep the cron out, but we
-  // don't email a "here's your zero-amount invoice" PDF — unless it is a
-  // corrected re-issue: a correction down to CHF 0.00 still owes the
-  // customer the "replaced" mail (ADR-0042).
+  // Free bills are acked at creation, but we don't email a "here's your
+  // zero-amount invoice" PDF — unless it is a corrected re-issue: a
+  // correction down to CHF 0.00 still owes the customer the "replaced"
+  // mail (ADR-0042).
   if (bill.paidVia === "free" && !bill.supersedesBillRef) return false;
 
   // No PDF yet — can't send email without attachment
@@ -843,17 +842,23 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
  * #750): a confirmed QR-Rechnung, a Sammelrechnung Beleg, or a terminal
  * payment Wallee confirmed. Such a bill
  * never sees the null → set ack transition `onBillUpdate` watches, so
- * `onBillCreate` runs the commit side effects instead. Every other bill
- * born committed sends its own mail or none: a CHF 0 bill (no mail,
- * BIL-8), the monthly run's Sammelrechnung (auto ack), corrected
- * re-issues (`supersedesBillRef`) and renewal invoices (own source).
+ * `onBillCreate` runs the commit side effects instead. A renewal invoice
+ * is minted committed by the renewal invoicer (MEM-24) and qualifies too.
+ * Every other bill born committed sends its own mail or none: a CHF 0 bill
+ * (no mail, BIL-8), the monthly run's Sammelrechnung (auto ack, mailed by
+ * the run) and corrected re-issues (`supersedesBillRef`, mailed by the
+ * correction).
  *
  * Exported for unit testing.
  */
 export function isCommittedAtClose(bill: BillEntity): boolean {
-  if ((bill.source ?? "checkout") !== "checkout") return false;
   if (bill.supersedesBillRef) return false;
   if (bill.paidVia === "free") return false;
+  const source = bill.source ?? "checkout";
+  // A renewal bill minted before #757 waited unacked for the overnight
+  // job; only one born acked is committed here.
+  if (source === "membership-renewal") return !!bill.paymentMethodConfirmationTime;
+  if (source !== "checkout") return false;
   if ((bill.kind ?? "invoice") === "beleg") return !bill.aggregatedIntoBillRef;
   // "terminal": the webhook closed the checkout on a Wallee-confirmed
   // payment and minted the bill paid and committed in one go (ADR-0051).
@@ -932,8 +937,8 @@ export async function handleBillCreated(
 
 /**
  * A bill committed after its creation — the ack stamp flips from null to
- * set (`acknowledgeBill`, the daily 03:00 cron) or the bill turns into a
- * Beleg (Sammelrechnung, issue #245/#405). The PDF was built before the
+ * set (the repeat close of a legacy unconfirmed bill, or an ops repair) or
+ * the bill turns into a Beleg (Sammelrechnung, issue #245/#405). The PDF was built before the
  * method was known, so it is regenerated: a Beleg is titled "Beleg", and a
  * method paid during the checkout or the Sammelrechnung must not carry the
  * QR slip (#251).

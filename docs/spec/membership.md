@@ -12,7 +12,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
 - **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile.
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
-- **MEM-7** A membership becomes active when its bill's payment method is committed — by the buyer (CHK-22), by the provider's confirmation of a verified payment (BIL-39) or by the overnight job (BIL-7) — not when the payment is booked (BIL-34). — #251, ADR-0051
+- **MEM-7** A membership becomes active when its bill's payment method is committed — by the buyer (CHK-22) or by the provider's confirmation of a verified payment (BIL-39) — not when the payment is booked (BIL-34). — #251, ADR-0051, #757
 - **MEM-8** A membership is valid for one year; a renewal or an admin's extension (MEM-32) adds a year to its end date, or starts the year today if that date has already passed.
 - **MEM-9** A membership has one price per type (single, family), the same for a first purchase and a renewal. — #743
 
@@ -44,7 +44,7 @@ renewal, cancellation and expiry. Terms: see the
 
 ## Renewal & cancellation
 
-- **MEM-24** About 30 days before the end date, an active membership with auto-renew gets one renewal bill (QR-Rechnung). — #323
+- **MEM-24** About 30 days before the end date, an active membership with auto-renew gets one renewal bill (QR-Rechnung), committed when it is issued. — #323, #757
 - **MEM-25** Only the family owner receives the renewal bill; invited members are told that the membership renews, never that they will be billed. — #730
 
   | Membership | Viewer | Told they receive the renewal bill |
@@ -80,10 +80,11 @@ renewal, cancellation and expiry. Terms: see the
 
 - **MEM-32** An admin can create a membership without payment for a person who has none, extend one by a year, end auto-renew and cancel.
 - **MEM-33** An admin adds existing people directly to a family; no invitation mail is sent. — #622, ADR-0048, #747
-- **MEM-34** The admin app counts a membership as expiring in its last 30 days, and shows a pending renewal bill on it.
+- **MEM-34** The admin app counts a membership as expiring in its last 30 days.
 
 ## Open questions
 
+- [NEEDS CLARIFICATION] The admin app's badge for a pending renewal bill shows only in the moment between a renewal bill's issue and its year being added (MEM-24, MEM-35), or after that step failed. Remove it, or show an unpaid renewal bill instead?
 - [NEEDS CLARIFICATION] Ending auto-renew after the renewal bill went out leaves the bill and the added year in place. Should ending auto-renew void a pending renewal bill?
 - [NEEDS CLARIFICATION] Should a family owner be able to cancel the membership? The server allows it; the checkout app offers no way to, and the cancelled view says only the club administration can act.
 - [NEEDS CLARIFICATION] A person whose membership was cancelled can't buy a new one themselves — the app offers no purchase (MEM-31), though the server would accept it. Intended, or should cancelled behave like expired (MEM-2)?
