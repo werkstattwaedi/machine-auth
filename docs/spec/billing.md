@@ -86,7 +86,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | it arrives for a checkout already closed — by an earlier payment at the Wallee terminal or another method — or cancelled | the checkout and its bill as they are |
   | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
   | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
-- **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document and its mail say that nothing is to be paid. — #237, #790
+- **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document and, where one is sent (BIL-26, BIL-28), its mail say that nothing is to be paid. — #237, #790
 
 ## Retention
 
@@ -97,6 +97,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
+- [NEEDS CLARIFICATION] A renewal bill totalling CHF 0 (MEM-24) is issued paid (BIL-45) but mailed by nobody — neither the renewal letter nor the CHF 0 mail (BIL-26). Intended, or should it get one? — #790
 
 ## Retired
 

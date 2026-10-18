@@ -112,7 +112,7 @@ export const EMAIL_CONTRACT = {
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
   },
   // Beleg of a checkout totalling CHF 0 (BIL-8, #790): no amount, no slip,
-  // and the copy says there is nothing to pay (BIL-39).
+  // and the copy says there is nothing to pay (BIL-45).
   "bill-free": {
     dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER"],
