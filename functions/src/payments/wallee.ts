@@ -18,7 +18,7 @@
 
 import * as logger from "firebase-functions/logger";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { parseTerminalReference, type TerminalReferenceEnv } from "@oww/shared";
+import type { TerminalReferenceEnv } from "@oww/shared";
 
 /** Application user's authentication key (base64), per project. */
 export const walleeAuthKey = defineSecret("WALLEE_AUTH_KEY");
@@ -288,13 +288,4 @@ export function parseWebhookPayload(rawBody: string): WalleeWebhookPayload | nul
     state: typeof b.state === "string" ? b.state : undefined,
     eventId: typeof b.eventId === "number" ? b.eventId : undefined,
   };
-}
-
-/** True when a reference belongs to the other environment sharing the space. */
-export function isOtherEnvironmentReference(
-  reference: string | null,
-  env: TerminalReferenceEnv,
-): boolean {
-  const parsed = parseTerminalReference(reference);
-  return parsed !== null && parsed.env !== env;
 }

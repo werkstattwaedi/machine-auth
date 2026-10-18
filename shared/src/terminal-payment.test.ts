@@ -20,7 +20,7 @@ describe("terminal reference", () => {
   it("rejects what isn't ours", () => {
     // Spike references, a standalone terminal sale (Wallee's own id), junk.
     expect(parseTerminalReference("SPIKE-0005")).toBeNull()
-    expect(parseTerminalReference("608434636")).toBeNull()
+    expect(parseTerminalReference("000000001")).toBeNull()
     expect(parseTerminalReference("X-abc-1")).toBeNull()
     expect(parseTerminalReference("P-abc-0")).toBeNull()
     expect(parseTerminalReference("P-ab_c-1")).toBeNull()

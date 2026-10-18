@@ -4,7 +4,6 @@
 import { expect } from "chai";
 import {
   customerReceiptText,
-  isOtherEnvironmentReference,
   parseWebhookPayload,
   toWalleeTransaction,
 } from "./wallee";
@@ -107,14 +106,6 @@ describe("parseWebhookPayload", () => {
   });
 });
 
-describe("isOtherEnvironmentReference", () => {
-  it("tells staging and prod apart", () => {
-    expect(isOtherEnvironmentReference("S-abc-1", "P")).to.equal(true);
-    expect(isOtherEnvironmentReference("P-abc-1", "P")).to.equal(false);
-    expect(isOtherEnvironmentReference("608434636", "P")).to.equal(false);
-  });
-});
-
 describe("classifyTransaction", () => {
   const config = { spaceId: 100, userId: 200, terminalId: 300, referenceEnv: "P" as const };
   const base = toWalleeTransaction(RAW_TRANSACTION);
@@ -141,7 +132,7 @@ describe("classifyTransaction", () => {
       classifyTransaction({ ...base, merchantReference: "S-abcDEF0123456789wxyz-1" }, config),
     ).to.equal("other-environment");
     // A sale started on the terminal itself carries Wallee's own id.
-    expect(classifyTransaction({ ...base, merchantReference: "608434636" }, config)).to.equal(
+    expect(classifyTransaction({ ...base, merchantReference: "000000001" }, config)).to.equal(
       "unmatched",
     );
   });
