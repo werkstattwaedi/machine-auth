@@ -68,9 +68,10 @@ document: "rechnung" | "sammelrechnung" | "beleg" | "quittung"
 - **Never key the queue on `document == "beleg"`** — that is the double
   charge this ADR exists to prevent.
 - The mail contract's `BILL_DOCUMENTS`/`BillDocument` become
-  `BILL_MAILS`/`BillMail`: they name a mail, not the document. Template
-  aliases are unchanged (`bill-receipt` carries the RaiseNow Beleg and the
-  Wallee Quittung).
+  `BILL_MAILS`/`BillMail`: they name a mail, not the document. A Quittung
+  keeps `bill-receipt`; the RaiseNow Beleg gets its own `bill-paid-beleg`,
+  since its copy must not say the payment was received (ADR-0046: wording
+  that depends on the document is a separate template).
 
 ### Migration
 

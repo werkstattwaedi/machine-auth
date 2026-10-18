@@ -2,32 +2,35 @@
 phase: before-functions
 ---
 
-# Publish the TWINT Beleg mail copy (#763, ADR-0052)
+# Publish the `bill-paid-beleg` mail (#763, ADR-0052)
 
-**What:** From this release on, a bill paid during the checkout (TWINT) is a
-**Beleg** `BL-…`, no longer a Quittung `RE-…`. Its mail is still the
-`bill-receipt` template (alias unchanged), but its copy said "Quittung". The
-operations repo's change (`email/src/mails/bill-receipt.ts`: subject, intro,
-card title "Beleg …"; `email/src/contract.ts` re-exports the renamed
-`BILL_MAILS` / `BillMail` from `shared/src/email-contract.ts`) must be on its
-`main`, then publish to the environment being deployed, from the operations
-repo, as its `email/README.md` describes (publish is additive; no `--prune`
-needed — no alias was added or removed):
+**What:** From this release on, a bill paid during the checkout through the
+RaiseNow TWINT paylink is a **Beleg** `BL-…` (the customer's own statement,
+nothing confirms it), and the functions announce it with a new contract mail,
+`bill-paid-beleg` (dimension `kind`: visit / membership / purchase). The
+Wallee terminal's verified payment keeps its Quittung and `bill-receipt`.
+The operations repo's change — `email/src/mails/bill-paid-beleg.ts`, its
+entry in `email/src/mails/index.ts`, and `email/src/contract.ts` re-exporting
+the renamed `BILL_MAILS` / `BillMail` from `shared/src/email-contract.ts` —
+must be on its `main`. Then publish to the environment being deployed, from
+the operations repo (publish is additive; no `--prune` — nothing was
+removed):
 
 ```bash
 cd ../machine-auth-operations
-npm run email:publish -- --env <staging|prod> --dry-run   # lists bill-receipt-* as changed
+npm run email:publish -- --env <staging|prod> --dry-run   # lists the three <env>-bill-paid-beleg-* as new
 npm run email:publish -- --env <staging|prod>
 ```
 
-**Check:** the published `<env>-bill-receipt-visit` template's subject reads
-"Beleg TWINT-Zahlung" (Resend dashboard, or `resend templates get` per the
-`resend-cli` skill). Already done when it does.
+**Check:** the templates `<env>-bill-paid-beleg-visit`, `-membership` and
+`-purchase` exist in Resend (dashboard, or `resend templates list` per the
+`resend-cli` skill). Already done when they do; a dry run then lists them as
+unchanged.
 
-**Without it:** TWINT customers get a mail titled "Quittung" with a PDF
-titled "Beleg" and a `BL-` number — the mismatch #763 fixes. Sends still
-work (the contract's variables are unchanged). If the operations repo still
-imports `BILL_DOCUMENTS` / `BillDocument`, its generator fails to load the
-contract — merge its PR first.
+**Without it:** every RaiseNow TWINT checkout's mail fails — Resend refuses
+a send to a template alias that doesn't exist; the hourly retry keeps
+failing until the templates are published. The operations repo's generator
+also fails to load the contract while it still imports `BILL_DOCUMENTS` /
+`BillDocument`.
 
 **Staging vs prod:** the same; staging first.

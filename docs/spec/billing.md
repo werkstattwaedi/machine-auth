@@ -12,7 +12,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   |---|---|---|---|---|
   | QR-Rechnung | no | no | no | Rechnung with QR slip |
   | Sammelrechnung | no | yes | yes | Beleg, later a Sammelrechnung |
-  | RaiseNow | yes | no | no | Quittung, no QR slip |
+  | RaiseNow | yes | no | no | Beleg, no QR slip |
   | Wallee terminal | yes, a verified payment (BIL-39) | no | no | Quittung, no QR slip |
 
 - **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order — the Wallee terminal only at a kiosk set up to drive it. — ADR-0044, ADR-0051, #735
@@ -32,13 +32,14 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows and their minutes as priced, leaving out the sessions that arrived later (CHK-44), which are billed neither there nor on a later checkout |
 
 - **BIL-43** A checkout takes at most ten payments started at the Wallee terminal, each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
-- **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
+- **BIL-8** A checkout totalling CHF 0 asks for no payment method, and unless it corrects an earlier bill (BIL-17, BIL-28) its document is a Beleg and no bill mail is sent. — #237, #780
 
 ## Documents
 
-- **BIL-9** Every document's title and file name name its kind: Rechnung, Quittung, Beleg or Sammelrechnung. — #405, #426
-- **BIL-10** Only a Rechnung or Sammelrechnung with an amount due carries a QR slip; a Beleg says its amount is added to the next Sammelrechnung. — ADR-0044
+- **BIL-9** Every document's title and file name name its kind: Rechnung, Quittung, Beleg or Sammelrechnung — a Sammelrechnung collecting a single visit included. — #405, #426, ADR-0052, #763
+- **BIL-10** Only a Rechnung or Sammelrechnung with an amount due carries a QR slip; a Beleg for the Sammelrechnung says its amount is added to the next Sammelrechnung. — ADR-0044
 - **BIL-11** A Quittung names the payment method; it states that the payment was received only for a verified payment (BIL-39), and then also gives the payment date and, for the Wallee terminal, Wallee's cardholder receipt. — ADR-0051, #735
+- **BIL-47** A RaiseNow Beleg names the payment method, and neither it nor its mail says that the payment was received. — ADR-0052, #763
 - **BIL-12** On a document, line items are grouped by workshop with a subtotal each, a membership is listed first, and a donation is listed as such. — #262, #464
 - **BIL-38** A document lists every person on the checkout with their user type, their usage type unless regular — *Nur Materialbezug* on a purchase-only checkout (CHK-9) — and the usage fee they pay, then one row per waived machine or material section naming the visit's type (CHK-29); a person whose usage fee is waived for an earlier visit that day (CHK-37) is listed at CHF 0 with the reason. — #284, #268, #269, ADR-0050, #605
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
@@ -49,11 +50,12 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 ## Numbering & references
 
 - **BIL-16** A bill gets its number when it is issued — at checkout close, by the monthly run (BIL-19) or by the renewal invoicer (MEM-24); a Rechnung, Quittung or Sammelrechnung shows it as `RE-<number>` and a Beleg as `BL-<number>`. — ADR-0042
-- **BIL-17** A correction keeps the original number with a revision suffix (`RE-4200001-1` … `-9`), and its QR reference ends in that digit; a tenth correction is refused. — ADR-0042
+- **BIL-17** A correction keeps the number of the bill it replaces with a revision suffix (`RE-4200001-1` … `-9`), its QR reference ending in that digit, and that bill's payment method and kind of document; a tenth correction is refused. — ADR-0042, ADR-0052, #763
+- **BIL-46** A RaiseNow bill issued before #763 stays a Quittung with its `RE-` number, its corrections included. — ADR-0052, #763
 
 ## Monthly Sammelrechnung
 
-- **BIL-19** On the first run of a month, each account holder's Belege from earlier months become one Sammelrechnung; a missed run catches up on the next day. — #245
+- **BIL-19** On the first run of a month, each account holder's Belege for the Sammelrechnung from earlier months become one Sammelrechnung; a missed run catches up on the next day. — #245
 - **BIL-20** A Sammelrechnung totals its Belege, leaves cancelled ones out, is sent without the member confirming again, and is issued even if the membership has ended.
 
 ## Cancellation & correction
@@ -67,9 +69,9 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-25** Bill mail goes only to the account holder, or for a guest without an account to the first e-mail given at check-in, and to nobody else on the visit. — ADR-0048, #471, #651
 - **BIL-37** A bill whose recipient (BIL-25) has no e-mail address is not mailed; the person is told so on Bezahlen (CHK-23). — #651, #761
-- **BIL-26** A Rechnung or Quittung is mailed once the payment method is committed, a Beleg when the checkout becomes a Beleg, and a Sammelrechnung by the monthly run. — #251, #405
-- **BIL-27** A Beleg and a Sammelrechnung are announced by different mails. — ADR-0046, #502
-- **BIL-28** A correction sends exactly one mail for the new top-level document, with corrected Belege attached; a cancellation without replacement sends a notice only if the original was mailed. — ADR-0042
+- **BIL-26** A Rechnung, Quittung or Beleg is mailed once its payment method is committed, a Sammelrechnung by the monthly run; a CHF 0 checkout's Beleg is not mailed (BIL-8). — #251, #405, #763
+- **BIL-27** A Beleg for the Sammelrechnung, a RaiseNow Beleg, a Quittung and a Sammelrechnung are each announced by a different mail. — ADR-0046, #502, ADR-0052, #763
+- **BIL-28** A correction sends exactly one mail for the new top-level document, with corrected Belege for the Sammelrechnung attached; a cancellation without replacement sends a notice only if the original was mailed. — ADR-0042
 
 ## Payment booking
 
@@ -93,7 +95,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Open questions
 
-- [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 
