@@ -35,7 +35,8 @@ vi.mock("firebase/firestore", () => ({
     }
   },
 }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+const mockToastError = vi.fn()
+vi.mock("sonner", () => ({ toast: { error: mockToastError, success: vi.fn() } }))
 
 const { useTerminalPayment, phaseForResult, TERMINAL_CHECK_MS } = await import(
   "./use-terminal-payment"
@@ -230,5 +231,71 @@ describe("useTerminalPayment", () => {
       phase: "error",
       errorText: "Das Terminal ist nicht eingerichtet.",
     })
+  })
+
+  it("starts one attempt however fast the button is tapped", async () => {
+    const { hook, bridge } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+      void hook.result.current.start()
+    })
+    await flush()
+    expect(mockPrepare).toHaveBeenCalledTimes(1)
+    expect(bridge.terminalPay).toHaveBeenCalledTimes(1)
+  })
+
+  it("prices nothing when aborted while the payment is being put together", async () => {
+    let release: () => void = () => {}
+    const slowPayload = () =>
+      new Promise<{ personsPayload: unknown[]; summary: unknown }>((resolve) => {
+        release = () => resolve({ personsPayload: [], summary: {} })
+      })
+    const fake = fakeBridge()
+    const hook = renderHook(() =>
+      useTerminalPayment({ checkoutId: "co1", bridge: fake.bridge, buildClosePayload: slowPayload }),
+    )
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await act(async () => {
+      await hook.result.current.abort()
+    })
+    await act(async () => {
+      release()
+    })
+    await flush()
+    expect(mockPrepare).not.toHaveBeenCalled()
+    expect(hook.result.current.terminal).toBeNull()
+  })
+
+  it("shows paid when Wallee already closed the checkout from an earlier attempt", async () => {
+    mockPrepare.mockRejectedValue(
+      Object.assign(new Error("Dieser Besuch ist bereits abgeschlossen."), {
+        code: "functions/failed-precondition",
+        details: { reason: "checkout-closed", paidAtTerminal: true },
+      }),
+    )
+    mockToastError.mockClear()
+    const { hook, bridge } = setup()
+    await act(async () => {
+      await hook.result.current.start()
+    })
+    expect(bridge.terminalPay).not.toHaveBeenCalled()
+    expect(hook.result.current.terminal?.phase).toBe("approved")
+    expect(mockToastError).not.toHaveBeenCalled()
+  })
+
+  it("has nothing to pay when the checkout closed another way", async () => {
+    mockPrepare.mockRejectedValue(
+      Object.assign(new Error("Dieser Besuch ist bereits abgeschlossen."), {
+        code: "functions/failed-precondition",
+        details: { reason: "checkout-closed", paidAtTerminal: false },
+      }),
+    )
+    const { hook } = setup()
+    await act(async () => {
+      await hook.result.current.start()
+    })
+    expect(hook.result.current.terminal?.phase).toBe("error")
   })
 })

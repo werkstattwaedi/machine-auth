@@ -94,6 +94,24 @@ interface ClosePayload {
 
 const SERVER_MESSAGE_CODES: readonly string[] = ["functions/failed-precondition"]
 
+/**
+ * The server's refusal when the checkout already closed (`details.reason`),
+ * most often because Wallee settled a payment this screen lost track of.
+ */
+const CHECKOUT_CLOSED_REASON = "checkout-closed"
+
+type PrepareOutcome =
+  | { kind: "prepared"; prepared: PrepareResponse }
+  | { kind: "closed"; paidAtTerminal: boolean }
+
+function checkoutClosedDetails(err: unknown): { paidAtTerminal: boolean } | null {
+  const details = (err as { details?: unknown } | null)?.details as
+    | { reason?: unknown; paidAtTerminal?: unknown }
+    | undefined
+  if (details?.reason !== CHECKOUT_CLOSED_REASON) return null
+  return { paidAtTerminal: details.paidAtTerminal === true }
+}
+
 /** The terminal's result as this screen's phase. Exported for tests. */
 export function phaseForResult(result: TerminalPaymentResult): {
   phase: TerminalPhase
@@ -135,7 +153,10 @@ export function useTerminalPayment(args: {
   // Results of an attempt the person already left (abort, a newer try)
   // must not repaint the screen.
   const runRef = useRef(0)
-  const prepare = useAsyncMutation<PrepareResponse>({
+  // The phase as of now, not as of the last render: two taps in one tick
+  // must not start two attempts.
+  const phaseRef = useRef<TerminalPhase | null>(null)
+  const prepare = useAsyncMutation<PrepareOutcome>({
     context: "checkout.prepareTerminalPayment",
     errorMessage: "Die Zahlung am Terminal konnte nicht gestartet werden.",
     serverMessageCodes: SERVER_MESSAGE_CODES,
@@ -143,13 +164,15 @@ export function useTerminalPayment(args: {
 
   const update = useCallback((run: number, patch: Partial<TerminalPaymentState>) => {
     if (run !== runRef.current) return
+    if (patch.phase) phaseRef.current = patch.phase
     setTerminal((prev) => (prev ? { ...prev, ...patch } : prev))
   }, [])
 
   const start = useCallback(async () => {
     if (!checkoutId || !bridge.terminalPay) return
-    if (terminal && TERMINAL_BUSY_PHASES.has(terminal.phase)) return
+    if (phaseRef.current && TERMINAL_BUSY_PHASES.has(phaseRef.current)) return
     const run = ++runRef.current
+    phaseRef.current = "preparing"
     setTerminal({
       phase: "preparing",
       checkoutId,
@@ -159,23 +182,32 @@ export function useTerminalPayment(args: {
     })
 
     const payload = await buildClosePayload()
+    // "Abbrechen" before anything was priced: no attempt for a dead run.
+    if (run !== runRef.current) return
     if (!payload) {
       update(run, { phase: "error", errorText: "Die Zahlung konnte nicht vorbereitet werden." })
       return
     }
-    let prepared: PrepareResponse
+    let outcome: PrepareOutcome
     try {
-      prepared = await prepare.mutate(async () => {
+      outcome = await prepare.mutate(async (): Promise<PrepareOutcome> => {
         const call = rpcCallable<
           { checkoutId: string; persons: unknown[]; summary: unknown },
           PrepareResponse
         >(functions, "billingCall", "prepareTerminalPayment")
-        const res = await call({
-          checkoutId,
-          persons: payload.personsPayload,
-          summary: payload.summary,
-        })
-        return res.data
+        try {
+          const res = await call({
+            checkoutId,
+            persons: payload.personsPayload,
+            summary: payload.summary,
+          })
+          return { kind: "prepared", prepared: res.data }
+        } catch (err) {
+          // Not a failure to toast: the checkout is done.
+          const closed = checkoutClosedDetails(err)
+          if (closed) return { kind: "closed", ...closed }
+          throw err
+        }
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : ""
@@ -187,6 +219,18 @@ export function useTerminalPayment(args: {
     }
     // "Abbrechen" while the attempt was being priced.
     if (run !== runRef.current) return
+    if (outcome.kind === "closed") {
+      // Wallee settled an earlier attempt (the screen lost its result):
+      // that is the payment. Closed any other way, there is nothing to pay.
+      update(
+        run,
+        outcome.paidAtTerminal
+          ? { phase: "approved", errorText: null }
+          : { phase: "error", errorText: "Dieser Besuch ist bereits abgeschlossen." },
+      )
+      return
+    }
+    const { prepared } = outcome
     update(run, {
       phase: "waiting",
       amount: prepared.amount,
@@ -215,12 +259,14 @@ export function useTerminalPayment(args: {
    */
   const abort = useCallback(async () => {
     runRef.current++
+    phaseRef.current = null
     setTerminal(null)
     await bridge.terminalAbort?.()
   }, [bridge])
 
   const clear = useCallback(() => {
     runRef.current++
+    phaseRef.current = null
     setTerminal(null)
   }, [])
 
