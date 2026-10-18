@@ -17,24 +17,35 @@ describe("badge eligibility", () => {
   it("active members get the first badge free", () => {
     expect(
       isBadgeEligibleFree(
-        user({ activeMembership: { id: "m1" } as never, permissions: [] })
+        user({ activeMembership: { id: "m1" } as never, permissions: [] }),
+        true
       )
     ).to.equal(true);
+  });
+
+  it("a pointer the membership doesn't back gets no free badge (#745)", () => {
+    expect(
+      isBadgeEligibleFree(
+        user({ activeMembership: { id: "m1" } as never, permissions: [] }),
+        false
+      )
+    ).to.equal(false);
   });
 
   it("any permission implies badge need — first badge free", () => {
     expect(
       isBadgeEligibleFree(
-        user({ activeMembership: null, permissions: [{ id: "laser" } as never] })
+        user({ activeMembership: null, permissions: [{ id: "laser" } as never] }),
+        false
       )
     ).to.equal(true);
   });
 
   it("no membership, no permissions — not eligible", () => {
     expect(
-      isBadgeEligibleFree(user({ activeMembership: null, permissions: [] }))
+      isBadgeEligibleFree(user({ activeMembership: null, permissions: [] }), false)
     ).to.equal(false);
-    expect(isBadgeEligibleFree(user({}))).to.equal(false);
+    expect(isBadgeEligibleFree(user({}), false)).to.equal(false);
   });
 });
 

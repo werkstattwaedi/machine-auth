@@ -25,6 +25,15 @@ beforeAll(() => {
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = () => {}
   }
+  // Radix Tooltip positions its content with Floating UI.
+  if (!("ResizeObserver" in globalThis)) {
+    ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+  }
 })
 
 afterEach(cleanup)
@@ -140,13 +149,40 @@ describe("AddPersonMenu", () => {
     expect(screen.getByTestId("saved-person-confirm")).toBeTruthy()
   })
 
-  it("is disabled with a reason", async () => {
+  it("is disabled with a reason, shown as a tooltip (#779)", async () => {
     const { onAddNew } = renderMenu({ disabledReason: "Nicht jetzt." })
     const button = screen.getByRole("button", { name: /Person hinzufügen/ })
     expect(button).toBeDisabled()
-    // Visible (touchscreens can't hover) and tied to the button.
-    expect(screen.getByTestId("add-person-disabled-reason")).toBeVisible()
+    // No inline line under the button; screen readers still get the reason.
+    expect(screen.queryByTestId("add-person-disabled-reason")).toBeNull()
+    expect(screen.queryByRole("tooltip")).toBeNull()
     expect(button).toHaveAccessibleDescription("Nicht jetzt.")
+
+    // A tap (touch / kiosk: no hover) opens the tooltip …
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.pointer({
+        keys: "[TouchA]",
+        target: screen.getByTestId("add-person-disabled"),
+      })
+    })
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Nicht jetzt.")
+
+    // … and a tap elsewhere closes it.
+    await act(async () => {
+      await user.pointer({ keys: "[TouchA]", target: document.body })
+    })
+    expect(screen.queryByRole("tooltip")).toBeNull()
     expect(onAddNew).not.toHaveBeenCalled()
+  })
+
+  it("opens the reason tooltip on keyboard focus", async () => {
+    renderMenu({ disabledReason: "Nicht jetzt." })
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.tab()
+    })
+    expect(screen.getByTestId("add-person-disabled")).toHaveFocus()
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Nicht jetzt.")
   })
 })

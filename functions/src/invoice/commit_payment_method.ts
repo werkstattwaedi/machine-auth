@@ -19,9 +19,11 @@ import { HttpsError } from "firebase-functions/v2/https";
 import {
   Timestamp,
   type DocumentReference,
+  type Transaction,
 } from "firebase-admin/firestore";
 import { PAYMENT_METHOD_INFO } from "@oww/shared";
 import { isPaymentMethodEnabled } from "../payments/config";
+import { resolveVerifiedMembership } from "../membership/verified_membership";
 import type { BillEntity } from "./types";
 import type { PaymentMethod, UserEntity } from "../types/firestore_entities";
 
@@ -30,7 +32,9 @@ import type { PaymentMethod, UserEntity } from "../types/firestore_entities";
  * without an active membership. The client hides such methods already;
  * the server has to refuse them too, because a Sammelrechnung Beleg of a
  * non-member (or of an anonymous checkout) is never collected — and a
- * membership bought on that Beleg would never activate.
+ * membership bought on that Beleg would never activate. "Active
+ * membership" means one that lists the account holder, not the bare
+ * `activeMembership` pointer (issue #745).
  */
 export async function assertPaymentMethodAllowed(
   method: PaymentMethod,
@@ -43,15 +47,27 @@ export async function assertPaymentMethodAllowed(
     );
   }
   if (!PAYMENT_METHOD_INFO[method].requiresMembership) return;
-  const user = accountHolder
-    ? ((await accountHolder.get()).data() as UserEntity | undefined)
-    : undefined;
-  if (!user?.activeMembership) {
+  if (!(await hasVerifiedMembership(accountHolder))) {
     throw new HttpsError(
       "failed-precondition",
       `paymentMethod ${method} requires an active membership`,
     );
   }
+}
+
+/**
+ * True when `accountHolder` belongs to an active membership that lists them
+ * (see `resolveVerifiedMembership`). An anonymous account holder (null) never
+ * does. Pass `tx` to read inside a transaction, before its writes.
+ */
+export async function hasVerifiedMembership(
+  accountHolder: DocumentReference | null,
+  tx?: Transaction,
+): Promise<boolean> {
+  if (!accountHolder) return false;
+  const userSnap = tx ? await tx.get(accountHolder) : await accountHolder.get();
+  const user = userSnap.data() as UserEntity | undefined;
+  return (await resolveVerifiedMembership(accountHolder, user, tx)) !== null;
 }
 
 /**

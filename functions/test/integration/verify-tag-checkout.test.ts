@@ -5,6 +5,7 @@ import {
   clearFirestore,
   teardownEmulator,
   seedTestData,
+  getFirestore,
 } from "../emulator-helper";
 import {
   handleVerifyTagCheckout,
@@ -150,7 +151,20 @@ describe("handleVerifyTagCheckout (Integration)", () => {
   // The response must expose a boolean `activeMembership` so the kiosk client
   // can apply member pricing.
   describe("Membership status", () => {
+    async function seedMembership(members: string[]): Promise<void> {
+      const db = getFirestore();
+      await db.doc("memberships/m_2026").set({
+        type: "family",
+        status: "active",
+        validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+        ownerUserId: db.doc(`users/${members[0]}`),
+        members: members.map((uid) => db.doc(`users/${uid}`)),
+        paymentCheckouts: [],
+      });
+    }
+
     it("returns activeMembership=true when the user holds an active membership", async () => {
+      await seedMembership([TEST_USER_ID]);
       await seedTestData({
         tokens: {
           [TEST_TOKEN_UID]: {
@@ -165,7 +179,7 @@ describe("handleVerifyTagCheckout (Integration)", () => {
             permissions: [],
             roles: [],
             // Stored as a DocumentReference; collapsed to a boolean in the response.
-            activeMembership: "/membership/m_2026",
+            activeMembership: "/memberships/m_2026",
           },
         },
       });
@@ -176,6 +190,36 @@ describe("handleVerifyTagCheckout (Integration)", () => {
       );
 
       expect(response.activeMembership).to.equal(true);
+    });
+
+    // Issue #745: the boolean drives member prices in the kiosk wizard, so a
+    // pointer to a membership that doesn't list the user must not set it.
+    it("returns activeMembership=false when the membership doesn't list the user", async () => {
+      await seedMembership(["someone-else"]);
+      await seedTestData({
+        tokens: {
+          [TEST_TOKEN_UID]: {
+            userId: `/users/${TEST_USER_ID}`,
+            label: "Test Token",
+          },
+        },
+        users: {
+          [TEST_USER_ID]: {
+            firstName: "Test", lastName: "User",
+            name: "Test User Full Name",
+            permissions: [],
+            roles: [],
+            activeMembership: "/memberships/m_2026",
+          },
+        },
+      });
+
+      const { picc, cmac } = generateTestData(TEST_TOKEN_UID);
+      const response = asRegistered(
+        await handleVerifyTagCheckout({ picc, cmac }, mockConfig)
+      );
+
+      expect(response.activeMembership).to.equal(false);
     });
 
     it("returns activeMembership=false when the user has no membership", async () => {

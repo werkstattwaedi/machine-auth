@@ -34,6 +34,7 @@ import type {
 } from "../types/firestore_entities";
 import { priceForTier } from "../types/firestore_entities";
 import { callerUserRef, db, detectMembershipKindForItems } from "./shared";
+import { resolveVerifiedMembership } from "./verified_membership";
 import { formatFullName } from "../util/username-utils";
 
 export interface PurchaseMembershipRequest {
@@ -131,8 +132,12 @@ export async function handlePurchaseMembership(
   // Membership fees use the same pricing tiers as everything else; the
   // member-renewal price is the `member` override (if set), first-time
   // signup is the variant's `default`. Server is authoritative so a
-  // stale client-side discount can't sneak through.
-  const tier = user.activeMembership ? "member" : "none";
+  // stale client-side discount can't sneak through — and it asks the
+  // membership, not the pointer (issue #745).
+  const tier =
+    (await resolveVerifiedMembership(callerRef, user)) !== null
+      ? "member"
+      : "none";
   const unitPrice = priceForTier(variant.unitPrice, tier);
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     throw new HttpsError(

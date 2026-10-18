@@ -28,6 +28,13 @@ export interface KioskSessionState {
   preservable: boolean
   identified: boolean
   /**
+   * Issue #769/#752: this session's checkout has been committed (CHK-22) —
+   * the confirmation page is showing. The checkout is closed, so nothing is
+   * `preservable` any more even though the wizard still holds the visit's
+   * persons; a registered badge switches without asking (KIO-6).
+   */
+  committed: boolean
+  /**
    * Display name of the current (identified) visitor, when known — so the
    * badge-switch confirmation can name whose visit is being parked
    * ("Der Besuch von … ist zwischengespeichert"). `null` for anonymous
@@ -71,6 +78,7 @@ type WizardSessionState = Omit<KioskSessionState, keyof CheckinScreenState>
 const NO_SESSION: WizardSessionState = {
   preservable: false,
   identified: false,
+  committed: false,
   holderName: null,
   badgeTokenIds: [],
 }

@@ -316,6 +316,19 @@ export function BridgeNfcRouter() {
           ...wizardSession,
           identified: wizardSession.identified || signedIn,
         }
+        // A guest's committed checkout (CHK-22) is closed: nothing to keep,
+        // but the wizard still holds the guest's persons, so switch with
+        // the wipe + reload rather than in place (issues #769/#752). The
+        // fresh page handles a registered or unregistered badge like the
+        // start screen does.
+        if (session.committed && !session.identified) {
+          void confirmTagSwitch({
+            tag: { picc, cmac },
+            resetSession: bridge.resetSession,
+            reload: (target) => window.location.replace(target),
+          })
+          return
+        }
         if (session.preservable || session.identified) {
           void probeMidSessionTap(picc, cmac, session)
           return

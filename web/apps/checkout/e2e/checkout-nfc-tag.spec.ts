@@ -36,6 +36,23 @@ test.beforeEach(async () => {
   // second tap with the same counter. Each browser project re-runs the
   // suite, so without this reset the second project trips the defense.
   const db = getAdminFirestore()
+  // The NFC user's `activeMembership` pointer only counts when the
+  // membership lists them (issue #745). Other specs wipe `memberships`, so
+  // (re)seed it here rather than once in global-setup.
+  const nfcUserRef = db.doc(`users/${NFC_USER_ID}`)
+  await db.doc("memberships/e2e-nfc-membership").set({
+    type: "single",
+    status: "active",
+    lastPaidAt: FieldValue.serverTimestamp(),
+    validUntil: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+    ownerUserId: nfcUserRef,
+    members: [nfcUserRef],
+    paymentCheckouts: [],
+  })
+  await nfcUserRef.set(
+    { activeMembership: db.doc("memberships/e2e-nfc-membership") },
+    { merge: true },
+  )
   await Promise.all(
     [NFC_TAG_UID, NFC_TAG_UID_2].map((uid) =>
       db

@@ -20,6 +20,7 @@ import type {
   UserEntity,
   DiscountLevel,
 } from "../types/firestore_entities.js";
+import { resolveVerifiedMembership } from "../membership/verified_membership.js";
 
 /**
  * Handle a `UploadUsageRequest` from a terminal/gateway.
@@ -263,33 +264,29 @@ async function accumulateForUser(
 
   // Determine discount level from the user's active membership. The
   // user-doc `activeMembership` is denormalized by the onMembershipWritten
-  // trigger + the daily expiry job. We re-validate `validUntil > now`
-  // against the membership doc here so a stale denorm — for instance, a
+  // trigger + the daily expiry job. The membership must list the user in
+  // `members[]` (a pointer alone proves nothing — issue #745), and we
+  // re-validate `validUntil > now` here so a stale denorm — for instance, a
   // membership that lapsed an hour ago and the hourly expiry job hasn't
   // run yet — can't grant a member discount on a usage upload. When the
   // mismatch occurs we log it; persistent lag would warrant a closer look.
   const userDoc = await userRef.get();
   let discountLevel: DiscountLevel = "none";
   if (userDoc.exists) {
-    const userData = userDoc.data() as UserEntity;
-    const activeMembership = userData.activeMembership ?? null;
-    if (activeMembership) {
-      const membershipSnap = await activeMembership.get();
-      const membership = membershipSnap.data();
-      if (
-        membershipSnap.exists &&
-        membership?.status === "active" &&
-        membership?.validUntil?.toMillis?.() > Date.now()
-      ) {
+    const membership = await resolveVerifiedMembership(
+      userRef,
+      userDoc.data() as UserEntity,
+    );
+    if (membership) {
+      if (membership.data.validUntil?.toMillis?.() > Date.now()) {
         discountLevel = "member";
       } else {
         logger.warn(
           "User activeMembership stale; falling back to non-member pricing",
           {
             userId,
-            membershipId: activeMembership.id,
-            status: membership?.status,
-            validUntil: membership?.validUntil?.toDate?.()?.toISOString?.(),
+            membershipId: membership.ref.id,
+            validUntil: membership.data.validUntil?.toDate?.()?.toISOString?.(),
           },
         );
       }
