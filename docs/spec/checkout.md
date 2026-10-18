@@ -43,6 +43,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 ## Kosten
 
 - **CHK-44** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout, opened for them as *Reguläre Nutzung* if they have none, as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032, #105
+- **CHK-46** Machine time (CHK-44) is priced for the person whose badge unlocked the machine — the member price while a membership that lists them as a member is active (MEM-10, MEM-11) — whoever on the visit worked the machine. — #799, #745
 - **CHK-45** On Kosten, a machine row (CHK-44) unfolds to list the sessions behind it — machine, start time, duration — for a restricted session (ACC-4) as for a signed-in person. — #214, #648
 
 ## Usage type
