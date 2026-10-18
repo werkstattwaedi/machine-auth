@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
+import { BILL_DOCUMENT_INFO } from "@oww/shared"
 import { FirebaseProvider, type FirebaseServices } from "@modules/lib/firebase-context"
 
 const mockCallable = vi.fn()
@@ -139,15 +140,14 @@ describe("PaymentConfirmation", () => {
 
   // CHK-25: the link names the document the choice produced (BIL-8, #763).
   it.each([
-    ["rechnung", "Rechnung"],
-    ["monthly", "Beleg"],
-    ["raisenow", "Beleg"],
-    ["free", "Beleg"],
-  ] as const)("after %s the PDF link names the %s", (choice, noun) => {
+    ["rechnung", "rechnung"],
+    ["monthly", "beleg"],
+    ["raisenow", "beleg"],
+    ["free", "beleg"],
+  ] as const)("after %s the PDF link names the %s", (choice, document) => {
     renderConfirmation(choice)
-    expect(
-      screen.getByRole("button", { name: `${noun} als PDF herunterladen` }),
-    ).toBeTruthy()
+    const link = screen.getByRole("button", { name: /als PDF herunterladen/ })
+    expect(link.textContent).toContain(BILL_DOCUMENT_INFO[document].label)
   })
 
   it("offers the QR slip after a QR-Rechnung, never on a phone, never for other methods", () => {

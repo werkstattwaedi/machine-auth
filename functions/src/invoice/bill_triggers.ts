@@ -1021,7 +1021,11 @@ export const onBillUpdate = onDocumentUpdated(
 export function isEmailRetryDue(bill: BillEntity): boolean {
   const committed =
     isCollectedBeleg(bill) || !!bill.paymentMethodConfirmationTime;
-  return committed && !bill.emailSentAt && !bill.emailSkippedReason;
+  // A CHF 0 bill is acked at creation, but only a checkout's Beleg and a
+  // correction are mailed (`trySendEmail`); don't sweep the others hourly.
+  const mailed =
+    bill.paidVia !== "free" || !!bill.supersedesBillRef || isFreeCheckoutBeleg(bill);
+  return committed && mailed && !bill.emailSentAt && !bill.emailSkippedReason;
 }
 
 /**
