@@ -47,6 +47,7 @@ import {
   loadBadgeCatalog,
 } from "./shared";
 import { formatFullName } from "../util/username-utils";
+import { resolveVerifiedMembership } from "../membership/verified_membership";
 
 export interface AddBadgeToCheckoutRequest {
   /** Signed proof-of-tap from verifyTagCheckout / probeTag. */
@@ -118,7 +119,10 @@ export async function handleAddBadgeToCheckout(
     );
   }
 
-  const eligibleFree = isBadgeEligibleFree(user);
+  const eligibleFree = isBadgeEligibleFree(
+    user,
+    (await resolveVerifiedMembership(callerRef, user)) !== null
+  );
   const now = Timestamp.now();
 
   /**

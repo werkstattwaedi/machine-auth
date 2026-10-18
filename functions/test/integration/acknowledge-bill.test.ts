@@ -43,6 +43,11 @@ interface SeedBillOpts {
   createdMsAgo?: number;
   /** Seeds the owner's user doc with an active membership (Sammelrechnung). */
   member?: boolean;
+  /**
+   * Seeds the owner's user doc with a pointer to an active membership that
+   * does NOT list them — a forged `activeMembership` (issue #745).
+   */
+  forgedMembership?: boolean;
 }
 
 async function seedBillAndCheckout(opts: SeedBillOpts): Promise<void> {
@@ -71,7 +76,19 @@ async function seedBillAndCheckout(opts: SeedBillOpts): Promise<void> {
   if (opts.paymentMethod !== undefined) checkout.paymentMethod = opts.paymentMethod;
   await checkoutRef.set(checkout);
 
-  if (opts.member && userRef) {
+  if ((opts.member || opts.forgedMembership) && userRef) {
+    const membershipRef = db.collection("memberships").doc(`m-${opts.ownerUid}`);
+    await membershipRef.set({
+      type: "family",
+      status: "active",
+      lastPaidAt: created,
+      validUntil: Timestamp.fromMillis(now.toMillis() + 365 * 24 * 3600 * 1000),
+      ownerUserId: db.collection("users").doc("someone-else"),
+      members: opts.member
+        ? [userRef]
+        : [db.collection("users").doc("someone-else")],
+      paymentCheckouts: [],
+    });
     await userRef.set({
       created,
       email: "alice@example.com",
@@ -79,7 +96,7 @@ async function seedBillAndCheckout(opts: SeedBillOpts): Promise<void> {
       lastName: "Test",
       permissions: [],
       roles: [],
-      activeMembership: db.collection("memberships").doc(`m-${opts.ownerUid}`),
+      activeMembership: membershipRef,
     });
   }
 
@@ -376,6 +393,22 @@ describe("acknowledgeBill callable (Integration)", () => {
     expect((await readCheckout("co-monthly-nonmember")).paymentMethod ?? null).to.equal(null);
   });
 
+  it("refuses 'monthly' when the pointer's membership doesn't list the account holder (#745)", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly-forged",
+      ownerUid: "alice",
+      forgedMembership: true,
+      checkoutId: "co-monthly-forged",
+    });
+    try {
+      await call("alice", { billId: "b-monthly-forged", paymentMethod: "monthly" });
+      throw new Error("Expected failed-precondition");
+    } catch (err) {
+      expect((err as { code?: string }).code).to.equal("failed-precondition");
+    }
+    expect((await readBill("b-monthly-forged")).kind ?? "invoice").to.equal("invoice");
+  });
+
   it("refuses 'monthly' for a guest bill without an account holder", async () => {
     await seedBillAndCheckout({
       billId: "b-monthly-guest",
@@ -542,6 +575,7 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
     await seedBillAndCheckout({
       billId: "b-monthly-walkout",
       ownerUid: "alice",
+      member: true,
       checkoutId: "co-monthly-walkout",
       createdMsAgo: 90 * 60 * 1000,
       paymentMethod: "monthly",
@@ -555,6 +589,28 @@ describe("runAutoAcknowledgeBills cron (Integration)", () => {
     expect(bill.kind).to.equal("beleg");
     expect(bill.paymentMethodConfirmationTime).to.be.null;
     expect(bill.paymentMethodConfirmationSource).to.be.null;
+  });
+
+  // A 'monthly' choice by an account holder whose membership doesn't list
+  // them (forged pointer, issue #745) gets the per-visit Rechnung instead.
+  it("acks a forged-pointer 'monthly' bill as 'rechnung' instead of flipping it", async () => {
+    await seedBillAndCheckout({
+      billId: "b-monthly-forged-walkout",
+      ownerUid: "alice",
+      forgedMembership: true,
+      checkoutId: "co-monthly-forged-walkout",
+      createdMsAgo: 90 * 60 * 1000,
+      paymentMethod: "monthly",
+    });
+
+    const res = await runAutoAcknowledgeBills(new Date());
+    expect(res.ackedIds).to.deep.equal(["b-monthly-forged-walkout"]);
+    expect(res.belegFlippedIds).to.deep.equal([]);
+
+    const bill = await readBill("b-monthly-forged-walkout");
+    expect(bill.kind ?? "invoice").to.equal("invoice");
+    expect(bill.paymentMethodConfirmationSource).to.equal("auto");
+    expect((await readCheckout("co-monthly-forged-walkout")).paymentMethod).to.equal("rechnung");
   });
 
   it("skips bills already flipped to kind 'beleg' (defensive — query filter would too)", async () => {

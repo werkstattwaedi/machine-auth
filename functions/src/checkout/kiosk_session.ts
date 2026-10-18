@@ -13,6 +13,7 @@
 
 import * as crypto from "crypto";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import {
   HttpsError,
@@ -21,6 +22,8 @@ import {
 import { defineString } from "firebase-functions/params";
 import { kioskBearer } from "../config/tag-secrets";
 import { parseIntParamOrDie } from "../auth/login-code/helpers";
+import { resolveVerifiedMembership } from "../membership/verified_membership";
+import type { UserEntity } from "../types/firestore_entities";
 
 /**
  * How long an OTP-elevated kiosk session may reach the member area
@@ -206,19 +209,28 @@ export async function mintKioskSessionToken(
   return { customToken, elevatedUntil };
 }
 
-/** Pre-fill payload from a `users/{userId}` doc snapshot's data. */
-export function buildKioskUserPayload(
+/**
+ * Pre-fill payload from a `users/{userId}` doc snapshot's data.
+ * `activeMembership` drives member prices and the Sammelrechnung option in
+ * the kiosk wizard, so it reflects a membership that really lists the user,
+ * not the bare pointer (issue #745) — one extra read when a pointer is set.
+ */
+export async function buildKioskUserPayload(
   userId: string,
   userData: FirebaseFirestore.DocumentData | undefined,
   elevatedUntil: number | null = null
-): KioskUserPayload {
+): Promise<KioskUserPayload> {
+  const membership = await resolveVerifiedMembership(
+    getFirestore().doc(`users/${userId}`),
+    userData as UserEntity | undefined
+  );
   return {
     userId,
     firstName: userData?.firstName,
     lastName: userData?.lastName,
     email: userData?.email,
     userType: userData?.userType,
-    activeMembership: !!userData?.activeMembership,
+    activeMembership: membership !== null,
     elevatedUntil,
   };
 }

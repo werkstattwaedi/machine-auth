@@ -2123,10 +2123,18 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
     async function seedMember(uid: string): Promise<void> {
       await seedUser(uid);
-      await getFirestore()
-        .collection("users")
-        .doc(uid)
-        .update({ activeMembership: getFirestore().collection("memberships").doc(`m-${uid}`) });
+      const db = getFirestore();
+      const userRef = db.collection("users").doc(uid);
+      const membershipRef = db.collection("memberships").doc(`m-${uid}`);
+      await membershipRef.set({
+        type: "single",
+        status: "active",
+        validUntil: Timestamp.fromMillis(Date.now() + 365 * 24 * 3600 * 1000),
+        ownerUserId: userRef,
+        members: [userRef],
+        paymentCheckouts: [],
+      });
+      await userRef.update({ activeMembership: membershipRef });
     }
 
     function seedOpen(checkoutId = CHECKOUT_ID, ownerUid = UID): Promise<void> {
