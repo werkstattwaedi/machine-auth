@@ -25,6 +25,8 @@ kiosk. Terms: see the [glossary](README.md#glossary).
 
 - **ACC-4** A restricted session reaches the checkout but not the account. — ADR-0041
 - **ACC-5** At the kiosk, an e-mail or SMS code opens the account for 15 min, entered at sign-in (ACC-1) or when a restricted session opens an account page. — ADR-0041
+- **ACC-6** The code that opens the account for a restricted session (ACC-5) goes only to the account's own e-mail address or its verified mobile number; no other address or number can be entered for it. — ADR-0041
+- **ACC-7** When a restricted session opens an account page, the e-mail address and the mobile number the code can go to (ACC-6) are shown only masked: of the e-mail address the first two characters of the name and of the domain plus the top-level domain, of the number the country code, the first two and the last two digits. — ADR-0041
 
 ## Open questions
 
