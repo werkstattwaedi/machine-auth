@@ -254,8 +254,8 @@ async function seedWorkflowData() {
     { merge: true },
   )
 
-  // ── Visits. The closed one carries billRef up front so the
-  // onCheckoutCreatedClosed trigger doesn't allocate a competing bill. ──
+  // ── Visits. The closed one carries its billRef, as every close mints
+  // its bill in the same transaction. ──
   const closedVisitRef = db.collection("checkouts").doc(VISIT_CLOSED_ID)
   await closedVisitRef.set({
     userId: annaRef,

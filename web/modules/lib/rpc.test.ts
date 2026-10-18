@@ -109,7 +109,7 @@ describe("reportRpcError", () => {
   })
 
   it("caps the message at 200 chars", () => {
-    reportRpcError(functions, "ctx", "billingCall", "acknowledgeBill", {
+    reportRpcError(functions, "ctx", "billingCall", "closeCheckoutAndGetPayment", {
       message: "x".repeat(500),
     })
     const payload = callableMock.mock.lastCall?.[0] as { message: string }

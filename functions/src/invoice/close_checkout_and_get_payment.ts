@@ -743,25 +743,45 @@ interface CloseCheckoutRequest {
    * `paylinkUrl`, and nothing can confirm that payment afterwards. A payment terminal is different:
    * its checkout must close only on an approved transaction, so it must
    * not come through here.
-   * Omitted: the bill stays unconfirmed, as before.
+   * Omitted: only a CHF 0 close may omit it (BIL-8); any other close is
+   * refused (BIL-44) — nothing would commit its bill later (#757).
    */
   paymentMethod?: PaymentMethod;
 }
 
 /**
+ * Shown when a close that costs something arrives without a method. The
+ * checkout app sends one for every non-zero total, so this means the
+ * client priced the checkout at CHF 0 and the server didn't (the
+ * divergence is logged by `logSummaryDivergence`), or a tab still runs an
+ * app version from before #761. A reload re-prices and offers the methods.
+ */
+const PAYMENT_METHOD_REQUIRED_MESSAGE =
+  "Der Betrag hat sich geändert – bitte Seite neu laden.";
+
+/**
  * How a close mints its bill when it commits `method` at once. A CHF 0
  * bill ignores the method: it is closed as `paidVia: "free"` either way
- * and needs no payment (BIL-8).
+ * and needs no payment (BIL-8). Any other bill is born committed, so a
+ * close without a method is refused (BIL-44).
  */
 interface MintCommit {
-  /** The method to write on the checkout; null leaves the bill unconfirmed. */
+  /** The method to write on the checkout; null only for a CHF 0 bill. */
   method: PaymentMethod | null;
   kind?: "beleg";
   preAck?: { source: "user" };
 }
 
-function mintCommitted(method: PaymentMethod | null, amount: number): MintCommit {
-  if (!method || amount === 0) return { method: null };
+function mintCommitted(
+  method: PaymentMethod | null,
+  amount: number,
+  context: string,
+): MintCommit {
+  if (amount === 0) return { method: null };
+  if (!method) {
+    logger.warn("Close without a payment method refused", { context, amount });
+    throw new HttpsError("failed-precondition", PAYMENT_METHOD_REQUIRED_MESSAGE);
+  }
   return PAYMENT_METHOD_INFO[method].isAggregated
     ? { method, kind: "beleg" }
     : { method, preAck: { source: "user" } };
@@ -1055,8 +1075,9 @@ async function closeExistingCheckout(
     const checkout = checkoutDoc.data() as CheckoutEntity;
     assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
 
-    // Idempotency: if the safety-net trigger already produced a bill for
-    // this checkout, return that bill's payment data instead of duplicating.
+    // Idempotency: a repeated close (double tap, retry after a lost
+    // response) finds the bill the first one minted and returns its payment
+    // data instead of minting another.
     if (checkout.billRef) {
       const existingBillDoc = await tx.get(checkout.billRef);
       if (existingBillDoc.exists) {
@@ -1102,7 +1123,7 @@ async function closeExistingCheckout(
 
     const { summary } = await priceOpenCheckout(tx, resolved, checkout, args.clientSummary);
 
-    const commit = mintCommitted(args.paymentMethod, summary.totalPrice);
+    const commit = mintCommitted(args.paymentMethod, summary.totalPrice, resolved.context);
     const bill = await allocateBill(tx, db, {
       userId: checkout.userId,
       checkoutRefs: [checkoutRef],
@@ -1262,7 +1283,11 @@ async function createAnonymousCheckout(
   // Pre-allocate item refs so they can be written inside the transaction.
   const itemRefs = validItems.map(() => checkoutRef.collection("items").doc());
 
-  const commit = mintCommitted(args.paymentMethod, summary.totalPrice);
+  const commit = mintCommitted(
+    args.paymentMethod,
+    summary.totalPrice,
+    "createAnonymousCheckout",
+  );
   const result = await db.runTransaction(async (tx) => {
     const bill = await allocateBill(tx, db, {
       userId: userIdRef,

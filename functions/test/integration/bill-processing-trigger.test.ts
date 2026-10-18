@@ -385,7 +385,7 @@ describe("bill processing triggers (Integration)", () => {
     it("force:true regenerates past a fresh lock + existing storagePath, producing the TWINT PDF (#426)", async function () {
       this.timeout(15000);
       const billId = "bill-426-twint-regen";
-      // Checkout records the TWINT selection (as acknowledgeBill writes it).
+      // Checkout records the TWINT method (as the close writes it).
       await seedCheckout("co-default", {
         paymentMethod: "raisenow",
         summary: { totalPrice: 25.5, entryFees: 15, machineCost: 10.5, materialCost: 0, tip: 0 },
@@ -1205,7 +1205,7 @@ describe("bill processing triggers (Integration)", () => {
         expectContractVariables(entity.template);
       });
 
-      it("defaults to QR-Rechnung template when paymentMethod is null (auto-ack with no last selection)", async () => {
+      it("defaults to QR-Rechnung template when paymentMethod is null (legacy bill, no method on the checkout)", async () => {
         const billId = "bill-default-template";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {});
@@ -1587,8 +1587,16 @@ describe("bill processing triggers (Integration)", () => {
         "corrected re-issue",
       ).to.equal(false);
       expect(
-        isCommittedAtClose({ ...acked, source: "membership-renewal" }),
-        "renewal invoice",
+        isCommittedAtClose({
+          ...acked,
+          paymentMethodConfirmationSource: "auto",
+          source: "membership-renewal",
+        }),
+        "renewal invoice, committed at issue (MEM-24)",
+      ).to.equal(true);
+      expect(
+        isCommittedAtClose({ ...base, source: "membership-renewal" }),
+        "legacy renewal invoice minted unconfirmed",
       ).to.equal(false);
     });
 
@@ -1650,6 +1658,26 @@ describe("bill processing triggers (Integration)", () => {
       await handleBillCreated("b-free", bill);
 
       expect(resendSendStub.called).to.equal(false);
+    });
+
+    it("a renewal bill committed at issue gets its PDF and exactly one renewal letter", async () => {
+      await seedAlice();
+      await seedCheckout("co-default", { paymentMethod: "rechnung" });
+      const bill = await seedBill("b-renewal", {
+        source: "membership-renewal",
+        paymentMethodConfirmationTime: Timestamp.now(),
+        paymentMethodConfirmationSource: "auto",
+      });
+
+      await handleBillCreated("b-renewal", bill);
+      // A redelivered trigger must not mail twice.
+      await handleBillCreated("b-renewal", await getBill("b-renewal"));
+
+      const after = await getBill("b-renewal");
+      expect(after.storagePath).to.be.a("string");
+      expect(resendSendStub.calledOnce).to.equal(true);
+      const [, entity] = resendSendStub.firstCall.args as [string, { template: { id: string } }];
+      expect(entity.template.id).to.equal("test-membership-renewal");
     });
 
     it("the monthly run's auto-acked Sammelrechnung is not mailed from the create trigger", async () => {

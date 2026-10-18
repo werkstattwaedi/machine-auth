@@ -11,8 +11,8 @@
  * of an overlapping bank statement), and `paidAt` may carry the statement's
  * booking date instead of "now".
  *
- * No side-effects fire on `paidAt` (membership activation is ack-driven;
- * the daily auto-ack cron covers bills the user never acknowledged).
+ * No side-effects fire on `paidAt` (membership activation is ack-driven,
+ * and every bill is committed when it is minted).
  */
 
 import * as logger from "firebase-functions/logger";

@@ -2,17 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Committing a bill's payment method (issues #251, #750), shared by the two
- * places that do it on the person's behalf:
- *
- *  - `acknowledgeBill`: the bill was minted earlier, at close, and the
- *    person confirms a method afterwards (the checkout before #750).
- *  - `closeCheckoutAndGetPayment` with a `paymentMethod`: the close and the
- *    confirmation are one action, so the bill is minted already committed.
- *
- * Both must refuse the same methods and leave the bill in the same shape,
- * or the triggers in `bill_triggers.ts` would treat the two paths
- * differently.
+ * Committing a bill's payment method on the person's behalf (issues #251,
+ * #750) — done by `closeCheckoutAndGetPayment`: the close and the
+ * confirmation are one action, so the bill is minted already committed. A
+ * repeated close of a legacy bill minted unconfirmed (before #750) commits
+ * it with `billCommitFields`, leaving it in the same shape, so the
+ * triggers in `bill_triggers.ts` treat both alike.
  */
 
 import { HttpsError } from "firebase-functions/v2/https";

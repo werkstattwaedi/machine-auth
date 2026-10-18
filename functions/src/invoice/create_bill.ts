@@ -2,30 +2,20 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Firestore triggers: auto-create a bill when a checkout is closed.
+ * Bill minting: reference-number allocation and the bill doc itself.
  *
- * Two triggers handle the two checkout flows:
- * - onCheckoutClosed: fires on update (open → closed), for tag-based checkouts
- * - onCheckoutCreatedClosed: fires on create, for anonymous checkouts created
- *   directly with status "closed"
+ * Every path that closes a checkout mints its bill in the same transaction
+ * (the close callable, the Wallee settlement, the renewal invoicer, a
+ * correction), so no trigger creates bills after the fact (#757).
  */
 
-import * as logger from "firebase-functions/logger";
-import {
-  onDocumentCreated,
-  onDocumentUpdated,
-} from "firebase-functions/v2/firestore";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import type {
   DocumentReference,
   Firestore,
   Transaction,
 } from "firebase-admin/firestore";
-import type {
-  CheckoutEntity,
-  CheckoutItemEntity,
-  PaidVia,
-} from "../types/firestore_entities";
+import type { PaidVia } from "../types/firestore_entities";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   BILL_REVISION_RADIX,
@@ -36,7 +26,6 @@ import {
   type BillAckSource,
   type BillSource,
 } from "./types";
-import { usageDiscount, isMachineItem, type UsageType } from "@oww/shared";
 
 /**
  * Marker written by `scripts/migrate-bill-numbers.ts` once every stored
@@ -53,7 +42,7 @@ interface BillingConfig {
   referenceNumberFormat?: string;
 }
 
-/** Payment-method ack stamp applied at mint time (skips the ack cron). */
+/** Payment-method ack stamp applied at mint time. */
 export interface BillAck {
   time: Timestamp;
   source: BillAckSource;
@@ -136,8 +125,8 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
 /**
  * Allocate a sequential reference number from `config/billing` and write a
  * bill doc inside the supplied transaction. Shared by every code path that
- * mints an *original* bill — per-visit triggers (`createBillForCheckout`),
- * the `closeCheckoutAndGetPayment` callable, and the monthlyBillRun cron —
+ * mints an *original* bill — the `closeCheckoutAndGetPayment` callable, the
+ * Wallee settlement, the renewal invoicer and the monthlyBillRun cron —
  * so the counter increment lives in one place. The stored number is
  * `counter × 10` (revision digit 0, ADR-0042); the counter itself keeps
  * advancing by 1.
@@ -156,10 +145,10 @@ export async function allocateBill(
     /** Defaults to "invoice". Pass "beleg" for per-visit Sammelrechnung records. */
     kind?: BillKind;
     /**
-     * Pre-ack the bill at creation. Used by the monthlyBillRun cron — the
-     * monthly Sammelrechnung is implicitly acked (the member acked by
-     * picking monthly on each visit). The acknowledgeBill code paths never
-     * pass this — the ack stamp lands later via the callable / auto-ack cron.
+     * Commit the bill at creation: the close with the person's method
+     * ("user"), the Wallee settlement ("terminal"), the monthly
+     * Sammelrechnung and the renewal invoice ("auto"). Omitted only for a
+     * Beleg (committed by its kind) and a CHF 0 bill (born free).
      */
     preAck?: { source: BillAckSource };
     /**
@@ -257,148 +246,3 @@ export async function allocateBillRevision(
   tx.set(args.billRef, bill);
   return bill;
 }
-
-/**
- * Look up the per-person entry fee from `config/pricing.entryFees`.
- *
- * Throws when the config row is missing (issue #149). The previous
- * silent-fallback path shipped hardcoded prices that diverged from the
- * seeded production values; throwing here puts the bill into the
- * documented "needs ops attention" state instead of emitting a wrong PDF.
- */
-function calculateEntryFee(
-  userType: string,
-  usageType: string,
-  configFees?: Record<string, Record<string, number>> | null,
-): number {
-  if (configFees) {
-    const row = configFees[userType];
-    if (row && "regular" in row) {
-      const standard = row["regular"];
-      if (typeof standard === "number") {
-        // Issue #284: standard fee scaled by the usage-type entry-fee
-        // discount (hardcoded in @oww/shared).
-        return standard * usageDiscount(usageType as UsageType).entryFee;
-      }
-    }
-  }
-  throw new Error(
-    `Pricing config missing standard entry fee for ${userType} (usageType ${usageType})`,
-  );
-}
-
-/**
- * Create a bill for a closed checkout. Shared by both triggers.
- *
- * Exported for integration testing — invoke directly to bypass the
- * Firestore trigger wrapper (the Functions emulator is not started in
- * the test harness).
- */
-export async function createBillForCheckout(
-  checkoutRef: DocumentReference,
-  checkout: CheckoutEntity,
-): Promise<void> {
-  const db = getFirestore();
-
-  // Load items subcollection
-  const itemsSnap = await checkoutRef.collection("items").get();
-  const items = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
-
-  // Load pricing config for entry fees
-  const pricingDoc = await db.doc("config/pricing").get();
-  const pricingData = pricingDoc.data() as {
-    entryFees?: Record<string, Record<string, number>>;
-  } | undefined;
-  const configFees = pricingData?.entryFees ?? null;
-
-  // Calculate totals — prefer checkout summary if available
-  let grandTotal: number;
-  if (checkout.summary?.totalPrice != null) {
-    grandTotal = checkout.summary.totalPrice;
-  } else {
-    // Safety-net fallback (the callable normally writes summary.totalPrice).
-    // Apply the usage-type discount per section (issue #284). calculateEntryFee
-    // already scales the entry fee by its discount multiplier.
-    const discount = usageDiscount(checkout.usageType as UsageType);
-    // Each person's own type discounts their fee (issue #605).
-    const entryFees = checkout.persons.reduce(
-      (sum, p) =>
-        sum +
-        (p.entryFeeWaivedToday
-          ? 0
-          : calculateEntryFee(p.userType, p.usageType ?? checkout.usageType, configFees)),
-      0,
-    );
-    const machineCost =
-      items
-        .filter((i) => isMachineItem(i))
-        .reduce((sum, i) => sum + i.totalPrice, 0) * discount.machine;
-    const materialCost =
-      items
-        .filter((i) => !isMachineItem(i))
-        .reduce((sum, i) => sum + i.totalPrice, 0) * discount.material;
-    grandTotal = Math.round((entryFees + machineCost + materialCost) * 100) / 100;
-  }
-
-  // Transaction: allocate reference number and create bill
-  const billRef = db.collection("bills").doc();
-
-  await db.runTransaction(async (tx) => {
-    // Re-read checkout inside transaction to guard against concurrent triggers
-    const freshDoc = await tx.get(checkoutRef);
-    const freshData = freshDoc.data() as CheckoutEntity;
-    if (freshData.billRef) {
-      logger.info(`Checkout ${checkoutRef.id} already has a bill, skipping`);
-      return;
-    }
-
-    await allocateBill(tx, db, {
-      userId: checkout.userId,
-      checkoutRefs: [checkoutRef],
-      amount: grandTotal,
-      billRef,
-    });
-
-    // Link bill to checkout
-    tx.update(checkoutRef, { billRef: billRef });
-  });
-
-  logger.info(
-    `Created bill ${billRef.id} for checkout ${checkoutRef.id}`,
-  );
-}
-
-/**
- * Tag-based checkout: status updated from open → closed.
- */
-export const onCheckoutClosed = onDocumentUpdated(
-  "checkouts/{checkoutId}",
-  async (event) => {
-    const before = event.data?.before.data() as CheckoutEntity | undefined;
-    const after = event.data?.after.data() as CheckoutEntity | undefined;
-
-    if (!before || !after) return;
-
-    // Only proceed if status just changed to "closed" and no bill exists yet
-    if (before.status === "closed" || after.status !== "closed") return;
-    if (after.billRef) return;
-
-    await createBillForCheckout(event.data!.after.ref, after);
-  },
-);
-
-/**
- * Anonymous checkout: created directly with status "closed".
- */
-export const onCheckoutCreatedClosed = onDocumentCreated(
-  "checkouts/{checkoutId}",
-  async (event) => {
-    const data = event.data?.data() as CheckoutEntity | undefined;
-    if (!data) return;
-
-    if (data.status !== "closed") return;
-    if (data.billRef) return;
-
-    await createBillForCheckout(event.data!.ref, data);
-  },
-);

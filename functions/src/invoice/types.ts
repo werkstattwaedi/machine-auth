@@ -20,9 +20,11 @@ export type BillKind = "invoice" | "beleg";
 export type BillSource = "checkout" | "membership-renewal";
 
 /**
- * Who committed a bill's payment method: the person (`user`), the
- * overnight job (`auto`), or the payment terminal's confirmed payment
- * (`terminal`, ADR-0051 — the bill is born paid).
+ * Who committed a bill's payment method: the person (`user`), the server
+ * on nobody's word (`auto`: a CHF 0 bill, the monthly Sammelrechnung, a
+ * renewal invoice, a correction, and — before #757 — the overnight job),
+ * or the payment terminal's confirmed payment (`terminal`, ADR-0051 — the
+ * bill is born paid).
  */
 export type BillAckSource = "user" | "auto" | "terminal";
 
@@ -44,12 +46,12 @@ export interface BillEntity {
   // manually to re-arm the send (e.g. after adding an e-mail to a child
   // account).
   emailSkippedReason?: "no-recipient" | null;
-  // The customer-stated "I'll pay this" ack. Server-only — written by
-  // the acknowledgeBill callable / the close (source: "user"), the
-  // autoAcknowledgeBills cron (source: "auto") or a Wallee-confirmed
-  // terminal payment (source: "terminal"). The email and
-  // membership-activation triggers key off this transitioning from null
-  // to set, or off a bill born committed (`isCommittedAtClose`).
+  // The "I'll pay this" ack (BillAckSource). Server-only, written when the
+  // bill is minted — by the close (source: "user"), a Wallee-confirmed
+  // terminal payment ("terminal") or the server itself ("auto"). The email
+  // and membership-activation triggers key off a bill born committed
+  // (`isCommittedAtClose`), or off this transitioning from null to set on
+  // a legacy bill nobody committed.
   paymentMethodConfirmationTime: Timestamp | null;
   paymentMethodConfirmationSource: BillAckSource | null;
   // The Wallee transaction that paid the bill at the terminal, and the
@@ -169,9 +171,8 @@ export interface InvoiceData {
   /** Wallee's cardholder receipt of a terminal payment (bill `walleeReceiptText`). */
   terminalReceiptText?: string | null;
   /**
-   * Customer's chosen payment method from Step 4 (Bezahlen). Null at
-   * bill-create time (PDF generated before the user picks). Set after
-   * `acknowledgeBill` lands and the PDF is regenerated. Gates the QR
+   * The payment method committed on the checkout (null for a CHF 0 bill or
+   * a legacy one nobody committed). Gates the QR
    * payment slip: only rendered for `rechnung` or null — methods paid
    * during the checkout and the Sammelrechnung get a method-specific
    * notice instead, so users don't think they need to pay via QR after

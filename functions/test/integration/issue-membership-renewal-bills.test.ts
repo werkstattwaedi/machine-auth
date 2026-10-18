@@ -31,6 +31,7 @@ import {
   RENEWAL_WINDOW_DAYS,
 } from "../../src/membership/renewal_invoicer";
 import { processMembershipForAckedBill } from "../../src/membership/process_membership_payment";
+import { isCommittedAtClose } from "../../src/invoice/bill_triggers";
 import type { BillEntity } from "../../src/invoice/types";
 import type {
   CatalogEntity,
@@ -189,9 +190,11 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     expect(bills[0].source).to.equal("membership-renewal");
     expect(bills[0].amount).to.equal(40); // member tier, not default 50
     expect(bills[0].kind ?? "invoice").to.equal("invoice");
-    // Un-acked at creation — the membership extends only once the ack path
-    // (auto-ack cron / payment) flips paymentMethodConfirmationTime.
-    expect(bills[0].paymentMethodConfirmationTime ?? null).to.be.null;
+    // Committed at issue (MEM-24, #757): onBillCreate mails the renewal
+    // letter and adds the year right away.
+    expect(bills[0].paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
+    expect(bills[0].paymentMethodConfirmationSource).to.equal("auto");
+    expect(isCommittedAtClose(bills[0])).to.equal(true);
     expect(bills[0].checkouts).to.have.length(1);
 
     // pendingRenewalBill set on the membership.
@@ -286,7 +289,7 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     expect(await listRenewalBills()).to.have.length(1);
   });
 
-  it("renewal bill, once paid, extends validUntil by one year via the ack path", async () => {
+  it("the committed renewal bill extends validUntil by one year", async () => {
     const memRef = await seedMembership({
       id: "m-pay",
       ownerUid: "frank",
@@ -298,16 +301,9 @@ describe("runRenewalInvoicer (Integration, #323)", () => {
     expect(summary.billIds).to.have.length(1);
     const billId = summary.billIds[0];
 
-    // Simulate the gated-ack path landing the payment-method confirmation
-    // (the auto-ack cron / explicit payment), then run the membership
-    // activation the onBillUpdate trigger would run.
-    await getFirestore()
-      .collection("bills")
-      .doc(billId)
-      .update({
-        paymentMethodConfirmationTime: Timestamp.now(),
-        paymentMethodConfirmationSource: "auto",
-      });
+    // The membership activation onBillCreate runs for a bill born
+    // committed (runCommitSideEffects); twice, as a trigger retry would.
+    await processMembershipForAckedBill(billId);
     await processMembershipForAckedBill(billId);
 
     const mem = await readMembership("m-pay");

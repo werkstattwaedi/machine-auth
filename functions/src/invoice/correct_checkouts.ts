@@ -527,7 +527,7 @@ export const correctCheckoutsHandler = async (
           tx.set(newCheckoutRef.collection("items").doc(), item);
         }
         // Invoice-kind replacements are pre-acked (copy the original's ack,
-        // else auto) so neither the ack cron nor onBillUpdate touches them;
+        // else auto) so onBillUpdate never sees an ack transition for them;
         // Belege never carry an ack.
         const ack: BillAck | null = isBeleg
           ? null

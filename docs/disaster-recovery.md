@@ -82,7 +82,7 @@ The `syncAuthIdentity` trigger also *unlinks* an Auth phone number that
 record; the member re-verifies on `/account/profile`.
 
 Scheduled jobs other than the cleanup (`dailyMembershipMaintenance`,
-`staleCheckoutReminders`, `retryBillProcessing`, `autoAcknowledgeBills`,
+`staleCheckoutReminders`, `retryBillProcessing`,
 `monthlyBillRun`, `dailyStatsExport`, `dailyLogDigest`) do not delete
 documents. Seeding scripts delete only against the emulator.
 
