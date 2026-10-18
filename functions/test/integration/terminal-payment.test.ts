@@ -481,7 +481,7 @@ describe("Wallee terminal payment (Integration)", () => {
         expect((await checkout("co1")).persons).to.have.length(1);
       });
 
-      it("takes machine time that arrived later off the checkout", async () => {
+      it("leaves machine time that arrived later unbilled and reports it", async () => {
         const db = getFirestore();
         await seedOpenCheckout("co1");
         // Replace the material line by a machine row holding one session
@@ -507,12 +507,27 @@ describe("Wallee terminal payment (Integration)", () => {
         await rowRef.update({ quantity: 1, totalPrice: 20 });
         wallee.pay(9001, reference, 25);
 
-        expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+        // The CJS module object: the namespace import of it can't be spied on.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const logger = require("firebase-functions/logger") as { warn: (...a: unknown[]) => void };
+        const warn = sinon.spy(logger, "warn");
+        try {
+          expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+          const alert = warn.getCalls().find((c) => c.args[0] === "terminal_checkout_changed");
+          const fields = alert?.args[1] as { changes?: { lostUsageIds?: string[] } } | undefined;
+          expect(fields?.changes?.lostUsageIds).to.deep.equal(["u2"]);
+        } finally {
+          warn.restore();
+        }
         expect((await rowRef.get()).data()).to.include({ quantity: 0.5, totalPrice: 10 });
+        // Both stay linked: the late session is never picked up again by a
+        // later upload, so it can't be billed on another visit.
         const u1 = (await db.collection("usage_machine").doc("u1").get()).data();
         const u2 = (await db.collection("usage_machine").doc("u2").get()).data();
         expect(u1?.checkoutItemRef?.path).to.equal(rowRef.path);
-        expect(u2?.checkoutItemRef).to.equal(null);
+        expect(u2?.checkoutItemRef?.path).to.equal(rowRef.path);
+        expect(u1?.notBilledReason).to.equal(undefined);
+        expect(u2?.notBilledReason).to.equal("after_verified_payment");
         expect((await alertMarkers()).map((m) => m.id)).to.deep.equal(["9001_checkout-changed"]);
       });
     });

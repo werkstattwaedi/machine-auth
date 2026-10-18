@@ -135,6 +135,9 @@ export interface UsageMachineEntity {
   endTime: Timestamp;
   endReason?: string; // JSON of CheckOutReason
   checkoutItemRef?: DocumentReference; // Reference to /checkouts/{checkoutId}/items/{itemId} when billed
+  // Set when linked but never billed: "after_verified_payment" = reached the
+  // checkout after a verified payment priced it (BIL-42).
+  notBilledReason?: "after_verified_payment";
   workshop?: string | null; // Denormalized from machine
 }
 

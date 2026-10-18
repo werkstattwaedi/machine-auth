@@ -204,6 +204,8 @@ export interface UsageMachineDoc extends AuditFields {
   endTime?: Timestamp
   endReason?: string | null
   checkoutItemRef?: DocumentReference<CheckoutItemDoc> | null
+  /** Linked but never billed (BIL-42): arrived after a verified payment priced the checkout. */
+  notBilledReason?: "after_verified_payment"
   workshop?: string
 }
 

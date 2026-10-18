@@ -367,13 +367,13 @@ export async function settleTransaction(
     for (const [id, item] of [...current, ...Object.entries(attempt.items)]) {
       if (isMachineItem(item)) machineRowIds.add(id);
     }
-    const lateUsage: string[] = [];
+    const lostUsage: string[] = [];
     for (const id of machineRowIds) {
       const priced = new Set(attempt.machineUsageIds[id] ?? []);
       const usage = await tx.get(linkedUsageQuery(checkoutRef.collection("items").doc(id)));
-      for (const doc of usage.docs) if (!priced.has(doc.id)) lateUsage.push(doc.id);
+      for (const doc of usage.docs) if (!priced.has(doc.id)) lostUsage.push(doc.id);
     }
-    changes = diffAgainstAttempt(attempt, current, checkout, lateUsage);
+    changes = diffAgainstAttempt(attempt, current, checkout, lostUsage);
 
     const billRef = db.collection("bills").doc();
     const paidAt = transaction.authorizedOn
@@ -401,17 +401,21 @@ export async function settleTransaction(
         const now = current.get(id);
         if (!now || stableKey(now) !== stableKey(item)) tx.set(itemsCol.doc(id), item);
       }
-      // Unbilled sessions go back to unlinked, as if never accumulated: the
-      // next upload of that machine type picks them up again.
+      // Sessions that arrived after pricing stay linked (so no later upload
+      // bills them on another visit) but go unbilled: the person paid for
+      // what was priced. The marker says so wherever the link is read, and
+      // the alert lists them for a person to follow up.
       const usageCol = db.collection("usage_machine");
-      for (const id of lateUsage) tx.update(usageCol.doc(id), { checkoutItemRef: null });
+      for (const id of lostUsage) {
+        tx.update(usageCol.doc(id), { notBilledReason: NOT_BILLED_AFTER_VERIFIED_PAYMENT });
+      }
     }
     tx.update(checkoutRef, {
       paymentMethod: "wallee_terminal",
       status: "closed",
       // As priced — also undoing a CHK-40 switch to Reguläre Nutzung that
-      // machine time arriving during the payment caused (its sessions were
-      // unlinked above).
+      // machine time arriving during the payment caused (that time goes
+      // unbilled, see above).
       usageType: attempt.usageType,
       persons: attempt.persons,
       closedAt: FieldValue.serverTimestamp(),
@@ -433,6 +437,12 @@ export async function settleTransaction(
   return outcome;
 }
 
+/**
+ * `usage_machine.notBilledReason` of a session that reached a checkout after
+ * a verified payment priced it: linked, but in no row's minutes or price.
+ */
+export const NOT_BILLED_AFTER_VERIFIED_PAYMENT = "after_verified_payment";
+
 /** `usage_machine` records accumulated into a checkout's machine row. */
 function linkedUsageQuery(itemRef: DocumentReference) {
   return getFirestore().collection("usage_machine").where("checkoutItemRef", "==", itemRef);
@@ -446,7 +456,8 @@ interface CheckoutChanges {
   added: { id: string; description: string; quantity: number }[];
   removed: { id: string; description: string; quantity: number }[];
   changed: { id: string; description: string; quantityDelta: number }[];
-  lateUsageIds: string[];
+  /** Machine sessions that arrived after pricing: linked, never billed. */
+  lostUsageIds: string[];
   personsChanged: boolean;
 }
 
@@ -454,13 +465,13 @@ function diffAgainstAttempt(
   attempt: TerminalAttemptEntity,
   current: Map<string, CheckoutItemEntity>,
   checkout: CheckoutEntity,
-  lateUsageIds: string[],
+  lostUsageIds: string[],
 ): CheckoutChanges | null {
   const changes: CheckoutChanges = {
     added: [],
     removed: [],
     changed: [],
-    lateUsageIds,
+    lostUsageIds,
     personsChanged: stableKey(checkout.persons ?? []) !== attempt.checkoutPersonsKey,
   };
   for (const [id, item] of current) {
@@ -484,7 +495,7 @@ function diffAgainstAttempt(
     changes.added.length > 0 ||
     changes.removed.length > 0 ||
     changes.changed.length > 0 ||
-    lateUsageIds.length > 0 ||
+    lostUsageIds.length > 0 ||
     changes.personsChanged;
   return any ? changes : null;
 }

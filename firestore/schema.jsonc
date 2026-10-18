@@ -141,6 +141,7 @@
       "billableSeconds": "number", // frozen billing basis: activeSeconds for gateway_sensing machines, else endTime-startTime. Summed by accumulation.
       "endReason": "string | null", // JSON representation of CheckOutReason proto
       "checkoutItemRef": "DocumentReference | null", // DocumentReference to /checkouts/{checkoutId}/items/{itemId}
+      "notBilledReason": "string?", // "after_verified_payment": linked to the checkout but in no row's minutes or price — it arrived after a verified payment priced the checkout (BIL-42); never billed. The row may have been deleted at settlement.
       "workshop": "string" // Workshop ID (e.g., "holz") — denormalized from machine
     }
   },
