@@ -21,6 +21,7 @@ import {
   USAGE_TYPE_DISCOUNTS,
   USAGE_TYPE_LABELS,
   computeCheckoutSummary,
+  isCollectedBeleg,
   deriveVisitUsageType,
   isOwnerOnlyUsage,
   machineUsageBlocked,
@@ -89,7 +90,10 @@ export const MAX_BILL_REVISION = 10
 
 export function correctionBlockedReason(
   visit: Pick<CheckoutDoc, "status">,
-  bill: Pick<BillDoc, "paidAt" | "cancelledAt" | "source" | "kind" | "referenceNumber"> | null,
+  bill: Pick<
+    BillDoc,
+    "paidAt" | "cancelledAt" | "source" | "kind" | "paymentMethod" | "referenceNumber"
+  > | null,
   items: Array<Pick<CheckoutItemDoc, "catalogId" | "variantId">>,
   refs: { membershipCatalogId: string | null; badgeCatalogId: string | null },
   /** The Sammelrechnung an aggregated Beleg was folded into; Belege never carry `paidAt` themselves. */
@@ -102,7 +106,7 @@ export function correctionBlockedReason(
   if (bill.paidAt) {
     return "Die Rechnung ist bereits bezahlt — bezahlte Rechnungen können in dieser Version nicht korrigiert werden."
   }
-  if ((bill.kind ?? "invoice") === "beleg" && aggregate?.paidAt) {
+  if (isCollectedBeleg(bill) && aggregate?.paidAt) {
     return "Die Sammelrechnung ist bereits bezahlt — bezahlte Rechnungen können in dieser Version nicht korrigiert werden."
   }
   if ((bill.source ?? "checkout") === "membership-renewal") {

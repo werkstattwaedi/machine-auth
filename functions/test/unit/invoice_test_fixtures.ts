@@ -86,6 +86,7 @@ function makeMembershipItem(
 export function membershipOnlyInvoice(): InvoiceData {
   return {
     referenceNumber: 500,
+    document: "rechnung",
     invoiceDate: zurich(2026, 4, 20),
     billingAddress: {
       company: "",
@@ -175,6 +176,7 @@ export function freeBadgeInvoice(): InvoiceData {
     grandTotal: 0,
     paidAt: base.invoiceDate,
     paidVia: "free",
+    document: "beleg",
   };
 }
 
@@ -186,6 +188,7 @@ export function freeBadgeInvoice(): InvoiceData {
 export function membershipMixedInvoice(): InvoiceData {
   return {
     referenceNumber: 510,
+    document: "rechnung",
     invoiceDate: zurich(2026, 4, 22),
     billingAddress: {
       company: "",
@@ -255,6 +258,7 @@ export function membershipRenewalInvoice(): InvoiceData {
 export function singleCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 10,
+    document: "rechnung",
     invoiceDate: zurich(2025, 5, 15),
     // Registered users carry a billingAddress on their user doc (issue
     // #269 review). Empty company → registered-user shape.
@@ -297,6 +301,7 @@ export function singleCheckoutInvoice(): InvoiceData {
 export function firmaCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 20,
+    document: "rechnung",
     invoiceDate: zurich(2025, 6, 1),
     billingAddress: {
       company: "Muster AG",
@@ -340,6 +345,7 @@ export function firmaCheckoutInvoice(): InvoiceData {
 export function multiCheckoutInvoice(): InvoiceData {
   return {
     referenceNumber: 30,
+    document: "sammelrechnung",
     invoiceDate: zurich(2025, 6, 10),
     // Registered user with billingAddress (issue #269 review).
     billingAddress: {
@@ -413,6 +419,7 @@ export function longInvoice(): InvoiceData {
 
   return {
     referenceNumber: 60,
+    document: "rechnung",
     invoiceDate: zurich(2025, 7, 15),
     billingAddress: {
       company: "Schreinerei Müller GmbH",
@@ -552,6 +559,32 @@ export function raisenowMethodInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 100;
   base.paymentMethod = "raisenow";
+  base.document = "beleg";
+  return base;
+}
+
+/**
+ * A TWINT bill issued before #763 (BIL-46): still a Quittung with its RE-
+ * number when its PDF is regenerated.
+ */
+export function legacyQuittungInvoice(): InvoiceData {
+  const base = raisenowMethodInvoice();
+  base.document = "quittung";
+  return base;
+}
+
+/**
+ * A payment Wallee confirmed at the terminal (ADR-0051): a Quittung, born
+ * paid, carrying Wallee's cardholder receipt.
+ */
+export function walleeTerminalInvoice(): InvoiceData {
+  const base = singleCheckoutInvoice();
+  base.referenceNumber = 140;
+  base.paymentMethod = "wallee_terminal";
+  base.document = "quittung";
+  base.paidAt = zurich(2025, 5, 16);
+  base.paidVia = "wallee_terminal";
+  base.terminalReceiptText = "Trm-Id: 12345678\nVISA ****1234\nAuth: 654321";
   return base;
 }
 
@@ -564,11 +597,12 @@ export function monthlyMethodInvoice(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 110;
   base.paymentMethod = "monthly";
+  base.document = "beleg";
   return base;
 }
 
 /**
- * Issue #245: per-visit Beleg (kind: "beleg"). Title reads "Beleg Self
+ * Issue #245: per-visit Beleg for the Sammelrechnung. Title reads "Beleg Self
  * Checkout", number label "Belegnummer: BL-XXXXXX", and the Sammelrechnung
  * notice replaces the QR payment slip.
  */
@@ -576,7 +610,7 @@ export function belegPerVisit(): InvoiceData {
   const base = singleCheckoutInvoice();
   base.referenceNumber = 420;
   base.paymentMethod = "monthly";
-  base.kind = "beleg";
+  base.document = "beleg";
   return base;
 }
 
@@ -589,6 +623,7 @@ export function freeZeroAmountInvoice(): InvoiceData {
   const now = zurich(2025, 4, 12);
   return {
     referenceNumber: 80,
+    document: "beleg",
     invoiceDate: now,
     // Registered user with billingAddress (issue #269 review). Interne
     // Nutzung is normally booked by a known member, not an anonymous
@@ -638,6 +673,7 @@ export function freeZeroAmountInvoice(): InvoiceData {
 export function volunteeringDiscountInvoice(): InvoiceData {
   return {
     referenceNumber: 500,
+    document: "rechnung",
     invoiceDate: zurich(2025, 4, 20),
     billingAddress: {
       company: "",
@@ -689,6 +725,7 @@ export function internDiscountInvoice(): InvoiceData {
   const now = zurich(2025, 4, 12);
   return {
     referenceNumber: 510,
+    document: "beleg",
     invoiceDate: now,
     billingAddress: {
       company: "",
@@ -736,6 +773,7 @@ export function internDiscountInvoice(): InvoiceData {
 export function registeredUserInvoice(): InvoiceData {
   return {
     referenceNumber: 90,
+    document: "rechnung",
     invoiceDate: zurich(2025, 4, 20),
     billingAddress: {
       // Empty company → PDF emits the recipientName instead of a blank line.
@@ -782,6 +820,7 @@ export function registeredUserInvoice(): InvoiceData {
 export function zeroItemsInvoice(): InvoiceData {
   return {
     referenceNumber: 50,
+    document: "rechnung",
     invoiceDate: zurich(2025, 7, 1),
     billingAddress: null,
     recipientName: "Erika Nur-Eintritt",
@@ -819,6 +858,7 @@ export function zeroItemsInvoice(): InvoiceData {
 export function perPersonUsageInvoice(): InvoiceData {
   return {
     referenceNumber: 520,
+    document: "rechnung",
     invoiceDate: zurich(2025, 8, 6),
     billingAddress: {
       company: "",

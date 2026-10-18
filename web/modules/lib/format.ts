@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { type Timestamp } from "firebase/firestore"
+import { BILL_DOCUMENT_INFO, billDocumentOf, type BillDocumentFields } from "@oww/shared"
 
 /**
  * Single source of truth for the app's locale + currency. Both come from
@@ -90,17 +91,15 @@ export function formatBelegNumber(n: number): string {
 
 
 /**
- * Format a bill's reference number using its `kind`. A `kind: "beleg"`
- * (per-visit Sammelrechnung record) renders "BL-…"; everything else
- * (real, payable invoice) renders "RE-…". Mirrors the functions-side
- * helper in functions/src/invoice/types.ts so web/functions stay in
- * lockstep. Issue #405.
+ * Format a bill's reference number with its document's prefix (ADR-0052):
+ * "BL-…" for a Beleg, "RE-…" for a Rechnung, Sammelrechnung or an earlier
+ * Quittung. Mirrors the functions-side helper in
+ * functions/src/invoice/types.ts so web/functions stay in lockstep.
  */
 export function formatBillReference(
-  n: number,
-  kind: "invoice" | "beleg" | undefined,
+  bill: BillDocumentFields & { referenceNumber: number },
 ): string {
-  return kind === "beleg" ? formatBelegNumber(n) : formatInvoiceNumber(n)
+  return formatBillNumber(BILL_DOCUMENT_INFO[billDocumentOf(bill)].prefix, bill.referenceNumber)
 }
 
 export function formatCHF(amount: number): string {

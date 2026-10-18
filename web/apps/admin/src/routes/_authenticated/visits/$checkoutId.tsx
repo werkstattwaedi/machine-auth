@@ -44,7 +44,7 @@ import { SummaryField } from "@/components/visit/summary-fields"
 import { VisitStatusBadge } from "@/components/visit/visit-status-badge"
 import { CancelVisitDialog } from "@/components/visit/cancel-visit-dialog"
 import { correctionBlockedReason } from "@/lib/visit-correction"
-import { USAGE_TYPE_LABELS, type UsageType } from "@oww/shared"
+import { USAGE_TYPE_LABELS, type UsageType, isCollectedBeleg } from "@oww/shared"
 import { Ban, Loader2, MoveRight, Pencil, Trash2, X } from "lucide-react"
 
 function usageTypeLabel(t: string): string {
@@ -112,10 +112,10 @@ function VisitDetailPage() {
       },
       sammelrechnung,
     ) === null
-  const billReference = bill ? formatBillReference(bill.referenceNumber, bill.kind) : null
+  const billReference = bill ? formatBillReference(bill) : null
   const sammelReference =
-    bill?.kind === "beleg" && sammelrechnung && !sammelrechnung.cancelledAt
-      ? formatBillReference(sammelrechnung.referenceNumber, sammelrechnung.kind)
+    bill && isCollectedBeleg(bill) && sammelrechnung && !sammelrechnung.cancelledAt
+      ? formatBillReference(sammelrechnung)
       : null
 
   const handleRemoveItem = async (itemId: string) => {

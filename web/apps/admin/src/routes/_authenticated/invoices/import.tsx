@@ -94,7 +94,7 @@ function StatementImportPage() {
           paid: !!b.paidAt,
           cancelled: !!b.cancelledAt,
           supersededByReference: successor
-            ? formatBillReference(successor.referenceNumber, successor.kind)
+            ? formatBillReference(successor)
             : null,
         }
       }),
@@ -256,7 +256,7 @@ function StatementImportPage() {
                       <TableRow key={`${m.bill.id}-${i}`}>
                         <TableCell className="font-mono text-xs">
                           {bill
-                            ? formatBillReference(bill.referenceNumber, bill.kind)
+                            ? formatBillReference(bill)
                             : m.bill.id}
                         </TableCell>
                         <TableCell>

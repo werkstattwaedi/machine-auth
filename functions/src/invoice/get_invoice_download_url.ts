@@ -6,8 +6,9 @@ import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor } from "../util/storage_download";
-import { billDocumentPrefix, formatBillReference, type BillEntity } from "./types";
-import type { CheckoutEntity, PaymentMethod } from "../types/firestore_entities";
+import { billDocumentOf } from "@oww/shared";
+import { billFileName, formatBillReference, type BillEntity } from "./types";
+import type { CheckoutEntity } from "../types/firestore_entities";
 
 /**
  * Build the options passed to `file.getSignedUrl(...)` for a bill download.
@@ -16,18 +17,20 @@ import type { CheckoutEntity, PaymentMethod } from "../types/firestore_entities"
  */
 export function buildDownloadOptions(
   bill: BillEntity,
-  paymentMethod: PaymentMethod | null = null,
+  legacyCheckoutMethod: unknown = null,
 ): {
   action: "read";
   expires: number;
   responseDisposition: string;
 } {
-  // Filename mirrors the document type inside the PDF (issue #405 for
-  // Belege, #426 follow-up for TWINT): "Beleg_BL-…", "Quittung_RE-…" for
-  // a visit paid during the checkout, "Rechnung_RE-…" for everything payable.
-  const reference = formatBillReference(bill.referenceNumber, bill.kind);
-  const prefix = billDocumentPrefix(bill.kind, paymentMethod);
-  const filename = `${prefix}_${reference}.pdf`;
+  // The file name names the document as its title does (issue #405):
+  // "Beleg_BL-…", "Rechnung_RE-…", "Sammelrechnung_RE-…" — or "Quittung_RE-…"
+  // for a TWINT bill issued before #763, whose document is resolved from
+  // its checkout's method.
+  const filename = billFileName(
+    billDocumentOf(bill, legacyCheckoutMethod),
+    formatBillReference(bill),
+  );
   return {
     action: "read",
     expires: Date.now() + 3600 * 1000,
@@ -56,10 +59,9 @@ export const getInvoiceDownloadUrlHandler = async (
   const bill = billSnap.data() as BillEntity;
 
   // The linked checkout carries the anonymous creator's uid (for the
-  // authorisation below) and the payment method, which picks the
-  // Quittung-vs-Rechnung filename (a bill doc doesn't carry it). Fail soft
-  // on a missing checkout — the download still works for its owner, just
-  // with the default "Rechnung" prefix.
+  // authorisation below) and, for a bill minted before ADR-0052, the
+  // payment method its file name depends on. Fail soft on a missing
+  // checkout — the download still works for its owner.
   let checkout: CheckoutEntity | null = null;
   const firstCheckoutRef = bill.checkouts?.[0];
   if (firstCheckoutRef) {
@@ -107,10 +109,11 @@ export const getInvoiceDownloadUrlHandler = async (
     throw new HttpsError("failed-precondition", "PDF not yet generated");
   }
 
-  const paymentMethod: PaymentMethod | null = checkout?.paymentMethod ?? null;
-
   const file = getStorage().bucket().file(bill.storagePath);
-  const url = await downloadUrlFor(file, buildDownloadOptions(bill, paymentMethod));
+  const url = await downloadUrlFor(
+    file,
+    buildDownloadOptions(bill, checkout?.paymentMethod ?? null),
+  );
 
   logger.info(`Generated download URL for bill ${billId}`);
 

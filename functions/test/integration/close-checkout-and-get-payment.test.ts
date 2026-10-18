@@ -2199,6 +2199,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
       const [bill] = await listBills();
       expect(bill.data.kind).to.equal("invoice");
+      expect(bill.data.paymentMethod).to.equal("rechnung");
+      expect(bill.data.document).to.equal("rechnung");
       expect(bill.data.paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
       expect(bill.data.paymentMethodConfirmationSource).to.equal("user");
       const checkout = await getCheckout(CHECKOUT_ID);
@@ -2214,6 +2216,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
 
       const [bill] = await listBills();
       expect(bill.data.kind).to.equal("beleg");
+      expect(bill.data.paymentMethod).to.equal("monthly");
+      expect(bill.data.document).to.equal("beleg");
       expect(bill.data.paymentMethodConfirmationTime).to.equal(null);
       expect(bill.data.aggregatedIntoBillRef).to.equal(null);
       expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("monthly");
@@ -2289,7 +2293,11 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(result.paylinkUrl).to.contain("reference.creditor");
 
       const [bill] = await listBills();
+      // A Beleg (#763) that never goes on the Sammelrechnung: `kind` stays
+      // "invoice" so the monthly run doesn't charge the visit twice.
       expect(bill.data.kind).to.equal("invoice");
+      expect(bill.data.paymentMethod).to.equal("raisenow");
+      expect(bill.data.document).to.equal("beleg");
       expect(bill.data.paymentMethodConfirmationSource).to.equal("user");
       const checkout = await getCheckout(CHECKOUT_ID);
       expect(checkout.status).to.equal("closed");
@@ -2429,6 +2437,10 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       expect(bill.data.amount).to.equal(0);
       expect(bill.data.paidVia).to.equal("free");
       expect(bill.data.paymentMethodConfirmationSource).to.equal("auto");
+      // #780: its document is a Beleg; there is no method to commit.
+      expect(bill.data.document).to.equal("beleg");
+      expect(bill.data.paymentMethod).to.equal(null);
+      expect(bill.data.kind).to.equal("invoice");
       expect((await getCheckout(CHECKOUT_ID)).paymentMethod ?? null).to.equal(null);
     });
 
@@ -2466,6 +2478,8 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
       const bills = await listBills();
       expect(bills).to.have.length(1);
       expect(bills[0].data.kind).to.equal("beleg");
+      expect(bills[0].data.paymentMethod).to.equal("monthly");
+      expect(bills[0].data.document).to.equal("beleg");
       expect(bills[0].data.paymentMethodConfirmationTime).to.equal(null);
       expect((await getCheckout(CHECKOUT_ID)).paymentMethod).to.equal("monthly");
     });

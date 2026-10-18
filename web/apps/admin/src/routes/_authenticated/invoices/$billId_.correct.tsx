@@ -8,6 +8,7 @@
 // the member gets exactly one mail with the corrected Sammelrechnung and
 // the changed Belege attached.
 
+import { isCollectedBeleg } from "@oww/shared"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { where } from "firebase/firestore"
@@ -98,12 +99,12 @@ function CorrectSammelrechnungPage() {
   if (loading || belegeLoading || pricing.loading || submitted) return <PageLoading />
   if (!bill) return <div>Rechnung nicht gefunden.</div>
 
-  const reference = formatBillReference(bill.referenceNumber, bill.kind)
+  const reference = formatBillReference(bill)
   const active = belege
-    .filter((b) => !b.cancelledAt && (b.kind ?? "invoice") === "beleg")
+    .filter((b) => !b.cancelledAt && isCollectedBeleg(b))
     .sort((a, b) => a.referenceNumber - b.referenceNumber)
   const blocked =
-    (bill.kind ?? "invoice") !== "invoice"
+    isCollectedBeleg(bill)
       ? "Nur eine Sammelrechnung kann hier korrigiert werden."
       : bill.cancelledAt
         ? "Die Sammelrechnung wurde bereits storniert."
@@ -144,7 +145,7 @@ function CorrectSammelrechnungPage() {
       newTotal += beleg.amount
     }
   }
-  const nextReference = formatBillReference(bill.referenceNumber + 1, bill.kind)
+  const nextReference = formatBillReference({ ...bill, referenceNumber: bill.referenceNumber + 1 })
   const canSubmit = changed.length > 0 && errors.length === 0 && !reasonError && !correct.loading
 
   const upsertRow = (checkoutId: string, update: (prev: RowState | undefined) => RowState) =>
@@ -314,7 +315,7 @@ function BelegCorrectionCard({
   }, [state, checkoutDocRef, checkout, items, itemsLoading, onInit])
 
   if (!checkoutDocRef) return null
-  const reference = formatBillReference(beleg.referenceNumber, beleg.kind)
+  const reference = formatBillReference(beleg)
   const blocked = checkout
     ? correctionBlockedReason(checkout, beleg, items, {
         membershipCatalogId: catalogRefs?.membership?.id ?? null,

@@ -13,8 +13,6 @@
  * here rather than as string literals at the call sites.
  */
 
-import type { BillDocument } from "./email-contract"
-
 export const PAYMENT_METHODS = [
   "rechnung",
   "monthly",
@@ -27,10 +25,10 @@ export interface PaymentMethodInfo {
   /** Customer-facing label (German UI). */
   label: string
   /**
-   * The customer pays inside the checkout flow, so the bill document is a
-   * receipt ("Quittung") without a QR slip rather than a payment request.
-   * This says nothing about whether the payment was verified — the RaiseNow
-   * paylink is customer-stated only (ADR-0020).
+   * The customer pays inside the checkout flow, so the bill document asks
+   * for no payment and carries no QR slip: a Beleg when the payment is the
+   * customer's own statement (the RaiseNow paylink, ADR-0020, #763), a
+   * Quittung when the provider confirms it (`confirmsPayment`).
    */
   paidDuringCheckout: boolean
   /** The bill becomes a Beleg that the monthly run folds into a Sammelrechnung. */
@@ -86,7 +84,7 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
   )
 }
 
-/** True when the method yields a receipt instead of an invoice. */
+/** True when the customer pays inside the checkout flow (no QR slip). */
 export function isPaidDuringCheckout(
   method: PaymentMethod | null | undefined
 ): boolean {
@@ -163,24 +161,4 @@ export function isPaymentMethodEnabledAnywhere(
   method: PaymentMethod
 ): boolean {
   return CLIENT_TYPES.some((c) => config[c].includes(method))
-}
-
-/**
- * What a bill document is, for the mail that carries it (ADR-0046): a Beleg
- * queued for the Sammelrechnung, the Sammelrechnung itself (an aggregated
- * invoice whose checkouts were paid "monthly"), a receipt for a method paid
- * during the checkout, or a payable QR-bill invoice — also for a legacy
- * bill whose checkout names no method. Reads method properties only, so a new payment
- * integration needs no new template.
- */
-export function billDocument(
-  billKind: "invoice" | "beleg" | undefined,
-  paymentMethod: unknown
-): BillDocument {
-  if ((billKind ?? "invoice") === "beleg") return "beleg"
-  if (!isPaymentMethod(paymentMethod)) return "invoice"
-  const method = paymentMethod
-  if (PAYMENT_METHOD_INFO[method].isAggregated) return "sammelrechnung"
-  if (PAYMENT_METHOD_INFO[method].paidDuringCheckout) return "receipt"
-  return "invoice"
 }

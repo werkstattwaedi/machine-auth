@@ -269,6 +269,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "paymentMethod",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aggregatedIntoBillRef",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bills",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "paymentMethodConfirmationTime",
           "order": "ASCENDING"
         },

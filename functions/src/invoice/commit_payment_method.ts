@@ -16,7 +16,11 @@ import {
   type DocumentReference,
   type Transaction,
 } from "firebase-admin/firestore";
-import { PAYMENT_METHOD_INFO } from "@oww/shared";
+import {
+  PAYMENT_METHOD_INFO,
+  documentFor,
+  isCollectedBeleg,
+} from "@oww/shared";
 import { isPaymentMethodEnabled } from "../payments/config";
 import { resolveVerifiedMembership } from "../membership/verified_membership";
 import type { BillEntity } from "./types";
@@ -66,27 +70,34 @@ export async function hasVerifiedMembership(
 }
 
 /**
- * The bill fields that commit `method`. A Sammelrechnung turns the bill
- * into a Beleg and deliberately carries no ack stamp (the monthly run
- * commits the aggregated invoice); every other method stamps the ack.
+ * The bill fields that commit `method` — the one place a bill learns its
+ * method and its final document (ADR-0052). A Sammelrechnung method makes
+ * it a Beleg for the Sammelrechnung and deliberately carries no ack stamp
+ * (the monthly run commits the aggregated invoice); every other method
+ * stamps the ack. `kind` is the legacy queue marker, kept in step until the
+ * monthly run reads `paymentMethod` (ADR-0052).
  */
 export function billCommitFields(
   method: PaymentMethod,
   now: Timestamp,
+  source: "user" | "auto" = "user",
 ): Partial<BillEntity> {
+  const fields: Partial<BillEntity> = {
+    paymentMethod: method,
+    document: documentFor(method),
+  };
   if (PAYMENT_METHOD_INFO[method].isAggregated) {
-    return { kind: "beleg" };
+    return { ...fields, kind: "beleg" };
   }
   return {
+    ...fields,
+    kind: "invoice",
     paymentMethodConfirmationTime: now,
-    paymentMethodConfirmationSource: "user",
+    paymentMethodConfirmationSource: source,
   };
 }
 
-/** True once a bill's method is final: acked, or turned into a Beleg. */
+/** True once a bill's method is final: acked, or a Beleg for the Sammelrechnung. */
 export function isBillCommitted(bill: BillEntity): boolean {
-  return (
-    !!bill.paymentMethodConfirmationTime ||
-    (bill.kind ?? "invoice") === "beleg"
-  );
+  return !!bill.paymentMethodConfirmationTime || isCollectedBeleg(bill);
 }

@@ -173,14 +173,13 @@ still passes a different wrong promise.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
-- **Quittung** — a receipt for a payment made during checkout, such as
-  RaiseNow.
+- **Quittung** — a receipt for a payment made during checkout.
 - **RaiseNow** — the payment method paid through RaiseNow's TWINT paylink, a
   promise to pay.
-- **Beleg** — the per-checkout document of a member paying by
-  Sammelrechnung.
-- **Sammelrechnung** — the monthly invoice that collects an account holder's
-  *Belege*.
+- **Beleg** — a per-checkout document that lists what was used or bought
+  and asks for no payment itself.
+- **Sammelrechnung** — the monthly invoice that collects the *Belege* of an
+  account holder paying by Sammelrechnung.
 - **Account holder** — the person a checkout is billed to (the payer).
 - **Confirm** — the person's choice of a payment method for a bill.
 - **Commit** — the moment a bill's payment method becomes final.

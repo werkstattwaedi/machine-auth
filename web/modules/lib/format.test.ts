@@ -53,11 +53,20 @@ describe("bill reference formatting (#405, ADR-0042)", () => {
     expect(formatBelegNumber(420)).toBe("BL-000042")
   })
 
-  it("formatBillReference uses BL- for a Beleg and RE- otherwise", () => {
-    expect(formatBillReference(70, "beleg")).toBe("BL-000007")
-    expect(formatBillReference(70, "invoice")).toBe("RE-000007")
-    // Missing kind (legacy doc) is treated as an invoice.
-    expect(formatBillReference(70, undefined)).toBe("RE-000007")
+  it("formatBillReference prints the stored document's prefix", () => {
+    expect(formatBillReference({ referenceNumber: 70, document: "beleg" })).toBe("BL-000007")
+    expect(formatBillReference({ referenceNumber: 70, document: "rechnung" })).toBe("RE-000007")
+    expect(formatBillReference({ referenceNumber: 70, document: "quittung" })).toBe("RE-000007")
+    // A TWINT Beleg is a Beleg although it never goes on the Sammelrechnung.
+    expect(
+      formatBillReference({ referenceNumber: 70, kind: "invoice", document: "beleg" }),
+    ).toBe("BL-000007")
+  })
+
+  it("formatBillReference derives a legacy bill's prefix from its kind", () => {
+    expect(formatBillReference({ referenceNumber: 70, kind: "beleg" })).toBe("BL-000007")
+    expect(formatBillReference({ referenceNumber: 70, kind: "invoice" })).toBe("RE-000007")
+    expect(formatBillReference({ referenceNumber: 70 })).toBe("RE-000007")
   })
 
   it("billBaseNumber / billRevision split the stored number", () => {

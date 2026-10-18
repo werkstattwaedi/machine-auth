@@ -1,6 +1,6 @@
 # ADR-0044: Payment Integrations per Client Type
 
-**Status:** Accepted (amended 2026-10-16: the server also refuses a members-only method for a non-member — see decision 5)
+**Status:** Accepted (amended 2026-10-16: the server also refuses a members-only method for a non-member — see decision 5; amended 2026-10-18 by [ADR-0052](0052-bill-payment-method-and-document.md): a promise to pay made during the checkout (RaiseNow) yields a Beleg, a verified payment a Quittung, and the bill stores its committed method — `billDocument()` became `billMailFor()`)
 
 **Date:** 2026-10-11
 

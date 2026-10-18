@@ -7,7 +7,7 @@
  * Belege — per-visit Sammelrechnung records, minted by the close when the
  * member commits the Sammelrechnung (#750) — accumulate
  * through the month. This job rolls each member's Belege from prior
- * months into a single `kind: "invoice"` Sammelrechnung with a Swiss
+ * months into a single Sammelrechnung with a Swiss
  * QR-bill PDF, then triggers the standard PDF + email path.
  *
  * Runs **daily** at 06:00 Europe/Zurich rather than once a month: the 1st
@@ -15,8 +15,8 @@
  * if a 1st-of-month run crashes the 2nd picks up the misses. Self-healing
  * without a separate retry path.
  *
- * Note: aggregation is keyed on the Beleg's `kind` field, not on the
- * user's current `activeMembership`. A member who acks monthly and later
+ * Note: aggregation is keyed on the Beleg's committed payment method, not
+ * on the user's current `activeMembership`. A member who acks monthly and later
  * cancels their membership still receives their Sammelrechnung — the
  * customer-of-record commitment was the ack, not the membership status
  * at billing time.
@@ -32,6 +32,7 @@ import {
   type Firestore,
   type Transaction,
 } from "firebase-admin/firestore";
+import { INVOICE_PAYMENT_METHOD, awaitsSammelrechnung } from "@oww/shared";
 import type { BillEntity } from "./types";
 import { allocateBill, allocateBillRevision } from "./create_bill";
 import { tryGeneratePdf, trySendEmail } from "./bill_triggers";
@@ -72,7 +73,7 @@ function startOfCurrentZurichMonth(now: Date): Date {
 }
 
 /**
- * Fold `belege` into one `kind: "invoice"` Sammelrechnung inside the
+ * Fold `belege` into one Sammelrechnung inside the
  * caller's transaction: sum the amounts, union the checkouts, mint the
  * invoice pre-acked (the member acked by picking monthly on each visit)
  * and re-point every Beleg's `aggregatedIntoBillRef` at it. Shaped like
@@ -115,7 +116,8 @@ export async function aggregateBelegeIntoInvoice(
         checkoutRefs,
         amount,
         billRef: args.billRef,
-        kind: "invoice",
+        paymentMethod: INVOICE_PAYMENT_METHOD,
+        document: "sammelrechnung",
         ack: { time: Timestamp.now(), source: "auto" },
         correctionReason: args.supersedes.reason,
         correctedBillRefs: args.supersedes.correctedBillRefs,
@@ -126,7 +128,9 @@ export async function aggregateBelegeIntoInvoice(
         checkoutRefs,
         amount,
         billRef: args.billRef,
-        kind: "invoice",
+        // Paid by its QR slip; the Belege it collects keep their method.
+        paymentMethod: INVOICE_PAYMENT_METHOD,
+        isSammelrechnung: true,
         preAck: { source: "auto" },
       });
 
@@ -168,6 +172,9 @@ export async function runMonthlyBillRun(
 
   // The index ordering matches firestore.indexes.json:
   //   kind ASC, aggregatedIntoBillRef ASC, created ASC
+  // `kind` is the legacy queue marker, written in step with `paymentMethod`
+  // (ADR-0052). Once every environment is backfilled this query moves to
+  // `paymentMethod in AGGREGATED_PAYMENT_METHODS` (index already deployed).
   // Composite index is required — Firestore can't combine three filters
   // (two equality + one range) without it. Missing-index errors surface
   // in logs with a one-click create link.
@@ -223,9 +230,7 @@ export async function runMonthlyBillRun(
           const snap = await tx.get(ref);
           if (!snap.exists) continue;
           const freshBill = snap.data() as BillEntity;
-          if ((freshBill.kind ?? "invoice") !== "beleg") continue;
-          if (freshBill.aggregatedIntoBillRef) continue;
-          if (freshBill.cancelledAt) continue;
+          if (!awaitsSammelrechnung(freshBill)) continue;
           fresh.push({ ref, bill: freshBill });
         }
 

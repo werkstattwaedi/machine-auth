@@ -79,10 +79,8 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     );
   });
 
-  it("names a RaiseNow-settled invoice Quittung_RE-XXXXXX.pdf", () => {
-    // The PDF inside is titled "Quittung Self-Checkout" (#426); the
-    // filename must not keep calling it a Rechnung — same contract #405
-    // established for Belege.
+  it("names a TWINT bill issued before #763 Quittung_RE-XXXXXX.pdf (BIL-46)", () => {
+    // A legacy bill carries no `document`; its checkout's method decides.
     const opts = buildDownloadOptions(
       makeBill({ referenceNumber: 130, kind: "invoice" }),
       "raisenow",
@@ -92,17 +90,50 @@ describe("getInvoiceDownloadUrl — buildDownloadOptions", () => {
     );
   });
 
-
-  it("keeps the Rechnung prefix for the aggregated Sammelrechnung (paymentMethod 'monthly')", () => {
-    // The aggregated monthly invoice's checkout still records
-    // paymentMethod "monthly" but the document is a payable Rechnung.
+  it("names a TWINT Beleg Beleg_BL-XXXXXX.pdf (#763)", () => {
     const opts = buildDownloadOptions(
-      makeBill({ referenceNumber: 140, kind: "invoice" }),
-      "monthly",
+      makeBill({
+        referenceNumber: 135,
+        kind: "invoice",
+        paymentMethod: "raisenow",
+        document: "beleg",
+      }),
+      "raisenow",
     );
     expect(opts.responseDisposition).to.equal(
-      'attachment; filename="Rechnung_RE-000014.pdf"',
+      'attachment; filename="Beleg_BL-000013-5.pdf"',
     );
+  });
+
+  it("names a CHF 0 Beleg Beleg_BL-XXXXXX.pdf (#780)", () => {
+    const opts = buildDownloadOptions(
+      makeBill({ referenceNumber: 160, paymentMethod: null, document: "beleg", paidVia: "free" }),
+    );
+    expect(opts.responseDisposition).to.equal(
+      'attachment; filename="Beleg_BL-000016.pdf"',
+    );
+  });
+
+  it("names the Sammelrechnung Sammelrechnung_RE-XXXXXX.pdf", () => {
+    // Stored document, and a legacy one whose checkouts name the
+    // Sammelrechnung method.
+    expect(
+      buildDownloadOptions(
+        makeBill({ referenceNumber: 140, paymentMethod: "rechnung", document: "sammelrechnung" }),
+      ).responseDisposition,
+    ).to.equal('attachment; filename="Sammelrechnung_RE-000014.pdf"');
+    const twoVisits = [{}, {}] as unknown as BillEntity["checkouts"];
+    expect(
+      buildDownloadOptions(
+        makeBill({ referenceNumber: 140, kind: "invoice", checkouts: twoVisits }),
+        "monthly",
+      ).responseDisposition,
+    ).to.equal('attachment; filename="Sammelrechnung_RE-000014.pdf"');
+    // A one-visit one issued before ADR-0052 was printed as a Rechnung.
+    expect(
+      buildDownloadOptions(makeBill({ referenceNumber: 140, kind: "invoice" }), "monthly")
+        .responseDisposition,
+    ).to.equal('attachment; filename="Rechnung_RE-000014.pdf"');
   });
 
   it("Beleg kind wins over any payment method", () => {

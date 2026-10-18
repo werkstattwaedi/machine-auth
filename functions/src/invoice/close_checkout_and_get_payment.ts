@@ -41,6 +41,7 @@ import {
   isMachineItem,
   isOwnerOnlyUsage,
   isPaymentMethod,
+  billPaymentMethodOf,
   machineUsageBlocked,
   sameDayCoveredPersons,
   samedayPersonKey,
@@ -768,7 +769,6 @@ const PAYMENT_METHOD_REQUIRED_MESSAGE =
 interface MintCommit {
   /** The method to write on the checkout; null only for a CHF 0 bill. */
   method: PaymentMethod | null;
-  kind?: "beleg";
   preAck?: { source: "user" };
 }
 
@@ -782,8 +782,9 @@ function mintCommitted(
     logger.warn("Close without a payment method refused", { context, amount });
     throw new HttpsError("failed-precondition", PAYMENT_METHOD_REQUIRED_MESSAGE);
   }
+  // A Beleg for the Sammelrechnung carries no ack stamp (billCommitFields).
   return PAYMENT_METHOD_INFO[method].isAggregated
-    ? { method, kind: "beleg" }
+    ? { method }
     : { method, preAck: { source: "user" } };
 }
 
@@ -1087,7 +1088,7 @@ async function closeExistingCheckout(
         // Either way the answer names the method the bill is committed
         // with, which may differ from the one asked for: the first wins.
         let committedMethod = isBillCommitted(existingBill)
-          ? (checkout.paymentMethod ?? null)
+          ? billPaymentMethodOf(existingBill, checkout.paymentMethod)
           : null;
         if (
           args.paymentMethod &&
@@ -1129,7 +1130,7 @@ async function closeExistingCheckout(
       checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
-      kind: commit.kind,
+      paymentMethod: commit.method,
       preAck: commit.preAck,
     });
 
@@ -1294,7 +1295,7 @@ async function createAnonymousCheckout(
       checkoutRefs: [checkoutRef],
       amount: summary.totalPrice,
       billRef,
-      kind: commit.kind,
+      paymentMethod: commit.method,
       preAck: commit.preAck,
     });
 

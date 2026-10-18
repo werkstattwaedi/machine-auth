@@ -22,7 +22,7 @@ import { DocumentReference, getFirestore, Timestamp } from "firebase-admin/fires
 import { getStorage } from "firebase-admin/storage";
 import { downloadUrlFor, pdfSaveOptions } from "../util/storage_download";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
-import { billDocumentPrefix, formatBillReference } from "./types";
+import { billFileName, formatBillReference } from "./types";
 import { logOperationError } from "../operations_log";
 import { contractVariables, templateRef } from "../util/resend_template";
 // The recipient resolver lives in its own module (`util/checkout_recipient`)
@@ -36,6 +36,7 @@ export { resolveRecipientEmail };
 import { loadMembershipCatalogId } from "../membership/shared";
 import { loadRecipient } from "./resolve_recipient";
 import { processMembershipForAckedBill } from "../membership/process_membership_payment";
+import type { BillDocumentType } from "@oww/shared";
 import type {
   BillEntity,
   InvoiceData,
@@ -50,9 +51,13 @@ import type {
   PaymentMethod,
 } from "../types/firestore_entities";
 import {
+  BILL_DOCUMENT_INFO,
   PAYMENT_METHOD_INFO,
-  billDocument,
+  billDocumentOf,
   billMail,
+  billMailFor,
+  billPaymentMethodOf,
+  isCollectedBeleg,
   classifyBillKind,
   classifyCheckoutKind,
   usageDiscount,
@@ -258,24 +263,14 @@ async function assembleInvoiceData(
     checkoutDocs.map((doc) => doc.data() as CheckoutEntity),
   );
 
-  // Read the customer's chosen payment method from the first checkout.
-  // Written with the commit (the close, the renewal invoicer); null on a
-  // CHF 0 checkout or a legacy one nobody committed.
-  // Gates whether the QR-bill payment slip is rendered (#251).
-  // For the monthly aggregated bill (kind "invoice" with paymentMethod
-  // "monthly" on every linked checkout): the bill IS the Sammelrechnung,
-  // so it must show the QR slip. We don't want the
-  // "Dieser Betrag wird der nächsten Sammelrechnung […] hinzugefügt"
-  // notice — fall through to the rechnung path.
+  // The bill's committed method gates the QR-bill payment slip (#251):
+  // null for a CHF 0 bill or a legacy one nobody committed. A bill minted
+  // before ADR-0052 has it only on its first checkout, and a
+  // Sammelrechnung's checkouts name the Sammelrechnung method although the
+  // bill itself is paid by QR slip — `billPaymentMethodOf` resolves both.
   const primaryCheckoutData = checkoutDocs[0]?.data() as CheckoutEntity | undefined;
-  const rawPaymentMethod = primaryCheckoutData?.paymentMethod ?? null;
-  const kind = bill.kind ?? "invoice";
-  const paymentMethod =
-    kind === "invoice" &&
-    rawPaymentMethod &&
-    PAYMENT_METHOD_INFO[rawPaymentMethod].isAggregated
-      ? "rechnung"
-      : rawPaymentMethod;
+  const legacyCheckoutMethod = primaryCheckoutData?.paymentMethod ?? null;
+  const paymentMethod = billPaymentMethodOf(bill, legacyCheckoutMethod);
 
   // Corrected re-issue (ADR-0042): one extra read for the superseded bill's
   // number and date so the PDF can state what it replaces.
@@ -285,7 +280,7 @@ async function assembleInvoiceData(
     const previous = previousSnap.data() as BillEntity | undefined;
     if (previous) {
       supersedes = {
-        reference: formatBillReference(previous.referenceNumber, previous.kind),
+        reference: formatBillReference(previous),
         date: previous.created.toDate(),
         reason: bill.correctionReason ?? "",
       };
@@ -305,7 +300,7 @@ async function assembleInvoiceData(
     paidVia: bill.paidVia ?? null,
     terminalReceiptText: bill.walleeReceiptText ?? null,
     paymentMethod,
-    kind,
+    document: billDocumentOf(bill, legacyCheckoutMethod),
     source: bill.source ?? "checkout",
     membershipCatalogId,
     supersedes,
@@ -410,24 +405,23 @@ export async function tryGeneratePdf(
 /**
  * Which mail of the email contract (ADR-0046) carries this bill. A
  * corrected re-issue and a membership renewal have their own copy, checked
- * first since they keep their original kind/method; everything else is
- * keyed by the bill document, read from payment-method properties — never
- * from a method id, so a new payment integration needs no new template.
- *
- * The method is the one committed on the checkout; a legacy bill whose
- * checkout names none gets the payable QR-Rechnung. A per-visit Beleg
- * ("charge queued") and the aggregated Sammelrechnung ("please pay") must
- * never share a template (issue #502).
+ * first since they keep their original method and document; everything
+ * else is keyed by the document and method properties (`billMailFor`) —
+ * never a method id, so a new payment integration needs no new template.
  */
 type BillMailName = Extract<
   MailName,
-  "bill-correction" | "membership-renewal" | `bill-${ReturnType<typeof billDocument>}`
+  "bill-correction" | "membership-renewal" | `bill-${ReturnType<typeof billMailFor>}`
 >;
 
-function pickBillMail(method: PaymentMethod | null, bill: BillEntity): BillMailName {
+function pickBillMail(
+  bill: BillEntity,
+  document: BillDocumentType,
+  method: PaymentMethod | null,
+): BillMailName {
   if (bill.supersedesBillRef) return "bill-correction";
   if ((bill.source ?? "checkout") === "membership-renewal") return "membership-renewal";
-  return billMail(billDocument(bill.kind, method)) as BillMailName;
+  return billMail(billMailFor(document, method)) as BillMailName;
 }
 
 export async function trySendEmail(billId: string): Promise<boolean> {
@@ -452,7 +446,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // hourly retry for 24 h. Clear the field manually to re-arm the send.
   if (bill.emailSkippedReason) return true;
 
-  const isBeleg = (bill.kind ?? "invoice") === "beleg";
+  const isBeleg = isCollectedBeleg(bill);
 
   // A replacement Beleg minted inside a Sammelrechnung revision (ADR-0042)
   // never mails on its own: its PDF rides along as an attachment of the
@@ -462,10 +456,9 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true;
   }
 
-  // A Beleg (per-visit Sammelrechnung record, issue #245) is committed by
-  // its kind (the close mints it as one, #750; before that a later commit
-  // flipped it to "beleg") and never carries a
-  // payment-method ack stamp. The member still wants an emailed receipt for
+  // A Beleg for the Sammelrechnung (issue #245) is committed without a
+  // payment-method ack stamp (the close mints it so, #750; before that a
+  // later commit set the Sammelrechnung method). The member still wants an emailed receipt for
   // the visit — just not a payable invoice
   // (issue #405). So Belege bypass the ack gate; real invoices stay gated
   // on the customer's payment-method ack (issue #251). retryBillProcessing
@@ -519,8 +512,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     return true; // Nothing to retry
   }
 
-  const paymentMethod = checkout.paymentMethod ?? null;
-  const mail = pickBillMail(paymentMethod, bill);
+  // Committed by now, so a legacy bill's checkout method is the committed one.
+  const paymentMethod = billPaymentMethodOf(bill, checkout.paymentMethod);
+  const document = billDocumentOf(bill, checkout.paymentMethod);
+  const mail = pickBillMail(bill, document, paymentMethod);
 
   // Acquire lock
   await billRef.update({ emailSentAt: Timestamp.now() });
@@ -536,7 +531,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       expires: Date.now() + 24 * 3600 * 1000,
     });
 
-    const invoiceNumber = formatBillReference(bill.referenceNumber, bill.kind);
+    const invoiceNumber = formatBillReference(bill);
     const recipientName = checkout.persons[0]?.name ?? "Kunde";
     const checkoutDate = formatWorkshopDateTime(
       checkout.created.toDate(),
@@ -544,17 +539,17 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     );
     // Correction-only variables (ADR-0042).
     const correctedDocuments = attachedBills
-      .map((a) => formatBillReference(a.bill.referenceNumber, a.bill.kind))
+      .map((a) => formatBillReference(a.bill))
       .join(", ");
     const cancelledDocuments = supersededBill
       ? (await cancelledWithoutReplacement(bill.supersedesBillRef!)).join(", ")
       : "";
     const supersededReference = supersededBill
-      ? formatBillReference(supersededBill.referenceNumber, supersededBill.kind)
+      ? formatBillReference(supersededBill)
       : "";
     const correctionVariables: Record<string, string> = supersededBill
       ? {
-          DOCUMENT_KIND: documentKindLabel(bill, paymentMethod),
+          DOCUMENT_KIND: BILL_DOCUMENT_INFO[document].label,
           SUPERSEDED_INVOICE_NUMBER: supersededReference,
           REASON: bill.correctionReason ?? "",
           PAYMENT_NOTE: correctionPaymentNote(
@@ -579,7 +574,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
           action: "read",
           expires: Date.now() + 24 * 3600 * 1000,
         }),
-        filename: `Beleg-${formatBillReference(a.bill.referenceNumber, a.bill.kind)}.pdf`,
+        filename: billFileName(billDocumentOf(a.bill), formatBillReference(a.bill), "-"),
       })),
     );
 
@@ -591,7 +586,10 @@ export async function trySendEmail(billId: string): Promise<boolean> {
     // The per-checkout mails word a membership or badge purchase differently
     // from a visit (issue #660); the others have no such dimension.
     const dims =
-      mail === "bill-invoice" || mail === "bill-receipt" || mail === "bill-beleg"
+      mail === "bill-invoice" ||
+      mail === "bill-receipt" ||
+      mail === "bill-paid-beleg" ||
+      mail === "bill-beleg"
         ? { kind: await loadBillKind(bill) }
         : {};
     const template = templateRef(
@@ -619,7 +617,7 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       attachments: [
         {
           path: signedUrl,
-          filename: `${billDocumentPrefix(bill.kind, paymentMethod)}-${invoiceNumber}.pdf`,
+          filename: billFileName(document, invoiceNumber, "-"),
         },
         ...extraAttachments,
       ],
@@ -663,22 +661,6 @@ async function loadBillKind(bill: BillEntity): Promise<CheckoutKind> {
 }
 
 /**
- * Noun for the correction/cancellation copy: Rechnung / Quittung / Beleg /
- * Sammelrechnung. Mirrors the PDF title rule in `build_invoice_pdf.ts`
- * (a one-visit aggregate is titled "Rechnung Self-Checkout", only a
- * multi-visit one "Sammelrechnung") so the mail names the document the
- * customer actually holds — deliberately NOT the `paymentMethod`-based
- * mail choice in `pickBillMail`, which picks copy, not the noun.
- */
-function documentKindLabel(
-  bill: BillEntity,
-  paymentMethod: PaymentMethod | null,
-): string {
-  const prefix = billDocumentPrefix(bill.kind, paymentMethod);
-  return prefix === "Rechnung" && bill.checkouts.length > 1 ? "Sammelrechnung" : prefix;
-}
-
-/**
  * What the customer has to do about money after a correction (ADR-0042).
  * Composed here because Resend templates have no conditionals and the
  * answer depends on the document: a payable Rechnung / Sammelrechnung ships
@@ -692,7 +674,7 @@ function correctionPaymentNote(
   supersededReference: string,
 ): string {
   if (bill.paidVia === "free") return "Für diese Korrektur ist nichts zu bezahlen.";
-  if ((bill.kind ?? "invoice") === "beleg") {
+  if (isCollectedBeleg(bill)) {
     return "Der Betrag wird über deine nächste Sammelrechnung abgerechnet.";
   }
   if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
@@ -709,7 +691,7 @@ function cancellationPaymentNote(
   bill: BillEntity,
   paymentMethod: PaymentMethod | null,
 ): string {
-  if ((bill.kind ?? "invoice") === "beleg") {
+  if (isCollectedBeleg(bill)) {
     return "Der Betrag wird nicht auf deine Sammelrechnung übernommen.";
   }
   if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
@@ -763,7 +745,7 @@ async function cancelledWithoutReplacement(
   return snap.docs
     .map((d) => d.data() as BillEntity)
     .filter((b) => b.cancelledAt && !b.supersededByBillRef)
-    .map((b) => formatBillReference(b.referenceNumber, b.kind));
+    .map((b) => formatBillReference(b));
 }
 
 /**
@@ -812,10 +794,13 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
       to: recipientEmail,
       template: templateRef("bill-cancellation", {}, {
         RECIPIENT_NAME: checkout.persons[0]?.name ?? "Kunde",
-        INVOICE_NUMBER: formatBillReference(bill.referenceNumber, bill.kind),
-        DOCUMENT_KIND: documentKindLabel(bill, checkout.paymentMethod ?? null),
+        INVOICE_NUMBER: formatBillReference(bill),
+        DOCUMENT_KIND: BILL_DOCUMENT_INFO[billDocumentOf(bill, checkout.paymentMethod)].label,
         REASON: bill.cancellationReason ?? "",
-        PAYMENT_NOTE: cancellationPaymentNote(bill, checkout.paymentMethod ?? null),
+        PAYMENT_NOTE: cancellationPaymentNote(
+          bill,
+          billPaymentMethodOf(bill, checkout.paymentMethod),
+        ),
         AMOUNT: bill.amount.toFixed(2),
         CURRENCY: bill.currency,
         KASSE_EMAIL: kasseEmail.value(),
@@ -859,7 +844,7 @@ export function isCommittedAtClose(bill: BillEntity): boolean {
   // job; only one born acked is committed here.
   if (source === "membership-renewal") return !!bill.paymentMethodConfirmationTime;
   if (source !== "checkout") return false;
-  if ((bill.kind ?? "invoice") === "beleg") return !bill.aggregatedIntoBillRef;
+  if (isCollectedBeleg(bill)) return !bill.aggregatedIntoBillRef;
   // "terminal": the webhook closed the checkout on a Wallee-confirmed
   // payment and minted the bill paid and committed in one go (ADR-0051).
   return (
@@ -888,7 +873,7 @@ async function runCommitSideEffects(
   bill: BillEntity,
   options: { regeneratePdf: boolean },
 ): Promise<void> {
-  const isBeleg = (bill.kind ?? "invoice") === "beleg";
+  const isBeleg = isCollectedBeleg(bill);
   try {
     await tryGeneratePdf(billId, { force: options.regeneratePdf });
   } catch (err) {
@@ -938,10 +923,12 @@ export async function handleBillCreated(
 /**
  * A bill committed after its creation — the ack stamp flips from null to
  * set (the repeat close of a legacy unconfirmed bill, or an ops repair) or
- * the bill turns into a Beleg (Sammelrechnung, issue #245/#405). The PDF was built before the
- * method was known, so it is regenerated: a Beleg is titled "Beleg", and a
- * method paid during the checkout or the Sammelrechnung must not carry the
- * QR slip (#251).
+ * the bill becomes a Beleg for the Sammelrechnung (issue #245/#405), which
+ * carries no stamp. The PDF was built before the method was known, so it is
+ * regenerated: a Beleg is titled "Beleg", and a method paid during the
+ * checkout or the Sammelrechnung must not carry the QR slip (#251). A
+ * backfill that only adds the ADR-0052 fields to a legacy bill is neither
+ * transition.
  *
  * Exported for integration testing.
  */
@@ -950,15 +937,14 @@ export async function handleBillUpdated(
   before: BillEntity,
   after: BillEntity,
 ): Promise<void> {
-  const beforeKind = before.kind ?? "invoice";
-  const afterKind = after.kind ?? "invoice";
-  const becameBeleg = beforeKind !== "beleg" && afterKind === "beleg";
+  const afterIsBeleg = isCollectedBeleg(after);
+  const becameBeleg = !isCollectedBeleg(before) && afterIsBeleg;
   // Defensive: Belege never carry an ack stamp, but if one ever lands
   // (manual ops repair?) we still skip the side effects.
   const becameAcked =
     !before.paymentMethodConfirmationTime &&
     !!after.paymentMethodConfirmationTime &&
-    afterKind !== "beleg";
+    !afterIsBeleg;
   if (!becameBeleg && !becameAcked) return;
 
   await runCommitSideEffects(billId, after, { regeneratePdf: true });
@@ -1003,7 +989,7 @@ export const onBillUpdate = onDocumentUpdated(
 /**
  * Retry gate for the hourly email sweep. An email is due once the bill is
  * committed: a real invoice carries a payment-method ack stamp (#251); a
- * Beleg is committed by its kind transition and never gets that stamp,
+ * Beleg for the Sammelrechnung is committed without that stamp,
  * but still emails a visit receipt (#405). Not due once sent, or once
  * `trySendEmail` has established there is nobody to mail (#651) — without
  * that last term the sweep re-logged "no recipient" 24× per guest bill.
@@ -1013,8 +999,7 @@ export const onBillUpdate = onDocumentUpdated(
  */
 export function isEmailRetryDue(bill: BillEntity): boolean {
   const committed =
-    (bill.kind ?? "invoice") === "beleg" ||
-    !!bill.paymentMethodConfirmationTime;
+    isCollectedBeleg(bill) || !!bill.paymentMethodConfirmationTime;
   return committed && !bill.emailSentAt && !bill.emailSkippedReason;
 }
 

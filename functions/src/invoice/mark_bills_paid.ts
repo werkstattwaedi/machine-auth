@@ -6,8 +6,8 @@
  * workspace (manual mark-paid and the bank-statement import).
  *
  * Bills stay client-write-denied in firestore.rules; this callable is the
- * single write path so the invariants hold: only unpaid `kind: "invoice"`
- * bills can be booked, already-paid bills are skipped (idempotent re-import
+ * single write path so the invariants hold: only unpaid bills that are not
+ * Belege for the Sammelrechnung can be booked, already-paid bills are skipped (idempotent re-import
  * of an overlapping bank statement), and `paidAt` may carry the statement's
  * booking date instead of "now".
  *
@@ -26,6 +26,7 @@ import {
   type MarkBillPaidInput,
   type MarkBillsPaidRequest,
   type MarkBillsPaidResult,
+  isCollectedBeleg,
 } from "@oww/shared";
 import type { BillEntity } from "./types";
 
@@ -99,7 +100,7 @@ export const adminMarkBillsPaidHandler = async (
       const snap = await tx.get(ref);
       if (!snap.exists) return "rejected";
       const bill = snap.data() as BillEntity;
-      if ((bill.kind ?? "invoice") === "beleg") {
+      if (isCollectedBeleg(bill)) {
         // Belege are folded into the monthly Sammelrechnung; the payment
         // books against that aggregate invoice, never the Beleg itself.
         return "rejected";
