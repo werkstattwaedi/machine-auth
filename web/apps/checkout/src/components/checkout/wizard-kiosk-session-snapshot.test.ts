@@ -24,6 +24,7 @@ function person(overrides: Partial<CheckoutPerson> = {}): CheckoutPerson {
     termsAccepted: true,
     isPreFilled: true,
     userId: "u1",
+    usageType: "regular",
     ...overrides,
   }
 }
