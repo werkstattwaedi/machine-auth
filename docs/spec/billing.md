@@ -22,16 +22,16 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung and its account holder is an active member (BIL-4), otherwise as a QR-Rechnung. — #251, #302, #761, #745
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill issued without a committed method that nobody confirms is committed overnight (BIL-7). — #251, #302
 - **BIL-39** A checkout paid by a verified payment stays open until the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) already paid and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
-- **BIL-40** A payment at the Wallee terminal (BIL-39) closes the checkout with exactly the persons and their usage types, the items, the donation and the amount priced when that payment was started, and its bill is paid as of the time Wallee authorised the payment. — ADR-0051, #735, #788
-- **BIL-42** A change made to the checkout after a payment at the Wallee terminal was started for it doesn't hold the payment up: Wallee's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to follow up the difference by hand — ADR-0051, #788:
+- **BIL-40** A verified payment (BIL-39) closes the checkout with exactly the persons and their usage types, the items, the donation and the amount priced when that payment was started, and its bill is paid as of the time the provider authorised the payment. — ADR-0051, #735, #788
+- **BIL-42** A change made to the checkout after a verified payment was started for it doesn't hold the payment up: the provider's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to the difference — ADR-0051, #788:
 
   | Changed after the start | On the closed checkout |
   |---|---|
   | an item added or removed, or a quantity changed | the items and quantities as priced |
   | a person added or removed, or a usage type changed (CHK-4, CHK-40) | the persons and usage types as priced |
-  | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows as priced; the sessions that arrived later are taken off the checkout and land on the person's open checkout with their next session on a machine of that type (CHK-44) |
+  | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows and their minutes as priced, leaving out the sessions that arrived later (CHK-44), which are billed neither there nor on a later checkout |
 
-- **BIL-43** A checkout takes at most ten payments started at the Wallee terminal (KIO-22), each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
+- **BIL-43** A checkout takes at most ten payments started at the Wallee terminal, each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method and sends no bill mail, unless it corrects an earlier bill (BIL-28). — #237
 
 ## Documents
@@ -94,7 +94,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
-- [NEEDS CLARIFICATION] A verified payment's bill is issued paid (BIL-39), so an admin can never cancel or correct it (BIL-21) — not even after a payment at the Wallee terminal was reversed and the bill still says paid (BIL-41). Should such a bill be correctable, with the difference refunded through the provider, or a reversal un-book its payment? → #803
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 
 ## Retired
