@@ -45,6 +45,12 @@ const projectRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const blocksConfigPath = resolve(projectRoot, "scripts/port-blocks.json");
 const baseE2eConfigPath = resolve(projectRoot, "firebase.e2e.json");
 
+// Not the firebase defaults (4400/4500): shifted by ci-1's +10000, the
+// logging port would land on 14500 — xpra's default port, which its
+// package's systemd socket holds on any machine with xpra installed.
+const HUB_BASE_PORT = 4410;
+const LOGGING_BASE_PORT = 4510;
+
 function tryAcquire(port: number): Promise<{ release: () => void } | null> {
   return new Promise((resolveBind) => {
     const server = createServer();
@@ -90,8 +96,10 @@ function applyOffsetToFirebaseConfig(
   // Pin hub + logging explicitly so concurrent blocks don't all start
   // probing from the default 4400/4500 and pick neighbouring ports
   // non-deterministically.
-  if (!emulators.hub) emulators.hub = { port: 4400 + offset };
-  if (!emulators.logging) emulators.logging = { port: 4500 + offset };
+  if (!emulators.hub) emulators.hub = { port: HUB_BASE_PORT + offset };
+  if (!emulators.logging) {
+    emulators.logging = { port: LOGGING_BASE_PORT + offset };
+  }
   writeFileSync(outputPath, JSON.stringify(raw, null, 2) + "\n");
 }
 
@@ -109,7 +117,7 @@ function shiftedKillPorts(basePath: string, offset: number): number[] {
     }
   }
   // emulator-exec.sh also kills hub/logging defaults
-  ports.push(4400 + offset, 4500 + offset);
+  ports.push(HUB_BASE_PORT + offset, LOGGING_BASE_PORT + offset);
   return [...new Set(ports)].sort((a, b) => a - b);
 }
 
