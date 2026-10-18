@@ -25,7 +25,7 @@ import {
   type UsageGroup,
   standardFee,
 } from "@modules/lib/pricing"
-import { personEntryFee } from "@oww/shared"
+import { maskEmail, personEntryFee } from "@oww/shared"
 import type { PricingConfig } from "@modules/lib/workshop-config"
 import { validatePerson } from "./validation"
 import { cn } from "@modules/lib/utils"
@@ -47,6 +47,13 @@ interface StepCheckinProps {
    *  strip so the page doesn't redundantly show the editable
    *  PersonCard fields for the user themselves. */
   signedInEmail?: string | null
+  /**
+   * Issue #668: an un-elevated kiosk badge session (ADR-0041) — whoever holds
+   * the badge must not learn the addresses on the card, so every identity
+   * strip shows its e-mail masked like the step-up dialog does. Display
+   * only; the persons keep their full address.
+   */
+  maskEmails?: boolean
   /** True when the signed-in user has an active membership; toggles the
    *  "Vereinsmitglied" suffix on the identity strip. */
   isMember?: boolean
@@ -128,7 +135,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, ownerUsageGroups = [], config = null, feePersons = [], savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, maskEmails = false, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, ownerUsageGroups = [], config = null, feePersons = [], savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -306,13 +313,14 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               key={person.id}
               person={person}
               index={i}
-              email={
+              email={displayEmail(
                 isSaved
                   ? null
                   : isSignedInUser
                     ? (signedInEmail ?? person.email)
-                    : person.email
-              }
+                    : person.email,
+                maskEmails,
+              )}
               suffix={
                 isSaved
                   ? USER_TYPE_LABELS[person.userType]
@@ -613,6 +621,12 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
       </div>
     </div>
   )
+}
+
+/** The strip's e-mail line: masked for an un-elevated kiosk badge session. */
+function displayEmail(email: string | null, mask: boolean): string | null {
+  if (!email) return null
+  return mask ? maskEmail(email) : email
 }
 
 /**
