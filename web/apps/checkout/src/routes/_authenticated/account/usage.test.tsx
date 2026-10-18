@@ -387,6 +387,36 @@ describe("Usage page", () => {
     expect(screen.getByText("1 h 30 min")).toBeInTheDocument()
   })
 
+  it("lists a visit paid at the terminal as awaiting confirmation (#812, ACC-6)", async () => {
+    const user = userEvent.setup()
+    fakeDb.setDoc(fakeDb.doc("checkouts", "co-await"), {
+      userId: fakeDb.doc("users", "user1"),
+      status: "awaiting_payment",
+      created: new Date("2025-06-11T14:00:00"),
+      workshopsVisited: ["holz"],
+      terminalApproval: { attempt: 2, reportedAt: new Date("2025-06-11T14:45:00") },
+      terminalAttempts: {
+        "1": { amount: 20, reference: "P-co-await-1" },
+        "2": { amount: 32.5, reference: "P-co-await-2" },
+      },
+    })
+
+    renderUsagePage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Nutzungsverlauf")).toBeInTheDocument()
+    })
+    await user.click(
+      screen.getByRole("button", { name: /Werkstatt-Besuche/ }),
+    )
+    expect(screen.getByTestId("session-awaiting-payment")).toHaveTextContent(
+      "Zahlung wird bestätigt",
+    )
+    // The approved attempt's amount, not an earlier one's.
+    expect(screen.getByText(/CHF\s*32\.50/)).toBeInTheDocument()
+    expect(screen.getByText("45 min")).toBeInTheDocument()
+  })
+
   it("shows all visited workshops as chips in the wide table row (no +N collapse)", async () => {
     const user = userEvent.setup()
     fakeDb.setDoc(fakeDb.doc("checkouts", "co-multi"), {

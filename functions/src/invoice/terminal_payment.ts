@@ -352,14 +352,29 @@ export async function alertUnconfirmedApprovals(now: Date = new Date()): Promise
   const awaiting = await db.collection("checkouts").where("status", "==", "awaiting_payment").get();
   const alerted: string[] = [];
   for (const doc of awaiting.docs) {
-    const checkout = doc.data() as CheckoutEntity;
-    const approval = checkout.terminalApproval;
-    if (!approval) continue;
-    const reportedAt = approval.reportedAt.toMillis();
-    if (now.getTime() - reportedAt < UNCONFIRMED_GRACE_MS) continue;
-    const lastAlert = approval.alertedAt?.toMillis();
-    if (lastAlert !== undefined && now.getTime() - lastAlert < UNCONFIRMED_REALERT_MS) continue;
-    const attempt = approvedAttempt(checkout);
+    // Re-checked and marked in a transaction: Wallee may settle it between
+    // the query and the mark, and a closed checkout must neither alert nor
+    // get a stray `terminalApproval` back.
+    const due = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(doc.ref);
+      const checkout = snap.data() as CheckoutEntity | undefined;
+      if (checkout?.status !== "awaiting_payment") return null;
+      const approval = checkout.terminalApproval;
+      if (!approval) {
+        // Only a hand edit leaves it like this; nothing would ever clear it.
+        logger.warn("terminal_awaiting_without_approval", { checkoutId: doc.id });
+        return null;
+      }
+      if (now.getTime() - approval.reportedAt.toMillis() < UNCONFIRMED_GRACE_MS) return null;
+      const lastAlert = approval.alertedAt?.toMillis();
+      if (lastAlert !== undefined && now.getTime() - lastAlert < UNCONFIRMED_REALERT_MS) {
+        return null;
+      }
+      tx.update(doc.ref, { "terminalApproval.alertedAt": Timestamp.fromDate(now) });
+      return { approval, attempt: approvedAttempt(checkout) };
+    });
+    if (!due) continue;
+    const { approval, attempt } = due;
     logger.error("terminal_payment_unconfirmed", {
       event: "terminal_payment_unconfirmed",
       checkoutId: doc.id,
@@ -370,15 +385,6 @@ export async function alertUnconfirmedApprovals(now: Date = new Date()): Promise
       reportedBy: approval.reportedBy,
       reportedAt: approval.reportedAt.toDate().toISOString(),
     });
-    // A failed write means a repeat next hour, which beats a missed alert.
-    try {
-      await doc.ref.update({ "terminalApproval.alertedAt": Timestamp.fromDate(now) });
-    } catch (err) {
-      logger.warn("terminal_unconfirmed_mark_failed", {
-        checkoutId: doc.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
     alerted.push(doc.id);
   }
   return alerted;

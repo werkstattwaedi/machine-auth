@@ -32,6 +32,7 @@ import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { flushTerminalReport, trackTerminalReport } from "./pending-terminal-report"
 
 /** The kiosk bridge's terminal methods (`useBridge`); absent outside the kiosk. */
 export interface TerminalBridge {
@@ -81,12 +82,6 @@ export interface TerminalPaymentState {
 
 /** How long a lost connection is answered by watching the checkout. */
 export const TERMINAL_CHECK_MS = 10_000
-
-/**
- * How long "Fertig" waits for the approval report: a retry after the kiosk
- * switched to the next person runs as someone else and is refused.
- */
-export const APPROVAL_REPORT_FLUSH_MS = 3_000
 
 /** Pauses between report retries; the server refusing it is final. */
 const APPROVAL_REPORT_RETRY_MS = [300, 1_000]
@@ -180,8 +175,6 @@ export function useTerminalPayment(args: {
   // The phase as of now, not as of the last render: two taps in one tick
   // must not start two attempts.
   const phaseRef = useRef<TerminalPhase | null>(null)
-  // The approval report in flight, for `flushReport`.
-  const reportRef = useRef<Promise<void> | null>(null)
   const prepare = useAsyncMutation<PrepareOutcome>({
     context: "checkout.prepareTerminalPayment",
     errorMessage: "Die Zahlung am Terminal konnte nicht gestartet werden.",
@@ -221,23 +214,11 @@ export function useTerminalPayment(args: {
           }
         }
       }
-      const pending = send().finally(() => {
-        if (reportRef.current === pending) reportRef.current = null
-      })
-      reportRef.current = pending
+      // Every reset waits for it briefly (`runStartOver`).
+      trackTerminalReport(send())
     },
     [functions],
   )
-
-  /** Waits for the approval report, at most `APPROVAL_REPORT_FLUSH_MS`. */
-  const flushReport = useCallback(async () => {
-    const pending = reportRef.current
-    if (!pending) return
-    await Promise.race([
-      pending,
-      new Promise((r) => setTimeout(r, APPROVAL_REPORT_FLUSH_MS)),
-    ])
-  }, [])
 
   const start = useCallback(async () => {
     if (!checkoutId || !bridge.terminalPay) return
@@ -382,5 +363,5 @@ export function useTerminalPayment(args: {
     return () => clearTimeout(timer)
   }, [checking, update])
 
-  return { terminal, start, abort, clear, flushReport }
+  return { terminal, start, abort, clear, flushReport: flushTerminalReport }
 }

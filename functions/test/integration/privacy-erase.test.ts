@@ -429,6 +429,31 @@ describe("privacy erase (integration)", function () {
         modifiedAt: Timestamp.now(),
       });
     },
+    // Paid at the Wallee terminal, Wallee's confirmation pending (#812).
+    "checkout awaiting payment": async (db2: admin.firestore.Firestore) => {
+      await db2.doc("checkouts/co-await").set({
+        userId: db2.doc("users/u1"),
+        status: "awaiting_payment",
+        usageType: "regular",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: Timestamp.now(),
+      });
+    },
+    "person in someone else's checkout awaiting payment": async (db2: admin.firestore.Firestore) => {
+      await db2.doc("checkouts/co-await-other").set({
+        userId: db2.doc("users/someone-else"),
+        status: "awaiting_payment",
+        usageType: "regular",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [{ name: "Erika Muster", email: "u1@example.com", userType: "erwachsen" }],
+        modifiedBy: null,
+        modifiedAt: Timestamp.now(),
+      });
+    },
     "unpaid bill": async (db2: admin.firestore.Firestore) => {
       await db2.doc("bills/b-open").set({
         userId: db2.doc("users/u1"),

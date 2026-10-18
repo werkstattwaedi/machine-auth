@@ -79,6 +79,7 @@ import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
 import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
 import { runStartOver } from "./start-over"
+import { flushTerminalReport } from "./pending-terminal-report"
 import {
   TERMINAL_BUSY_PHASES,
   useTerminalPayment,
@@ -592,8 +593,6 @@ export function WizardProvider({
   // root, outside the wizard) can ask before discarding the session on a
   // badge tap. Read through a ref so the registered getter is always
   // current without re-registering on every render.
-  // Set below from the terminal hook, which needs callbacks defined later.
-  const flushTerminalReportRef = useRef<() => Promise<void>>(async () => {})
   const guardStateRef = useRef({
     openCheckout: openCheckout as CheckoutDoc | null,
     checkoutId,
@@ -876,7 +875,8 @@ export function WizardProvider({
 
   // Reset wizard: clear local state, sign out tag/anon, navigate to /checkin.
   const resetWizard = useCallback(async () => {
-    await flushTerminalReportRef.current()
+    // As in runStartOver: the terminal approval report goes out first (#812).
+    await flushTerminalReport()
     personsDispatch({ type: "RESET" })
     setTip(0)
     setPaymentData(null)
@@ -904,9 +904,6 @@ export function WizardProvider({
   // reload. The flow lives in `runStartOver` so it's unit-testable.
   const startOver = useCallback(
     async (opts?: { startedHint?: string | null }) => {
-      // The terminal's approval report must reach the server as this
-      // session: once it is wiped a retry would be refused (#812).
-      await flushTerminalReportRef.current()
       await runStartOver({
         signOut,
         bridgeAvailable: bridge.available,
@@ -1043,7 +1040,6 @@ export function WizardProvider({
   ])
 
   const terminalPayment = useTerminalPayment({ checkoutId, bridge, buildClosePayload })
-  flushTerminalReportRef.current = terminalPayment.flushReport
   const { clear: clearTerminal } = terminalPayment
   guardStateRef.current.paymentInProgress =
     !!terminalPayment.terminal && TERMINAL_BUSY_PHASES.has(terminalPayment.terminal.phase)

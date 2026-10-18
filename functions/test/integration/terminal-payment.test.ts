@@ -408,6 +408,39 @@ describe("Wallee terminal payment (Integration)", () => {
       expect((await checkout("co1")).status).to.equal("open");
     });
 
+    it("takes the report from a kiosk acting as the owner and from an anonymous visitor", async () => {
+      await seedOpenCheckout("coKiosk");
+      const { attempt } = await prepare("coKiosk");
+      const kiosk = {
+        data: { checkoutId: "coKiosk", attempt },
+        auth: { uid: "tag:kiosk", token: { actsAs: OWNER } },
+        rawRequest: {},
+        acceptsStreaming: false,
+      };
+      expect(await reportTerminalApprovalHandler(kiosk as never)).to.deep.equal({
+        status: "awaiting_payment",
+      });
+      expect((await checkout("coKiosk")).terminalApproval?.reportedBy).to.equal(OWNER);
+
+      // An anonymous visitor's cart: only the session that opened it.
+      await seedOpenCheckout("coAnon", { userId: null as never, modifiedBy: "anon-1" });
+      await getFirestore().collection("checkouts").doc("coAnon").update({
+        terminalAttemptCount: 1,
+        "terminalAttempts.1": { reference: "P-coAnon-1", amount: 25, createdAt: Timestamp.now() },
+      });
+      const anon = (uid: string) => ({
+        data: { checkoutId: "coAnon", attempt: 1 },
+        auth: { uid, token: { firebase: { sign_in_provider: "anonymous" } } },
+        rawRequest: {},
+        acceptsStreaming: false,
+      });
+      await expectRejects(reportTerminalApprovalHandler(anon("anon-2") as never), "permission-denied");
+      await expectRejects(report("coAnon", 1), "permission-denied");
+      expect(await reportTerminalApprovalHandler(anon("anon-1") as never)).to.deep.equal({
+        status: "awaiting_payment",
+      });
+    });
+
     it("refuses a checkout closed another way", async () => {
       await seedOpenCheckout("co1", { status: "closed" });
       await expectRejects(report("co1", 1), "failed-precondition");

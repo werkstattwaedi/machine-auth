@@ -10,6 +10,10 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { runStartOver } from "./start-over"
+import {
+  APPROVAL_REPORT_FLUSH_MS,
+  trackTerminalReport,
+} from "./pending-terminal-report"
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -27,6 +31,40 @@ function makeDeps(over: Record<string, unknown> = {}) {
 }
 
 describe("runStartOver", () => {
+  it("lets a terminal approval report finish before the wipe (#812)", async () => {
+    const order: string[] = []
+    let finishReport: () => void = () => {}
+    trackTerminalReport(
+      new Promise<void>((resolve) => {
+        finishReport = () => {
+          order.push("report")
+          resolve()
+        }
+      }),
+    )
+    const deps = makeDeps({ signOut: vi.fn(async () => void order.push("signOut")) })
+    const done = runStartOver(deps)
+    await Promise.resolve()
+    expect(order).toEqual([])
+    finishReport()
+    await done
+    expect(order).toEqual(["report", "signOut"])
+  })
+
+  it("wipes anyway when the report hangs", async () => {
+    vi.useFakeTimers()
+    try {
+      trackTerminalReport(new Promise<void>(() => {}))
+      const deps = makeDeps()
+      const done = runStartOver(deps)
+      await vi.advanceTimersByTimeAsync(APPROVAL_REPORT_FLUSH_MS)
+      await done
+      expect(deps.reload).toHaveBeenCalledWith("/checkin")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("signs out and hard-reloads to /checkin in a browser tab", async () => {
     const deps = makeDeps()
     await runStartOver(deps)
