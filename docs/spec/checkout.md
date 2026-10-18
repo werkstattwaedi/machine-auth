@@ -121,6 +121,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | nobody signed in | the sign-in, and after it back to the link |
   | the checkout's account holder | the app, as when opening it (CHK-2) |
   | another signed-in account | a notice that the checkout belongs to another account, offering to sign out and sign in with another, after which it leads on as for that account |
+  | a session signed in only by a badge tap (the kiosk) | a notice that the link can't be opened there, without offering to sign out |
 
 ## Open questions
 
@@ -129,8 +130,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - [NEEDS CLARIFICATION] After the commit (CHK-22) a reload, the browser's back or a deep link leaves Bezahlen for good: there is no open checkout, the person is sent to the check-in, and a guest has no way back to the PDF download (CHK-25) or the paylink (CHK-27) — the document is in the mail (BIL-26). Intended?
 - [NEEDS CLARIFICATION] The unfolded sessions (CHK-45) show each session's wall-clock duration, while the row's minutes (CHK-44) are the billed time, so on a machine billed by active time (ADR-0032) the sessions don't add up to the row. Intended, or should the list show billed time?
 - [NEEDS CLARIFICATION] Only the app keeps a machine row read-only (CHK-44); the server accepts an edit or delete of it from the checkout's owner. Should the server refuse?
-- [NEEDS CLARIFICATION] An account holder who opens the reminder's link (CHK-42) while signed in only by a badge tap does not reach the app: they get the spinner or the notice for another account. Intended?
-- [NEEDS CLARIFICATION] A reminder link to a checkout that no longer exists tells even its account holder that it belongs to another account (CHK-42). Intended?
+- [NEEDS CLARIFICATION] A reminder link to a checkout that no longer exists tells even its account holder that it belongs to another account (CHK-42). Intended? → #802
 
 ## Retired
 

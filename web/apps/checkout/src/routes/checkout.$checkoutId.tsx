@@ -19,6 +19,10 @@
  *     show a "wrong account" hint rather than a blank screen, offering a
  *     sign-out to switch accounts (signs out, then /login with a redirect
  *     back here).
+ *   - Signed in only by a badge tap (`sessionKind === "tag"`) → a plain
+ *     "can't be opened here" notice. Badge sessions are minted only behind
+ *     the kiosk bearer, so this is the kiosk, where a mailed link can't be
+ *     pasted anyway; signing the kiosk session out from here would be wrong.
  *
  * NB: PR #551 (issue #535, `/denied`) introduces a parallel signed-in-user
  * mismatch pattern. This route was built independently off `main` (which does
@@ -58,7 +62,9 @@ function CheckoutByIdRoute() {
     data: checkout,
     loading: checkoutLoading,
     error: checkoutError,
-  } = useDocument(user ? checkoutRef(db, checkoutId) : null)
+  } = useDocument(
+    user && sessionKind !== "tag" ? checkoutRef(db, checkoutId) : null,
+  )
 
   const signedIn = sessionKind === "real" || sessionKind === "tag"
   const principalLoading =
@@ -80,6 +86,9 @@ function CheckoutByIdRoute() {
       })
       return
     }
+
+    // Badge-tap (kiosk) session → the notice below; nothing to dispatch.
+    if (sessionKind === "tag") return
 
     // Signed in — wait for the checkout read to resolve.
     if (checkoutLoading) return
@@ -108,10 +117,15 @@ function CheckoutByIdRoute() {
     navigate,
   ])
 
+  // A badge-tap session only exists on the kiosk, where a reminder link from
+  // a mail can't be opened; refuse plainly instead of waiting on the read.
+  const isKioskSession =
+    !principalLoading && user != null && sessionKind === "tag"
+
   // Wrong-account / unreadable checkout: the signed-in member is not the
   // owner. Use the id as a hint and let them switch accounts.
   const isWrongAccount =
-    signedIn &&
+    sessionKind === "real" &&
     !principalLoading &&
     !checkoutLoading &&
     (checkoutError != null ||
@@ -134,6 +148,27 @@ function CheckoutByIdRoute() {
       to: "/login",
       search: { redirect: `/checkout/${checkoutId}` },
     })
+  }
+
+  if (isKioskSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div
+          role="alert"
+          data-testid="checkout-link-unavailable"
+          className="max-w-md w-full rounded-lg border border-amber-300 bg-amber-50 p-6 text-center"
+        >
+          <AlertTriangle className="h-8 w-8 text-amber-600 mx-auto mb-3" />
+          <h1 className="text-lg font-semibold text-amber-900 mb-2">
+            Dieser Link kann hier nicht geöffnet werden
+          </h1>
+          <p className="text-sm text-amber-800">
+            Bitte öffne den Link aus der Erinnerung auf deinem eigenen Gerät,
+            um den Besuch abzuschliessen.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   if (isWrongAccount) {

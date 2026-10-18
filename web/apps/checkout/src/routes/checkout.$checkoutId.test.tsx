@@ -10,6 +10,7 @@
  *   - owner signed in → hand off to the root dispatcher (`/`)
  *   - a *different* member signed in (checkout unreadable) → "wrong account"
  *     hint using the id, not a blank screen
+ *   - a badge-tap (kiosk) session → a plain "can't open here" notice
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
@@ -179,5 +180,28 @@ describe("/checkout/$checkoutId", () => {
       }),
     )
     expect(mockSignOut).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses a badge-tap (kiosk) session without signing it out", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: "tag:04abcdef", isAnonymous: false },
+      userDoc: { id: "u1" },
+      loading: false,
+      userDocLoading: false,
+      sessionKind: "tag",
+      signOut: mockSignOut,
+    })
+    // Even a still-pending read must not hold the notice back.
+    mockUseDocument.mockReturnValue({ data: null, loading: true, error: null })
+
+    await renderRoute()
+
+    expect(
+      await screen.findByTestId("checkout-link-unavailable"),
+    ).toBeTruthy()
+    // No account switch on the kiosk: no button, no sign-out, no navigation.
+    expect(screen.queryByRole("button")).toBeNull()
+    expect(mockSignOut).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })
