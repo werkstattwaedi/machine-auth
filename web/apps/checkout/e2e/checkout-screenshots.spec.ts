@@ -440,6 +440,30 @@ test.describe("Checkout step screenshots", () => {
     await expect(card.getByTestId("usage-type-trigger")).toContainText("Reguläre Nutzung")
   })
 
+  // CHK-32 (#779): an owner-only Nutzungsart disables "Person hinzufügen";
+  // the reason is a tooltip, opened by a tap (mobile-chrome is touch, so
+  // this covers the kiosk), not a line under the button.
+  test("check-in — Freiwilligengruppe: add-person reason as tooltip", async ({ page }) => {
+    await signIn(page)
+    await page.goto("/")
+    const strip = page.getByTestId("identity-strip").first()
+    await expect(strip).toBeVisible({ timeout: 10_000 })
+    await chooseUsageType(page, strip, "Freiwilligengruppe")
+
+    await expect(page.getByTestId("add-person")).toBeDisabled()
+    const tooltip = page.locator('[data-slot="tooltip-content"]')
+    await expect(tooltip).toHaveCount(0)
+
+    // tap() and click() wait until the wrapper receives events (the closing
+    // Select briefly keeps pointer-events off the body).
+    const trigger = page.getByTestId("add-person-disabled")
+    if (test.info().project.name === "mobile-chrome") await trigger.tap()
+    else await trigger.click()
+    await expect(tooltip).toBeVisible()
+
+    await expect(page).toHaveScreenshot("checkin-add-person-reason-tooltip.png")
+  })
+
   // CHK-8 (#605): machine time with every person on „Begleitung / nur
   // Materialbezug" can't be billed — Check Out says so in Maschinen and
   // disables the payment cards, instead of a server refusal on submit.
