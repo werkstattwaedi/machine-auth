@@ -424,6 +424,85 @@ describe("Checkout update: remindersSent is server-only (#531)", () => {
   })
 })
 
+describe("Checkout update: payment method and terminal fields are server-only (#750, ADR-0051)", () => {
+  // The close callable commits the method with the bill; only Wallee's
+  // confirmation (settleTerminalPayment, Admin SDK) closes a checkout as
+  // `wallee_terminal`. The attempt fields carry the priced close.
+  it.each([
+    ["terminalAttempts", { "1": { reference: "P-x-1", amount: 0.01 } }],
+    ["terminalAttemptCount", 7],
+    ["walleeTransactionId", 123],
+    ["paymentMethod", "wallee_terminal"],
+    ["paymentMethod", "rechnung"],
+  ])("owner cannot write %s on their open checkout", async (field, value) => {
+    await createOpenCheckout("co-term1", "u1")
+    await assertFails(
+      updateDoc(doc(authedDb("u1"), "checkouts", "co-term1"), { [field]: value }),
+    )
+  })
+
+  it("owner can still edit the open checkout's notes (positive control)", async () => {
+    await createOpenCheckout("co-term2", "u1")
+    await assertSucceeds(
+      updateDoc(doc(authedDb("u1"), "checkouts", "co-term2"), { notes: "Holz" }),
+    )
+  })
+
+  it("anonymous session cannot set wallee_terminal or attempts on its open checkout", async () => {
+    const anonDb = anonAuthDb("anon-term")
+    await setDoc(doc(anonDb, "checkouts", "co-term3"), {
+      userId: null,
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: [],
+      persons: [],
+      modifiedBy: null,
+      modifiedAt: serverTimestamp(),
+      firebaseUid: "anon-term",
+    })
+    await assertFails(
+      updateDoc(doc(anonDb, "checkouts", "co-term3"), { paymentMethod: "wallee_terminal" }),
+    )
+    await assertFails(
+      updateDoc(doc(anonDb, "checkouts", "co-term3"), { terminalAttemptCount: 1 }),
+    )
+  })
+
+  it("owner can neither claim nor leave wallee_terminal on a closed checkout", async () => {
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore()
+      await setDoc(doc(db, "checkouts", "co-term4"), {
+        userId: doc(db, "users", "u1"),
+        status: "closed",
+        usageType: "regular",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: "u1",
+        modifiedAt: Timestamp.now(),
+        firebaseUid: "u1",
+      })
+    })
+    const db = authedDb("u1")
+    await assertFails(
+      updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "wallee_terminal" }),
+    )
+    await assertFails(
+      updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "rechnung" }),
+    )
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "checkouts", "co-term4"), {
+        paymentMethod: "wallee_terminal",
+        walleeTransactionId: 1003,
+      })
+    })
+    await assertFails(
+      updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "rechnung" }),
+    )
+  })
+})
+
 describe("Checkout items create rules", () => {
   it("allows owner to add items to their open checkout", async () => {
     // Create checkout as u1 (allowed by create rule)

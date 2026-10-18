@@ -302,6 +302,7 @@ async function assembleInvoiceData(
     currency: bill.currency,
     paidAt: bill.paidAt?.toDate() ?? null,
     paidVia: bill.paidVia ?? null,
+    terminalReceiptText: bill.walleeReceiptText ?? null,
     paymentMethod,
     kind,
     source: bill.source ?? "checkout",
@@ -839,7 +840,8 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
 
 /**
  * True for a bill the checkout close minted already committed (issue
- * #750): a confirmed QR-Rechnung, or a Sammelrechnung Beleg. Such a bill
+ * #750): a confirmed QR-Rechnung, a Sammelrechnung Beleg, or a terminal
+ * payment Wallee confirmed. Such a bill
  * never sees the null → set ack transition `onBillUpdate` watches, so
  * `onBillCreate` runs the commit side effects instead. Every other bill
  * born committed sends its own mail or none: a CHF 0 bill (no mail,
@@ -853,7 +855,12 @@ export function isCommittedAtClose(bill: BillEntity): boolean {
   if (bill.supersedesBillRef) return false;
   if (bill.paidVia === "free") return false;
   if ((bill.kind ?? "invoice") === "beleg") return !bill.aggregatedIntoBillRef;
-  return bill.paymentMethodConfirmationSource === "user";
+  // "terminal": the webhook closed the checkout on a Wallee-confirmed
+  // payment and minted the bill paid and committed in one go (ADR-0051).
+  return (
+    bill.paymentMethodConfirmationSource === "user" ||
+    bill.paymentMethodConfirmationSource === "terminal"
+  );
 }
 
 /**

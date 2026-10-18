@@ -94,7 +94,7 @@ function hasMachineUsage(items: { type?: string | null }[]): boolean {
  *
  * Returns null for unauthenticated callers (the truly-anonymous flow).
  */
-function effectiveUid(request: CallableRequest<unknown>): string | null {
+export function effectiveUid(request: CallableRequest<unknown>): string | null {
   const claims = request.auth?.token as { actsAs?: unknown } | undefined;
   if (typeof claims?.actsAs === "string" && claims.actsAs.length > 0) {
     return claims.actsAs;
@@ -109,7 +109,7 @@ function effectiveUid(request: CallableRequest<unknown>): string | null {
  * adds the first item, so the server must accept that anon session
  * later — but only that anon session — when it submits.
  */
-function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
+export function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
   const provider = (request.auth?.token as
     | { firebase?: { sign_in_provider?: string } }
     | undefined)?.firebase?.sign_in_provider;
@@ -818,26 +818,32 @@ export const closeCheckoutAndGetPaymentHandler = async (
   );
 };
 
-async function closeExistingCheckout(
-  callerUid: string | null,
-  isAnonymous: boolean,
-  args: {
-    checkoutId: string;
-    persons: ClosePersonInput[];
-    clientSummary?: CheckoutSummaryEntity;
-    paymentMethod: PaymentMethod | null;
-  },
-): Promise<PaymentData> {
-  if (!callerUid) {
-    throw new HttpsError(
-      "unauthenticated",
-      "Sign-in required to close an existing checkout",
-    );
-  }
+/**
+ * Everything a close of an existing open checkout settles before its
+ * transaction: who owns it, the roster as it will be stored (identities
+ * checked, account-holder user type enforced, same-day waiver applied),
+ * the visit's usage type and the pricing config. Shared by the close and
+ * by `prepareTerminalPayment` (ADR-0051), which prices a terminal attempt
+ * exactly like the close it later becomes.
+ */
+export interface ResolvedExistingClose {
+  checkoutRef: DocumentReference;
+  context: string;
+  ownerId: string | null;
+  visitUsageType: UsageType;
+  persons: CheckoutPersonEntity[];
+  configFees: Record<string, Record<string, number>> | null;
+  membershipCatalogId: string | null;
+  memberBillingAddress: { street?: string; zip?: string; city?: string } | null;
+}
 
+export async function resolveExistingClose(
+  callerUid: string,
+  isAnonymous: boolean,
+  args: { checkoutId: string; persons: ClosePersonInput[]; context: string },
+): Promise<ResolvedExistingClose> {
   const db = getFirestore();
   const checkoutRef = db.collection("checkouts").doc(args.checkoutId);
-  const billRef = db.collection("bills").doc();
 
   // Pricing config read outside the transaction — it's not strongly tied
   // to the checkout's atomicity and changes infrequently. Issue #149:
@@ -878,20 +884,12 @@ async function closeExistingCheckout(
   const ownerId = stored
     ? (stored.userId?.id ?? null)
     : (isAnonymous ? null : callerUid);
-  const context = `closeExistingCheckout ${args.checkoutId}`;
+  const context = args.context;
   const typed = resolvePersonUsageTypes(
     resolveClosePersons(db, args.persons, ownerId, context),
     ownerId,
   );
-  const visitUsageType = typed.usageType;
   const persons = await verifySavedPersonIds(db, typed.persons, ownerId, context);
-
-  if (args.paymentMethod) {
-    await assertPaymentMethodAllowed(
-      args.paymentMethod,
-      ownerId ? db.collection("users").doc(ownerId) : null,
-    );
-  }
 
   const enforcedPersons = await enforceAccountHolderUserType(
     db,
@@ -923,38 +921,139 @@ async function closeExistingCheckout(
     { excludeCheckoutId: args.checkoutId },
   );
 
+  return {
+    checkoutRef,
+    context,
+    ownerId,
+    visitUsageType: typed.usageType,
+    persons: dedupedPersons,
+    configFees,
+    membershipCatalogId,
+    memberBillingAddress,
+  };
+}
+
+/**
+ * The caller must be the checkout's principal. Two valid paths:
+ *
+ * 1. Registered user / kiosk tag-tap: `checkout.userId` is set and
+ *    must match `callerUid` (real login uid, or actsAs target for a
+ *    tag-tap session).
+ * 2. Eager-anon flow (issue #151): `checkout.userId` is null. The
+ *    Firestore rules permit any anon-auth session to read/update a
+ *    null-userId open checkout, so we add a server-side scoping that
+ *    mirrors the wizard's `modifiedBy == anonUid` query: only the
+ *    anon session that opened the cart may close it. The
+ *    sign-in-provider gate keeps real-user spoofing out — a real
+ *    user cannot accidentally (or deliberately) submit a stranger's
+ *    null-userId cart even if they know its id.
+ */
+export function assertCheckoutPrincipal(
+  checkout: CheckoutEntity,
+  callerUid: string,
+  isAnonymous: boolean,
+): void {
+  if (checkout.userId) {
+    if (checkout.userId.id !== callerUid) {
+      throw new HttpsError("permission-denied", "Not the checkout owner");
+    }
+  } else {
+    if (!isAnonymous) {
+      throw new HttpsError("permission-denied", "Not the checkout owner");
+    }
+    if (checkout.modifiedBy !== callerUid) {
+      throw new HttpsError("permission-denied", "Not the checkout owner");
+    }
+  }
+}
+
+/**
+ * Prices an open checkout inside the close's transaction: reads its items,
+ * runs the shared pricing tail and the identity-bound guards that need the
+ * items. Throws `failed-precondition` on a guard violation.
+ */
+export async function priceOpenCheckout(
+  tx: FirebaseFirestore.Transaction,
+  resolved: ResolvedExistingClose,
+  checkout: CheckoutEntity,
+  clientSummary: CheckoutSummaryEntity | undefined,
+): Promise<{
+  summary: CheckoutSummaryEntity;
+  /** The item docs it priced, for a terminal attempt's snapshot. */
+  itemDocs: FirebaseFirestore.QueryDocumentSnapshot[];
+}> {
+  // Load the items subcollection inside the transaction for the
+  // server-side recompute.
+  const itemsSnap = await tx.get(resolved.checkoutRef.collection("items"));
+  const rawItems = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
+
+  const { items, summary, membershipPresent } = priceCheckoutItems({
+    persons: resolved.persons,
+    usageType: resolved.visitUsageType,
+    items: rawItems,
+    configFees: resolved.configFees,
+    membershipCatalogId: resolved.membershipCatalogId,
+    tip: clientSummary?.tip ?? 0,
+  });
+  // Badge association needs an identified owner (see the guard's doc).
+  assertBadgeItemsBelongToOwner(items, checkout.userId);
+  // A membership invoice needs a postal address (combined-signin refactor).
+  // The buyer's user doc carries it (written from the inline checkout field).
+  if (membershipPresent) {
+    assertMembershipBillingAddress(resolved.memberBillingAddress);
+  }
+  logSummaryDivergence(resolved.context, clientSummary, summary);
+  return { summary, itemDocs: itemsSnap.docs };
+}
+
+async function closeExistingCheckout(
+  callerUid: string | null,
+  isAnonymous: boolean,
+  args: {
+    checkoutId: string;
+    persons: ClosePersonInput[];
+    clientSummary?: CheckoutSummaryEntity;
+    paymentMethod: PaymentMethod | null;
+  },
+): Promise<PaymentData> {
+  if (!callerUid) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Sign-in required to close an existing checkout",
+    );
+  }
+  // A terminal payment closes only on Wallee's confirmation
+  // (settleTerminalPayment), never on the client's word.
+  if (args.paymentMethod && PAYMENT_METHOD_INFO[args.paymentMethod].confirmsPayment) {
+    throw new HttpsError(
+      "invalid-argument",
+      `paymentMethod ${args.paymentMethod} is confirmed by its provider, not by the close`,
+    );
+  }
+
+  const db = getFirestore();
+  const billRef = db.collection("bills").doc();
+  const resolved = await resolveExistingClose(callerUid, isAnonymous, {
+    checkoutId: args.checkoutId,
+    persons: args.persons,
+    context: `closeExistingCheckout ${args.checkoutId}`,
+  });
+  const { checkoutRef } = resolved;
+
+  if (args.paymentMethod) {
+    await assertPaymentMethodAllowed(
+      args.paymentMethod,
+      resolved.ownerId ? db.collection("users").doc(resolved.ownerId) : null,
+    );
+  }
+
   const result = await db.runTransaction(async (tx) => {
     const checkoutDoc = await tx.get(checkoutRef);
     if (!checkoutDoc.exists) {
       throw new HttpsError("not-found", `Checkout ${args.checkoutId} not found`);
     }
     const checkout = checkoutDoc.data() as CheckoutEntity;
-
-    // The caller must be the checkout's principal. Two valid paths:
-    //
-    // 1. Registered user / kiosk tag-tap: `checkout.userId` is set and
-    //    must match `callerUid` (real login uid, or actsAs target for a
-    //    tag-tap session).
-    // 2. Eager-anon flow (issue #151): `checkout.userId` is null. The
-    //    Firestore rules permit any anon-auth session to read/update a
-    //    null-userId open checkout, so we add a server-side scoping that
-    //    mirrors the wizard's `modifiedBy == anonUid` query: only the
-    //    anon session that opened the cart may close it. The
-    //    sign-in-provider gate keeps real-user spoofing out — a real
-    //    user cannot accidentally (or deliberately) submit a stranger's
-    //    null-userId cart even if they know its id.
-    if (checkout.userId) {
-      if (checkout.userId.id !== callerUid) {
-        throw new HttpsError("permission-denied", "Not the checkout owner");
-      }
-    } else {
-      if (!isAnonymous) {
-        throw new HttpsError("permission-denied", "Not the checkout owner");
-      }
-      if (checkout.modifiedBy !== callerUid) {
-        throw new HttpsError("permission-denied", "Not the checkout owner");
-      }
-    }
+    assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
 
     // Idempotency: if the safety-net trigger already produced a bill for
     // this checkout, return that bill's payment data instead of duplicating.
@@ -988,7 +1087,7 @@ async function closeExistingCheckout(
         return {
           bill: existingBill,
           billId: checkout.billRef.id,
-          payer: payerFromPersons(checkout.persons ?? enforcedPersons),
+          payer: payerFromPersons(checkout.persons ?? resolved.persons),
           committedMethod,
         };
       }
@@ -1001,27 +1100,7 @@ async function closeExistingCheckout(
       );
     }
 
-    // Load the items subcollection inside the transaction for the
-    // server-side recompute.
-    const itemsSnap = await tx.get(checkoutRef.collection("items"));
-    const rawItems = itemsSnap.docs.map((d) => d.data() as CheckoutItemEntity);
-
-    const { items, summary, membershipPresent } = priceCheckoutItems({
-      persons: dedupedPersons,
-      usageType: visitUsageType,
-      items: rawItems,
-      configFees,
-      membershipCatalogId,
-      tip: args.clientSummary?.tip ?? 0,
-    });
-    // Badge association needs an identified owner (see the guard's doc).
-    assertBadgeItemsBelongToOwner(items, checkout.userId);
-    // A membership invoice needs a postal address (combined-signin refactor).
-    // The buyer's user doc carries it (written from the inline checkout field).
-    if (membershipPresent) {
-      assertMembershipBillingAddress(memberBillingAddress);
-    }
-    logSummaryDivergence(`closeExistingCheckout ${args.checkoutId}`, args.clientSummary, summary);
+    const { summary } = await priceOpenCheckout(tx, resolved, checkout, args.clientSummary);
 
     const commit = mintCommitted(args.paymentMethod, summary.totalPrice);
     const bill = await allocateBill(tx, db, {
@@ -1036,20 +1115,23 @@ async function closeExistingCheckout(
     tx.update(checkoutRef, {
       ...(commit.method ? { paymentMethod: commit.method } : {}),
       status: "closed",
-      usageType: visitUsageType,
-      persons: dedupedPersons,
+      usageType: resolved.visitUsageType,
+      persons: resolved.persons,
       closedAt: FieldValue.serverTimestamp(),
       notes: null,
       summary,
       modifiedBy: callerUid,
       modifiedAt: FieldValue.serverTimestamp(),
       billRef,
+      // Terminal attempts die with the close: money that still arrives for
+      // one is a double charge (settleTerminalPayment alerts on it).
+      terminalAttempts: FieldValue.delete(),
     });
 
     return {
       bill,
       billId: billRef.id,
-      payer: payerFromPersons(dedupedPersons),
+      payer: payerFromPersons(resolved.persons),
       committedMethod: commit.method,
     };
   });
@@ -1084,6 +1166,12 @@ async function createAnonymousCheckout(
     );
   }
   const effectiveUserId = callerUid ? requestedUserId : null;
+  if (args.paymentMethod && PAYMENT_METHOD_INFO[args.paymentMethod].confirmsPayment) {
+    throw new HttpsError(
+      "invalid-argument",
+      `paymentMethod ${args.paymentMethod} is confirmed by its provider, not by the close`,
+    );
+  }
 
   // Items are validated and summed server-side. Negative quantities or
   // prices in the request are silently dropped (rule-level rejection
@@ -1239,7 +1327,7 @@ async function createAnonymousCheckout(
   };
 }
 
-function payerFromPersons(
+export function payerFromPersons(
   persons: CheckoutPersonEntity[],
 ): { name: string; email?: string } | null {
   const primary = persons[0];

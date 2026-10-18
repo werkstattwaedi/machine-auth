@@ -24,6 +24,7 @@ import type {
 import type {
   CheckoutEntity,
   CheckoutItemEntity,
+  PaidVia,
 } from "../types/firestore_entities";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
@@ -32,6 +33,7 @@ import {
   formatBillReference,
   type BillEntity,
   type BillKind,
+  type BillAckSource,
   type BillSource,
 } from "./types";
 import { usageDiscount, isMachineItem, type UsageType } from "@oww/shared";
@@ -54,7 +56,18 @@ interface BillingConfig {
 /** Payment-method ack stamp applied at mint time (skips the ack cron). */
 export interface BillAck {
   time: Timestamp;
-  source: "user" | "auto";
+  source: BillAckSource;
+}
+
+/**
+ * A payment the provider confirmed before the bill exists (the Wallee
+ * terminal, ADR-0051): the bill is born paid.
+ */
+export interface BillPaid {
+  paidAt: Timestamp;
+  paidVia: PaidVia;
+  walleeTransactionId: number | null;
+  walleeReceiptText: string | null;
 }
 
 interface BuildBillArgs {
@@ -70,6 +83,7 @@ interface BuildBillArgs {
   correctionReason?: string | null;
   correctedBillRefs?: DocumentReference[] | null;
   modifiedBy?: string | null;
+  paid?: BillPaid | null;
 }
 
 /**
@@ -95,8 +109,10 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
     currency: "CHF",
     storagePath: null,
     created: now,
-    paidAt: isFree ? now : null,
-    paidVia: isFree ? "free" : null,
+    paidAt: isFree ? now : (args.paid?.paidAt ?? null),
+    paidVia: isFree ? "free" : (args.paid?.paidVia ?? null),
+    walleeTransactionId: args.paid?.walleeTransactionId ?? null,
+    walleeReceiptText: args.paid?.walleeReceiptText ?? null,
     pdfGeneratedAt: null,
     emailSentAt: null,
     paymentMethodConfirmationTime: ack?.time ?? null,
@@ -145,13 +161,15 @@ export async function allocateBill(
      * picking monthly on each visit). The acknowledgeBill code paths never
      * pass this — the ack stamp lands later via the callable / auto-ack cron.
      */
-    preAck?: { source: "user" | "auto" };
+    preAck?: { source: BillAckSource };
     /**
      * Origin discriminator (issue #323). Defaults to "checkout". The
      * renewalInvoicer cron passes "membership-renewal" to mark bills it
      * auto-issued for an expiring membership.
      */
     source?: BillSource;
+    /** A payment confirmed before the bill exists (Wallee terminal). */
+    paid?: BillPaid;
   },
 ): Promise<BillEntity> {
   const configRef = db.doc("config/billing");
@@ -183,6 +201,7 @@ export async function allocateBill(
     kind: args.kind,
     ack: args.preAck ? { time: Timestamp.now(), source: args.preAck.source } : null,
     source: args.source,
+    paid: args.paid ?? null,
   });
   tx.set(args.billRef, bill);
   return bill;

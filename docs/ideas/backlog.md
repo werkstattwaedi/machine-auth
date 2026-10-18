@@ -215,6 +215,18 @@ banner and offer it in the admin UI, keeping the original untouched.
 
 **Context:** The checkout derives the client type from `?kiosk` in the wizard but uses `window.bridge` elsewhere (account area, NFC, payment auto-confirm). Payment enablement follows the wizard's `?kiosk`. One `useClientType()` over a single signal would stop the two drifting apart. That matters once the Wallee terminal can only work where the bridge exists.
 
+### Wallee terminal — refunds, reversals, status
+**Status:** 💡 Idea
+
+**Context:** ADR-0051 settles terminal payments automatically but leaves every way back to a human: a double charge (`terminal_double_charge`), an amount mismatch, a reversal after settlement (`terminal_payment_voided`) and a refund are handled in the Wallee portal, and an ADR-0042 correction of a terminal-paid bill doesn't touch Wallee.
+
+**Notes:**
+- Admin refund from the bill page (Wallee refund API) that also books the correction.
+- Automatic reversal of a double charge over LTI (`reversalRequest` + answering the terminal's `confirmationRequest`, spike 08) — only reaches the terminal's recent transactions.
+- A VOIDED after settlement could un-settle (bill unpaid again) instead of only alerting.
+- Terminal reachability and EP2 terminal id in the kiosk status report (`reportKioskStatus` accepts fixed fields today; the kiosk logs both at startup).
+- Badge (NFC) reading on the terminal instead of the separate reader.
+
 ### Periodic spec and conformance audit
 **Status:** 💡 Idea
 

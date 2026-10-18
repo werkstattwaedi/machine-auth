@@ -238,6 +238,10 @@ firebase functions:secrets:set GATEWAY_API_KEY
 firebase functions:secrets:set KIOSK_BEARER_KEY
 firebase functions:secrets:set RESEND_API_KEY
 firebase functions:secrets:set TERMINAL_KEY
+# Wallee application user's auth key (ADR-0051), shared by staging and prod
+# (one Wallee space). A placeholder is fine until the terminal is enabled
+# (see "Wallee payment terminal" below).
+firebase functions:secrets:set WALLEE_AUTH_KEY
 # Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
 # DIFFERENT value per project (staging vs prod). Destroying this secret is
 # the retroactive-anonymization switch for all BigQuery stats rows.
@@ -310,6 +314,35 @@ Smoke test after deploy: verify a phone number on `/account/profile`
 (one SMS), then sign in with it on `/checkin`. On the kiosk, confirm the
 session lands as the ephemeral actsAs principal (the header shows no
 account avatar and "Besuch starten" appears).
+
+### Wallee payment terminal (ADR-0051)
+
+Optional — the kiosk works without it. Paying "Karte / TWINT" at the A35
+next to the kiosk needs, in this order:
+
+1. **Operations config:** `wallee.spaceId`, `wallee.userId`,
+   `wallee.terminalId` (the Wallee *backend* terminal id, not the EP2 id
+   the terminal prints), `wallee.referencePrefix` (`P` for prod, `S` for
+   staging — they share the space and must differ), and the kiosk's
+   `kiosk.terminal.{host,port,posId}`. Run `npm run generate-env`.
+   Any empty `wallee.*` value keeps the terminal switched off.
+2. **The `WALLEE_AUTH_KEY` secret** with the real key (§1), then deploy
+   functions.
+3. **Webhook registration** (idempotent; also re-activates a listener
+   Wallee deactivated):
+   ```bash
+   npx tsx scripts/wallee-webhook-setup.ts --project <project-id> --dry-run
+   npx tsx scripts/wallee-webhook-setup.ts --project <project-id>
+   ```
+4. **Offer it:** add `wallee_terminal` to `web.paymentMethodsKiosk` (first
+   in the list puts its card on top), `npm run generate-env`, deploy
+   functions and hosting, and build the kiosk (`npm run build:kiosk:<env>`)
+   so it knows the terminal's address.
+
+Smoke test on staging with the test acquirer: CHF 3.00 approves, CHF 1.00
+declines (`docs/plans/wallee-terminal.md`). The checkout must close within
+seconds of the tap and the Quittung mail must say "Bezahlt … via
+Karte/TWINT (Terminal)" with the terminal receipt block in the PDF.
 
 ### Transactional mail templates (ADR-0046)
 

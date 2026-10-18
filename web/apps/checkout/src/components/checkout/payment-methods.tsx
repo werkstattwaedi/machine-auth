@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from "react"
-import { CircleCheck, FileText } from "lucide-react"
+import { CircleCheck, CreditCard, FileText } from "lucide-react"
 import { PAYMENT_METHOD_INFO, type PaymentMethod } from "@oww/shared"
 
 export interface PaymentData {
@@ -157,6 +157,24 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
         .
       </>
     ),
+  },
+  // Paid at the terminal next to the kiosk screen. The terminal's own
+  // result only drives this screen; Wallee's confirmation closes the
+  // checkout and mails the Quittung (BIL-39).
+  wallee_terminal: {
+    icon: <CreditCard className="h-5 w-5" strokeWidth={1.6} />,
+    title: PAYMENT_METHOD_INFO.wallee_terminal.label,
+    description: "Jetzt am Terminal neben dem Bildschirm bezahlen.",
+    actionLabel: "Am Terminal bezahlen",
+    instruction: () => "Folge den Anweisungen am Terminal.",
+    commitLabel: "Am Terminal bezahlen",
+    doneStatus: "Bezahlt",
+    doneBox: ({ email }) =>
+      email ? (
+        <>
+          Die Quittung haben wir dir an <strong>{email}</strong> gesendet.
+        </>
+      ) : null,
   },
   free: {
     icon: <CircleCheck className="h-5 w-5" strokeWidth={1.6} />,

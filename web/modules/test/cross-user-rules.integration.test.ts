@@ -885,8 +885,8 @@ describe("cross-user: checkouts", () => {
 
 describe("cross-user: cancelled checkouts + bills (ADR-0042)", () => {
   // Cancellation is server-only (the correctCheckouts callable). A
-  // cancelled checkout is neither open (no principal edits) nor closed
-  // (no paymentMethod carve-out), so every client write must fail while
+  // cancelled checkout is not open (no principal edits), so every client
+  // write must fail while
   // owner + admin reads keep working for the "storniert" views.
   const cancelledExtra = {
     status: "cancelled",
@@ -946,13 +946,11 @@ describe("cross-user: cancelled checkouts + bills (ADR-0042)", () => {
   })
 })
 
-describe("cross-user: checkouts paymentMethod last-selection write", () => {
-  // After #251 the customer-stated ack (paymentMethodConfirmationTime /
-  // Source) lives on the BILL and is server-only via the
-  // acknowledgeBill callable. Clients can only write paymentMethod on
-  // their closed checkout, fire-and-forget on every tab click. The
-  // value validation + cross-user denial still matter; the write-once
-  // gate does not.
+describe("cross-user: closed checkouts take no client writes", () => {
+  // Until #750 the customer picked the method on the closed checkout
+  // (#251's carve-out). The close callable now commits it with the bill
+  // and a correction creates a new checkout, so a client-set method could
+  // only contradict the bill — denied to everyone, owner included.
   const ackPayload = { paymentMethod: "rechnung" }
 
   it("denies bob writing paymentMethod on alice's closed checkout", async () => {
@@ -973,105 +971,6 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     )
   })
 
-  // The pre-rename id was migrated away (ADR-0044); a stale client must not
-  // write it back.
-  it("denies the retired paymentMethod 'twint' on a closed checkout", async () => {
-    await seedClosedCheckout("co1", "alice")
-    await assertFails(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "twint",
-      }),
-    )
-  })
-
-  it("allows a second paymentMethod write (not write-once — user can switch tabs)", async () => {
-    await seedClosedCheckout("co1", "alice", { paymentMethod: "rechnung" })
-    await assertSucceeds(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "raisenow",
-      }),
-    )
-  })
-
-  it("denies sneaking an unrelated field change alongside paymentMethod", async () => {
-    await seedClosedCheckout("co1", "alice")
-    await assertFails(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        ...ackPayload,
-        // Attempt to escalate by reopening the checkout. hasOnly() must reject.
-        status: "open",
-      }),
-    )
-  })
-
-  it("denies an unknown payment-method value", async () => {
-    await seedClosedCheckout("co1", "alice")
-    await assertFails(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "bitcoin",
-      }),
-    )
-  })
-
-  // --- monthly is gated by activeMembership ---
-
-  it("allows a Vereinsmitglied to write paymentMethod=monthly on their own closed checkout", async () => {
-    await seedUser("alice")
-    await seedMembership("m1", "alice")
-    await seedClosedCheckout("co1", "alice")
-    await assertSucceeds(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "monthly",
-      }),
-    )
-  })
-
-  it("denies a non-member writing paymentMethod=monthly on their own closed checkout", async () => {
-    await seedUser("alice") // activeMembership: null per seedUser default
-    await seedClosedCheckout("co1", "alice")
-    await assertFails(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
-        paymentMethod: "monthly",
-      }),
-    )
-  })
-
-  it("denies an anonymous-auth session from writing paymentMethod=monthly on a null-userId checkout", async () => {
-    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
-    // No user doc to consult for membership — the anon branch intentionally
-    // restricts the value list to ['rechnung', 'raisenow']. (firebaseUid
-    // matches the caller so this exercises the value restriction, not P0-2.)
-    await assertFails(
-      updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
-        paymentMethod: "monthly",
-      }),
-    )
-  })
-
-  // Positive carve-outs
-  it("allows alice writing paymentMethod on her own closed checkout", async () => {
-    await seedClosedCheckout("co1", "alice")
-    await assertSucceeds(
-      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), ackPayload),
-    )
-  })
-
-  it("allows the tag-tap session to write paymentMethod on its principal's closed checkout", async () => {
-    await seedClosedCheckout("co1", "alice")
-    await assertSucceeds(
-      updateDoc(doc(tagSessionDb("alice"), "checkouts", "co1"), ackPayload),
-    )
-  })
-
-  it("allows the creating anonymous-auth session to write paymentMethod on a null-userId closed checkout", async () => {
-    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
-    await assertSucceeds(
-      updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
-        paymentMethod: "raisenow",
-      }),
-    )
-  })
-
   it("denies a DIFFERENT anon session from writing paymentMethod on another anon session's closed checkout (P0-2)", async () => {
     await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
     await assertCrossUserDenied(
@@ -1084,11 +983,8 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
     )
   })
 
-  it("denies a non-principal real user impersonating an anonymous null-userId checkout paymentMethod write", async () => {
+  it("denies a real user writing paymentMethod on a null-userId closed checkout", async () => {
     await seedClosedCheckout("co-anon", null)
-    // A real signed-in user is not an anonymous-auth session, so they
-    // cannot write paymentMethod on a null-userId checkout (closes the
-    // cross-principal ambiguity in the closed-checkout clause).
     await assertCrossUserDenied(
       "checkouts paymentMethod write leaked to real user on null-userId doc",
       "firestore.rules:checkouts.update",
@@ -1096,6 +992,65 @@ describe("cross-user: checkouts paymentMethod last-selection write", () => {
         updateDoc(doc(authedDb("alice"), "checkouts", "co-anon"), {
           paymentMethod: "rechnung",
         }),
+    )
+  })
+
+  it("denies the owner changing paymentMethod on their own closed checkout", async () => {
+    await seedClosedCheckout("co1", "alice", { paymentMethod: "rechnung" })
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethod: "raisenow",
+      }),
+    )
+  })
+
+  it("denies a member switching their closed checkout to monthly", async () => {
+    await seedUser("alice")
+    await seedMembership("m1", "alice")
+    await seedClosedCheckout("co1", "alice")
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), {
+        paymentMethod: "monthly",
+      }),
+    )
+  })
+
+  it("denies the tag-tap session writing paymentMethod on its principal's closed checkout", async () => {
+    await seedClosedCheckout("co1", "alice")
+    await assertFails(
+      updateDoc(doc(tagSessionDb("alice"), "checkouts", "co1"), ackPayload),
+    )
+  })
+
+  it("denies the creating anonymous-auth session writing paymentMethod on its closed checkout", async () => {
+    await seedClosedCheckout("co-anon", null, { firebaseUid: "anon-x" })
+    await assertFails(
+      updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), {
+        paymentMethod: "raisenow",
+      }),
+    )
+  })
+
+  // ADR-0051: a terminal-paid checkout must keep the method its paid
+  // bill was minted with.
+  it("denies the owner relabelling a terminal-paid checkout", async () => {
+    await seedClosedCheckout("co1", "alice", {
+      paymentMethod: "wallee_terminal",
+      walleeTransactionId: 1001,
+    })
+    await assertFails(
+      updateDoc(doc(authedDb("alice"), "checkouts", "co1"), ackPayload),
+    )
+  })
+
+  it("denies the creating anonymous session relabelling its terminal-paid checkout", async () => {
+    await seedClosedCheckout("co-anon", null, {
+      firebaseUid: "anon-x",
+      paymentMethod: "wallee_terminal",
+      walleeTransactionId: 1002,
+    })
+    await assertFails(
+      updateDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-anon"), ackPayload),
     )
   })
 })

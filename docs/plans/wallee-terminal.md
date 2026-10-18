@@ -1,6 +1,6 @@
 # Wallee A35 terminal payment at the kiosk — LTI (technical draft)
 
-Status: **draft**, updated 2026-10-17. Builds on the checkout UI refresh in #750, which ships first: payment methods are chosen on step 3, and the checkout only closes once the method is confirmed. The terminal adds one option, "Karte / TWINT", to that flow. Its states are in the #750 mockup (Kiosk view). Account-specific identifiers (space, terminal, merchant) live in the operations config, not here.
+Status: **implemented** (ADR-0051), updated 2026-10-17 — this plan stays as the design record; deviations are listed in the ADR and the PRs (no `newCheckout` branch in `prepareTerminalPayment`; clients may never write `wallee_terminal`, so the rules lists stay as they are; ADR number 0051, not 0048). Builds on the checkout UI refresh in #750, which ships first: payment methods are chosen on step 3, and the checkout only closes once the method is confirmed. The terminal adds one option, "Karte / TWINT", to that flow. Its states are in the #750 mockup (Kiosk view). Account-specific identifiers (space, terminal, merchant) live in the operations config, not here.
 
 ## Context
 

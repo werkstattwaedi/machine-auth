@@ -121,7 +121,7 @@ export const STATS_TABLES: StatsTableDef[] = [
       { name: "paid_at", type: "TIMESTAMP" },
       { name: "subject_key", type: "STRING" },
       { name: "amount", type: "NUMERIC" },
-      { name: "paid_via", type: "STRING", description: "raisenow | ebanking | free (older rows may hold twint = raisenow)" },
+      { name: "paid_via", type: "STRING", description: "raisenow | ebanking | free | wallee_terminal (older rows may hold twint = raisenow)" },
       { name: "kind", type: "STRING", description: "invoice | beleg (absent ⇒ invoice)" },
       { name: "source", type: "STRING", description: "checkout | membership-renewal (absent ⇒ checkout)" },
     ],

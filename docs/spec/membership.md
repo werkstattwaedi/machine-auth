@@ -12,7 +12,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
 - **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile.
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
-- **MEM-7** A membership becomes active when the buyer commits a payment method (or the overnight job commits it, BIL-7), not when the payment is booked (BIL-34). — #251
+- **MEM-7** A membership becomes active when its bill's payment method is committed — by the buyer (CHK-22), by the provider's confirmation of a verified payment (BIL-39) or by the overnight job (BIL-7) — not when the payment is booked (BIL-34). — #251, ADR-0051
 - **MEM-8** A membership is valid for one year; a renewal or an admin's extension (MEM-32) adds a year to its end date, or starts the year today if that date has already passed.
 - **MEM-9** A membership has one price per type (single, family), the same for a first purchase and a renewal. — #743
 

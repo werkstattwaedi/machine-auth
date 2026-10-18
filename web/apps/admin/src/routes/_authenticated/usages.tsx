@@ -192,6 +192,9 @@ function UsagesTable({
                     >
                       Besuch
                       <MoveRight className="h-3.5 w-3.5" />
+                      {usage.notBilledReason && (
+                        <span className="font-normal text-muted-foreground">(nicht verrechnet)</span>
+                      )}
                     </Link>
                   ) : (
                     <span className="text-muted-foreground">–</span>

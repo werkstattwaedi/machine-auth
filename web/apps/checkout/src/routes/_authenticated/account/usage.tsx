@@ -48,6 +48,7 @@ export const Route = createFileRoute("/_authenticated/account/usage")({
 const paidViaLabel: Partial<Record<PaidVia, string>> = {
   raisenow: "TWINT",
   ebanking: "E-Banking",
+  wallee_terminal: "Karte/TWINT",
 }
 
 type FilterKey = "all" | "open" | "paid"

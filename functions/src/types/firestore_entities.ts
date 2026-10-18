@@ -135,6 +135,9 @@ export interface UsageMachineEntity {
   endTime: Timestamp;
   endReason?: string; // JSON of CheckOutReason
   checkoutItemRef?: DocumentReference; // Reference to /checkouts/{checkoutId}/items/{itemId} when billed
+  // Set when linked but never billed: "after_verified_payment" = reached the
+  // checkout after a verified payment priced it (BIL-42).
+  notBilledReason?: "after_verified_payment";
   workshop?: string | null; // Denormalized from machine
 }
 
@@ -320,6 +323,43 @@ export interface CheckoutEntity {
   // on every other doc, so `where("statsFlushedAt", "==", null)` is a
   // precise "pending flush" query.
   statsFlushedAt?: Timestamp | null;
+
+  // --- Payment terminal (ADR-0051). Server-only (open-update denylist). ---
+  // Attempts `prepareTerminalPayment` priced while the checkout was open,
+  // keyed by attempt number. Each one stays settleable until the checkout
+  // closes — money may still arrive for an older attempt after a newer one
+  // was prepared. Deleted at close.
+  terminalAttempts?: Record<string, TerminalAttemptEntity>;
+  // Last attempt number handed out; only ever grows.
+  terminalAttemptCount?: number;
+  // The Wallee transaction whose payment closed this checkout.
+  walleeTransactionId?: number | null;
+}
+
+/**
+ * One priced terminal attempt: the close it becomes once Wallee confirms
+ * the payment. Settlement uses this stored input — what the person saw and
+ * paid — not a re-pricing at confirmation time.
+ */
+export interface TerminalAttemptEntity {
+  reference: string;
+  /** CHF, the amount sent to the terminal. */
+  amount: number;
+  usageType: UsageType;
+  persons: CheckoutPersonEntity[];
+  summary: CheckoutSummaryEntity;
+  /**
+   * The checkout's items as priced, by item doc id. Settlement closes the
+   * checkout with exactly these, whatever changed since (ADR-0051).
+   */
+  items: Record<string, CheckoutItemEntity>;
+  /** Ids of the `usage_machine` records linked to each machine row when priced, by item id. */
+  machineUsageIds: Record<string, string[]>;
+  /** `stableKey` of the checkout's persons when priced, to notice a change. */
+  checkoutPersonsKey: string;
+  /** The principal that prepared it; stamped as `modifiedBy` on the close. */
+  preparedBy: string;
+  createdAt: Timestamp;
 }
 
 
