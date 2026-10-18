@@ -28,7 +28,14 @@ export type EmailEnv = (typeof EMAIL_ENVS)[number]
  * itself (`BillDocumentType`): a Beleg for the Sammelrechnung and a Beleg
  * for a payment the customer made during the checkout say different things.
  */
-export const BILL_MAILS = ["invoice", "receipt", "paid-beleg", "beleg", "sammelrechnung"] as const
+export const BILL_MAILS = [
+  "invoice",
+  "receipt",
+  "paid-beleg",
+  "beleg",
+  "free",
+  "sammelrechnung",
+] as const
 export type BillMail = (typeof BILL_MAILS)[number]
 
 /**
@@ -103,6 +110,12 @@ export const EMAIL_CONTRACT = {
   "bill-beleg": {
     dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY", "KASSE_EMAIL"],
+  },
+  // Beleg of a checkout totalling CHF 0 (BIL-8, #790): no amount, no slip,
+  // and the copy says there is nothing to pay (BIL-45).
+  "bill-free": {
+    dims: { kind: CHECKOUT_KINDS },
+    variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER"],
   },
   // The monthly aggregate of Belege — payable, QR slip attached.
   "bill-sammelrechnung": {

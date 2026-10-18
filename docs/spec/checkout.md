@@ -98,7 +98,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | RaiseNow | the button that opens the paylink — choosing RaiseNow alone commits nothing, and nothing confirms the payment afterwards (BIL-6) |
   | CHF 0 | its one action on Check Out (CHK-20) |
 
-- **CHK-23** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — the person is told that the checkout is complete and, unless it is CHF 0 (BIL-8), what became of its document — #750, #761, ADR-0051, #735:
+- **CHK-23** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — the person is told that the checkout is complete and, case by case, what follows — #750, #761, ADR-0051, #735, #790:
 
   | Case | Told |
   |---|---|
@@ -106,10 +106,12 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | Sammelrechnung | the date of the next monthly run (BIL-19) the Sammelrechnung comes on, and to which e-mail address |
   | RaiseNow | the document was sent and to which e-mail address, and whom to contact if the RaiseNow payment did not go through (BIL-6) |
   | Wallee terminal | that it is paid, and to which e-mail address the Quittung will be sent (BIL-26, BIL-39) |
-  | no e-mail address on record, any method | nothing was sent (BIL-37), and whom to contact |
+  | CHF 0 (BIL-8) | that there is nothing to pay, and that the Beleg was sent and to which e-mail address (BIL-26) |
+  | no e-mail address on record, any method but CHF 0 | nothing was sent (BIL-37), and whom to contact |
+  | CHF 0, no e-mail address on record | that there is nothing to pay, and nothing about the Beleg or whom to contact (BIL-37) |
 
 - **CHK-24** Only after a QR-Rechnung was confirmed can the person unfold the QR code of its QR slip, and never on a phone. — ADR-0020, #750
-- **CHK-25** On an own device the PDF download (BIL-15) is offered once the method is committed, and waits for the PDF to be generated instead of failing. — #750
+- **CHK-25** On an own device the PDF download (BIL-15) is offered once the commit (CHK-22) is done, names the kind of document it is (BIL-1, BIL-8), and waits for the PDF to be generated instead of failing. — #750, #790
 - **CHK-27** After RaiseNow is committed, Bezahlen offers to open the paylink again. — #750
 - **CHK-26** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — what the person can do next depends on where they are — ADR-0022, #750, ADR-0051, #735:
 

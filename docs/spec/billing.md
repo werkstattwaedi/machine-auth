@@ -32,7 +32,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows and their minutes as priced, leaving out the sessions that arrived later (CHK-44), which are billed neither there nor on a later checkout |
 
 - **BIL-43** A checkout takes at most ten payments started at the Wallee terminal, each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
-- **BIL-8** A checkout totalling CHF 0 asks for no payment method, and unless it corrects an earlier bill (BIL-17, BIL-28) its document is a Beleg and no bill mail is sent. — #237, #780
+- **BIL-8** A checkout totalling CHF 0 asks for no payment method, and unless it corrects an earlier bill (BIL-17, BIL-28) its document is a Beleg. — #237, #780
 
 ## Documents
 
@@ -68,9 +68,9 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 ## Mail
 
 - **BIL-25** Bill mail goes only to the account holder, or for a guest without an account to the first e-mail given at check-in, and to nobody else on the visit. — ADR-0048, #471, #651
-- **BIL-37** A bill whose recipient (BIL-25) has no e-mail address is not mailed; the person is told so on Bezahlen (CHK-23). — #651, #761
-- **BIL-26** A Rechnung, Quittung or Beleg is mailed once its payment method is committed, a Sammelrechnung by the monthly run; a CHF 0 checkout's Beleg is not mailed (BIL-8). — #251, #405, #763
-- **BIL-27** A Beleg for the Sammelrechnung, a RaiseNow Beleg, a Quittung and a Sammelrechnung are each announced by a different mail. — ADR-0046, #502, ADR-0052, #763
+- **BIL-37** A bill whose recipient (BIL-25) has no e-mail address is not mailed; unless the checkout totals CHF 0, the person is told so on Bezahlen (CHK-23). — #651, #761, #790
+- **BIL-26** A Rechnung, Quittung or Beleg is mailed once its payment method is committed, a CHF 0 checkout's Beleg (BIL-8) once the checkout is closed (CHK-22), and a Sammelrechnung by the monthly run. — #251, #405, #763, #790
+- **BIL-27** A Beleg for the Sammelrechnung, a RaiseNow Beleg, a CHF 0 checkout's Beleg (BIL-8), a Quittung and a Sammelrechnung are each announced by a different mail. — ADR-0046, #502, ADR-0052, #763, #790
 - **BIL-28** A correction sends exactly one mail for the new top-level document, with corrected Belege for the Sammelrechnung attached; a cancellation without replacement sends a notice only if the original was mailed. — ADR-0042
 
 ## Payment booking
@@ -86,7 +86,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | it arrives for a checkout already closed — by an earlier payment at the Wallee terminal or another method — or cancelled | the checkout and its bill as they are |
   | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
   | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
-- **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document says that nothing is to be paid. — #237
+- **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document and, where one is sent (BIL-26, BIL-28), its mail say that nothing is to be paid. — #237, #790
 
 ## Retention
 
@@ -97,6 +97,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
+- [NEEDS CLARIFICATION] A renewal bill totalling CHF 0 (MEM-24) is issued paid (BIL-45) but mailed by nobody — neither the renewal letter nor the CHF 0 mail (BIL-26). Intended, or should it get one? — #790
 
 ## Retired
 

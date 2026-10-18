@@ -51,6 +51,7 @@ import {
   handleBillUpdated,
   isCommittedAtClose,
   isEmailRetryDue,
+  isFreeCheckoutBeleg,
   tryGeneratePdf,
   trySendCancellationNotice,
   trySendEmail,
@@ -1037,20 +1038,89 @@ describe("bill processing triggers (Integration)", () => {
           .be.false;
       });
 
-      it("skips sending when paidVia is free", async () => {
+      it("mails a CHF 0 Beleg on the free template, attached as Beleg-BL-… (BIL-8, #790)", async () => {
         const billId = "bill-free";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {});
         await seedBill(billId, {
           storagePath: "invoices/bill-free.pdf",
+          referenceNumber: 120,
+          amount: 0,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          paidVia: "free",
+          stored: { paymentMethod: null, document: "beleg" },
+        });
+
+        expect(await trySendEmail(billId)).to.be.true;
+        expect(resendSendStub.calledOnce).to.be.true;
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          {
+            to: string;
+            template: { id: string; variables: Record<string, string> };
+            attachments: Array<{ filename: string }>;
+          },
+        ];
+        expect(entity.to).to.equal("payer@example.com");
+        expect(entity.template.id).to.equal("test-bill-free-visit");
+        expectContractVariables(entity.template);
+        expect(entity.template.variables.INVOICE_NUMBER).to.equal("BL-000012");
+        expect(entity.attachments[0].filename).to.equal("Beleg-BL-000012.pdf");
+      });
+
+      it("routes a CHF 0 bill minted before ADR-0052 to the free template too", async () => {
+        const billId = "bill-free-legacy";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-free-legacy.pdf",
+          amount: 0,
           paymentMethodConfirmationTime: Timestamp.now(),
           paymentMethodConfirmationSource: "auto",
           paidVia: "free",
         });
 
-        const ok = await trySendEmail(billId);
-        expect(ok).to.be.false;
-        expect(resendSendStub.called, "Resend not called for free bill").to.be
-          .false;
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          { template: { id: string } },
+        ];
+        expect(entity.template.id).to.equal("test-bill-free-visit");
+      });
+
+      it("does not mail a CHF 0 renewal bill (no checkout Beleg)", async () => {
+        const billId = "bill-free-renewal";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-free-renewal.pdf",
+          amount: 0,
+          source: "membership-renewal",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          paidVia: "free",
+        });
+
+        expect(await trySendEmail(billId)).to.be.false;
+        expect(resendSendStub.called).to.be.false;
+      });
+
+      it("does not mail a CHF 0 Beleg without a recipient (BIL-37)", async () => {
+        const billId = "bill-free-no-recipient";
+        await seedUser("u-bill-proc", {});
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-free-no-recipient.pdf",
+          amount: 0,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          paidVia: "free",
+        });
+
+        expect(await trySendEmail(billId)).to.be.true;
+        expect(resendSendStub.called).to.be.false;
+        expect((await getBill(billId)).emailSkippedReason).to.equal("no-recipient");
       });
 
       it("picks the receipt mail for a TWINT bill issued before #763 (Quittung, BIL-46)", async () => {
@@ -1413,6 +1483,9 @@ describe("bill processing triggers (Integration)", () => {
       });
       expect(await trySendEmail("bill-free-new")).to.be.true;
       expect(resendSendStub.calledOnce).to.be.true;
+      expect(sentEntity().template.id, "correction, not the CHF 0 Beleg mail").to.equal(
+        "test-bill-correction",
+      );
       expect(sentEntity().template.variables.INVOICE_NUMBER).to.equal("RE-000007-1");
       expect(sentEntity().template.variables.AMOUNT).to.equal("0.00");
       expect(sentEntity().template.variables.PAYMENT_NOTE).to.equal(
@@ -1679,7 +1752,22 @@ describe("bill processing triggers (Integration)", () => {
       expect(resendSendStub.called).to.equal(false);
     });
 
-    it("a CHF 0 bill gets no mail (BIL-8)", async () => {
+    it("isFreeCheckoutBeleg: only a CHF 0 checkout original qualifies", async () => {
+      const db = getFirestore();
+      const free = await seedBill("b-free-pred", { amount: 0, paidVia: "free" });
+      expect(isFreeCheckoutBeleg(free), "CHF 0 checkout").to.equal(true);
+      expect(isFreeCheckoutBeleg({ ...free, paidVia: null }), "paid").to.equal(false);
+      expect(
+        isFreeCheckoutBeleg({ ...free, supersedesBillRef: db.doc("bills/old") }),
+        "CHF 0 correction (mailed by the correction)",
+      ).to.equal(false);
+      expect(
+        isFreeCheckoutBeleg({ ...free, source: "membership-renewal" }),
+        "renewal invoice (its own letter)",
+      ).to.equal(false);
+    });
+
+    it("a CHF 0 bill gets its PDF and exactly one free mail (BIL-26, #790)", async () => {
       await seedAlice();
       await seedCheckout("co-default");
       const bill = await seedBill("b-free", {
@@ -1690,8 +1778,14 @@ describe("bill processing triggers (Integration)", () => {
       });
 
       await handleBillCreated("b-free", bill);
+      // A redelivered trigger must not mail twice.
+      await handleBillCreated("b-free", await getBill("b-free"));
 
-      expect(resendSendStub.called).to.equal(false);
+      const after = await getBill("b-free");
+      expect(after.storagePath).to.be.a("string");
+      expect(resendSendStub.calledOnce).to.equal(true);
+      const [, entity] = resendSendStub.firstCall.args as [string, { template: { id: string } }];
+      expect(entity.template.id).to.equal("test-bill-free-visit");
     });
 
     it("a renewal bill committed at issue gets its PDF and exactly one renewal letter", async () => {

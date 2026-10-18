@@ -128,10 +128,13 @@ export function PaymentOptionCards({ choices, onChoose, disabled }: PaymentOptio
 export function PaymentFrame({
   amount,
   free,
+  footer,
   children,
 }: {
   amount: number
   free: boolean
+  /** A row below the content, right-aligned (the confirmation's PDF). */
+  footer?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -151,6 +154,11 @@ export function PaymentFrame({
         </div>
       </div>
       <div className="px-5 sm:px-6 py-5 sm:py-6">{children}</div>
+      {footer && (
+        <div className="flex justify-end border-t border-border px-5 sm:px-6 py-3">
+          {footer}
+        </div>
+      )}
     </div>
   )
 }

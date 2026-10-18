@@ -120,6 +120,12 @@ describe("billMailFor", () => {
     expect(billMailFor("quittung", "raisenow")).toBe("receipt")
   })
 
+  it("sends a CHF 0 bill the free mail, whatever its document", () => {
+    expect(billMailFor("beleg", "free")).toBe("free")
+    // Minted before ADR-0052: resolves to a Rechnung.
+    expect(billMailFor("rechnung", "free")).toBe("free")
+  })
+
   it("routes the payable documents", () => {
     expect(billMailFor("rechnung", "rechnung")).toBe("invoice")
     expect(billMailFor("rechnung", null)).toBe("invoice")

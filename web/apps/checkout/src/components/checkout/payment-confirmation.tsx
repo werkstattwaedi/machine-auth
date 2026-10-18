@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The confirmation inside the payment frame once the checkout closed
- * (issue #750; replaces the completion dialog): an animated check with the
- * status, a green box saying what was sent where, and below it what the
- * device may offer — the PDF on the person's own device (never the kiosk,
- * BIL-15), the QR slip behind a disclosure after a QR-Rechnung (desktop and
- * kiosk, never a phone), and the paylink again after TWINT in case its
- * window didn't open.
+ * The payment frame once the checkout closed (issue #750; replaces the
+ * completion dialog): an animated check with the status, a green box saying
+ * what was sent where, and below it what the device may offer — the QR slip
+ * behind a disclosure after a QR-Rechnung (desktop and kiosk, never a
+ * phone) and the paylink again after TWINT in case its window didn't open.
+ * The PDF download sits in the frame's footer, the same place for every
+ * method (#790), and only on the person's own device (never the kiosk,
+ * BIL-15).
  */
 
 import { QRCodeSVG } from "qrcode.react"
 import { ChevronDown, Download, ExternalLink, Loader2 } from "lucide-react"
+import { BILL_DOCUMENT_INFO, documentFor } from "@oww/shared"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { rpcCallable } from "@modules/lib/rpc"
@@ -25,15 +27,24 @@ import {
   type PaymentChoice,
   type PaymentData,
 } from "./payment-methods"
-import { ChoiceIcon } from "./payment-options"
+import { ChoiceIcon, PaymentFrame } from "./payment-options"
 import "./payment-confirmation.css"
 
 /** How long the PDF link keeps asking while the PDF is still being made. */
 const PDF_RETRY_DELAY_MS = 2_000
 const PDF_MAX_ATTEMPTS = 15
 
+/**
+ * The status of a paid method when nothing could be mailed (#651). Not the
+ * free visit's: its thanks would read odd next to "we couldn't send you
+ * anything".
+ */
+const NO_RECIPIENT_STATUS = "Abgeschlossen"
+
 interface PaymentConfirmationProps {
   choice: PaymentChoice
+  /** The frame's total; CHF 0 heads it "Total" instead of "Zu bezahlen". */
+  amount: number
   /**
    * The close's answer. Null after a terminal payment: this screen never
    * closed anything — Wallee's confirmation does (ADR-0051).
@@ -52,6 +63,7 @@ interface PaymentConfirmationProps {
 
 export function PaymentConfirmation({
   choice,
+  amount,
   paymentData,
   copy,
   ownDevice,
@@ -63,83 +75,90 @@ export function PaymentConfirmation({
   const ui = PAYMENT_CHOICE_UI[choice]
   const box = ui.doneBox?.(copy) ?? null
   // A badge or signed-in account without an e-mail address gets no mail
-  // (the server finds no recipient, #651): don't claim one was sent.
+  // (the server finds no recipient, #651): don't claim one was sent. A free
+  // visit owes nothing, so its box says so instead of warning (CHK-23).
   const noRecipient = choice !== "free" && !copy.email.trim()
   const showQr = choice === "rechnung" && !isPhone
 
   return (
-    <div className="flex flex-col gap-5" data-testid="payment-confirmation">
-      <div className="flex items-center gap-4">
-        <ChoiceIcon choice={choice} />
-        <span className="font-heading font-semibold text-[17px] leading-tight flex-1 min-w-0">
-          {ui.title}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3" role="status">
-        <AnimatedCheck />
-        <span className="font-heading font-bold text-xl text-foreground">
-          {noRecipient ? PAYMENT_CHOICE_UI.free.doneStatus : ui.doneStatus}
-        </span>
-      </div>
-
-      {box && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 leading-relaxed">
-          {box}
+    <PaymentFrame
+      amount={amount}
+      free={amount === 0}
+      footer={
+        ownDevice && paymentData ? (
+          <PdfDownloadLink choice={choice} billId={paymentData.billId} sleep={sleep} />
+        ) : null
+      }
+    >
+      <div className="flex flex-col gap-5" data-testid="payment-confirmation">
+        <div className="flex items-center gap-4">
+          <ChoiceIcon choice={choice} />
+          <span className="font-heading font-semibold text-[17px] leading-tight flex-1 min-w-0">
+            {ui.title}
+          </span>
         </div>
-      )}
 
-      {noRecipient && (
-        <div
-          data-testid="no-recipient"
-          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 leading-relaxed"
-        >
-          Wir haben keine E-Mail-Adresse von dir und konnten dir nichts schicken.
-          Melde dich bei{" "}
-          <a href={`mailto:${KASSE_EMAIL}`} className="font-semibold underline">
-            {KASSE_EMAIL}
-          </a>
-          .
+        <div className="flex items-center gap-3" role="status">
+          <AnimatedCheck />
+          <span className="font-heading font-bold text-xl text-foreground">
+            {noRecipient ? NO_RECIPIENT_STATUS : ui.doneStatus}
+          </span>
         </div>
-      )}
 
-      {ui.doneNote && (
-        <p className="text-sm text-muted-foreground leading-relaxed">{ui.doneNote}</p>
-      )}
+        {box && (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 leading-relaxed">
+            {box}
+          </div>
+        )}
 
-      {choice === "raisenow" && paymentData?.paylinkUrl && (
-        <a
-          href={paymentData.paylinkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="self-start inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark"
-        >
-          <ExternalLink className="h-4 w-4" />
-          TWINT-Zahlung nochmals öffnen
-        </a>
-      )}
-
-      {ownDevice && paymentData && (
-        <PdfDownloadLink billId={paymentData.billId} sleep={sleep} />
-      )}
-
-      {showQr && (
-        <div>
-          <button
-            type="button"
-            aria-expanded={qrOpen}
-            onClick={() => onQrOpenChange(!qrOpen)}
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark"
+        {noRecipient && (
+          <div
+            data-testid="no-recipient"
+            className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 leading-relaxed"
           >
-            Gleich bezahlen? QR-Code anzeigen
-            <ChevronDown
-              className={cn("h-4 w-4 transition-transform", qrOpen && "rotate-180")}
-            />
-          </button>
-          {qrOpen && paymentData && <QrSlip paymentData={paymentData} />}
-        </div>
-      )}
-    </div>
+            Wir haben keine E-Mail-Adresse von dir und konnten dir nichts schicken.
+            Melde dich bei{" "}
+            <a href={`mailto:${KASSE_EMAIL}`} className="font-semibold underline">
+              {KASSE_EMAIL}
+            </a>
+            .
+          </div>
+        )}
+
+        {ui.doneNote && (
+          <p className="text-sm text-muted-foreground leading-relaxed">{ui.doneNote}</p>
+        )}
+
+        {choice === "raisenow" && paymentData?.paylinkUrl && (
+          <a
+            href={paymentData.paylinkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark"
+          >
+            <ExternalLink className="h-4 w-4" />
+            TWINT-Zahlung nochmals öffnen
+          </a>
+        )}
+
+        {showQr && (
+          <div>
+            <button
+              type="button"
+              aria-expanded={qrOpen}
+              onClick={() => onQrOpenChange(!qrOpen)}
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark"
+            >
+              Gleich bezahlen? QR-Code anzeigen
+              <ChevronDown
+                className={cn("h-4 w-4 transition-transform", qrOpen && "rotate-180")}
+              />
+            </button>
+            {qrOpen && paymentData && <QrSlip paymentData={paymentData} />}
+          </div>
+        )}
+      </div>
+    </PaymentFrame>
   )
 }
 
@@ -175,14 +194,17 @@ function AnimatedCheck() {
 }
 
 /**
- * "PDF herunterladen". The PDF is made after the commit, asynchronously, so
+ * "Rechnung als PDF herunterladen" — named after the document the choice
+ * produces (CHK-25). The PDF is made after the commit, asynchronously, so
  * the first ask can find none yet (`failed-precondition`): keep asking for a
  * while with a spinner instead of failing.
  */
 function PdfDownloadLink({
+  choice,
   billId,
   sleep,
 }: {
+  choice: PaymentChoice
   billId: string
   sleep: (ms: number) => Promise<void>
 }) {
@@ -235,14 +257,14 @@ function PdfDownloadLink({
       type="button"
       onClick={handleClick}
       disabled={download.loading}
-      className="self-start inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark disabled:opacity-70"
+      className="inline-flex items-center gap-1.5 text-sm font-bold text-cog-teal hover:text-cog-teal-dark disabled:opacity-70"
     >
       {download.loading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
         <Download className="h-4 w-4" />
       )}
-      PDF herunterladen
+      {BILL_DOCUMENT_INFO[documentFor(choice)].label} als PDF herunterladen
     </button>
   )
 }
