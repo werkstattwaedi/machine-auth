@@ -22,7 +22,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 |--------|---------|--------|
 | `MEM` | [membership.md](membership.md) | buying, family, benefits, renewal, cancellation, expiry |
 | `BIL` | [billing.md](billing.md) | payment methods, documents, numbering, monthly run, corrections, payment booking |
-| `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in, the restricted session at the kiosk |
+| `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in, the restricted session at the kiosk, the Nutzungsverlauf |
 | `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, the persons on it, usage types, usage fee, Check Out, Bezahlen — on any device |
 | `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset |
 
@@ -155,6 +155,9 @@ still passes a different wrong promise.
   it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was
   paid.
+- **Awaiting payment** — the state of a checkout whose payment the Wallee
+  terminal approved and Wallee has not confirmed yet: no longer open, not
+  yet closed.
 - **Day** (today, an earlier day) — the workshop day: 03:00 to 03:00 the
   next morning, Swiss time.
 - **Complete profile** — a profile with first and last name, accepted terms
