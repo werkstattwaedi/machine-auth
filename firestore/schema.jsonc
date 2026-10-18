@@ -540,6 +540,20 @@
       "debugCode?": "string"        // EMULATOR ONLY — plaintext code for E2E tests; absent in production docs
     }
   },
+  "terminalPaymentAlerts": {
+    // Server-only (Admin SDK; no client rules). One marker per Wallee
+    // transaction and alert outcome (ADR-0051), so the webhook's retries and
+    // the nightly reconcile — which sees each payment for three days —
+    // raise an alert like terminal_double_charge once, not every night.
+    // Auto-deleted via the `expiresAt` TTL policy.
+    "{transactionId}_{outcome}": {
+      "transactionId": "number",   // Wallee transaction id
+      "outcome": "unmatched | amount-mismatch | items-changed | double-charge | voided",
+      "reference": "string | null", // the transaction's merchantReference ({P|S}-{checkoutId}-{n} for ours)
+      "createdAt": "timestamp",
+      "expiresAt": "timestamp"     // created + 7 days (past the reconcile window); Firestore TTL field
+    }
+  },
   "printJobs": {
     // Label print jobs. The admin web app renders the label and builds the
     // Brother raster bytes client-side, then writes a `queued` job here. The

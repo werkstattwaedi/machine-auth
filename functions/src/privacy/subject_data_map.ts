@@ -201,6 +201,14 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
     erasure: "none",
   },
   {
+    collection: "terminalPaymentAlerts",
+    piiFields: ["none (Wallee transaction id, payment reference, alert outcome)"],
+    legalBasis: "—",
+    retention: "TTL 7 days (expiresAt)",
+    erasure: "none",
+    notes: "Dedupes terminal payment alerts (ADR-0051); the reference names a checkout id, no person.",
+  },
+  {
     collection: "printJobs",
     piiFields: ["createdBy (admin uid)"],
     legalBasis: "Legitimate interest (label printing)",

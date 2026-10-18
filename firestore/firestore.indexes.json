@@ -363,6 +363,12 @@
       "fieldPath": "ttlAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "terminalPaymentAlerts",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
     }
   ]
 }

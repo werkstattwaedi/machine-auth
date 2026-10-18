@@ -63,6 +63,19 @@ import {
 /** Below this the amounts are the same CHF value (float noise). */
 const AMOUNT_TOLERANCE = 0.005;
 
+/**
+ * Attempts per checkout. Each stores a copy of the priced close; a person
+ * retrying this often needs the team, not another try.
+ */
+export const MAX_TERMINAL_ATTEMPTS = 10;
+
+/**
+ * `details.reason` of the refusal when the checkout already closed — most
+ * often because Wallee settled a payment the screen lost track of. The
+ * kiosk then shows the payment as done instead of an error.
+ */
+export const CHECKOUT_CLOSED_REASON = "checkout-closed";
+
 export interface PrepareTerminalPaymentRequest {
   checkoutId?: string;
   persons?: ClosePersonInput[];
@@ -130,7 +143,16 @@ export const prepareTerminalPaymentHandler = async (
     const checkout = snap.data() as CheckoutEntity;
     assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
     if (checkout.status !== "open") {
-      throw new HttpsError("failed-precondition", `Checkout ${checkoutId} is not open`);
+      throw new HttpsError("failed-precondition", "Dieser Besuch ist bereits abgeschlossen.", {
+        reason: CHECKOUT_CLOSED_REASON,
+        paidAtTerminal: checkout.paymentMethod === "wallee_terminal",
+      });
+    }
+    if ((checkout.terminalAttemptCount ?? 0) >= MAX_TERMINAL_ATTEMPTS) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Zu viele Zahlungsversuche. Bitte melde dich beim Team.",
+      );
     }
 
     const { summary, itemsKey } = await priceOpenCheckout(tx, resolved, checkout, data.summary);
@@ -260,21 +282,31 @@ export async function settleTransaction(
   if (early === "unmatched") {
     // A sale started on the terminal itself (its own id as reference), or
     // a payment whose reference we can't read: money with no checkout.
-    logger.warn("terminal_unmatched_payment", { event: "terminal_unmatched_payment", ...fields });
+    await alertOnce(early, transaction.id, fields);
     return early;
   }
   if (early === "amount-mismatch") {
-    logger.error("terminal_amount_mismatch", {
-      event: "terminal_amount_mismatch",
-      currency: transaction.currency,
-      ...fields,
-    });
+    await alertOnce(early, transaction.id, { currency: transaction.currency, ...fields });
     return early;
   }
 
   const ref = parseTerminalReference(transaction.merchantReference)!;
   const db = getFirestore();
   const checkoutRef = db.collection("checkouts").doc(ref.checkoutId);
+  const logFields = { ...fields, checkoutId: ref.checkoutId, attempt: ref.attempt };
+
+  // The reconcile hands in every paid payment of the last days, nearly all
+  // settled long ago: decide those from a plain read, without the receipt
+  // call and the transaction. Only what may settle goes on.
+  const settled = judgeCheckout(
+    (await checkoutRef.get()).data() as CheckoutEntity | undefined,
+    transaction,
+    ref.attempt,
+  );
+  if (typeof settled === "string") {
+    await reportOutcome(settled, transaction.id, logFields);
+    return settled;
+  }
 
   // Fetched before the transaction: a network call has no place inside
   // one. Wallee requires the cardholder receipt on the customer's document;
@@ -292,22 +324,13 @@ export async function settleTransaction(
 
   const outcome = await db.runTransaction(async (tx): Promise<SettleOutcome> => {
     const snap = await tx.get(checkoutRef);
-    if (!snap.exists) return "unmatched";
-    const checkout = snap.data() as CheckoutEntity;
-
-    if (checkout.status !== "open") {
-      if (checkout.walleeTransactionId === transaction.id) return "already-settled";
-      return "double-charge";
-    }
-
-    const attempt = checkout.terminalAttempts?.[String(ref.attempt)];
-    if (!attempt || attempt.reference !== transaction.merchantReference) return "unmatched";
-    if (
-      transaction.authorizationAmount === null ||
-      Math.abs(transaction.authorizationAmount - attempt.amount) >= AMOUNT_TOLERANCE
-    ) {
-      return "amount-mismatch";
-    }
+    const judged = judgeCheckout(
+      snap.data() as CheckoutEntity | undefined,
+      transaction,
+      ref.attempt,
+    );
+    if (typeof judged === "string") return judged;
+    const { checkout, attempt } = judged;
     // The bill and summary come from the attempt, the Quittung's lines from
     // the items: they must still be the ones that were priced.
     const itemsSnap = await tx.get(checkoutRef.collection("items"));
@@ -349,33 +372,108 @@ export async function settleTransaction(
     return "settled";
   });
 
-  const logFields = { ...fields, checkoutId: ref.checkoutId, attempt: ref.attempt };
+  await reportOutcome(outcome, transaction.id, logFields);
+  return outcome;
+}
+
+/**
+ * What the checkout says about a paid transaction for it: an outcome when
+ * it can't settle, otherwise the attempt it settles. The items are checked
+ * inside the settling transaction only.
+ */
+function judgeCheckout(
+  checkout: CheckoutEntity | undefined,
+  transaction: WalleeTransaction,
+  attemptNumber: number,
+): SettleOutcome | { checkout: CheckoutEntity; attempt: TerminalAttemptEntity } {
+  if (!checkout) return "unmatched";
+  if (checkout.status !== "open") {
+    return checkout.walleeTransactionId === transaction.id ? "already-settled" : "double-charge";
+  }
+  const attempt = checkout.terminalAttempts?.[String(attemptNumber)];
+  if (!attempt || attempt.reference !== transaction.merchantReference) return "unmatched";
+  if (
+    transaction.authorizationAmount === null ||
+    Math.abs(transaction.authorizationAmount - attempt.amount) >= AMOUNT_TOLERANCE
+  ) {
+    return "amount-mismatch";
+  }
+  return { checkout, attempt };
+}
+
+async function reportOutcome(
+  outcome: SettleOutcome,
+  transactionId: number,
+  logFields: Record<string, unknown>,
+): Promise<void> {
   switch (outcome) {
     case "settled":
       logger.info("terminal_payment_settled", { event: "terminal_payment_settled", ...logFields });
       break;
     case "unmatched":
-      logger.warn("terminal_unmatched_payment", { event: "terminal_unmatched_payment", ...logFields });
-      break;
     case "amount-mismatch":
-      logger.error("terminal_amount_mismatch", { event: "terminal_amount_mismatch", ...logFields });
-      break;
+    // Paid for a version of the visit that no longer exists; the checkout
+    // stays open for the current one. Refunded by hand.
     case "items-changed":
-      // Paid for a version of the visit that no longer exists; the
-      // checkout stays open for the current one. Refunded by hand.
-      logger.error("terminal_items_changed", { event: "terminal_items_changed", ...logFields });
-      break;
+    // Money arrived for a checkout that is already closed — by another
+    // attempt, another method or a cancellation. Refunded by hand in the
+    // Wallee portal for now (ADR-0051).
     case "double-charge":
-      // Money arrived for a checkout that is already closed — by another
-      // attempt, another method or a cancellation. Refunded by hand in the
-      // Wallee portal for now (ADR-0051).
-      logger.error("terminal_double_charge", { event: "terminal_double_charge", ...logFields });
+      await alertOnce(outcome, transactionId, logFields);
       break;
     default:
       break;
   }
-  return outcome;
 }
+
+/** Log event and level of each outcome a person has to look at. */
+const ALERTS: Record<AlertOutcome, { event: string; level: "warn" | "error" }> = {
+  "unmatched": { event: "terminal_unmatched_payment", level: "warn" },
+  "amount-mismatch": { event: "terminal_amount_mismatch", level: "error" },
+  "items-changed": { event: "terminal_items_changed", level: "error" },
+  "double-charge": { event: "terminal_double_charge", level: "error" },
+  "voided": { event: "terminal_payment_voided", level: "error" },
+};
+type AlertOutcome = "unmatched" | "amount-mismatch" | "items-changed" | "double-charge" | "voided";
+
+/** Markers outlive the reconcile's window, then Firestore TTL drops them. */
+const ALERT_MARKER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Raises an alert once per transaction and outcome. The webhook's retries
+ * and the reconcile see the same transaction again for days; a marker in
+ * `terminalPaymentAlerts` turns the repeats into an info line. Failing to
+ * write the marker alerts anyway: a repeat beats a missed alert.
+ */
+async function alertOnce(
+  outcome: AlertOutcome,
+  transactionId: number,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  const { event, level } = ALERTS[outcome];
+  const now = Date.now();
+  try {
+    await getFirestore()
+      .collection("terminalPaymentAlerts")
+      .doc(`${transactionId}_${outcome}`)
+      .create({
+        transactionId,
+        outcome,
+        reference: typeof fields.reference === "string" ? fields.reference : null,
+        createdAt: Timestamp.fromMillis(now),
+        expiresAt: Timestamp.fromMillis(now + ALERT_MARKER_TTL_MS),
+      });
+  } catch (err) {
+    if ((err as { code?: number }).code === ALREADY_EXISTS) {
+      logger.info(`${event} (already reported)`, { ...fields, outcome });
+      return;
+    }
+  }
+  logger[level](event, { event, ...fields });
+}
+
+/** gRPC status of a `create()` on an existing document. */
+const ALREADY_EXISTS = 6;
 
 /**
  * A reversal at the terminal or in the portal after we closed the checkout
@@ -393,8 +491,7 @@ async function alertIfSettledPaymentVoided(
   const snap = await getFirestore().collection("checkouts").doc(ref.checkoutId).get();
   const checkout = snap.data() as CheckoutEntity | undefined;
   if (checkout?.walleeTransactionId !== transaction.id) return;
-  logger.error("terminal_payment_voided", {
-    event: "terminal_payment_voided",
+  await alertOnce("voided", transaction.id, {
     checkoutId: ref.checkoutId,
     billId: checkout.billRef?.id ?? null,
     ...fields,

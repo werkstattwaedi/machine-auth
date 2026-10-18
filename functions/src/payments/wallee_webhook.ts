@@ -63,13 +63,13 @@ export async function handleWalleeWebhook(req: WebhookRequest): Promise<WebhookR
   }
   const rawBody = raw.toString("utf8");
 
-  const api = await walleeApi();
   let valid = false;
   try {
+    const api = await walleeApi();
     valid = !!req.signature && (await api.isSignatureValid(req.signature, rawBody));
   } catch (err) {
-    // The SDK fetches the signing key from Wallee; failing to reach it is
-    // transient, not proof of forgery.
+    // The SDK fetches the signing key from Wallee; failing to reach it (or
+    // to load the SDK) is transient, not proof of forgery.
     logger.error("wallee_webhook_key_fetch_failed", {
       event: "wallee_webhook_key_fetch_failed",
       error: err instanceof Error ? err.message : String(err),
@@ -107,6 +107,22 @@ export async function handleWalleeWebhook(req: WebhookRequest): Promise<WebhookR
   return { status: 200, body: outcome };
 }
 
+/**
+ * `handleWalleeWebhook` that never rejects: an unexpected error still
+ * answers (500, so Wallee retries) and leaves a log event to alert on.
+ */
+export async function handleWalleeWebhookSafely(req: WebhookRequest): Promise<WebhookReply> {
+  try {
+    return await handleWalleeWebhook(req);
+  } catch (err) {
+    logger.error("wallee_webhook_failed", {
+      event: "wallee_webhook_failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { status: 500, body: "retry" };
+  }
+}
+
 export const walleeWebhook = onRequest(
   {
     // Wallee calls it unauthenticated; the ECDSA signature is the gate.
@@ -117,7 +133,7 @@ export const walleeWebhook = onRequest(
     memory: "512MiB",
   },
   async (req, res) => {
-    const reply = await handleWalleeWebhook({
+    const reply = await handleWalleeWebhookSafely({
       method: req.method,
       rawBody: (req as unknown as { rawBody?: Buffer }).rawBody,
       signature: req.get("x-signature") ?? undefined,

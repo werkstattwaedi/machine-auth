@@ -32,6 +32,7 @@ const TERMINAL_ENV: Record<string, string> = {
 process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT ?? "oww-maco";
 
 import { expect } from "chai";
+import * as sinon from "sinon";
 import { Timestamp } from "firebase-admin/firestore";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import {
@@ -50,8 +51,10 @@ import { runAutoAcknowledgeBills } from "../../src/invoice/acknowledge_bill";
 import { isCommittedAtClose } from "../../src/invoice/bill_triggers";
 import {
   handleWalleeWebhook,
+  handleWalleeWebhookSafely,
   runReconcileTerminalPayments,
 } from "../../src/payments/wallee_webhook";
+import * as walleeModule from "../../src/payments/wallee";
 import {
   setWalleeApiForTest,
   walleeListenerName,
@@ -79,6 +82,7 @@ class FakeWallee implements WalleeApi {
   transactions = new Map<number, WalleeTransaction>();
   signatureValid = true;
   receiptFails = false;
+  receiptCalls = 0;
   failReads = false;
   listeners: WalleeListener[] = [
     { id: 1, name: walleeListenerName(process.env.GCLOUD_PROJECT ?? ""), state: "ACTIVE" },
@@ -96,6 +100,7 @@ class FakeWallee implements WalleeApi {
     );
   }
   async getCustomerReceiptText(): Promise<string | null> {
+    this.receiptCalls++;
     if (this.receiptFails) throw new Error("receipt unavailable");
     return RECEIPT;
   }
@@ -206,6 +211,10 @@ async function checkout(id: string): Promise<CheckoutEntity> {
   return (await getFirestore().collection("checkouts").doc(id).get()).data() as CheckoutEntity;
 }
 
+async function alertMarkers() {
+  return (await getFirestore().collection("terminalPaymentAlerts").get()).docs;
+}
+
 async function bills(): Promise<{ id: string; data: BillEntity }[]> {
   const snap = await getFirestore().collection("bills").get();
   return snap.docs.map((d) => ({ id: d.id, data: d.data() as BillEntity }));
@@ -305,6 +314,29 @@ describe("Wallee terminal payment (Integration)", () => {
         ),
         "failed-precondition",
       );
+    });
+
+    it("tells the kiosk when Wallee already closed the checkout", async () => {
+      await seedOpenCheckout("co1");
+      const { reference } = await prepare("co1");
+      wallee.pay(9001, reference, 25);
+      await settleTerminalPayment(9001, "webhook");
+      try {
+        await prepare("co1");
+        expect.fail("expected a refusal");
+      } catch (err) {
+        const e = err as { code?: string; message?: string; details?: unknown };
+        expect(e.code).to.equal("failed-precondition");
+        expect(e.message).to.not.contain("co1");
+        expect(e.details).to.deep.equal({ reason: "checkout-closed", paidAtTerminal: true });
+      }
+    });
+
+    it("refuses an eleventh attempt", async () => {
+      await seedOpenCheckout("co1");
+      for (let i = 0; i < 10; i++) await prepare("co1");
+      await expectRejects(prepare("co1"), "failed-precondition");
+      expect((await checkout("co1")).terminalAttemptCount).to.equal(10);
     });
 
     it("refuses while the terminal is offered nowhere", async () => {
@@ -530,6 +562,26 @@ describe("Wallee terminal payment (Integration)", () => {
       expect((await deliver(body(9001))).status).to.equal(500);
     });
 
+    it("asks Wallee to retry when the SDK can't be set up", async () => {
+      const stub = sinon.stub(walleeModule, "walleeApi").rejects(new Error("no key"));
+      try {
+        expect(await deliver(body(9001))).to.deep.equal({ status: 503, body: "retry" });
+      } finally {
+        stub.restore();
+      }
+    });
+
+    it("answers 500 instead of rejecting on an unexpected error", async () => {
+      const stub = sinon.stub(walleeModule, "walleeConfig").throws(new Error("boom"));
+      try {
+        expect(
+          await handleWalleeWebhookSafely({ method: "POST", rawBody: body(9001), signature: "s" }),
+        ).to.deep.equal({ status: 500, body: "retry" });
+      } finally {
+        stub.restore();
+      }
+    });
+
     it("refuses other methods and oversized bodies", async () => {
       expect((await handleWalleeWebhook({ method: "GET", rawBody: undefined, signature: undefined })).status).to.equal(405);
       expect((await deliver(Buffer.alloc(20000, 0x20))).status).to.equal(400);
@@ -541,16 +593,38 @@ describe("Wallee terminal payment (Integration)", () => {
       await seedOpenCheckout("co1");
       const { reference } = await prepare("co1");
       wallee.pay(9001, reference, 25);
-      wallee.pay(9002, "608434636", 3);
+      // A sale keyed in on the terminal: its own number as reference.
+      wallee.pay(9002, "000000001", 3);
 
       const report = await runReconcileTerminalPayments();
       expect(report?.outcomes).to.deep.equal({ settled: 1, unmatched: 1 });
       expect(report?.listenerActive).to.equal(true);
       expect((await checkout("co1")).status).to.equal("closed");
+      expect(wallee.receiptCalls).to.equal(1);
 
-      // A second night finds it settled.
+      // A second night finds it settled, without asking Wallee for the
+      // receipt again, and doesn't alert about the terminal sale again.
       const again = await runReconcileTerminalPayments();
       expect(again?.outcomes).to.deep.equal({ "already-settled": 1, unmatched: 1 });
+      expect(wallee.receiptCalls).to.equal(1);
+      expect((await alertMarkers()).map((d) => d.id)).to.deep.equal(["9002_unmatched"]);
+    });
+
+    it("alerts a double charge once, however often it is seen", async () => {
+      await seedOpenCheckout("co1");
+      const first = await prepare("co1");
+      const second = await prepare("co1");
+      wallee.pay(9001, second.reference, 25);
+      wallee.pay(9002, first.reference, 25);
+      expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+      expect(await settleTerminalPayment(9002, "webhook")).to.equal("double-charge");
+      await runReconcileTerminalPayments();
+      await runReconcileTerminalPayments();
+      const markers = await alertMarkers();
+      expect(markers.map((d) => d.id)).to.deep.equal(["9002_double-charge"]);
+      expect(markers[0].data().reference).to.equal(first.reference);
+      // The duplicate's receipt is never fetched: it can't settle.
+      expect(wallee.receiptCalls).to.equal(1);
     });
 
     it("notices a deactivated listener", async () => {
