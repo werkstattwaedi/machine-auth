@@ -88,8 +88,8 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 ## Bezahlen
 
-- **CHK-21** Choosing a method opens Bezahlen for it, showing the amount to pay; until the commit (CHK-22) "Zurück" returns to Check Out with everything still editable and the donation and round-up kept. — #650, #750
-- **CHK-22** One action closes the checkout, issues its bill (BIL-16) and commits the payment method (BIL-36); from then on nothing on the checkout can be changed and there is no way back — #650, #750, #753:
+- **CHK-21** Choosing a method opens Bezahlen for it, showing the amount to pay; until the commit (CHK-22) "Zurück" returns to Check Out with everything still editable and the donation and round-up kept — for the Wallee terminal only as KIO-22 allows. — #650, #750, ADR-0051, #735
+- **CHK-22** For every method but a verified payment, whose checkout only its provider's confirmation closes (BIL-39, KIO-22), one action closes the checkout, issues its bill (BIL-16) and commits the payment method (BIL-36); from then on nothing on the checkout can be changed and there is no way back — #650, #750, #753, ADR-0051, #735:
 
   | Method | The action |
   |---|---|
@@ -98,19 +98,20 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | RaiseNow | the button that opens the paylink — choosing RaiseNow alone commits nothing, and nothing confirms the payment afterwards (BIL-6) |
   | CHF 0 | its one action on Check Out (CHK-20) |
 
-- **CHK-23** After the commit the person is told that the checkout is complete and, unless it is CHF 0 (BIL-8), what became of its document — #750, #761:
+- **CHK-23** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — the person is told that the checkout is complete and, unless it is CHF 0 (BIL-8), what became of its document — #750, #761, ADR-0051, #735:
 
   | Case | Told |
   |---|---|
   | QR-Rechnung | the Rechnung was sent, and to which e-mail address (BIL-25) |
   | Sammelrechnung | the date of the next monthly run (BIL-19) the Sammelrechnung comes on, and to which e-mail address |
   | RaiseNow | the document was sent and to which e-mail address, and whom to contact if the RaiseNow payment did not go through (BIL-6) |
+  | Wallee terminal | that it is paid, and to which e-mail address the Quittung will be sent (BIL-26, BIL-39) |
   | no e-mail address on record, any method | nothing was sent (BIL-37), and whom to contact |
 
 - **CHK-24** Only after a QR-Rechnung was confirmed can the person unfold the QR code of its QR slip, and never on a phone. — ADR-0020, #750
 - **CHK-25** On an own device the PDF download (BIL-15) is offered once the method is committed, and waits for the PDF to be generated instead of failing. — #750
 - **CHK-27** After RaiseNow is committed, Bezahlen offers to open the paylink again. — #750
-- **CHK-26** After the commit, what the person can do next depends on where they are — ADR-0022, #750:
+- **CHK-26** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — what the person can do next depends on where they are — ADR-0022, #750, ADR-0051, #735:
 
   | Where | Offered | Then |
   |---|---|---|

@@ -160,7 +160,8 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   },
   // Paid at the terminal next to the kiosk screen. The terminal's own
   // result only drives this screen; Wallee's confirmation closes the
-  // checkout and mails the Quittung (BIL-39).
+  // checkout and mails the Quittung (BIL-39) — possibly only the next
+  // night, hence "kommt", not "gesendet".
   wallee_terminal: {
     icon: <CreditCard className="h-5 w-5" strokeWidth={1.6} />,
     title: PAYMENT_METHOD_INFO.wallee_terminal.label,
@@ -172,7 +173,7 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
     doneBox: ({ email }) =>
       email ? (
         <>
-          Die Quittung haben wir dir an <strong>{email}</strong> gesendet.
+          Die Quittung kommt per E-Mail an <strong>{email}</strong>.
         </>
       ) : null,
   },

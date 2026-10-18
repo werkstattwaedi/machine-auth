@@ -1,0 +1,9 @@
+# LTI 2.54 frames captured from a Wallee A35 (2026-10), sanitized:
+# ids, merchant data, card data and auth codes replaced by placeholders.
+# '--- <<<' terminal -> till, '--- >>>' till -> terminal; body verbatim up to the next marker.
+--- >>>
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><vcs-pos:pingRequest xmlns:vcs-pos="http://www.vibbek.com/pos"/>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:displayNotification displayType="ATTENDANT" xmlns:vcs-device="http://www.vibbek.com/device"><display><line>Connection OK</line></display></vcs-device:displayNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-pos:pingResponse xmlns:vcs-pos="http://www.vibbek.com/pos"><server>terminal-backend.example.invalid</server></vcs-pos:pingResponse>

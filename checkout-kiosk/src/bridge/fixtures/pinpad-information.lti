@@ -1,0 +1,7 @@
+# LTI 2.54 frames captured from a Wallee A35 (2026-10), sanitized:
+# ids, merchant data, card data and auth codes replaced by placeholders.
+# '--- <<<' terminal -> till, '--- >>>' till -> terminal; body verbatim up to the next marker.
+--- >>>
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><vcs-pos:pinpadInformationRequest xmlns:vcs-pos="http://www.vibbek.com/pos"><posId>KIOSK-01</posId></vcs-pos:pinpadInformationRequest>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-pos:pinpadInformationResponse xmlns:vcs-pos="http://www.vibbek.com/pos"><serialNumber>0000000000</serialNumber><hardwareType>A35</hardwareType><vpjSoftwareVersion>1.2.54.1</vpjSoftwareVersion><terminalId>12345678</terminalId><merchantId>MERCHANT-ID-000</merchantId><merchantName>Muster Händler AG</merchantName><spaceId>0</spaceId></vcs-pos:pinpadInformationResponse>

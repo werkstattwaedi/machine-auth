@@ -17,6 +17,7 @@ import type { PricingConfig } from "@modules/lib/workshop-config"
 import type { UsageType } from "@modules/lib/pricing"
 import type { PaymentMethod } from "@oww/shared"
 import type { PaymentChoice } from "./payment-methods"
+import type { TerminalPaymentState } from "./use-terminal-payment"
 
 afterEach(cleanup)
 
@@ -214,5 +215,98 @@ describe("SpendeCard — collapsed on a phone", () => {
   it("shows the amount once one is set", () => {
     renderCard(5)
     expect(screen.getByRole("button", { expanded: false }).textContent).toContain("5.00")
+  })
+})
+
+describe("StepCheckout — payment terminal (ADR-0051)", () => {
+  function TerminalHarness({
+    terminal,
+    onStart = () => {},
+    onAbort = async () => {},
+  }: {
+    terminal: TerminalPaymentState | null
+    onStart?: () => void
+    onAbort?: () => Promise<void>
+  }) {
+    const [choice, setChoice] = useState<PaymentChoice | null>(null)
+    return (
+      <StepCheckout
+        persons={persons}
+        visitUsageType="regular"
+        tip={0}
+        setTip={() => {}}
+        paymentMethods={["wallee_terminal", "rechnung"]}
+        paymentChoice={choice}
+        onPaymentChoiceChange={setChoice}
+        onCommit={async () => {}}
+        onBack={() => {}}
+        terminal={terminal}
+        onStartTerminal={onStart}
+        onAbortTerminal={onAbort}
+        submitting={false}
+        submitError={null}
+        items={[] as CheckoutItemLocal[]}
+        config={config(15)}
+      />
+    )
+  }
+
+  const at = (phase: TerminalPaymentState["phase"]): TerminalPaymentState => ({
+    phase,
+    checkoutId: "co1",
+    amount: 15,
+    payerEmail: "max@example.com",
+    errorText: phase === "error" ? "Das Terminal ist gerade nicht erreichbar." : null,
+  })
+
+  it("choosing the card arms the terminal; there is no commit button", () => {
+    const onStart = vi.fn()
+    render(<TerminalHarness terminal={at("waiting")} onStart={onStart} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(onStart).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("terminal-waiting")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Am Terminal bezahlen" })).toBeNull()
+  })
+
+  it("a waiting terminal offers Abbrechen, which stops it and returns to step 3", async () => {
+    const onAbort = vi.fn(async () => {})
+    render(<TerminalHarness terminal={at("waiting")} onAbort={onAbort} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(screen.queryByRole("button", { name: /Zurück/ })).toBeNull()
+
+    fireEvent.click(screen.getByTestId("terminal-cancel"))
+    await vi.waitFor(() => expect(onAbort).toHaveBeenCalled())
+    await vi.waitFor(() => expect(folded("payment-option-wallee_terminal")).toBe(false))
+  })
+
+  it("nothing leaves step 4 once a card was read", () => {
+    render(<TerminalHarness terminal={at("processing")} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(screen.getByTestId("terminal-processing")).toBeTruthy()
+    expect(screen.queryByTestId("terminal-cancel")).toBeNull()
+    expect(screen.queryByRole("button", { name: /Zurück/ })).toBeNull()
+  })
+
+  it("after a decline: retry, or back to step 3", () => {
+    const onStart = vi.fn()
+    render(<TerminalHarness terminal={at("declined")} onStart={onStart} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(screen.getByTestId("terminal-declined")).toBeTruthy()
+    fireEvent.click(screen.getByTestId("terminal-retry"))
+    expect(onStart).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole("button", { name: /Zurück/ })).toBeTruthy()
+  })
+
+  it("a lost connection warns before paying again", () => {
+    render(<TerminalHarness terminal={at("unknown")} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(screen.getByTestId("terminal-unknown")).toBeTruthy()
+    expect(screen.getByText(/Zeigt das Terminal «bezahlt»/)).toBeTruthy()
+  })
+
+  it("the frame shows the attempt's amount, not the live total", () => {
+    render(<TerminalHarness terminal={{ ...at("waiting"), amount: 42.5 }} />)
+    fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))
+    expect(screen.getByTestId("payment-frame").textContent).toContain("42.50")
   })
 })

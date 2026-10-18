@@ -20,6 +20,8 @@ import {
   type ChoiceCopyContext,
   type PaymentChoice,
 } from "./payment-methods"
+import { TerminalPaymentPanel } from "./terminal-payment-panel"
+import type { TerminalPaymentState } from "./use-terminal-payment"
 
 /**
  * Folds its children away (height to zero, faded) and back. CSS grid rows
@@ -158,12 +160,33 @@ interface PaymentStepProps {
   copy: ChoiceCopyContext
   committing: boolean
   onCommit: () => void
+  /** The terminal payment, for "Karte / TWINT" (armed on choosing it). */
+  terminal?: TerminalPaymentState | null
+  onTerminalRetry?: () => void
 }
 
-/** Step 4's body: the chosen card with its instruction and commit button. */
-export function PaymentStep({ choice, copy, committing, onCommit }: PaymentStepProps) {
+/**
+ * Step 4's body: the chosen card with its instruction and commit button —
+ * or, for the payment terminal, the terminal's status: choosing that card
+ * already armed it, there is nothing to commit here (ADR-0051).
+ */
+export function PaymentStep({
+  choice,
+  copy,
+  committing,
+  onCommit,
+  terminal,
+  onTerminalRetry,
+}: PaymentStepProps) {
   const ui = PAYMENT_CHOICE_UI[choice]
-  const instruction = ui.instruction(copy)
+  const terminalChoice = choice === "wallee_terminal"
+  // The instruction only helps while the terminal still wants something.
+  const instruction =
+    terminalChoice &&
+    terminal &&
+    !["preparing", "waiting", "processing"].includes(terminal.phase)
+      ? null
+      : ui.instruction(copy)
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-4">
@@ -176,7 +199,9 @@ export function PaymentStep({ choice, copy, committing, onCommit }: PaymentStepP
         <p className="text-sm text-foreground leading-relaxed max-w-2xl">{instruction}</p>
       )}
       <div>
-        {choice === "raisenow" ? (
+        {terminalChoice ? (
+          terminal && <TerminalPaymentPanel terminal={terminal} onRetry={() => onTerminalRetry?.()} />
+        ) : choice === "raisenow" ? (
           <TwintButton onClick={onCommit} busy={committing} />
         ) : (
           <button

@@ -61,6 +61,7 @@ import {
 } from "./payment-options"
 import { firstOfNextMonth, type PaymentChoice } from "./payment-methods"
 import { useIsPhone } from "./use-is-phone"
+import type { TerminalPaymentState } from "./use-terminal-payment"
 import type { PaymentMethod } from "@oww/shared"
 
 /**
@@ -234,6 +235,14 @@ interface StepCheckoutProps {
   onCommit: (choice: PaymentChoice) => Promise<void>
   /** Leaves step 3 for the visit page. */
   onBack: () => void
+  /**
+   * The payment terminal (ADR-0051): choosing its card arms it at once
+   * (`onStartTerminal`); `onAbortTerminal` stops it if it still waits and
+   * forgets the attempt.
+   */
+  terminal?: TerminalPaymentState | null
+  onStartTerminal?: () => void
+  onAbortTerminal?: () => Promise<void>
   submitting: boolean
   /** Inline alert after a failed submit (ADR-0025). */
   submitError?: string | null
@@ -422,6 +431,9 @@ export function StepCheckout({
   onPaymentChoiceChange,
   onCommit,
   onBack,
+  terminal = null,
+  onStartTerminal,
+  onAbortTerminal,
   submitting,
   submitError,
   items,
@@ -724,7 +736,25 @@ export function StepCheckout({
     // The free card's action is the commit itself: nothing to choose on a
     // step 4 that would only repeat "Abschliessen".
     if (choice === "free") commitChoice("free")
+    // The terminal card arms the terminal: the person pays there next.
+    if (choice === "wallee_terminal") onStartTerminal?.()
   }
+
+  // Leaving step 4 of a terminal payment stops the terminal first — but
+  // not once a card was read: that payment can't be stopped any more.
+  const terminalChosen = paymentChoice === "wallee_terminal"
+  const terminalRunning =
+    terminalChosen && !!terminal && ["processing", "checking"].includes(terminal.phase)
+  const terminalArmed =
+    terminalChosen && !!terminal && ["preparing", "waiting"].includes(terminal.phase)
+  const leaveStepFour = async () => {
+    if (terminalChosen) await onAbortTerminal?.()
+    onPaymentChoiceChange(null)
+  }
+  // The amount the terminal charges, once priced: the live total would
+  // fall to CHF 0 when Wallee closes the checkout under this page.
+  const frameTotal =
+    shownChoice === "wallee_terminal" && terminal?.amount != null ? terminal.amount : shownTotal
 
   const totalMachineMinutes = timedMachineMinutes(nfcItems)
   // Only mention a duration when there is a timed item to sum (issue #653).
@@ -1021,12 +1051,14 @@ export function StepCheckout({
       <Fold open={!!paymentChoice}>
         {shownChoice && (
           <div ref={stepFourRef} tabIndex={-1} className="outline-none">
-            <PaymentFrame amount={shownTotal} free={shownTotal === 0}>
+            <PaymentFrame amount={frameTotal} free={frameTotal === 0}>
               <PaymentStep
                 choice={shownChoice}
                 copy={copy}
                 committing={submitting}
                 onCommit={() => commitChoice(shownChoice)}
+                terminal={terminal}
+                onTerminalRetry={onStartTerminal}
               />
             </PaymentFrame>
           </div>
@@ -1040,15 +1072,30 @@ export function StepCheckout({
         {/* Until the commit "Zurück" leaves step 4 for an editable step 3
             (the donation and round-up survive: this component stays
             mounted); on step 3 it goes back to the visit. */}
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
-          onClick={paymentChoice ? () => onPaymentChoiceChange(null) : onBack}
-          disabled={submitting}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Zurück
-        </button>
+        {/* A terminal that waits offers "Abbrechen"; once a card was read
+            nothing leaves step 4 until the terminal answers (ADR-0051). */}
+        {terminalRunning ? (
+          <span />
+        ) : terminalArmed ? (
+          <button
+            type="button"
+            data-testid="terminal-cancel"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-foreground border border-border rounded-[3px] bg-white hover:bg-muted transition-colors"
+            onClick={() => void leaveStepFour()}
+          >
+            Abbrechen
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
+            onClick={paymentChoice ? () => void leaveStepFour() : onBack}
+            disabled={submitting}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Zurück
+          </button>
+        )}
       </div>
     </div>
   )

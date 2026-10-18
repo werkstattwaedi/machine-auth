@@ -76,6 +76,30 @@ if (!bearer && !isDev) {
   )
 }
 
+// ── Payment terminal (Wallee A35 over LTI, ADR-0051) ────────────────
+// From the ops config's `kiosk.terminal.{host,port,posId}`; env vars
+// TERMINAL_HOST / TERMINAL_PORT / TERMINAL_POS_ID win. An empty host keeps
+// the feature off, so builds without the key ship it dark. In the dev
+// profile only the env vars count (point TERMINAL_HOST at
+// `scripts/lti-sim.ts` on 127.0.0.1).
+const terminalHost = (
+  process.env.TERMINAL_HOST ?? opsDefaults?.terminal.host ?? ""
+).trim()
+const terminalPort = parsePort(
+  process.env.TERMINAL_PORT || opsDefaults?.terminal.port || "50000",
+)
+const terminalPosId = (
+  process.env.TERMINAL_POS_ID || opsDefaults?.terminal.posId || "KIOSK-01"
+).trim()
+// Lands in a TCP connect and the LTI posId element; refuse anything that
+// isn't plainly a hostname / IP or a short printable id.
+if (terminalHost && !/^[A-Za-z0-9.:-]{1,253}$/.test(terminalHost)) {
+  fail(`Invalid terminal host ${JSON.stringify(terminalHost)}.`)
+}
+if (!/^[\x20-\x7e]{1,32}$/.test(terminalPosId)) {
+  fail(`Invalid terminal posId ${JSON.stringify(terminalPosId)}.`)
+}
+
 const content = `// Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
@@ -87,13 +111,18 @@ const content = `// Copyright Offene Werkstatt Wädenswil
 export const BRIDGE_URL: string = ${JSON.stringify(url)}
 export const BRIDGE_BEARER_KEY: string = ${JSON.stringify(bearer)}
 export const BRIDGE_ENV_LABEL: string = ${JSON.stringify(label)}
+// Empty = no payment terminal configured (feature off).
+export const TERMINAL_HOST: string = ${JSON.stringify(terminalHost)}
+export const TERMINAL_PORT: number = ${terminalPort}
+export const TERMINAL_POS_ID: string = ${JSON.stringify(terminalPosId)}
 `
 
 writeFileSync(target, content)
 const redactedBearer = bearer ? `(set, ${bearer.length} chars)` : "(empty)"
 console.log(
   `inject-build-config: profile=${profile} url=${url} ` +
-    `bearer=${redactedBearer} label=${JSON.stringify(label)}`,
+    `bearer=${redactedBearer} label=${JSON.stringify(label)} ` +
+    `terminal=${terminalHost ? `${terminalHost}:${terminalPort} posId=${terminalPosId}` : "(off)"}`,
 )
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -139,7 +168,33 @@ function loadOpsDefaults(envName) {
     projectId: readPath(cfg, "firebase.projectId", configPath),
     url: `https://${domain}/?kiosk`,
     envLabel: readOptionalString(cfg, "web.envLabel"),
+    // Optional: absent until the terminal is rolled out to that environment.
+    terminal: {
+      host: readOptionalString(cfg, "kiosk.terminal.host"),
+      port: readOptionalScalar(cfg, "kiosk.terminal.port"),
+      posId: readOptionalString(cfg, "kiosk.terminal.posId"),
+    },
   }
+}
+
+// Like readOptionalString, but a JSON number counts too (ports).
+function readOptionalScalar(cfg, jsonPath) {
+  let current = cfg
+  for (const part of jsonPath.split(".")) {
+    if (current == null || typeof current !== "object") return ""
+    current = current[part]
+  }
+  return typeof current === "string" || typeof current === "number"
+    ? String(current)
+    : ""
+}
+
+function parsePort(value) {
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    fail(`Invalid terminal port ${JSON.stringify(value)}.`)
+  }
+  return port
 }
 
 // Soft variant of readPath() for keys that may legitimately be absent

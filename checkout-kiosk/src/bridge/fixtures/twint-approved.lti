@@ -1,0 +1,67 @@
+# LTI 2.54 frames captured from a Wallee A35 (2026-10), sanitized:
+# ids, merchant data, card data and auth codes replaced by placeholders.
+# '--- <<<' terminal -> till, '--- >>>' till -> terminal; body verbatim up to the next marker.
+--- >>>
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><vcs-pos:financialTrxRequest xmlns:vcs-pos="http://www.vibbek.com/pos"><posId>KIOSK-01</posId><trxData><amount>300</amount><currency>756</currency><transactionType>0</transactionType><partialApprovalCap>0</partialApprovalCap><noDCC>true</noDCC><merchantReference>S-FixtureCheckout0004-1</merchantReference></trxData><trxInfo>AAA/</trxInfo><showTrxResultScreens>true</showTrxResultScreens></vcs-pos:financialTrxRequest>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:trxStartNotification xmlns:vcs-device="http://www.vibbek.com/device"></vcs-device:trxStartNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:qrCodeScanNotification xmlns:vcs-device="http://www.vibbek.com/device"></vcs-device:qrCodeScanNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:displayNotification displayType="CARDHOLDER" xmlns:vcs-device="http://www.vibbek.com/device"><display><line></line><line>Verarbeitung OK</line></display></vcs-device:displayNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:displayNotification displayType="ATTENDANT" xmlns:vcs-device="http://www.vibbek.com/device"><display><line>Verarbeitung OK</line></display></vcs-device:displayNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:printerNotification xmlns:vcs-device="http://www.vibbek.com/device"><merchantReceipt>
+Muster Händler AG
+  Musterstrasse 1   
+   CH-0000 Musterort    
+      Switzerland       
+
+Buchung
+TWINT
+XXXXXXXXXXXXXXX0000
+
+17.10.2026      21:58:40
+Trm-Id:         12345678
+Akt-Id:                1
+AID:      A000000157449E
+Trx. Seq-Cnt:         16
+Trx. Ref-Nr:      000000
+Auth. Code:       000000
+Acq-Id:      00000000000
+000000000000000000000000
+00000000
+02/01
+
+Total-EFT CHF:      3.00
+
+</merchantReceipt><admin>false</admin></vcs-device:printerNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:printerNotification xmlns:vcs-device="http://www.vibbek.com/device"><cardholderReceipt>
+Muster Händler AG
+  Musterstrasse 1   
+   CH-0000 Musterort    
+      Switzerland       
+
+  *** Kundenbeleg ***   
+
+Buchung
+TWINT
+XXXXXXXXXXXXXXX0000
+
+17.10.2026      21:58:40
+Trm-Id:         12345678
+AID:      A000000157449E
+Trx. Seq-Cnt:         16
+Trx. Ref-Nr:      000000
+Auth. Code:       000000
+Acq-Id:      00000000000
+
+Total-EFT CHF:      3.00
+
+</cardholderReceipt><admin>false</admin></vcs-device:printerNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-device:trxEndNotification xmlns:vcs-device="http://www.vibbek.com/device"></vcs-device:trxEndNotification>
+--- <<<
+<?xml version="1.0" encoding="utf-8"?><vcs-pos:financialTrxResponse xmlns:vcs-pos="http://www.vibbek.com/pos"><ep2AuthResponseCode>00</ep2AuthResponseCode><ep2AuthResult>0</ep2AuthResult><ep2AuthCode>000000</ep2AuthCode><ep2TrmId>12345678</ep2TrmId><ep2TrxSeqCnt>16</ep2TrxSeqCnt><trxResult>0</trxResult><amountAuth>300</amountAuth><amountAuthCurr>756</amountAuthCurr><transactionRefNumber>000000</transactionRefNumber><cardNumber>XXXXXXXXXXXXXXX0000</cardNumber><cardExpDate>210101</cardExpDate><cardAppLabel>TWINT</cardAppLabel><cardAppId>A000000157449E</cardAppId><transactionTime>20261017215840</transactionTime><acquirerId>00000000000</acquirerId><cvm>1</cvm><partialApprovalFlag>0</partialApprovalFlag><cardIssuingCountry></cardIssuingCountry><merchantReference>S-FixtureCheckout0004-1</merchantReference><paymentEntryMethod>QR</paymentEntryMethod></vcs-pos:financialTrxResponse>

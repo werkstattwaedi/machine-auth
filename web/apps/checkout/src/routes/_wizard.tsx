@@ -198,21 +198,24 @@ function WizardChrome({
     paymentChoice,
     clearPayment,
     submitting,
+    terminal,
   } = useWizardContext()
   // A finished checkout's confirmation must not greet the next visit: a
   // signed-in person leaves it via "Fertig" without a reset, so forget it
   // as soon as the wizard is anywhere but /checkout.
   useEffect(() => {
-    if ((paymentData || paymentChoice) && !pathname.startsWith("/checkout")) {
+    if ((paymentData || paymentChoice || terminal) && !pathname.startsWith("/checkout")) {
       clearPayment()
     }
-  }, [pathname, paymentData, paymentChoice, clearPayment])
+  }, [pathname, paymentData, paymentChoice, terminal, clearPayment])
   const gateState = {
     pathname,
     hasOpenCheckout: !!openCheckout,
     pendingCheckout,
     paymentChosen: !!paymentChoice,
-    committed: !!paymentData,
+    // A terminal payment holds the page from its first attempt on: Wallee
+    // may close the checkout any time after the tap (ADR-0051).
+    committed: !!paymentData || !!terminal,
     submitting,
   }
   // /checkout is step 3 until a payment card is chosen, then step 4 in
