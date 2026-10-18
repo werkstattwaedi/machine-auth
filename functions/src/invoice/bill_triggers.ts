@@ -468,6 +468,13 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // from tests / one-off scripts — keep the guard.
   if (!isBeleg && !bill.paymentMethodConfirmationTime) return false;
 
+  // Of the CHF 0 bills only a checkout's Beleg (#790) and a corrected
+  // re-issue (ADR-0042, the "replaced" mail) are mailed — not a CHF 0
+  // renewal or Sammelrechnung, which the hourly retry would otherwise reach.
+  if (bill.paidVia === "free" && !bill.supersedesBillRef && !isFreeCheckoutBeleg(bill)) {
+    return false;
+  }
+
   // No PDF yet — can't send email without attachment
   if (!bill.storagePath) return false;
 

@@ -1089,6 +1089,23 @@ describe("bill processing triggers (Integration)", () => {
         expect(entity.template.id).to.equal("test-bill-free-visit");
       });
 
+      it("does not mail a CHF 0 renewal bill (no checkout Beleg)", async () => {
+        const billId = "bill-free-renewal";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
+        await seedCheckout("co-default", {});
+        await seedBill(billId, {
+          storagePath: "invoices/bill-free-renewal.pdf",
+          amount: 0,
+          source: "membership-renewal",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+          paidVia: "free",
+        });
+
+        expect(await trySendEmail(billId)).to.be.false;
+        expect(resendSendStub.called).to.be.false;
+      });
+
       it("does not mail a CHF 0 Beleg without a recipient (BIL-37)", async () => {
         const billId = "bill-free-no-recipient";
         await seedUser("u-bill-proc", {});
