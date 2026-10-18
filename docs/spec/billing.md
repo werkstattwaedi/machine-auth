@@ -97,7 +97,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
-- [NEEDS CLARIFICATION] A renewal bill totalling CHF 0 (MEM-24) is issued paid (BIL-45) but mailed by nobody — neither the renewal letter nor the CHF 0 mail (BIL-26). Intended, or should it get one? — #790
+- [NEEDS CLARIFICATION] A renewal bill (MEM-24) or a Sammelrechnung (BIL-20) totalling CHF 0 is issued paid (BIL-45) but mailed by nobody — neither the renewal letter or monthly run nor the CHF 0 mail (BIL-26). Intended, or should they get one? — #790
 
 ## Retired
 
