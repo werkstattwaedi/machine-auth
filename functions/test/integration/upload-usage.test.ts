@@ -276,8 +276,9 @@ describe("handleUploadUsage (Integration)", () => {
     });
   });
 
-  // CHK-40 (ADR-0050): machine time means the owner worked in the
-  // workshop — an owner on Begleitung moves to Reguläre Nutzung.
+  // CHK-40 (ADR-0050, #799): machine time on a visit where everyone is on
+  // Begleitung means the owner worked in the workshop — they move to
+  // Reguläre Nutzung. Next to a paying companion they keep Begleitung.
   describe("owner usage type", () => {
     it("switches an owner on Begleitung to regular; companions stay", async () => {
       await seedBaseFixtures();
@@ -310,6 +311,40 @@ describe("handleUploadUsage (Integration)", () => {
       expect(checkout.persons.map((p: { usageType: string }) => p.usageType)).to.deep.equal([
         "regular",
         "materialbezug",
+      ]);
+    });
+
+    it("keeps an owner on Begleitung next to a paying companion", async () => {
+      await seedBaseFixtures();
+      const db = getFirestore();
+      const ownerRef = db.doc(`users/${TEST_USER_ID}`);
+      await db.collection("checkouts").doc("co-kid").set({
+        userId: ownerRef,
+        status: "open",
+        usageType: "regular",
+        created: Timestamp.now(),
+        workshopsVisited: [],
+        persons: [
+          {
+            name: "Alice Adult",
+            email: "alice@example.com",
+            userType: "erwachsen",
+            userRef: ownerRef,
+            usageType: "materialbezug",
+          },
+          { name: "Kim Kid", email: "", userType: "kind", usageType: "regular" },
+        ],
+        modifiedBy: null,
+        modifiedAt: Timestamp.now(),
+      });
+
+      await handleUploadUsage(buildRequest([{}]), config);
+
+      const checkout = (await db.collection("checkouts").doc("co-kid").get()).data()!;
+      expect(checkout.usageType).to.equal("regular");
+      expect(checkout.persons.map((p: { usageType: string }) => p.usageType)).to.deep.equal([
+        "materialbezug",
+        "regular",
       ]);
     });
 

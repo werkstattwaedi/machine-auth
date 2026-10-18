@@ -1,6 +1,6 @@
 # ADR-0050: Usage Type per Person, Saved Persons
 
-**Status:** Accepted (amends the #570 usage-type design; resolves the companion cons of [ADR-0048](0048-family-membership-account-holders-only.md))
+**Status:** Accepted (amends the #570 usage-type design; resolves the companion cons of [ADR-0048](0048-family-membership-account-holders-only.md)). Amended 2026-10-18, issue #799: machine time switches the owner to Reguläre Nutzung only while every person is on Begleitung
 
 **Date:** 2026-10-16
 
@@ -57,7 +57,8 @@ Nutzungsart*, v10; screens in `.wq-capture/issue-605/`).
   Begleitung, the server moves that line to Reguläre Nutzung and re-derives
   the visit type (`ownerSwitchForMachineTime`, CHK-40): someone who ran a
   machine worked in the workshop. Owner-only types and the other persons stay
-  as they are.
+  as they are. *(Amended by #799: only while every person is on Begleitung —
+  see the amendment below.)*
 
 **Purchase-only is derived from the persons.** A checkout on which nobody
 works in the workshop — every person on Begleitung / nur Materialbezug, i.e.
@@ -179,3 +180,26 @@ usage type of their own, and take no visit-wide type from the client.
   already paid today.
 - **Compare close instants instead of opening days** — rejected: a visit left
   open past 03:00 would land on the next day's waiver.
+
+## Amendment (2026-10-18, issue #799): the owner switch needs an all-Begleitung visit
+
+A parent brings their kid: the parent is on Begleitung, the kid on a paying
+type, and the kid works the machines on the parent's badge — a kid has none.
+The switch above moved the parent to Reguläre Nutzung, charging a usage fee
+for someone who only accompanied; setting it back on the check-in worked, but
+only after the last upload, and nobody knew to do it.
+
+`ownerSwitchForMachineTime` now switches only while **every** person is on
+Begleitung (`machineUsageBlocked`) — exactly the visit whose close would
+otherwise be refused (CHK-8). With anyone on another type the owner keeps
+Begleitung. Machine time and material are billed in full either way: that
+person makes the derived visit type Reguläre Nutzung (CHK-29).
+
+- **The terminal still can't tell who stood at the machine.** An adult who
+  did work and declared Begleitung next to a paying companion now keeps it
+  without effort (before, it took a manual change back). The Begleitung
+  declaration on Check Out (CHK-30) is the safeguard; only that person's
+  usage fee is at stake.
+- **Machine time keeps the badge holder's price tier** — a member parent's
+  machine time is billed at the member rate even when the kid did the work.
+  Intended: the badge identifies the account, not the hands.

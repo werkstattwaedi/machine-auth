@@ -67,6 +67,20 @@ describe("ownerSwitchForMachineTime (CHK-40)", () => {
     ]);
   });
 
+  // A parent whose badge runs the machines for their kid (#799): someone on
+  // the visit pays, so the owner keeps Begleitung.
+  for (const type of ["regular", "ermaessigt", "hangenmoos"] as const) {
+    it(`keeps an owner on Begleitung next to a companion on ${type}`, () => {
+      expect(
+        ownerSwitchForMachineTime({
+          userId: ref("owner"),
+          usageType: "regular",
+          persons: [owner("materialbezug"), guest(type)],
+        }),
+      ).to.equal(null);
+    });
+  }
+
   for (const type of ["regular", "volunteering", "intern", "ermaessigt"] as const) {
     it(`leaves an owner on ${type} untouched`, () => {
       expect(
