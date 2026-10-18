@@ -102,14 +102,25 @@ const CHECKOUT_CLOSED_REASON = "checkout-closed"
 
 type PrepareOutcome =
   | { kind: "prepared"; prepared: PrepareResponse }
-  | { kind: "closed"; paidAtTerminal: boolean }
+  | ({ kind: "closed" } & ClosedDetails)
 
-function checkoutClosedDetails(err: unknown): { paidAtTerminal: boolean } | null {
+interface ClosedDetails {
+  paidAtTerminal: boolean
+  /** What it was paid with and where the Quittung goes, when paid at the terminal. */
+  amount: number | null
+  payerEmail: string | null
+}
+
+function checkoutClosedDetails(err: unknown): ClosedDetails | null {
   const details = (err as { details?: unknown } | null)?.details as
-    | { reason?: unknown; paidAtTerminal?: unknown }
+    | { reason?: unknown; paidAtTerminal?: unknown; amount?: unknown; payerEmail?: unknown }
     | undefined
   if (details?.reason !== CHECKOUT_CLOSED_REASON) return null
-  return { paidAtTerminal: details.paidAtTerminal === true }
+  return {
+    paidAtTerminal: details.paidAtTerminal === true,
+    amount: typeof details.amount === "number" ? details.amount : null,
+    payerEmail: typeof details.payerEmail === "string" ? details.payerEmail : null,
+  }
 }
 
 /** The terminal's result as this screen's phase. Exported for tests. */
@@ -225,7 +236,13 @@ export function useTerminalPayment(args: {
       update(
         run,
         outcome.paidAtTerminal
-          ? { phase: "approved", errorText: null }
+          ? {
+            phase: "approved",
+            errorText: null,
+            // The first try of this screen has priced nothing yet.
+            ...(outcome.amount !== null ? { amount: outcome.amount } : {}),
+            ...(outcome.payerEmail ? { payerEmail: outcome.payerEmail } : {}),
+          }
           : { phase: "error", errorText: "Dieser Besuch ist bereits abgeschlossen." },
       )
       return

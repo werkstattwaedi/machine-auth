@@ -272,7 +272,12 @@ describe("useTerminalPayment", () => {
     mockPrepare.mockRejectedValue(
       Object.assign(new Error("Dieser Besuch ist bereits abgeschlossen."), {
         code: "functions/failed-precondition",
-        details: { reason: "checkout-closed", paidAtTerminal: true },
+        details: {
+          reason: "checkout-closed",
+          paidAtTerminal: true,
+          amount: 25,
+          payerEmail: "alice@example.com",
+        },
       }),
     )
     mockToastError.mockClear()
@@ -281,7 +286,11 @@ describe("useTerminalPayment", () => {
       await hook.result.current.start()
     })
     expect(bridge.terminalPay).not.toHaveBeenCalled()
-    expect(hook.result.current.terminal?.phase).toBe("approved")
+    expect(hook.result.current.terminal).toMatchObject({
+      phase: "approved",
+      amount: 25,
+      payerEmail: "alice@example.com",
+    })
     expect(mockToastError).not.toHaveBeenCalled()
   })
 
