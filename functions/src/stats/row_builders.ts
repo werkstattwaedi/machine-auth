@@ -23,6 +23,7 @@ import type {
   MembershipEntity,
   UsageMachineEntity,
 } from "../types/firestore_entities";
+import { isCollectedBeleg } from "@oww/shared";
 import type { BillEntity } from "../invoice/types";
 
 export type StatsRow = Record<string, unknown>;
@@ -163,7 +164,10 @@ export function buildBillRow(
     subject_key: subjectKey,
     amount: bill.amount ?? null,
     paid_via: bill.paidVia ?? null,
-    kind: bill.kind ?? "invoice",
+    kind: isCollectedBeleg(bill) ? "beleg" : "invoice",
+    // Stored fields only: a pre-ADR-0052 bill's document needs its checkout.
+    document: bill.document ?? null,
+    payment_method: bill.paymentMethod ?? null,
     source: bill.source ?? "checkout",
   };
 }

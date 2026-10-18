@@ -19,6 +19,7 @@ import type {
 } from "firebase/firestore"
 
 import type {
+  BillDocumentType,
   CatalogVariant,
   DiscountLevel,
   ItemType,
@@ -425,15 +426,17 @@ export interface BillDoc extends AuditFields {
   paymentMethodConfirmationSource?: "user" | "auto" | "terminal" | null
   walleeTransactionId?: number | null
   walleeReceiptText?: string | null
-  // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
-  // member who picked Sammelrechnung — the payable QR-bill is emitted as
-  // the aggregated monthly Sammelrechnung (`aggregatedIntoBillRef`) on the
-  // 1st. Missing `kind` is treated as "invoice" so legacy docs
-  // migrate-free. Mirrors `BillEntity.kind` in
-  // functions/src/invoice/types.ts. Issue #245/#405.
+  // The committed payment method and the document (ADR-0052). Missing on
+  // bills minted before it — read them through the `@oww/shared` resolvers
+  // (`isCollectedBeleg`, `billDocumentOf`), never directly. Mirrors
+  // `BillEntity` in functions/src/invoice/types.ts.
+  paymentMethod?: PaymentMethod | null
+  document?: BillDocumentType
+  // Legacy queue marker ("beleg" = for the Sammelrechnung), read only by
+  // the resolvers' fallback.
   kind?: "invoice" | "beleg"
-  // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
-  // monthly `kind: "invoice"`. Mirrors `BillEntity.aggregatedIntoBillRef`.
+  // Set on a Beleg for the Sammelrechnung once monthlyBillRun has folded it
+  // into a Sammelrechnung. Mirrors `BillEntity.aggregatedIntoBillRef`.
   aggregatedIntoBillRef?: DocumentReference<BillDoc> | null
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.

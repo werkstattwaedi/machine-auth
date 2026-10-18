@@ -28,6 +28,13 @@ function bill(overrides: {
 }
 
 describe("billStatus", () => {
+  it("counts only a Beleg for the Sammelrechnung as beleg (ADR-0052)", () => {
+    const fresh = bill({ createdDaysAgo: 5 })
+    expect(billStatus({ ...fresh, paymentMethod: "monthly" as const }, NOW)).toBe("beleg")
+    // A TWINT Beleg is paid by booking the RaiseNow export, like any bill.
+    expect(billStatus({ ...fresh, paymentMethod: "raisenow" as const }, NOW)).toBe("open")
+  })
+
   it("is open while within the payment window", () => {
     expect(billStatus(bill({ createdDaysAgo: 5 }), NOW)).toBe("open")
     expect(

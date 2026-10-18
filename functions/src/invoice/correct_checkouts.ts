@@ -39,8 +39,16 @@ import {
   type CorrectCheckoutReplacement,
   type CorrectCheckoutsRequest,
   type CorrectCheckoutsResult,
+  INVOICE_PAYMENT_METHOD,
+  PAYMENT_METHOD_INFO,
+  billDocumentOf,
+  billPaymentMethodOf,
+  documentFor,
+  isCollectedBeleg,
+  type BillDocumentType,
 } from "@oww/shared";
 import type {
+  PaymentMethod,
   CheckoutEntity,
   CheckoutItemEntity,
   CheckoutPersonEntity,
@@ -49,6 +57,7 @@ import type {
 } from "../types/firestore_entities";
 import { formatBillReference, type BillEntity } from "./types";
 import { allocateBillRevision, type BillAck } from "./create_bill";
+import { isBillCommitted } from "./commit_payment_method";
 import { aggregateBelegeIntoInvoice } from "./monthly_bill_run";
 import {
   isUsageType,
@@ -285,7 +294,32 @@ interface LoadedEntry {
 }
 
 function refLabel(bill: BillEntity): string {
-  return formatBillReference(bill.referenceNumber, bill.kind);
+  return formatBillReference(bill);
+}
+
+/**
+ * The replacement's method and document (BIL-17): the original's, so a
+ * TWINT Beleg stays a Beleg and an earlier Quittung a Quittung. The
+ * replacement is committed at once, so an original without a method needs
+ * one: CHF 0 stays without, otherwise the tab last tapped on the checkout,
+ * or the QR-Rechnung — a Sammelrechnung tab nobody committed is not a
+ * Beleg the monthly run would collect.
+ */
+export function replacementBilling(
+  bill: BillEntity,
+  checkout: CheckoutEntity,
+  amount: number,
+): { paymentMethod: PaymentMethod | null; document: BillDocumentType } {
+  // An unconfirmed checkout's method is only the tab last tapped.
+  const legacyMethod = isBillCommitted(bill) ? checkout.paymentMethod : null;
+  const kept = billPaymentMethodOf(bill, legacyMethod);
+  if (kept || amount === 0) {
+    return { paymentMethod: kept, document: billDocumentOf(bill, legacyMethod) };
+  }
+  const tapped = checkout.paymentMethod ?? null;
+  const paymentMethod =
+    tapped && !PAYMENT_METHOD_INFO[tapped].isAggregated ? tapped : INVOICE_PAYMENT_METHOD;
+  return { paymentMethod, document: documentFor(paymentMethod) };
 }
 
 // --- Handler --------------------------------------------------------------
@@ -403,7 +437,7 @@ export const correctCheckoutsHandler = async (
     // The Sammelrechnung family, if any Beleg in the list is aggregated.
     const aggregateRefs = new Map<string, DocumentReference>();
     for (const l of loaded) {
-      if ((l.bill.kind ?? "invoice") === "beleg" && l.bill.aggregatedIntoBillRef) {
+      if (isCollectedBeleg(l.bill) && l.bill.aggregatedIntoBillRef) {
         aggregateRefs.set(l.bill.aggregatedIntoBillRef.path, l.bill.aggregatedIntoBillRef);
       }
     }
@@ -484,7 +518,7 @@ export const correctCheckoutsHandler = async (
     const noticeBillIds: string[] = [];
 
     for (const l of loaded) {
-      const isBeleg = (l.bill.kind ?? "invoice") === "beleg";
+      const isBeleg = isCollectedBeleg(l.bill);
       // Per bill, not per batch: a standalone Beleg listed next to an
       // aggregated one must stay standalone (own mail, no re-pointing).
       const insideRevision =
@@ -500,6 +534,7 @@ export const correctCheckoutsHandler = async (
         newCheckoutRef = db.collection("checkouts").doc();
         newBillRef = db.collection("bills").doc();
         const r = l.replacement;
+        const billing = replacementBilling(l.bill, l.checkout, r.summary.totalPrice);
         const replacementCheckout: CheckoutEntity = {
           userId: (l.checkout.userId ?? null) as DocumentReference,
           status: "closed",
@@ -514,7 +549,7 @@ export const correctCheckoutsHandler = async (
           billRef: newBillRef,
           notes: null,
           summary: r.summary,
-          paymentMethod: l.checkout.paymentMethod ?? null,
+          paymentMethod: billing.paymentMethod ?? l.checkout.paymentMethod ?? null,
           supersedesCheckoutRef: l.checkoutRef,
           supersededByCheckoutRef: null,
           cancelledAt: null,
@@ -526,9 +561,9 @@ export const correctCheckoutsHandler = async (
         for (const item of r.items) {
           tx.set(newCheckoutRef.collection("items").doc(), item);
         }
-        // Invoice-kind replacements are pre-acked (copy the original's ack,
-        // else auto) so onBillUpdate never sees an ack transition for them;
-        // Belege never carry an ack.
+        // Replacements are pre-acked (copy the original's ack, else auto) so
+        // onBillUpdate never sees an ack transition for them; Belege for the
+        // Sammelrechnung never carry an ack.
         const ack: BillAck | null = isBeleg
           ? null
           : l.bill.paymentMethodConfirmationTime
@@ -543,7 +578,8 @@ export const correctCheckoutsHandler = async (
           checkoutRefs: [newCheckoutRef],
           amount: r.summary.totalPrice,
           billRef: newBillRef,
-          kind: l.bill.kind ?? "invoice",
+          paymentMethod: billing.paymentMethod,
+          document: billing.document,
           aggregatedIntoBillRef: insideRevision ? revisionRef : null,
           ack,
           correctionReason: reason,
@@ -588,7 +624,7 @@ export const correctCheckoutsHandler = async (
     if (aggregateRef && aggregate && revisionRef) {
       const surviving = siblings.filter(
         (s) =>
-          (s.bill.kind ?? "invoice") === "beleg" &&
+          isCollectedBeleg(s.bill) &&
           !s.bill.cancelledAt &&
           !cancelledPaths.has(s.ref.path),
       );

@@ -5,6 +5,7 @@
 // the list. Read-only bill facts (bills are server-written), PDF
 // download, mark-paid for open invoices, links to the underlying visits.
 
+import { isCollectedBeleg } from "@oww/shared"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { where } from "firebase/firestore"
@@ -64,12 +65,12 @@ function BillDetailPage() {
   if (loading) return <PageLoading />
   if (!bill) return <div>Rechnung nicht gefunden.</div>
 
-  const reference = formatBillReference(bill.referenceNumber, bill.kind)
+  const reference = formatBillReference(bill)
   const status = billStatus(bill, Date.now())
   const payable = status === "open" || status === "overdue"
   const activeBelege = belege.filter((b) => !b.cancelledAt)
   const correctableSammelrechnung =
-    (bill.kind ?? "invoice") === "invoice" &&
+    !isCollectedBeleg(bill) &&
     !bill.paidAt &&
     !bill.cancelledAt &&
     activeBelege.length > 0
@@ -190,7 +191,7 @@ function BillDetailPage() {
                 className="font-medium text-primary hover:underline"
               >
                 {successor
-                  ? formatBillReference(successor.referenceNumber, successor.kind)
+                  ? formatBillReference(successor)
                   : "…"}
               </Link>
             </Field>
@@ -203,7 +204,7 @@ function BillDetailPage() {
                 className="font-medium text-primary hover:underline"
               >
                 {predecessor
-                  ? formatBillReference(predecessor.referenceNumber, predecessor.kind)
+                  ? formatBillReference(predecessor)
                   : "…"}
               </Link>
             </Field>

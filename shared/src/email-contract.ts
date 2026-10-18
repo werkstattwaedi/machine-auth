@@ -22,11 +22,15 @@ export const EMAIL_ENVS = ["prod", "staging", "test"] as const
 export type EmailEnv = (typeof EMAIL_ENVS)[number]
 
 /**
- * What the bill document is, derived from payment-method *properties*, never
- * from a method id — new payment integrations must not add templates.
+ * Which mail announces a bill (`bill-<value>`), chosen by `billMailFor` from
+ * the bill's document and payment-method *properties*, never from a method
+ * id — new payment integrations must not add templates. Not the document
+ * itself (`BillDocumentType`): a Beleg for the Sammelrechnung and a Beleg
+ * paid during the checkout say different things. "receipt" is the alias of
+ * the latter's template, kept from when that document was a Quittung.
  */
-export const BILL_DOCUMENTS = ["invoice", "receipt", "beleg", "sammelrechnung"] as const
-export type BillDocument = (typeof BILL_DOCUMENTS)[number]
+export const BILL_MAILS = ["invoice", "receipt", "beleg", "sammelrechnung"] as const
+export type BillMail = (typeof BILL_MAILS)[number]
 
 /**
  * What a checkout was (issue #660): a workshop visit, a membership
@@ -65,7 +69,8 @@ export const EMAIL_CONTRACT = {
     dims: { kind: CHECKOUT_KINDS },
     variables: ["RECIPIENT_NAME", "CHECKOUT_DATE", "INVOICE_NUMBER", "AMOUNT", "CURRENCY"],
   },
-  // Paid during the checkout (`paidDuringCheckout`): receipt, no QR slip.
+  // Beleg for a method paid during the checkout (`paidDuringCheckout`), no QR
+  // slip; the alias keeps "receipt" from when the document was a Quittung.
   // PAYMENT_LABEL is the method's brand ("TWINT"), never part of the alias.
   "bill-receipt": {
     dims: { kind: CHECKOUT_KINDS },
@@ -140,9 +145,9 @@ export type MailVariables<M extends MailName> = Record<
   string
 >
 
-/** The mail that carries a bill of the given document type. */
-export function billMail(document: BillDocument): MailName {
-  return `bill-${document}` as const
+/** The contract mail name of a bill mail. */
+export function billMail(mail: BillMail): MailName {
+  return `bill-${mail}` as const
 }
 
 export function isEmailEnv(value: unknown): value is EmailEnv {

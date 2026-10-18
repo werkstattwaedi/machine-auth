@@ -109,6 +109,8 @@ interface SeedBillOptions {
   paidVia?: BillEntity["paidVia"];
   checkoutIds?: string[];
   kind?: "invoice" | "beleg";
+  /** Stored on the bill (ADR-0052); omitted seeds a pre-ADR-0052 bill. */
+  stored?: Pick<BillEntity, "paymentMethod" | "document">;
   source?: "checkout" | "membership-renewal";
   // Account holder; the close path copies `checkout.userId` here. Omitted
   // → the shared "u-bill-proc" owner.
@@ -217,6 +219,7 @@ async function seedBill(
     kind: opts.kind ?? "invoice",
     aggregatedIntoBillRef: null,
     source: opts.source ?? "checkout",
+    ...opts.stored,
   };
 
   await db.collection("bills").doc(billId).set(bill);
@@ -1050,7 +1053,7 @@ describe("bill processing triggers (Integration)", () => {
           .false;
       });
 
-      it("picks the receipt mail when checkout.paymentMethod is 'raisenow'", async () => {
+      it("picks the receipt mail for a TWINT bill issued before #763 (Quittung, BIL-46)", async () => {
         const billId = "bill-twint";
         await seedUser("u-bill-proc", { email: "payer@example.com" });
         await seedCheckout("co-default", {
@@ -1077,6 +1080,33 @@ describe("bill processing triggers (Integration)", () => {
         // attachment filename must match the document type, mirroring the
         // Beleg filename contract from #405.
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
+      });
+
+      it("mails a TWINT Beleg on the receipt template, attached as Beleg-BL-… (#763)", async () => {
+        const billId = "bill-twint-beleg";
+        await seedUser("u-bill-proc", { email: "payer@example.com" });
+        await seedCheckout("co-default", {
+          paymentMethod: "raisenow",
+        });
+        await seedBill(billId, {
+          storagePath: "invoices/bill-twint-beleg.pdf",
+          referenceNumber: 110,
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "user",
+          stored: { paymentMethod: "raisenow", document: "beleg" },
+        });
+
+        await trySendEmail(billId);
+        const [, entity] = resendSendStub.firstCall.args as [
+          string,
+          {
+            template: { id: string };
+            attachments: Array<{ filename: string }>;
+          },
+        ];
+        expect(entity.template.id).to.equal("test-bill-receipt-visit");
+        expectContractVariables(entity.template);
+        expect(entity.attachments[0].filename).to.equal("Beleg-BL-000011.pdf");
       });
 
       // Issue #660: a membership or badge bought at the kiosk is no visit,
@@ -1460,7 +1490,7 @@ describe("bill processing triggers (Integration)", () => {
         "Einzahlungsschein zu RE-000050 ist ungültig",
       );
       expect(entity.attachments!.map((a) => a.filename)).to.deep.equal([
-        "Rechnung-RE-000050-1.pdf",
+        "Sammelrechnung-RE-000050-1.pdf",
         "Beleg-BL-000061-1.pdf",
       ]);
       expect((await getBill("agg-rev")).emailSentAt).to.be.instanceOf(Timestamp);

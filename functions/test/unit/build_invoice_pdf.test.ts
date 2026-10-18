@@ -14,6 +14,7 @@ import {
   longInvoice,
   paidInvoice,
   raisenowMethodInvoice,
+  legacyQuittungInvoice,
   freeZeroAmountInvoice,
   registeredUserInvoice,
   membershipOnlyInvoice,
@@ -298,18 +299,16 @@ describe("buildInvoicePdf — content", () => {
     expect(text).to.include("Zahlbar innert 30 Tagen");
   });
 
-  // Issue #426: a TWINT-method self-checkout is a payment receipt, not a
-  // payable Rechnung. The PDF must (a) title itself "Quittung Self-
-  // Checkout" so the customer sees it's a TWINT receipt (matching the
-  // "Quittung TWINT-Zahlung" email), (b) state the TWINT payment method,
-  // and (c) omit the QR payment slip so nobody pays twice. It must NOT
-  // claim "Bezahlt am …" — we have no bank-side confirmation.
-  it("TWINT-method invoice: 'Quittung' title, TWINT notice, no QR slip (#426)", async () => {
+  // Issue #426 / #763: a TWINT-method self-checkout asks for no payment —
+  // TWINT sends the receipt, our document is a Beleg. The PDF must (a) title
+  // itself "Beleg Self-Checkout" with a BL- number, (b) state the TWINT
+  // payment method, and (c) omit the QR payment slip so nobody pays twice.
+  // It must NOT claim "Bezahlt am …" — we have no bank-side confirmation.
+  it("TWINT-method invoice: 'Beleg' title, BL- number, TWINT notice, no QR slip (#763)", async () => {
     const text = await pdfText(raisenowMethodInvoice());
-    expect(text).to.include("Quittung Self-Checkout");
+    expect(text).to.include("Beleg Self-Checkout");
     expect(text).to.not.include("Rechnung Self-Checkout");
-    // The underlying bill is still kind "invoice" → RE- reference kept.
-    expect(text).to.include("Rechnungsnummer: RE-000010");
+    expect(text).to.include("Belegnummer: BL-000010");
     // States the payment method.
     expect(text).to.include("Zahlweise: TWINT");
     // No QR payment slip and no "pay within 30 days" terms.
@@ -319,6 +318,31 @@ describe("buildInvoicePdf — content", () => {
     // Must not falsely claim a confirmed payment — no bank confirmation.
     expect(text).to.not.include("Bezahlt via TWINT am");
     expect(text).to.not.include("bereits beglichen");
+    // Nor that it goes on the Sammelrechnung.
+    expect(text).to.not.include("Sammelrechnung");
+  });
+
+  it("TWINT bill issued before #763 stays a Quittung with its RE- number (BIL-46)", async () => {
+    const text = await pdfText(legacyQuittungInvoice());
+    expect(text).to.include("Quittung Self-Checkout");
+    expect(text).to.include("Rechnungsnummer: RE-000010");
+    expect(text).to.include("Zahlweise: TWINT");
+    expect(text).to.not.include("Zahlteil");
+  });
+
+  it("CHF 0 bill is a Beleg with a BL- number (#780)", async () => {
+    const text = await pdfText(freeZeroAmountInvoice());
+    expect(text).to.include("Beleg Self-Checkout");
+    expect(text).to.include("Belegnummer: BL-");
+    expect(text).to.include("Keine Zahlung erforderlich");
+  });
+
+  it("every Sammelrechnung is titled with its month, one visit too", async () => {
+    const one = singleCheckoutInvoice();
+    one.document = "sammelrechnung";
+    const text = await pdfText(one);
+    expect(text).to.include("Sammelrechnung — ");
+    expect(text).to.not.include("Rechnung Self-Checkout");
   });
 
   // Issue #323: a membership-renewal bill (source "membership-renewal") is

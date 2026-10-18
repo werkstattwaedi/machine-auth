@@ -15,17 +15,17 @@ import type {
   Firestore,
   Transaction,
 } from "firebase-admin/firestore";
-import type { PaidVia } from "../types/firestore_entities";
+import type { PaidVia, PaymentMethod } from "../types/firestore_entities";
 import { HttpsError } from "firebase-functions/v2/https";
 import {
   BILL_REVISION_RADIX,
   MAX_BILL_REVISION_DIGIT,
   formatBillReference,
   type BillEntity,
-  type BillKind,
   type BillAckSource,
   type BillSource,
 } from "./types";
+import { documentFor, isCollectedBeleg, type BillDocumentType } from "@oww/shared";
 
 /**
  * Marker written by `scripts/migrate-bill-numbers.ts` once every stored
@@ -64,7 +64,12 @@ interface BuildBillArgs {
   checkoutRefs: DocumentReference[];
   referenceNumber: number;
   amount: number;
-  kind?: BillKind;
+  /** The committed method (ADR-0052); null/omitted: unconfirmed, or CHF 0. */
+  paymentMethod?: PaymentMethod | null;
+  /** The monthly aggregate of Belege (monthlyBillRun). */
+  isSammelrechnung?: boolean;
+  /** Overrides the derived document — a correction keeps its original's. */
+  document?: BillDocumentType;
   ack?: BillAck | null;
   source?: BillSource;
   aggregatedIntoBillRef?: DocumentReference | null;
@@ -90,6 +95,10 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
   const now = Timestamp.now();
   const ack: BillAck | null =
     args.ack ?? (isFree ? { time: now, source: "auto" } : null);
+  const paymentMethod = args.paymentMethod ?? null;
+  const document =
+    args.document ??
+    documentFor(isFree ? "free" : paymentMethod, { isSammelrechnung: args.isSammelrechnung });
   return {
     userId: args.userId as DocumentReference,
     checkouts: args.checkoutRefs,
@@ -106,7 +115,9 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
     emailSentAt: null,
     paymentMethodConfirmationTime: ack?.time ?? null,
     paymentMethodConfirmationSource: ack?.source ?? null,
-    kind: args.kind ?? "invoice",
+    paymentMethod,
+    document,
+    kind: isCollectedBeleg({ paymentMethod }) ? "beleg" : "invoice",
     aggregatedIntoBillRef: args.aggregatedIntoBillRef ?? null,
     source: args.source ?? "checkout",
     cancelledAt: null,
@@ -142,13 +153,21 @@ export async function allocateBill(
     checkoutRefs: DocumentReference[];
     amount: number;
     billRef: DocumentReference;
-    /** Defaults to "invoice". Pass "beleg" for per-visit Sammelrechnung records. */
-    kind?: BillKind;
+    /**
+     * The method the bill is committed with (issue #750, ADR-0052); null
+     * only for a CHF 0 bill. An aggregated method makes it a Beleg for the
+     * Sammelrechnung, which carries no ack stamp — pass `preAck` for the
+     * others.
+     */
+    paymentMethod?: PaymentMethod | null;
+    /** The monthly aggregate of Belege (monthlyBillRun). */
+    isSammelrechnung?: boolean;
     /**
      * Commit the bill at creation: the close with the person's method
      * ("user"), the Wallee settlement ("terminal"), the monthly
      * Sammelrechnung and the renewal invoice ("auto"). Omitted only for a
-     * Beleg (committed by its kind) and a CHF 0 bill (born free).
+     * Beleg for the Sammelrechnung (committed by its method) and a CHF 0
+     * bill (born free).
      */
     preAck?: { source: BillAckSource };
     /**
@@ -187,7 +206,8 @@ export async function allocateBill(
     checkoutRefs: args.checkoutRefs,
     referenceNumber: nextBillNumber * BILL_REVISION_RADIX,
     amount: args.amount,
-    kind: args.kind,
+    paymentMethod: args.paymentMethod,
+    isSammelrechnung: args.isSammelrechnung,
     ack: args.preAck ? { time: Timestamp.now(), source: args.preAck.source } : null,
     source: args.source,
     paid: args.paid ?? null,
@@ -210,10 +230,15 @@ export async function allocateBillRevision(
     checkoutRefs: DocumentReference[];
     amount: number;
     billRef: DocumentReference;
-    /** Defaults to the previous bill's kind. */
-    kind?: BillKind;
+    /**
+     * The replacement's committed method and document (ADR-0052). Passed,
+     * not copied: the caller resolves them from the previous bill — which
+     * may predate the fields — and its checkout.
+     */
+    paymentMethod: PaymentMethod | null;
+    document: BillDocumentType;
     aggregatedIntoBillRef?: DocumentReference | null;
-    /** Invoice-kind replacements are pre-acked; Belege pass null. */
+    /** Replacements are pre-acked, except Belege for the Sammelrechnung (null). */
     ack?: BillAck | null;
     correctionReason: string;
     /** Sammelrechnung revision only: replacement Belege attached to its mail. */
@@ -225,7 +250,7 @@ export async function allocateBillRevision(
   if (previousNumber % BILL_REVISION_RADIX >= MAX_BILL_REVISION_DIGIT) {
     throw new HttpsError(
       "failed-precondition",
-      `${formatBillReference(previousNumber, args.previous.bill.kind)} hat die maximale Anzahl ` +
+      `${formatBillReference(args.previous.bill)} hat die maximale Anzahl ` +
         `Korrekturen (${MAX_BILL_REVISION_DIGIT}) erreicht — keine weitere Korrektur möglich.`,
     );
   }
@@ -234,7 +259,8 @@ export async function allocateBillRevision(
     checkoutRefs: args.checkoutRefs,
     referenceNumber: previousNumber + 1,
     amount: args.amount,
-    kind: args.kind ?? args.previous.bill.kind ?? "invoice",
+    paymentMethod: args.paymentMethod,
+    document: args.document,
     ack: args.ack ?? null,
     source: args.previous.bill.source,
     aggregatedIntoBillRef: args.aggregatedIntoBillRef ?? null,

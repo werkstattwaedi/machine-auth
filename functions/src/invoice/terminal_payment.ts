@@ -384,6 +384,7 @@ export async function settleTransaction(
       checkoutRefs: [checkoutRef],
       amount: attempt.amount,
       billRef,
+      paymentMethod: "wallee_terminal",
       preAck: { source: "terminal" },
       paid: {
         paidAt,

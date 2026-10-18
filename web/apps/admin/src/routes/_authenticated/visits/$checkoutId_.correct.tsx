@@ -10,6 +10,7 @@
 // authoritatively. The `_` in the file name keeps this route outside
 // `$checkoutId.tsx`, which renders no <Outlet/>.
 
+import { isCollectedBeleg } from "@oww/shared"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -130,11 +131,11 @@ function CorrectVisitPage() {
     )
   }
 
-  const reference = formatBillReference(bill.referenceNumber, bill.kind)
-  const nextReference = formatBillReference(bill.referenceNumber + 1, bill.kind)
+  const reference = formatBillReference(bill)
+  const nextReference = formatBillReference({ ...bill, referenceNumber: bill.referenceNumber + 1 })
   const sammelReference =
-    bill.kind === "beleg" && sammelrechnung && !sammelrechnung.cancelledAt
-      ? formatBillReference(sammelrechnung.referenceNumber, sammelrechnung.kind)
+    isCollectedBeleg(bill) && sammelrechnung && !sammelrechnung.cancelledAt
+      ? formatBillReference(sammelrechnung)
       : null
   const errors = validateDraft(draft)
   const unchanged = isUnchanged(draft, original)

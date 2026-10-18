@@ -1,6 +1,7 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { isCollectedBeleg } from "@oww/shared"
 import { createFileRoute } from "@tanstack/react-router"
 import { useAuth, type UserDoc } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
@@ -323,7 +324,7 @@ function InvoicesPanel({
               >
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="font-semibold">
-                    {formatBillReference(bill.referenceNumber, bill.kind)}
+                    {formatBillReference(bill)}
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {formatDate(bill.created)}
@@ -370,7 +371,7 @@ function InvoicesPanel({
                 >
 
                   <td className="px-6 py-3 font-semibold">
-                    {formatBillReference(bill.referenceNumber, bill.kind)}
+                    {formatBillReference(bill)}
                   </td>
                   <td className="px-6 py-3 tabular-nums">
                     {formatDate(bill.created)}
@@ -420,8 +421,8 @@ function FilterPill({
 }
 
 /**
- * Status pill for a bill row. A `kind: "beleg"` is a per-visit
- * Sammelrechnung record — it is never payable on its own (the monthly
+ * Status pill for a bill row. A Beleg for the Sammelrechnung is never
+ * payable on its own (the monthly
  * aggregated invoice carries the QR slip), so it must NOT show the
  * "Offen"/"Bezahlt" payable-status badge. Render a neutral "Beleg" badge
  * instead. Issue #405.
@@ -434,7 +435,7 @@ function BillStatusBadge({ bill }: { bill: BillDoc }) {
       </Badge>
     )
   }
-  if (bill.kind === "beleg") {
+  if (isCollectedBeleg(bill)) {
     return <Badge variant="secondary">Beleg</Badge>
   }
   if (bill.paidAt) {
@@ -544,12 +545,12 @@ function WorkshopChips({ workshops }: { workshops: string[] }) {
 
 /**
  * A bill is "Offen" (payable, outstanding) when it's a real invoice that
- * hasn't been paid. A `kind: "beleg"` (per-visit Sammelrechnung record)
- * is never payable on its own — it's settled via the aggregated monthly
+ * hasn't been paid. A Beleg for the Sammelrechnung is never payable on
+ * its own — it's settled via the aggregated monthly
  * invoice — so it is neither open nor paid. Issue #405.
  */
 function isOpenBill(bill: BillDoc): boolean {
-  return bill.kind !== "beleg" && !bill.paidAt && !bill.cancelledAt
+  return !isCollectedBeleg(bill) && !bill.paidAt && !bill.cancelledAt
 }
 
 /** Tolerant Timestamp-or-Date converter — fakes used in tests store plain

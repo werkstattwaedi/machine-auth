@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react"
 import { CircleCheck, CreditCard, FileText } from "lucide-react"
-import { PAYMENT_METHOD_INFO, type PaymentMethod } from "@oww/shared"
+import { PAYMENT_METHOD_INFO, type PaymentChoice, type PaymentMethod } from "@oww/shared"
 
 export interface PaymentData {
   /** Doc id of the underlying bill — drives the PDF download action. */
@@ -41,7 +41,7 @@ export interface PaymentData {
 }
 
 /** A card on step 3: a payment method, or the single card of a CHF 0 visit. */
-export type PaymentChoice = PaymentMethod | "free"
+export type { PaymentChoice }
 
 // Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec).
 export const SWISS_CROSS_SVG = `data:image/svg+xml,${encodeURIComponent(

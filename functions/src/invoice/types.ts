@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
-import { isPaidDuringCheckout } from "@oww/shared";
+import {
+  BILL_DOCUMENT_INFO,
+  billDocumentOf,
+  type BillDocumentFields,
+  type BillDocumentType,
+} from "@oww/shared";
 import {
   CheckoutPersonEntity,
   CheckoutItemEntity,
@@ -11,6 +16,11 @@ import {
   UsageType,
 } from "../types/firestore_entities";
 
+// Legacy queue marker, superseded by `paymentMethod` (ADR-0052): "beleg" =
+// a Beleg for the Sammelrechnung. Still written — always equal to
+// `isAggregated(paymentMethod)` — until every environment is backfilled and
+// the monthly run queries `paymentMethod`; read only through the
+// `@oww/shared` resolvers, which fall back to it for un-backfilled bills.
 export type BillKind = "invoice" | "beleg";
 
 // Origin discriminator (issue #323). "checkout" = a normal Self-Checkout
@@ -60,13 +70,20 @@ export interface BillEntity {
   // on legacy docs (absent).
   walleeTransactionId?: number | null;
   walleeReceiptText?: string | null;
-  // "invoice" = real, payable QR-bill. "beleg" = per-visit record for a
-  // member who picked Sammelrechnung — the QR-bill is emitted as the
-  // aggregated monthly invoice (`aggregatedIntoBillRef`) on the 1st.
-  // Missing `kind` is treated as "invoice" so legacy docs migrate-free.
+  // The committed payment method (ADR-0052): null until committed, and for
+  // a CHF 0 bill. What the bill does follows from its PAYMENT_METHOD_INFO
+  // properties — an aggregated method makes it a Beleg for the
+  // Sammelrechnung. Missing on bills minted before ADR-0052; read through
+  // `billPaymentMethodOf` / `isCollectedBeleg`.
+  paymentMethod?: PaymentMethod | null;
+  // What the customer holds (ADR-0052): its prefix, title and file name.
+  // Set at mint, fixed at commit. Missing on bills minted before ADR-0052;
+  // read through `billDocumentOf`.
+  document?: BillDocumentType;
+  // See BillKind.
   kind?: BillKind;
-  // Set on a `kind: "beleg"` once monthlyBillRun has folded it into a
-  // monthly `kind: "invoice"`. Re-runs skip Belege where this is set.
+  // Set on a Beleg for the Sammelrechnung once monthlyBillRun has folded it
+  // into a Sammelrechnung. Re-runs skip Belege where this is set.
   aggregatedIntoBillRef?: DocumentReference | null;
   // Origin discriminator (issue #323). Missing value is treated as
   // "checkout" so legacy docs migrate-free.
@@ -171,20 +188,15 @@ export interface InvoiceData {
   /** Wallee's cardholder receipt of a terminal payment (bill `walleeReceiptText`). */
   terminalReceiptText?: string | null;
   /**
-   * The payment method committed on the checkout (null for a CHF 0 bill or
-   * a legacy one nobody committed). Gates the QR
-   * payment slip: only rendered for `rechnung` or null — methods paid
-   * during the checkout and the Sammelrechnung get a method-specific
-   * notice instead, so users don't think they need to pay via QR after
-   * already settling or having it routed to their monthly bill.
+   * The bill's committed payment method; null for a CHF 0 bill and a
+   * legacy one nobody committed. Gates the QR payment slip: a method paid
+   * during the checkout and a Beleg for the Sammelrechnung get a
+   * method-specific notice instead, so nobody thinks they still need to
+   * pay by QR.
    */
   paymentMethod?: PaymentMethod | null;
-  /**
-   * Discriminator for the rendered document. "invoice" → "Rechnung
-   * RE-XXXXXX" with QR slip; "beleg" → "Beleg BL-XXXXXX" without QR
-   * slip (a record of one Sammelrechnung-acked visit).
-   */
-  kind?: BillKind;
+  /** The rendered document: title, number label and prefix (ADR-0052). */
+  document: BillDocumentType;
   /**
    * Bill origin (issue #323). "membership-renewal" switches the PDF into
    * its renewal rendering: "Rechnung Mitgliederbeitrag" title, a short
@@ -263,31 +275,28 @@ export function formatBelegNumber(n: number): string {
   return formatBillNumber("BL", n);
 }
 
-/** Format a bill's reference number using its `kind`. */
-export function formatBillReference(
-  n: number,
-  kind: BillKind | undefined,
-): string {
-  return kind === "beleg" ? formatBelegNumber(n) : formatInvoiceNumber(n);
+/** The bill fields that decide its printed number. */
+export type BillReferenceFields = BillDocumentFields & { referenceNumber: number };
+
+/** Format a bill's reference number with its document's prefix. */
+export function formatBillReference(bill: BillReferenceFields): string {
+  return formatBillNumber(
+    BILL_DOCUMENT_INFO[billDocumentOf(bill)].prefix,
+    bill.referenceNumber,
+  );
 }
 
 /**
- * Human filename prefix for a bill PDF (download + email attachment).
- * Mirrors the PDF title logic in build_invoice_pdf: a Beleg is "Beleg",
- * an invoice paid during the checkout renders as a receipt ("Quittung" —
- * issue #426),
- * everything else — including the aggregated Sammelrechnung, whose
- * checkout still records paymentMethod "monthly" — is a payable
- * "Rechnung". Keeping the filename in sync with the title inside the PDF
- * is the same contract issue #405 established for Belege.
+ * Human file name of a bill PDF (download + mail attachment) — the document
+ * named as inside the PDF (issue #405): `Beleg_BL-…`, `Rechnung_RE-…`,
+ * `Sammelrechnung_RE-…`, `Quittung_RE-…` for one issued before #763.
  */
-export function billDocumentPrefix(
-  kind: BillKind | undefined,
-  paymentMethod: PaymentMethod | null | undefined,
-): "Beleg" | "Quittung" | "Rechnung" {
-  if ((kind ?? "invoice") === "beleg") return "Beleg";
-  if (isPaidDuringCheckout(paymentMethod)) return "Quittung";
-  return "Rechnung";
+export function billFileName(
+  document: BillDocumentType,
+  reference: string,
+  separator: "_" | "-" = "_",
+): string {
+  return `${BILL_DOCUMENT_INFO[document].label}${separator}${reference}.pdf`;
 }
 
 /** Payment recipient configuration (from environment params) */

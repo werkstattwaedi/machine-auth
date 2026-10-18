@@ -37,6 +37,8 @@ interface SeedOpts {
   aggregatedIntoBillRef?: DocumentReference | null;
   checkoutStatus?: "open" | "closed";
   paymentMethod?: "rechnung" | "raisenow" | "monthly" | null;
+  /** Stored on the bill (ADR-0052); omitted seeds a pre-ADR-0052 bill. */
+  bill?: Partial<Pick<BillEntity, "paymentMethod" | "document" | "paidVia">>;
 }
 
 async function seed(opts: SeedOpts): Promise<void> {
@@ -79,6 +81,7 @@ async function seed(opts: SeedOpts): Promise<void> {
     paymentMethodConfirmationSource: null,
     kind: opts.kind ?? "invoice",
     aggregatedIntoBillRef: opts.aggregatedIntoBillRef ?? null,
+    ...opts.bill,
   };
   await billRef.set(bill);
 }
@@ -168,6 +171,9 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
     expect(invoice!.checkouts).to.have.length(3);
     expect(invoice!.paymentMethodConfirmationTime).to.be.instanceOf(Timestamp);
     expect(invoice!.paymentMethodConfirmationSource).to.equal("auto");
+    // Paid by its QR slip; titled Sammelrechnung (ADR-0052).
+    expect(invoice!.paymentMethod).to.equal("rechnung");
+    expect(invoice!.document).to.equal("sammelrechnung");
     // counter 100 → stored 1000 (revision digit 0, ADR-0042)
     expect(invoice!.referenceNumber).to.equal(1000);
 
@@ -223,6 +229,49 @@ describe("runMonthlyBillRun (Integration, #245)", () => {
     // The Beleg was the only thing aggregated.
     const beleg = await readBill("beleg-monthly");
     expect(beleg.aggregatedIntoBillRef).to.exist;
+  });
+
+  // #763: a TWINT Beleg and a CHF 0 Beleg are Belege that ask for no
+  // payment, but the Sammelrechnung must never collect them — the visit is
+  // paid (or free) already.
+  it("never collects a Beleg that is not for the Sammelrechnung", async () => {
+    await seed({
+      userId: "alice",
+      billId: "beleg-monthly",
+      checkoutId: "co-monthly",
+      amount: 10,
+      createdAt: inMay,
+      kind: "beleg",
+      paymentMethod: "monthly",
+      bill: { paymentMethod: "monthly", document: "beleg" },
+    });
+    await seed({
+      userId: "alice",
+      billId: "beleg-twint",
+      checkoutId: "co-twint",
+      amount: 22,
+      createdAt: inMay,
+      kind: "invoice",
+      paymentMethod: "raisenow",
+      bill: { paymentMethod: "raisenow", document: "beleg" },
+    });
+    await seed({
+      userId: "alice",
+      billId: "beleg-free",
+      checkoutId: "co-free",
+      amount: 0,
+      createdAt: inMay,
+      kind: "invoice",
+      bill: { paymentMethod: null, document: "beleg", paidVia: "free" },
+    });
+
+    const summary = await runMonthlyBillRun(fireOn);
+
+    expect(summary.invoicesCreated).to.equal(1);
+    const aggregate = await readBill(summary.invoiceIds[0]);
+    expect(aggregate.amount).to.equal(10);
+    expect((await readBill("beleg-twint")).aggregatedIntoBillRef ?? null).to.be.null;
+    expect((await readBill("beleg-free")).aggregatedIntoBillRef ?? null).to.be.null;
   });
 
   it("groups by user — two members each get their own Sammelrechnung", async () => {

@@ -4,6 +4,7 @@
 import { expect } from "chai";
 import {
   billBaseNumber,
+  billFileName,
   billRevision,
   formatBelegNumber,
   formatBillReference,
@@ -26,10 +27,25 @@ describe("bill reference formatting (ADR-0042)", () => {
     expect(formatBelegNumber(51)).to.equal("BL-000005-1");
   });
 
-  it("formatBillReference picks the prefix by kind, invoice by default", () => {
-    expect(formatBillReference(70, "beleg")).to.equal("BL-000007");
-    expect(formatBillReference(70, "invoice")).to.equal("RE-000007");
-    expect(formatBillReference(70, undefined)).to.equal("RE-000007");
+  it("formatBillReference prints the stored document's prefix", () => {
+    expect(formatBillReference({ referenceNumber: 70, document: "beleg" })).to.equal("BL-000007");
+    expect(formatBillReference({ referenceNumber: 71, kind: "invoice", document: "beleg" }))
+      .to.equal("BL-000007-1");
+    expect(formatBillReference({ referenceNumber: 70, document: "sammelrechnung" }))
+      .to.equal("RE-000007");
+    expect(formatBillReference({ referenceNumber: 70, document: "quittung" })).to.equal("RE-000007");
+  });
+
+  it("formatBillReference derives a legacy bill's prefix from its kind", () => {
+    expect(formatBillReference({ referenceNumber: 70, kind: "beleg" })).to.equal("BL-000007");
+    expect(formatBillReference({ referenceNumber: 70, kind: "invoice" })).to.equal("RE-000007");
+    expect(formatBillReference({ referenceNumber: 70 })).to.equal("RE-000007");
+  });
+
+  it("billFileName names the document", () => {
+    expect(billFileName("beleg", "BL-000007")).to.equal("Beleg_BL-000007.pdf");
+    expect(billFileName("sammelrechnung", "RE-000007")).to.equal("Sammelrechnung_RE-000007.pdf");
+    expect(billFileName("quittung", "RE-000007", "-")).to.equal("Quittung-RE-000007.pdf");
   });
 
   it("billBaseNumber / billRevision split the stored number", () => {

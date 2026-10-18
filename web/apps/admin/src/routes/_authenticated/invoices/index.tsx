@@ -141,7 +141,7 @@ function InvoicesContent({
         ...bill,
         derivedStatus: billStatus(bill, nowMs),
         personName: bill.userId ? resolveRef(users, bill.userId) : "–",
-        reference: formatBillReference(bill.referenceNumber, bill.kind),
+        reference: formatBillReference(bill),
       }))
       .filter((b) => statusFilter === "all" || b.derivedStatus === statusFilter)
       .filter(

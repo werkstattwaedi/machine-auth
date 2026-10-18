@@ -276,6 +276,9 @@ describe("stats row builders", () => {
       created: ts("2026-06-01T08:00:00Z"),
       paidAt: ts("2026-06-03T18:22:10Z"),
       paidVia: "raisenow",
+      paymentMethod: "raisenow",
+      document: "beleg",
+      kind: "invoice",
     } as unknown as BillEntity;
 
     it("maps a paid bill and excludes the re-link vectors", () => {
@@ -289,10 +292,22 @@ describe("stats row builders", () => {
         amount: 42.5,
         paid_via: "raisenow",
         kind: "invoice",
+        document: "beleg",
+        payment_method: "raisenow",
         source: "checkout",
       });
       expect(Object.keys(row)).to.not.include("referenceNumber");
       expect(JSON.stringify(row)).to.not.include("invoices/");
+    });
+
+    it("leaves a pre-ADR-0052 bill's new columns empty, kind as stored", () => {
+      const legacy = { ...bill, kind: "beleg" } as Record<string, unknown>;
+      delete legacy.paymentMethod;
+      delete legacy.document;
+      const row = buildBillRow("b-3", legacy as unknown as BillEntity, "k", ctx);
+      expect(row.kind).to.equal("beleg");
+      expect(row.document).to.equal(null);
+      expect(row.payment_method).to.equal(null);
     });
 
     it("refuses unpaid bills", () => {

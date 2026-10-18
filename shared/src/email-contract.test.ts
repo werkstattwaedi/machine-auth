@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 import {
-  BILL_DOCUMENTS,
+  BILL_MAILS,
   EMAIL_CONTRACT,
   MAIL_NAMES,
   billMail,
@@ -41,9 +41,9 @@ describe("templateAlias", () => {
 })
 
 describe("billMail", () => {
-  it("maps every bill document to a contract mail", () => {
-    for (const document of BILL_DOCUMENTS) {
-      expect(EMAIL_CONTRACT[billMail(document)]).toBeDefined()
+  it("maps every bill mail to a contract mail", () => {
+    for (const mail of BILL_MAILS) {
+      expect(EMAIL_CONTRACT[billMail(mail)]).toBeDefined()
     }
   })
 })

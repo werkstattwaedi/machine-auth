@@ -1,13 +1,15 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { isCollectedBeleg } from "@oww/shared"
 import type { BillDoc } from "@modules/lib/firestore-entities"
 
 /**
  * Derived payment state of a bill for the Rechnungen workspace.
  *
- * - "beleg": per-visit Sammelrechnung record — never payable on its own,
- *   the payment books against the aggregated monthly invoice.
+ * - "beleg": a Beleg for the Sammelrechnung — never payable on its own,
+ *   the payment books against the aggregated monthly invoice. A Beleg paid
+ *   during the checkout (TWINT) or a CHF 0 one is paid/open like a bill.
  * - "overdue": unpaid invoice older than {@link OVERDUE_AFTER_DAYS}. Bills
  *   carry no explicit due date; the invoice PDF asks for payment within
  *   30 days of issue, so created + 30d is the due date.
@@ -21,11 +23,11 @@ export const OVERDUE_AFTER_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export function billStatus(
-  bill: Pick<BillDoc, "paidAt" | "created" | "kind" | "cancelledAt">,
+  bill: Pick<BillDoc, "paidAt" | "created" | "kind" | "paymentMethod" | "cancelledAt">,
   nowMs: number,
 ): BillStatus {
   if (bill.cancelledAt) return "cancelled"
-  if ((bill.kind ?? "invoice") === "beleg") return "beleg"
+  if (isCollectedBeleg(bill)) return "beleg"
   if (bill.paidAt) return "paid"
   const createdMs = bill.created?.toMillis() ?? nowMs
   return nowMs - createdMs > OVERDUE_AFTER_DAYS * DAY_MS ? "overdue" : "open"
@@ -40,7 +42,7 @@ export interface BillTotals {
 }
 
 export function billTotals(
-  bills: Pick<BillDoc, "paidAt" | "created" | "kind" | "amount" | "cancelledAt">[],
+  bills: Pick<BillDoc, "paidAt" | "created" | "kind" | "paymentMethod" | "amount" | "cancelledAt">[],
 
   nowMs: number,
 ): BillTotals {

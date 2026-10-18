@@ -132,6 +132,8 @@ interface BillSeed {
   source?: "checkout" | "membership-renewal";
   acked?: boolean;
   cancelledAt?: Timestamp | null;
+  /** Stored on the bill (ADR-0052); omitted seeds a pre-ADR-0052 bill. */
+  stored?: Pick<BillEntity, "paymentMethod" | "document">;
 }
 
 async function seedBill(id: string, seed: BillSeed): Promise<DocumentReference> {
@@ -155,6 +157,7 @@ async function seedBill(id: string, seed: BillSeed): Promise<DocumentReference> 
     aggregatedIntoBillRef: seed.aggregatedIntoBillId ? db.collection("bills").doc(seed.aggregatedIntoBillId) : null,
     source: seed.source ?? "checkout",
     cancelledAt: seed.cancelledAt ?? null,
+    ...seed.stored,
   };
   await ref.set(bill);
   return ref;
@@ -381,6 +384,9 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       const nb = await bill(newBillId);
       expect(nb.referenceNumber).to.equal(42000011);
       expect(nb.kind).to.equal("invoice");
+      // Resolved from the pre-ADR-0052 original and its checkout.
+      expect(nb.paymentMethod).to.equal("rechnung");
+      expect(nb.document).to.equal("rechnung");
       // 15 entry fee + 10 material + 2 tip, priced by the server
       expect(nb.amount).to.equal(27);
       expect(nb.supersedesBillRef?.id).to.equal("bill-1");
@@ -416,6 +422,45 @@ describe("correctCheckouts (Integration, ADR-0042)", () => {
       expect(pdfStub.calledOnceWith(newBillId)).to.be.true;
       expect(mailStub.calledOnceWith(newBillId)).to.be.true;
       expect(noticeStub.called).to.be.false;
+    });
+
+    // BIL-17 / BIL-46: a correction keeps the kind of document.
+    it("keeps a TWINT Beleg a Beleg and an earlier Quittung a Quittung", async () => {
+      await seedUser("u-alice");
+      await seedCheckout("co-t", { ownerUid: "u-alice", billId: "bill-t", paymentMethod: "raisenow" });
+      await seedBill("bill-t", {
+        ownerUid: "u-alice",
+        checkoutIds: ["co-t"],
+        referenceNumber: 42000020,
+        amount: 25,
+        acked: true,
+        stored: { paymentMethod: "raisenow", document: "beleg" },
+      });
+      await seedCheckout("co-q", { ownerUid: "u-alice", billId: "bill-q", paymentMethod: "raisenow" });
+      await seedBill("bill-q", {
+        ownerUid: "u-alice",
+        checkoutIds: ["co-q"],
+        referenceNumber: 42000030,
+        amount: 25,
+        acked: true,
+      });
+
+      const result = await correctCheckoutsHandler(
+        request({
+          reason: "Menge korrigiert",
+          corrections: [
+            { checkoutId: "co-t", replacement: replacement() },
+            { checkoutId: "co-q", replacement: replacement() },
+          ],
+        }),
+      );
+      expect(result.references).to.deep.equal(["BL-4200002-1", "RE-4200003-1"]);
+      const [twint, quittung] = await Promise.all(result.replacementBillIds.map(bill));
+      expect(twint.document).to.equal("beleg");
+      expect(twint.paymentMethod).to.equal("raisenow");
+      expect(twint.kind).to.equal("invoice");
+      expect(quittung.document).to.equal("quittung");
+      expect(quittung.paymentMethod).to.equal("raisenow");
     });
 
     it("recomputes line totals to cents like the checkout wizard, ignoring the client's total", async () => {

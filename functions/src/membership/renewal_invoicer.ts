@@ -60,6 +60,7 @@ import type {
   UserEntity,
 } from "../types/firestore_entities";
 import { priceForTier } from "../types/firestore_entities";
+import { INVOICE_PAYMENT_METHOD } from "@oww/shared";
 import { allocateBill } from "../invoice/create_bill";
 import { formatFullName } from "../util/username-utils";
 import { formatWorkshopDateTime } from "../util/workshop_timezone";
@@ -285,6 +286,8 @@ export async function runRenewalInvoicer(
           source: "membership-renewal",
           // Committed at issue (MEM-24): onBillCreate mails the renewal
           // letter and adds the year (MEM-35) — nobody confirms a renewal.
+          // Paid by QR slip, like the renewal checkout's method.
+          paymentMethod: INVOICE_PAYMENT_METHOD,
           preAck: { source: "auto" },
         });
         tx.set(checkoutRef, checkout);

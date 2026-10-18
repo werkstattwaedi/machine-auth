@@ -19,6 +19,7 @@ import {
   materialSectionLabels,
   USAGE_DISCOUNT_LABELS,
   USAGE_TYPE_LABELS,
+  BILL_DOCUMENT_INFO,
   PAYMENT_METHOD_INFO,
   type CheckoutKind,
   type PaidVia,
@@ -192,11 +193,11 @@ export async function buildInvoicePdf(
     y += 24;
 
     // --- Title ---
-    // "Beleg" is the per-visit Sammelrechnung record (issue #245); the
-    // QR-bill is emitted as the aggregated monthly Sammelrechnung. For a
-    // multi-checkout invoice (the monthlyBillRun output) append the
-    // earliest-checkout's month so the customer reads "Sammelrechnung —
-    // Mai 2026" rather than the bare title.
+    // The document (ADR-0052) names itself: a Beleg asks for no payment —
+    // it rides on the Sammelrechnung (issue #245), was paid during the
+    // checkout (TWINT, #763) or totals CHF 0 (#780); a Quittung is a TWINT
+    // bill issued before #763. A Sammelrechnung appends the earliest
+    // checkout's month so the customer reads "Sammelrechnung — Mai 2026".
     //
     // Catch-up runs (a stale prior-month Beleg swept into a later
     // month's aggregation — see monthly_bill_run.ts self-heal docs)
@@ -205,52 +206,37 @@ export async function buildInvoicePdf(
     // because: (a) the per-checkout sections inside the PDF list the real
     // dates; (b) catch-up runs only happen after a cron failure, which
     // is rare enough not to justify a "Mai–Juni 2026" label.
-    const isBeleg = data.kind === "beleg";
-    // Paid during the checkout (issue #426 — TWINT via RaiseNow): the
-    // document is a receipt ("Quittung"), not a payable Rechnung — title
-    // it accordingly and (further down) omit the QR slip.
-    // The underlying bill is still kind "invoice" with an "RE-" reference,
-    // so the Rechnungsnummer label stays; we deliberately do NOT claim
-    // "Bezahlt am …" since there is no bank-side confirmation yet.
+    const documentInfo = BILL_DOCUMENT_INFO[data.document];
+    // Paid during the checkout (issue #426 — TWINT via RaiseNow): no QR
+    // slip further down, and we deliberately do NOT claim "Bezahlt am …"
+    // since there is no bank-side confirmation yet.
     const paidMethodInfo =
       data.paymentMethod && PAYMENT_METHOD_INFO[data.paymentMethod].paidDuringCheckout
         ? PAYMENT_METHOD_INFO[data.paymentMethod]
         : null;
-    const isReceipt = !isBeleg && paidMethodInfo !== null;
     // Membership renewal (issue #323): the bill was minted by the
     // renewalInvoicer cron, not a workshop visit — title it after the
     // Mitgliederbeitrag and (below) swap the visit header for a short
     // letter from the Vorstand.
-    const isRenewal = !isBeleg && data.source === "membership-renewal";
+    const isRenewal = documentInfo.payable && data.source === "membership-renewal";
     let title: string;
-    if (isBeleg) {
-      title = "Beleg Self-Checkout";
-    } else if (isReceipt) {
-      title = "Quittung Self-Checkout";
-    } else if (isRenewal) {
-      title = "Rechnung Mitgliederbeitrag";
-    } else if (data.checkouts.length > 1) {
+    if (data.document === "sammelrechnung") {
       const earliest = data.checkouts.reduce(
         (a, b) => (a.date.getTime() < b.date.getTime() ? a : b),
       );
       title = `Sammelrechnung — ${formatWorkshopDateTime(earliest.date, "MMMM yyyy")}`;
+    } else if (isRenewal) {
+      title = "Rechnung Mitgliederbeitrag";
     } else {
-      // Single-checkout aggregated invoice (a member who visited once in
-      // the prior month). Keeps the standard "Rechnung Self-Checkout"
-      // title rather than a "Sammelrechnung" label — a single line item
-      // doesn't read as an aggregation, and the per-visit Beleg the
-      // member received earlier already mentioned the upcoming
-      // Sammelrechnung. Accounting treats it as a regular Rechnung.
-      title = "Rechnung Self-Checkout";
+      title = `${documentInfo.label} Self-Checkout`;
     }
     y = ensureSpace(doc, y, 40);
     doc.fontSize(16).font("Helvetica-Bold");
     doc.text(title, MARGIN_LEFT, y);
     y += 22;
     doc.fontSize(10).font("Helvetica");
-    const numberLabel = isBeleg ? "Belegnummer" : "Rechnungsnummer";
     doc.text(
-      `${numberLabel}: ${formatBillReference(data.referenceNumber, data.kind)}`,
+      `${documentInfo.numberLabel}: ${formatBillReference(data)}`,
       MARGIN_LEFT,
       y,
     );
@@ -262,13 +248,13 @@ export async function buildInvoicePdf(
     // why, right under the date so it cannot be missed. The superseded
     // document keeps its printed number; only the suffix tells them apart.
     if (data.supersedes) {
-      const lead = isBeleg
-        ? "Dieser Beleg ersetzt den Beleg"
-        : isReceipt
-          ? "Diese Quittung ersetzt die Quittung"
-          : data.checkouts.length > 1
-            ? "Diese Sammelrechnung ersetzt die Rechnung"
-            : "Diese Rechnung ersetzt die Rechnung";
+      // A correction keeps its document (BIL-17), so it replaces one of its kind.
+      const lead = {
+        beleg: "Dieser Beleg ersetzt den Beleg",
+        quittung: "Diese Quittung ersetzt die Quittung",
+        sammelrechnung: "Diese Sammelrechnung ersetzt die Sammelrechnung",
+        rechnung: "Diese Rechnung ersetzt die Rechnung",
+      }[data.document];
       const notice =
         `${lead} ${data.supersedes.reference} vom ` +
         `${formatDateOnly(data.supersedes.date)}. Grund: ${data.supersedes.reason}`;
@@ -385,7 +371,7 @@ export async function buildInvoicePdf(
       );
 
       addPageFooters(doc, data, doc.bufferedPageRange().count);
-    } else if (data.paymentMethod === "monthly") {
+    } else if (data.paymentMethod && PAYMENT_METHOD_INFO[data.paymentMethod].isAggregated) {
       // --- Sammelrechnung notice (issue #251) ---
       // Goes onto next month's Sammelrechnung — no QR slip needed.
       y = ensureSpace(doc, y, 40);
@@ -489,7 +475,7 @@ function addPageFooters(
     // Page number + reference in footer (lineBreak: false to prevent auto-pagination)
     doc.fontSize(8).font("Helvetica");
     doc.text(
-      `${formatBillReference(data.referenceNumber, data.kind)}`,
+      `${formatBillReference(data)}`,
       MARGIN_LEFT, footerY,
       { width: CONTENT_WIDTH / 2, align: "left", lineBreak: false }
     );

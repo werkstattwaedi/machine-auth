@@ -406,14 +406,27 @@
       // number, auth code), printed on the Quittung.
       "walleeTransactionId": "number | null",
       "walleeReceiptText": "string | null",
-      // Document kind (issue #245). "invoice" = real, payable QR-bill
-      // (RE-XXXXXX); "beleg" = per-visit record for a member who picked
-      // Sammelrechnung (BL-XXXXXX, no QR slip). Belege are aggregated
-      // into a monthly invoice on the 1st by monthlyBillRun. Missing
-      // value is treated as "invoice" so legacy docs migrate-free.
+      // The committed payment method (ADR-0052): null until committed and
+      // for a CHF 0 bill. What the bill does follows from its
+      // PAYMENT_METHOD_INFO properties — an aggregated method ("monthly")
+      // makes it a Beleg for the Sammelrechnung, collected by
+      // monthlyBillRun on the 1st. A Sammelrechnung itself is "rechnung".
+      "paymentMethod": "rechnung | monthly | raisenow | wallee_terminal | null",
+      // What the customer holds (ADR-0052): prefix (BL- for a Beleg, else
+      // RE-), title and file name. Set at mint, fixed at commit. A Beleg
+      // asks for no payment itself — for the Sammelrechnung, paid during
+      // the checkout on the customer's word (RaiseNow TWINT) or CHF 0; a
+      // Quittung confirms a verified payment (Wallee terminal) — and is
+      // what a RaiseNow bill issued before #763 stays (BIL-46). Never key
+      // the Sammelrechnung on "beleg".
+      "document": "rechnung | sammelrechnung | beleg | quittung",
+      // Legacy queue marker: "beleg" = for the Sammelrechnung. Written in
+      // step with paymentMethod until every environment is backfilled
+      // (scripts/backfill-bill-document.ts); bills without the two fields
+      // above are read through the @oww/shared resolvers' fallback.
       "kind": "invoice | beleg",
-      // Set on a "beleg" once the monthlyBillRun cron has folded it into
-      // a "kind: invoice" Sammelrechnung. Re-runs skip Belege where this
+      // Set on a Beleg for the Sammelrechnung once monthlyBillRun has
+      // folded it into a Sammelrechnung. Re-runs skip Belege where this
       // is set — provides the cron's idempotency guarantee.
       "aggregatedIntoBillRef": "DocumentReference | null",
       // Origin discriminator (issue #323). "checkout" = a normal Self-
