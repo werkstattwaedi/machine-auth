@@ -22,7 +22,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 // Transaction, in Wallee's webhook entity list.
 const TRANSACTION_ENTITY_ID = 1472041829003;
@@ -39,7 +39,8 @@ function arg(name: string): string | null {
 }
 
 function readEnvFile(projectId: string): Record<string, string> {
-  const path = resolve(__dirname, "..", "functions", `.env.${projectId}`);
+  const scriptDir = dirname(new URL(import.meta.url).pathname);
+  const path = resolve(scriptDir, "..", "functions", `.env.${projectId}`);
   const out: Record<string, string> = {};
   for (const line of readFileSync(path, "utf8").split("\n")) {
     const m = /^([A-Z0-9_]+)=(.*)$/.exec(line);
