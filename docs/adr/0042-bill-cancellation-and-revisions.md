@@ -1,6 +1,6 @@
 # ADR-0042: Bill cancellation and corrected re-issue (Storno / Korrektur)
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-10-18 by [ADR-0052](0052-bill-payment-method-and-document.md): the number prefix comes from the stored `document`, not `kind`, and a correction keeps its original's method and document)
 
 **Date:** 2026-09-13
 
