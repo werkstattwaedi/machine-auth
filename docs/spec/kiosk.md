@@ -2,7 +2,7 @@
 
 What differs at the shared terminal: where a badge tap lands, "Besuch
 starten" next to "Material erfassen", what a second badge does, paying by
-TWINT or at the Wallee terminal, and when the kiosk resets. The check-in itself follows
+RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itself follows
 [checkout.md](checkout.md) (CHK), the ways to sign in
 [account.md](account.md) (ACC). Terms: see the
 [glossary](README.md#glossary).
@@ -63,8 +63,8 @@ TWINT or at the Wallee terminal, and when the kiosk resets. The check-in itself 
 
 ## Paying
 
-- **KIO-19** At the kiosk the TWINT paylink opens in an overlay on the kiosk itself; TWINT is committed when it opens (CHK-22), and what happens in the overlay changes nothing on the bill (BIL-6). — #416, #750
-- **KIO-20** After TWINT is committed at the kiosk, "Fertig" does not start its 8 s countdown (CHK-26) until the overlay reports the payment done; until then it waits to be pressed, and the idle reset (KIO-7) still applies. — #416, #750
+- **KIO-19** At the kiosk the RaiseNow paylink opens in an overlay on the kiosk itself; RaiseNow is committed when it opens (CHK-22), and what happens in the overlay changes nothing on the bill (BIL-6). — #416, #750
+- **KIO-20** After RaiseNow is committed at the kiosk, "Fertig" does not start its 8 s countdown (CHK-26) until the overlay reports the payment done; until then it waits to be pressed, and the idle reset (KIO-7) still applies. — #416, #750
 - **KIO-22** Choosing the Wallee terminal starts a payment there at once, for the amount priced at that moment (BIL-40), which Bezahlen shows; there is nothing to commit on the screen, and Bezahlen follows the terminal — ADR-0051, #735, #792:
 
   | The terminal | The person is told | Offered |
