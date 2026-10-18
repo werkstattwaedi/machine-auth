@@ -63,8 +63,8 @@ TWINT, and when the kiosk resets. The check-in itself follows
 
 ## Paying
 
-- **KIO-19** At the kiosk the TWINT paylink opens in an overlay on the kiosk itself; TWINT is committed when it opens (CHK-22), and what happens in the overlay changes nothing on the bill (BIL-6). — #416, #750
-- **KIO-20** After TWINT is committed at the kiosk, "Fertig" does not start its 8 s countdown (CHK-26) until the overlay reports the payment done; until then it waits to be pressed, and the idle reset (KIO-7) still applies. — #416, #750
+- **KIO-19** At the kiosk the RaiseNow paylink opens in an overlay on the kiosk itself; RaiseNow is committed when it opens (CHK-22), and what happens in the overlay changes nothing on the bill (BIL-6). — #416, #750
+- **KIO-20** After RaiseNow is committed at the kiosk, "Fertig" does not start its 8 s countdown (CHK-26) until the overlay reports the payment done; until then it waits to be pressed, and the idle reset (KIO-7) still applies. — #416, #750
 
 ## Idle & reset
 
@@ -102,7 +102,7 @@ TWINT, and when the kiosk resets. The check-in itself follows
 - [NEEDS CLARIFICATION] A badge tap that first runs the welcome onboarding (ACC-2) gets no countdown afterwards (KIO-10). Should the countdown start once the profile is complete? — #732
 - [NEEDS CLARIFICATION] A second badge over a check-in with a purchase-only checkout open tells the person that what is on the screen is lost (KIO-6), although that checkout is kept and comes back on their next tap (KIO-14). Should the dialog say so? — #732
 - [NEEDS CLARIFICATION] A start that stalled past 8 s (KIO-6) can still land while "Benutzer wechseln?" is open: after a countdown or a click the kiosk then resets under the dialog and hides (KIO-8); after a tap alone the visit exists although the dialog said none was started. Should a stalled start be abandoned, or should the dialog follow the late start? — #732
-- [NEEDS CLARIFICATION] A second registered badge while a TWINT payment is still in the overlay (KIO-20) switches the kiosk without asking, since TWINT is committed when the overlay opens (KIO-6, KIO-19); the switch does not close the overlay. What a badge tap during a payment does is for #735 to decide.
+- [NEEDS CLARIFICATION] A second registered badge while a RaiseNow payment is still in the overlay (KIO-20) switches the kiosk without asking, since RaiseNow is committed when the overlay opens (KIO-6, KIO-19); the switch does not close the overlay. What a badge tap during a payment does is for #735 to decide.
 
 ## Retired
 

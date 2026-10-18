@@ -88,7 +88,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   |---|---|
   | QR-Rechnung | the button that sends the Rechnung |
   | Sammelrechnung | the button that puts the checkout on the Sammelrechnung |
-  | TWINT | the button that opens the paylink — choosing TWINT alone commits nothing, and nothing confirms the payment afterwards (BIL-6) |
+  | RaiseNow | the button that opens the paylink — choosing RaiseNow alone commits nothing, and nothing confirms the payment afterwards (BIL-6) |
   | CHF 0 | its one action on Check Out (CHK-20) |
 
 - **CHK-23** After the commit the person is told that the checkout is complete and, unless it is CHF 0 (BIL-8), what became of its document — #750, #761:
@@ -97,17 +97,17 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   |---|---|
   | QR-Rechnung | the Rechnung was sent, and to which e-mail address (BIL-25) |
   | Sammelrechnung | the date of the next monthly run (BIL-19) the Sammelrechnung comes on, and to which e-mail address |
-  | TWINT | the document was sent and to which e-mail address, and whom to contact if the TWINT payment did not go through (BIL-6) |
+  | RaiseNow | the document was sent and to which e-mail address, and whom to contact if the RaiseNow payment did not go through (BIL-6) |
   | no e-mail address on record, any method | nothing was sent (BIL-37), and whom to contact |
 
 - **CHK-24** Only after a QR-Rechnung was confirmed can the person unfold the QR code of its QR slip, and never on a phone. — ADR-0020, #750
 - **CHK-25** On an own device the PDF download (BIL-15) is offered once the method is committed, and waits for the PDF to be generated instead of failing. — #750
-- **CHK-27** After TWINT is committed, Bezahlen offers to open the paylink again. — #750
+- **CHK-27** After RaiseNow is committed, Bezahlen offers to open the paylink again. — #750
 - **CHK-26** After the commit, what the person can do next depends on where they are — ADR-0022, #750:
 
   | Where | Offered | Then |
   |---|---|---|
-  | the kiosk | "Fertig", filling over 8 s and then pressing itself; once the QR code was unfolded (CHK-24), or while a TWINT payment is still in the overlay (KIO-20), it waits to be pressed instead | the kiosk resets (KIO-8) |
+  | the kiosk | "Fertig", filling over 8 s and then pressing itself; once the QR code was unfolded (CHK-24), or while a RaiseNow payment is still in the overlay (KIO-20), it waits to be pressed instead | the kiosk resets (KIO-8) |
   | an own device, signed in | "Fertig", without countdown | the account's Nutzungsverlauf |
   | an own device, as a guest | no button; the person is told they can close the window | nothing — the guest is neither signed out nor sent anywhere |
 

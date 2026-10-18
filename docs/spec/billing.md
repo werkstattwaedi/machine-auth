@@ -6,19 +6,19 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 ## Payment methods
 
-- **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung, TWINT or at the Wallee terminal. — ADR-0044, ADR-0051, #735
+- **BIL-1** A checkout is paid by QR-Rechnung, Sammelrechnung, RaiseNow or at the Wallee terminal. — ADR-0044, ADR-0051, #735
 
   | Method | Paid during checkout (BIL-6) | Collected monthly | Members only | Document |
   |---|---|---|---|---|
   | QR-Rechnung | no | no | no | Rechnung with QR slip |
   | Sammelrechnung | no | yes | yes | Beleg, later a Sammelrechnung |
-  | TWINT | yes | no | no | Quittung, no QR slip |
+  | RaiseNow | yes | no | no | Quittung, no QR slip |
   | Wallee terminal | yes, a verified payment (BIL-39) | no | no | Quittung, no QR slip |
 
 - **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order. — ADR-0044
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
-- **BIL-6** Confirming TWINT is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
+- **BIL-6** Confirming RaiseNow is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-7** A bill still unconfirmed an hour after it was issued — a renewal bill (MEM-24), or a checkout an older app version closed without a method — is committed overnight: as a Beleg when its checkout names the Sammelrechnung and its account holder is an active member (BIL-4), otherwise as a QR-Rechnung. — #251, #302, #761, #745
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone; a bill issued without a committed method that nobody confirms is committed overnight (BIL-7). — #251, #302
 - **BIL-39** A checkout paid by a verified payment stays open until the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) already paid and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
@@ -95,10 +95,10 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - [NEEDS CLARIFICATION] A single-visit Sammelrechnung is titled "Rechnung" on the PDF but sent with the Sammelrechnung mail. Which name is intended?
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] A verified payment's bill is issued paid (BIL-39), so an admin can never cancel or correct it (BIL-21) — not even after a payment at the Wallee terminal was reversed and the bill still says paid (BIL-41). Should such a bill be correctable, with the difference refunded through the provider, or a reversal un-book its payment? → #803
-- [NEEDS CLARIFICATION] Correction mails for TWINT bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
+- [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 
 ## Retired
 
 <!-- `- BIL-n — <PR that retired it>` -->
 - BIL-18 — #743 (bill-number migration; a one-off transition, not the product)
-- BIL-5 — #761 (the TWINT confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)
+- BIL-5 — #761 (the RaiseNow confirm button gated behind the paylink; the click that opens the paylink is the confirmation now, CHK-22)

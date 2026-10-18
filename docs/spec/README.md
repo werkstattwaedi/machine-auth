@@ -139,8 +139,8 @@ still passes a different wrong promise.
 - **Own device** — the checkout app on the person's phone or computer.
 - **Kiosk** — the shared terminal in the workshop (badge reader, printer).
 - **Machine terminal** — the device on a machine that unlocks it.
-- **Wallee terminal** — the Wallee payment terminal next to the kiosk; also
-  the payment method paid there, a verified payment.
+- **Wallee terminal** — the Wallee payment terminal next to the kiosk, and
+  the payment method paid there.
 
 **Screens**
 - **Check-in, Kosten, Check Out, Bezahlen** — the four steps of the checkout
@@ -174,9 +174,9 @@ still passes a different wrong promise.
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
 - **Quittung** — a receipt for a payment made during checkout, such as
-  TWINT.
-- **TWINT** — the payment method that pays through RaiseNow's TWINT paylink,
-  not TWINT at the Wallee terminal.
+  RaiseNow.
+- **RaiseNow** — the payment method paid through RaiseNow's TWINT paylink, a
+  promise to pay.
 - **Beleg** — the per-checkout document of a member paying by
   Sammelrechnung.
 - **Sammelrechnung** — the monthly invoice that collects an account holder's
@@ -184,8 +184,6 @@ still passes a different wrong promise.
 - **Account holder** — the person a checkout is billed to (the payer).
 - **Confirm** — the person's choice of a payment method for a bill.
 - **Commit** — the moment a bill's payment method becomes final.
-- **Verified payment** — a payment that its payment provider confirms to the
-  server itself, or a payment method whose payments all are; the opposite of a
-  promise to pay, which the person states (QR-Rechnung, Sammelrechnung, TWINT).
-  The means a provider accepts — cards, TWINT, … — are the connectors set up
-  at that provider, not chosen by this app.
+- **Verified payment** — a payment method whose payments the provider
+  confirms to the server, unlike a promise to pay (QR-Rechnung,
+  Sammelrechnung, RaiseNow).
