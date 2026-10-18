@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import { showNoCheckoutGate, wizardStep } from "@/components/checkout/wizard-gate"
 import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
+import { maskEmail } from "@oww/shared"
 import { signOut } from "firebase/auth"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirebaseAuth } from "@modules/lib/firebase-context"
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/_wizard")({
 
 function WizardLayout() {
   const auth = useFirebaseAuth()
-  const { user, userDoc, loading, userDocLoading, sessionKind } = useAuth()
+  const { user, userDoc, loading, userDocLoading, sessionKind, isKioskElevated } = useAuth()
   const { picc, cmac, kiosk } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const { data: pricingConfig, loading: loadingConfig, configError } =
@@ -134,9 +135,14 @@ function WizardLayout() {
       ? `${kioskTokenUser.firstName ?? ""} ${kioskTokenUser.lastName ?? ""}`.trim() || null
       : null)
   const headerUserId = userDoc?.id ?? kioskTokenUser?.userId
+  // Issue #668: an un-elevated badge session shows the address masked, as
+  // the step-up dialog does — a found badge must not reveal it.
+  const kioskEmail = kioskTokenUser?.email || null
   const headerEmail =
     sessionKind === "tag"
-      ? kioskTokenUser?.email ?? null
+      ? kioskEmail && !isKioskElevated
+        ? maskEmail(kioskEmail)
+        : kioskEmail
       : user?.email ?? userDoc?.email ?? null
 
   return (

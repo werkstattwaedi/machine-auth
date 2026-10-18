@@ -41,6 +41,7 @@ interface CheckinOpts {
   isAccountLoggedIn?: boolean
   signedInUserId?: string | null
   signedInEmail?: string | null
+  maskEmails?: boolean
   isMember?: boolean
   personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
@@ -58,6 +59,7 @@ function renderCheckin(opts: CheckinOpts = {}) {
     isAccountLoggedIn = false,
     signedInUserId,
     signedInEmail,
+    maskEmails,
     isMember = false,
     personsOverride,
     onAdvance,
@@ -89,6 +91,7 @@ function renderCheckin(opts: CheckinOpts = {}) {
         isAccountLoggedIn={isAccountLoggedIn}
         signedInUserId={effectiveSignedInUserId}
         signedInEmail={signedInEmail}
+        maskEmails={maskEmails}
         isMember={isMember}
         onAdvance={onAdvance}
         tagAuthLoading={tagAuthLoading}
@@ -606,5 +609,63 @@ describe("Identity strip — keyed by userId, not index", () => {
     expect(selfStrip.textContent).toContain("Max Muster")
     expect(selfStrip.textContent).toContain("max@example.com")
     expect(selfStrip.textContent).toContain("Vereinsmitglied")
+  })
+})
+
+// Issue #668: an un-elevated kiosk badge session must not reveal the
+// addresses on the card; the step-up (ADR-0041) unmasks them.
+describe("StepCheckin e-mail masking", () => {
+  const badgeOwner: CheckoutPerson = {
+    id: "p1",
+    firstName: "Max",
+    lastName: "Muster",
+    email: "max@example.com",
+    userType: "erwachsen",
+    termsAccepted: true,
+    isPreFilled: true,
+    usageType: "regular",
+    userId: "u-badge",
+  }
+  const familyMember: CheckoutPerson = {
+    ...badgeOwner,
+    id: "p2",
+    firstName: "Mia",
+    email: "mia@family.ch",
+    userId: "u-family",
+  }
+  const badgeSession = {
+    isAnonymous: false,
+    kiosk: true,
+    isAccountLoggedIn: false,
+    personsOverride: [badgeOwner, familyMember],
+  }
+  const stripTexts = () =>
+    screen.getAllByTestId("identity-strip").map((el) => el.textContent ?? "")
+
+  it("masks every strip's e-mail while the badge session is un-elevated", () => {
+    renderCheckin({ ...badgeSession, maskEmails: true })
+
+    const [owner, family] = stripTexts()
+    expect(owner).toContain("ma•••@ex•••.com")
+    expect(owner).not.toContain("max@example.com")
+    expect(family).toContain("mi•••@fa•••.ch")
+    expect(family).not.toContain("mia@family.ch")
+  })
+
+  it("shows the full addresses when not masking", () => {
+    renderCheckin(badgeSession)
+
+    const [owner, family] = stripTexts()
+    expect(owner).toContain("max@example.com")
+    expect(family).toContain("mia@family.ch")
+  })
+
+  it("unmasks in place once the session is elevated", () => {
+    const { rerenderWith } = renderCheckin({ ...badgeSession, maskEmails: true })
+    expect(stripTexts()[0]).not.toContain("max@example.com")
+
+    rerenderWith({ maskEmails: false })
+
+    expect(stripTexts()[0]).toContain("max@example.com")
   })
 })

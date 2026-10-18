@@ -16,6 +16,7 @@ export * from "./bill-document"
 export * from "./checkout-summary"
 export * from "./checkout-kind"
 export * from "./same-day-fee"
+export * from "./contact-mask"
 
 export * from "./rejection"
 export * from "./log-triage"
