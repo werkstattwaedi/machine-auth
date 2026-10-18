@@ -216,7 +216,7 @@ test.describe("Check-in step screenshots", () => {
     await expect(page).toHaveScreenshot("checkin-kiosk-nfc-hint.png")
   })
 
-  test("logged-in user — sign-out in person card", async ({ page }) => {
+  test("logged-in user — sign-out in person card", async ({ page, isMobile }) => {
     // Clear prior loginCodes so the per-email 60 s rate limit doesn't
     // reject this test when it follows another that signed in.
     await clearCollections("loginCodes")
@@ -236,7 +236,18 @@ test.describe("Check-in step screenshots", () => {
 
     // Navigate to checkout
     await page.goto("/")
-    await expect(page.getByTestId("identity-strip").first()).toBeVisible({ timeout: 10_000 })
+    const strip = page.getByTestId("identity-strip").first()
+    await expect(strip).toBeVisible({ timeout: 10_000 })
+
+    // Issue #797: on desktop the fee column is a short amount and gets half
+    // the share of the Nutzungsart column. A column shift this small stays
+    // under the screenshot's diff tolerance, so measure it.
+    if (!isMobile) {
+      const usage = await strip.getByTestId("usage-type-trigger").boundingBox()
+      const fee = await strip.getByTestId("person-usage-fee").boundingBox()
+      expect(usage && fee).toBeTruthy()
+      expect(fee!.width).toBeLessThan(usage!.width * 0.6)
+    }
 
     await expect(page).toHaveScreenshot("checkin-logged-in.png")
   })
