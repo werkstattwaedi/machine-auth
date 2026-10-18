@@ -20,7 +20,7 @@ it would touch, grouped as `kind=… → document=… paymentMethod=…`. Expect
 `kind=beleg → document=beleg paymentMethod=monthly`, `kind=invoice →
 document=rechnung …`, `… document=sammelrechnung paymentMethod=rechnung`
 for Sammelrechnungen and `… document=quittung paymentMethod=raisenow` for
-earlier TWINT bills. Anything else (e.g. `kind=beleg` with another method)
+earlier RaiseNow bills (and Wallee terminal ones). Anything else (e.g. `kind=beleg` with another method)
 is worth a look before the real run. Cost: about two writes and two reads
 per bill (each write also fires the bill audit trigger); far inside the
 daily quota for a few thousand bills.

@@ -1,6 +1,6 @@
 # ADR-0052: The Bill Stores Its Payment Method and Its Document
 
-**Status:** Accepted (amends the `kind` design of #245, the "prefix from `kind`" part of [ADR-0042](0042-bill-cancellation-and-corrections.md) and `billDocument()` of [ADR-0044](0044-payment-methods.md))
+**Status:** Accepted (amends the `kind` design of #245, the "prefix from `kind`" part of [ADR-0042](0042-bill-cancellation-and-revisions.md) and `billDocument()` of [ADR-0044](0044-payment-integrations-per-client-type.md))
 
 **Date:** 2026-10-18
 
@@ -8,8 +8,9 @@
 
 ## Context
 
-Issue #763 makes our document for a bill paid during the checkout (TWINT) a
-**Beleg** numbered `BL-…`; #780 does the same for a CHF 0 checkout. Both
+Issue #763 makes our document for a RaiseNow bill — a promise to pay made
+during the checkout through RaiseNow's TWINT paylink — a **Beleg** numbered
+`BL-…`; #780 does the same for a checkout totalling CHF 0. Both
 were blocked by how a bill described itself.
 
 `bills.kind: "invoice" | "beleg"` (#245) carried three meanings at once:
@@ -23,8 +24,9 @@ were blocked by how a bill described itself.
    committed without an ack stamp, which `isBillCommitted`, the update
    trigger and the e-mail retry gate rely on.
 
-Setting `kind: "beleg"` on a TWINT bill would therefore have put an
-already-paid visit on the member's Sammelrechnung. At the same time, "what is
+Setting `kind: "beleg"` on a RaiseNow bill would therefore have put a visit
+settled during the checkout on the account holder's Sammelrechnung as well —
+charged twice. At the same time, "what is
 this document" was derived three times — `billDocument()` for the mail,
 `billDocumentPrefix()`, the PDF title — each from `kind` plus
 `checkouts[0].paymentMethod`, because **the bill did not store its payment
@@ -36,7 +38,7 @@ checkouts' "monthly" back into "rechnung" for the PDF.
 A bill stores two independent facts:
 
 ```ts
-paymentMethod: PaymentMethod | null   // the committed method; null until committed, and for CHF 0
+paymentMethod: PaymentMethod | null   // the committed method; null for CHF 0 (and a legacy bill nobody committed)
 document: "rechnung" | "sammelrechnung" | "beleg" | "quittung"
 ```
 
@@ -44,15 +46,17 @@ document: "rechnung" | "sammelrechnung" | "beleg" | "quittung"
   (ADR-0044): a bill is a *Beleg for the Sammelrechnung* exactly when its
   method `isAggregated` (`isCollectedBeleg`), and waits for the monthly run
   until `aggregatedIntoBillRef` is set (`awaitsSammelrechnung`); it is
-  committed when acked or a Beleg for the Sammelrechnung; the QR slip and the
+  committed when it carries the confirmation stamp
+  (`paymentMethodConfirmationTime`) or is a Beleg for the Sammelrechnung; the
+  QR slip and the
   mail (`billMailFor`) read method properties. A Sammelrechnung's own method
   is the QR-Rechnung.
 - **Presentation follows the document**, through `BILL_DOCUMENT_INFO`
-  (prefix, label, number label, payable). A Beleg asks for no payment itself
-  — because the Sammelrechnung will, because the customer says they paid
-  during the checkout (the RaiseNow TWINT paylink), or because nothing is
-  due. A **Quittung** confirms a payment the provider verified
-  (`confirmsPayment`: the Wallee terminal, ADR-0051). File name and title both use the label; every
+  (prefix, label, number label, payable). A **Beleg** asks for no payment
+  itself — because the Sammelrechnung will, because RaiseNow took a promise
+  to pay during the checkout, or because nothing is due. A **Quittung** is
+  the receipt of a verified payment (`confirmsPayment`: the Wallee terminal,
+  ADR-0051). File name and title both use the label; every
   Sammelrechnung, one visit included, is titled and named "Sammelrechnung"
   (one printed "Rechnung" before keeps that, like every issued document).
 - **One derivation, `documentFor(choice, { isSammelrechnung })`**, takes a
@@ -114,7 +118,8 @@ with its data:
   `billDocumentPrefix()` overlapping, with a precedence rule every reader must
   know.
 - *Derive the document from the stored method on every read:* no second
-  field, but old TWINT bills would turn into Belege on their next PDF, and
+  field, but earlier RaiseNow Quittungen would turn into Belege on their
+  next PDF, and
   every future wording change would renumber issued documents.
 - *`paymentMethod: "free"`:* would make "committed" total, but leaks a
   non-choice into the offered-method config, the rules value list and the

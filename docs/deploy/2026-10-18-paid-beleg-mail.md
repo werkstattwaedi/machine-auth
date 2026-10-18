@@ -4,9 +4,9 @@ phase: before-functions
 
 # Publish the `bill-paid-beleg` mail (#763, ADR-0052)
 
-**What:** From this release on, a bill paid during the checkout through the
-RaiseNow TWINT paylink is a **Beleg** `BL-…` (the customer's own statement,
-nothing confirms it), and the functions announce it with a new contract mail,
+**What:** From this release on, a RaiseNow bill — a promise to pay made
+during the checkout through RaiseNow's TWINT paylink, which nothing
+confirms — is a **Beleg** `BL-…`, and the functions announce it with a new contract mail,
 `bill-paid-beleg` (dimension `kind`: visit / membership / purchase). The
 Wallee terminal's verified payment keeps its Quittung and `bill-receipt`.
 The operations repo's change — `email/src/mails/bill-paid-beleg.ts`, its
@@ -27,7 +27,7 @@ npm run email:publish -- --env <staging|prod>
 `resend-cli` skill). Already done when they do; a dry run then lists them as
 unchanged.
 
-**Without it:** every RaiseNow TWINT checkout's mail fails — Resend refuses
+**Without it:** every RaiseNow checkout's mail fails — Resend refuses
 a send to a template alias that doesn't exist; the hourly retry keeps
 failing until the templates are published. The operations repo's generator
 also fails to load the contract while it still imports `BILL_DOCUMENTS` /
