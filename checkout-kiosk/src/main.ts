@@ -26,6 +26,7 @@ import {
 import { resolveConfig } from "./config"
 import { startNfc } from "./bridge/nfc"
 import { WalleeTerminal } from "./bridge/wallee-terminal"
+import { watchPageLeave } from "./bridge/page-leave"
 import { abortTerminalBestEffort, performSessionReset } from "./reset-session"
 import { claimSingleInstance } from "./single-instance"
 import {
@@ -508,10 +509,9 @@ ipcMain.handle(
       return { outcome: "unavailable", reference }
     }
     const wc = event.sender
-    // The page that started the payment went away (crash, reload into a
-    // new session): nobody is left to present a card for it.
-    const onDestroyed = () => void terminal.abort()
-    wc.once("destroyed", onDestroyed)
+    // The page that started the payment went away (crash, reload,
+    // navigation): nobody is left to present a card for it.
+    const stopWatching = watchPageLeave(wc, () => void terminal.abort())
     try {
       return await terminal.pay(
         { amountRappen: input.amountRappen as number, reference },
@@ -520,7 +520,7 @@ ipcMain.handle(
         }
       )
     } finally {
-      if (!wc.isDestroyed()) wc.removeListener("destroyed", onDestroyed)
+      stopWatching()
     }
   }
 )
