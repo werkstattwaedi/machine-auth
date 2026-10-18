@@ -77,7 +77,7 @@ TWINT, and when the kiosk resets. The check-in itself follows
   | the account | 2 min |
   | the start screen, or a guest who has entered nothing | none |
 
-- **KIO-8** A reset signs the person out, clears everything they entered and hides the kiosk until the next badge tap; a switch to another badge (KIO-6) keeps it open on the new person's check-in — ADR-0022, #415, #516, #689, #750:
+- **KIO-8** A reset signs the person out, clears everything they entered and hides the kiosk until the next badge tap; a switch to another badge (KIO-6) keeps it open on the new person's check-in, and an unregistered badge over a guest's committed checkout (KIO-13) keeps it open on the start screen — ADR-0022, #415, #516, #689, #750, #769:
 
   | Trigger | Asked first |
   |---|---|
@@ -85,6 +85,7 @@ TWINT, and when the kiosk resets. The check-in itself follows
   | "Fertig" after the commit, or 8 s without it unless held (CHK-26, KIO-20) | no |
   | the idle time ran out (KIO-7) | yes: whether the person is still there |
   | a switch to another badge | see KIO-6 |
+  | an unregistered badge over a guest's committed checkout (KIO-13) | no |
   | "Abmelden" in the header menu | no |
   | "Neuer Checkout" in the kiosk frame | only a guest with an open checkout |
 
