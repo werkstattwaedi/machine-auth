@@ -11,7 +11,7 @@
  */
 
 import type { ReactNode } from "react"
-import { CircleCheck, CreditCard, FileText } from "lucide-react"
+import { CreditCard, FileText, PartyPopper } from "lucide-react"
 import { PAYMENT_METHOD_INFO, type PaymentChoice, type PaymentMethod } from "@oww/shared"
 
 export interface PaymentData {
@@ -177,16 +177,29 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
         </>
       ) : null,
   },
+  // Not the check mark: the status line next to it already shows one.
   free: {
-    icon: <CircleCheck className="h-5 w-5" strokeWidth={1.6} />,
+    icon: <PartyPopper className="h-5 w-5" strokeWidth={1.6} />,
     title: "Kostenlos",
     description: "Für diesen Besuch ist nichts zu bezahlen.",
     actionLabel: "Abschliessen",
     instruction: () => null,
     commitLabel: "Abschliessen",
-    doneStatus: "Abgeschlossen",
-    // A CHF 0 bill sends no mail (BIL-8).
-    doneBox: null,
+    doneStatus: "Danke für deinen Besuch!",
+    // The Beleg is mailed when there is an address (BIL-26); without one
+    // nothing is owed, so there is nothing to warn about either (CHK-23).
+    doneBox: ({ email }) => (
+      <>
+        Für diesen Besuch ist nichts zu bezahlen.{" "}
+        {email ? (
+          <>
+            Den Beleg haben wir dir an <strong>{email}</strong> gesendet.
+          </>
+        ) : (
+          "Bis zum nächsten Mal in der Werkstatt!"
+        )}
+      </>
+    ),
   },
 }
 

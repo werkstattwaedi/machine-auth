@@ -15,7 +15,6 @@ import {
 import { useBridge } from "@modules/lib/use-bridge"
 import { StepCheckout } from "@/components/checkout/step-checkout"
 import { useWizardContext } from "@/components/checkout/wizard-context"
-import { PaymentFrame } from "@/components/checkout/payment-options"
 import { PaymentConfirmation } from "@/components/checkout/payment-confirmation"
 import { CheckoutFinishBar } from "@/components/checkout/checkout-finish-bar"
 import { useIsPhone } from "@/components/checkout/use-is-phone"
@@ -160,7 +159,7 @@ function CheckoutDone({
   // The server names the method the bill is committed with — the first
   // one, should a retry have asked for another (#750). Its amount decides
   // a free visit: should its recompute land on CHF 0 where the page showed
-  // more, the bill closed free, without a mail (BIL-8).
+  // more, the bill closed free (BIL-8).
   const amount = Number(paymentData.amount)
   const committed: PaymentChoice =
     choice === "free" || amount === 0 ? "free" : (paymentData.paymentMethod ?? choice)
@@ -189,20 +188,19 @@ function CheckoutDone({
 
   return (
     <div className="flex flex-col flex-1 gap-6">
-      <PaymentFrame amount={amount} free={amount === 0}>
-        <PaymentConfirmation
-          choice={committed}
-          paymentData={paymentData}
-          copy={{ email: paymentData.payerEmail, monthlyDate: firstOfNextMonth() }}
-          ownDevice={!ctx.kiosk}
-          isPhone={isPhone}
-          qrOpen={qrOpen}
-          onQrOpenChange={(open) => {
-            setQrOpen(open)
-            if (open) setQrHeld(true)
-          }}
-        />
-      </PaymentFrame>
+      <PaymentConfirmation
+        choice={committed}
+        amount={amount}
+        paymentData={paymentData}
+        copy={{ email: paymentData.payerEmail, monthlyDate: firstOfNextMonth() }}
+        ownDevice={!ctx.kiosk}
+        isPhone={isPhone}
+        qrOpen={qrOpen}
+        onQrOpenChange={(open) => {
+          setQrOpen(open)
+          if (open) setQrHeld(true)
+        }}
+      />
       <div className="flex-1" />
       <CheckoutFinishBar
         kiosk={ctx.kiosk}
@@ -225,17 +223,16 @@ function TerminalDone({ amount, email }: { amount: number; email: string }) {
   const isPhone = useIsPhone()
   return (
     <div className="flex flex-col flex-1 gap-6">
-      <PaymentFrame amount={amount} free={false}>
-        <PaymentConfirmation
-          choice="wallee_terminal"
-          paymentData={null}
-          copy={{ email, monthlyDate: firstOfNextMonth() }}
-          ownDevice={!ctx.kiosk}
-          isPhone={isPhone}
-          qrOpen={false}
-          onQrOpenChange={() => {}}
-        />
-      </PaymentFrame>
+      <PaymentConfirmation
+        choice="wallee_terminal"
+        amount={amount}
+        paymentData={null}
+        copy={{ email, monthlyDate: firstOfNextMonth() }}
+        ownDevice={!ctx.kiosk}
+        isPhone={isPhone}
+        qrOpen={false}
+        onQrOpenChange={() => {}}
+      />
       <div className="flex-1" />
       <CheckoutFinishBar
         kiosk={ctx.kiosk}

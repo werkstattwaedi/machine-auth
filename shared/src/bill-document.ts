@@ -179,14 +179,19 @@ export function awaitsSammelrechnung(bill: BillDocumentFields): boolean {
 /**
  * The mail that announces a bill (ADR-0046). A Beleg for the Sammelrechnung
  * ("charge queued"), one for a payment the customer made during the
- * checkout ("you paid by TWINT") and a Quittung ("payment received") say
- * different things, and none may share a template with the payable
- * Sammelrechnung (#502). Reads properties only, never a method id.
+ * checkout ("you paid by TWINT"), one for a CHF 0 checkout ("nothing to
+ * pay", #790) and a Quittung ("payment received") say different things,
+ * and none may share a template with the payable Sammelrechnung (#502).
+ * Reads properties only, never a method id; "free" is no method but the
+ * absence of one (`PaymentChoice`).
  */
 export function billMailFor(
   document: BillDocumentType,
-  paymentMethod: PaymentMethod | null
+  choice: PaymentChoice | null
 ): BillMail {
+  // Before the document: a CHF 0 bill minted before ADR-0052 resolves to a
+  // Rechnung, and must not get the payable invoice's copy either.
+  if (choice === "free") return "free"
   switch (document) {
     case "sammelrechnung":
       return "sammelrechnung"
@@ -196,7 +201,7 @@ export function billMailFor(
     case "rechnung":
       return "invoice"
     case "beleg":
-      if (paymentMethod && PAYMENT_METHOD_INFO[paymentMethod].paidDuringCheckout) {
+      if (choice && PAYMENT_METHOD_INFO[choice].paidDuringCheckout) {
         return "paid-beleg"
       }
       return "beleg"

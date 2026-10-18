@@ -35,6 +35,18 @@ describe("isEmailRetryDue", () => {
     expect(isEmailRetryDue(bill({ kind: "beleg" }))).to.be.true;
   });
 
+  it("is due for a CHF 0 Beleg (acked at creation, mailed since #790)", () => {
+    expect(
+      isEmailRetryDue(
+        bill({
+          paidVia: "free",
+          paymentMethodConfirmationTime: Timestamp.now(),
+          paymentMethodConfirmationSource: "auto",
+        }),
+      ),
+    ).to.be.true;
+  });
+
   it("treats a missing kind as an invoice (legacy docs)", () => {
     expect(isEmailRetryDue(bill({ kind: undefined }))).to.be.false;
     expect(

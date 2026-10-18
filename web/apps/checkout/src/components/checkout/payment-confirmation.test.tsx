@@ -26,7 +26,12 @@ vi.mock("sonner", () => ({
 }))
 
 const { PaymentConfirmation } = await import("./payment-confirmation")
-import { KASSE_EMAIL, type PaymentChoice, type PaymentData } from "./payment-methods"
+import {
+  KASSE_EMAIL,
+  PAYMENT_CHOICE_UI,
+  type PaymentChoice,
+  type PaymentData,
+} from "./payment-methods"
 
 const PAYMENT: PaymentData = {
   billId: "bill-1",
@@ -64,6 +69,7 @@ function renderConfirmation(
   return render(
     <PaymentConfirmation
       choice={choice}
+      amount={choice === "free" ? 0 : 42.5}
       paymentData={PAYMENT}
       copy={{ email: opts.email ?? "max@test.com", monthlyDate: "1. November" }}
       ownDevice={opts.ownDevice ?? true}
@@ -103,18 +109,45 @@ describe("PaymentConfirmation", () => {
     expect(screen.queryByTestId("no-recipient")).toBeNull()
   })
 
-  it("a free visit reports a status and names no mail (BIL-8)", () => {
+  it("a free visit names the address its Beleg went to (CHK-23)", () => {
     renderConfirmation("free")
-    expect(screen.getByRole("status").textContent).not.toBe("")
-    expect(screen.queryByText("max@test.com")).toBeNull()
+    expect(screen.getByRole("status").textContent).toBe(PAYMENT_CHOICE_UI.free.doneStatus)
+    expect(screen.getByText("max@test.com")).toBeTruthy()
+  })
+
+  it("a free visit without an e-mail address warns about nothing (CHK-23)", () => {
+    renderConfirmation("free", { email: "" })
+    expect(screen.getByRole("status").textContent).toBe(PAYMENT_CHOICE_UI.free.doneStatus)
+    expect(screen.queryByTestId("no-recipient")).toBeNull()
+    expect(screen.queryByRole("link", { name: KASSE_EMAIL })).toBeNull()
+  })
+
+  it("a paid method without an e-mail address does not borrow the free visit's status", () => {
+    renderConfirmation("rechnung", { email: "" })
+    expect(screen.getByRole("status").textContent).not.toBe(
+      PAYMENT_CHOICE_UI.free.doneStatus,
+    )
   })
 
   it("offers the PDF on the own device only (BIL-15)", () => {
     renderConfirmation("rechnung", { ownDevice: true })
-    expect(screen.getByRole("button", { name: /PDF herunterladen/ })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /als PDF herunterladen/ })).toBeTruthy()
     cleanup()
-    renderConfirmation("rechnung", { ownDevice: false })
-    expect(screen.queryByRole("button", { name: /PDF herunterladen/ })).toBeNull()
+    renderConfirmation("free", { ownDevice: false })
+    expect(screen.queryByRole("button", { name: /als PDF herunterladen/ })).toBeNull()
+  })
+
+  // CHK-25: the link names the document the choice produced (BIL-8, #763).
+  it.each([
+    ["rechnung", "Rechnung"],
+    ["monthly", "Beleg"],
+    ["raisenow", "Beleg"],
+    ["free", "Beleg"],
+  ] as const)("after %s the PDF link names the %s", (choice, noun) => {
+    renderConfirmation(choice)
+    expect(
+      screen.getByRole("button", { name: `${noun} als PDF herunterladen` }),
+    ).toBeTruthy()
   })
 
   it("offers the QR slip after a QR-Rechnung, never on a phone, never for other methods", () => {
@@ -165,7 +198,7 @@ describe("PaymentConfirmation", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
 
     renderConfirmation("rechnung")
-    fireEvent.click(screen.getByRole("button", { name: /PDF herunterladen/ }))
+    fireEvent.click(screen.getByRole("button", { name: /als PDF herunterladen/ }))
 
     await waitFor(() => expect(click).toHaveBeenCalledOnce())
     const asks = mockCallable.mock.calls.filter(([arg]) => arg?.billId === "bill-1")
@@ -179,7 +212,7 @@ describe("PaymentConfirmation", () => {
       Object.assign(new Error("denied"), { code: "functions/permission-denied" }),
     )
     renderConfirmation("rechnung")
-    fireEvent.click(screen.getByRole("button", { name: /PDF herunterladen/ }))
+    fireEvent.click(screen.getByRole("button", { name: /als PDF herunterladen/ }))
 
     await waitFor(() => expect(mockToastError).toHaveBeenCalled())
     // One ask for the URL (the other call is the hook's error telemetry).

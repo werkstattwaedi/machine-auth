@@ -421,7 +421,9 @@ function pickBillMail(
 ): BillMailName {
   if (bill.supersedesBillRef) return "bill-correction";
   if ((bill.source ?? "checkout") === "membership-renewal") return "membership-renewal";
-  return billMail(billMailFor(document, method)) as BillMailName;
+  // "free" is no method: a CHF 0 bill has none (BIL-8) — paidVia says so.
+  const choice = bill.paidVia === "free" ? "free" : method;
+  return billMail(billMailFor(document, choice)) as BillMailName;
 }
 
 export async function trySendEmail(billId: string): Promise<boolean> {
@@ -465,12 +467,6 @@ export async function trySendEmail(billId: string): Promise<boolean> {
   // also checks this, but the helper is exported and can be called directly
   // from tests / one-off scripts — keep the guard.
   if (!isBeleg && !bill.paymentMethodConfirmationTime) return false;
-
-  // Free bills are acked at creation, but we don't email a "here's your
-  // zero-amount invoice" PDF — unless it is a corrected re-issue: a
-  // correction down to CHF 0.00 still owes the customer the "replaced"
-  // mail (ADR-0042).
-  if (bill.paidVia === "free" && !bill.supersedesBillRef) return false;
 
   // No PDF yet — can't send email without attachment
   if (!bill.storagePath) return false;
@@ -589,7 +585,8 @@ export async function trySendEmail(billId: string): Promise<boolean> {
       mail === "bill-invoice" ||
       mail === "bill-receipt" ||
       mail === "bill-paid-beleg" ||
-      mail === "bill-beleg"
+      mail === "bill-beleg" ||
+      mail === "bill-free"
         ? { kind: await loadBillKind(bill) }
         : {};
     const template = templateRef(
@@ -829,10 +826,10 @@ export async function trySendCancellationNotice(billId: string): Promise<boolean
  * never sees the null → set ack transition `onBillUpdate` watches, so
  * `onBillCreate` runs the commit side effects instead. A renewal invoice
  * is minted committed by the renewal invoicer (MEM-24) and qualifies too.
- * Every other bill born committed sends its own mail or none: a CHF 0 bill
- * (no mail, BIL-8), the monthly run's Sammelrechnung (auto ack, mailed by
- * the run) and corrected re-issues (`supersedesBillRef`, mailed by the
- * correction).
+ * Every other bill born committed takes another path: a CHF 0 checkout's
+ * Beleg (`isFreeCheckoutBeleg`), the monthly run's Sammelrechnung (auto
+ * ack, mailed by the run) and corrected re-issues (`supersedesBillRef`,
+ * mailed by the correction).
  *
  * Exported for unit testing.
  */
@@ -850,6 +847,22 @@ export function isCommittedAtClose(bill: BillEntity): boolean {
   return (
     bill.paymentMethodConfirmationSource === "user" ||
     bill.paymentMethodConfirmationSource === "terminal"
+  );
+}
+
+/**
+ * The Beleg of a checkout totalling CHF 0 (BIL-8): closed and acked in one
+ * go, so `onBillCreate` renders and mails it (BIL-26, #790). Not a commit
+ * in `runCommitSideEffects`' sense — membership activation keeps its paid
+ * paths, as before the mail existed.
+ *
+ * Exported for unit testing.
+ */
+export function isFreeCheckoutBeleg(bill: BillEntity): boolean {
+  return (
+    bill.paidVia === "free" &&
+    !bill.supersedesBillRef &&
+    (bill.source ?? "checkout") === "checkout"
   );
 }
 
@@ -901,8 +914,8 @@ async function runCommitSideEffects(
  * Fast path: when a bill is created, generate the PDF so it (and the
  * SCOR reference) is ready by the time the person needs it. A bill the
  * close minted committed (`isCommittedAtClose`) also gets its mail and
- * membership activation here; any other bill waits for its commit (see
- * `handleBillUpdated`).
+ * membership activation here, a CHF 0 checkout's Beleg its mail; any other
+ * bill waits for its commit (see `handleBillUpdated`).
  *
  * Exported for integration testing — the trigger wrapper doesn't run in
  * the emulator harness.
@@ -917,7 +930,8 @@ export async function handleBillCreated(
     await runCommitSideEffects(billId, bill, { regeneratePdf: false });
     return;
   }
-  await tryGeneratePdf(billId);
+  const pdfOk = await tryGeneratePdf(billId);
+  if (pdfOk && isFreeCheckoutBeleg(bill)) await trySendEmail(billId);
 }
 
 /**
@@ -1034,8 +1048,8 @@ export const retryBillProcessing = onSchedule(
       const bill = doc.data() as BillEntity;
       const billId = doc.id;
 
-      // Free bills are handled inside trySendEmail; see isEmailRetryDue
-      // for the commit / sent / no-recipient terms.
+      // See isEmailRetryDue for the commit / sent / no-recipient terms. A
+      // CHF 0 bill is acked at creation, so its mail is retried like any.
       const emailDue = isEmailRetryDue(bill);
 
       // Needs PDF: no storagePath, no active lock (or stale lock)
