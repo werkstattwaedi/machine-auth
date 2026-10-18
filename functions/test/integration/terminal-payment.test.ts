@@ -328,7 +328,12 @@ describe("Wallee terminal payment (Integration)", () => {
         const e = err as { code?: string; message?: string; details?: unknown };
         expect(e.code).to.equal("failed-precondition");
         expect(e.message).to.not.contain("co1");
-        expect(e.details).to.deep.equal({ reason: "checkout-closed", paidAtTerminal: true });
+        expect(e.details).to.deep.equal({
+          reason: "checkout-closed",
+          paidAtTerminal: true,
+          amount: 25,
+          payerEmail: "alice@example.com",
+        });
       }
     });
 
@@ -403,24 +408,113 @@ describe("Wallee terminal payment (Integration)", () => {
       expect((await checkout("co1")).summary?.tip).to.equal(0);
     });
 
-    it("refuses an attempt whose items changed since it was priced", async () => {
+    it("closes an unchanged visit without a change alert", async () => {
       await seedOpenCheckout("co1");
       const { reference } = await prepare("co1");
-      // "Zurück" to step 3, one more item.
-      await getFirestore().collection("checkouts").doc("co1").collection("items").doc("i1").set({
+      expect((await checkout("co1")).terminalAttempts?.["1"]?.items).to.have.keys("i0");
+      wallee.pay(9001, reference, 25);
+      expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+      expect(await alertMarkers()).to.have.length(0);
+    });
+
+    describe("a visit changed after the payment was started", () => {
+      const itemsCol = () => getFirestore().collection("checkouts").doc("co1").collection("items");
+      const item = (description: string, quantity: number, unitPrice: number, extra = {}) => ({
         workshop: "holz",
-        description: "Leim",
+        description,
         origin: "manual",
         catalogId: null,
         created: Timestamp.now(),
-        quantity: 1,
-        unitPrice: 4,
-        totalPrice: 4,
+        quantity,
+        unitPrice,
+        totalPrice: quantity * unitPrice,
+        ...extra,
       });
-      wallee.pay(9001, reference, 25);
-      expect(await settleTerminalPayment(9001, "webhook")).to.equal("items-changed");
-      expect((await checkout("co1")).status).to.equal("open");
-      expect(await bills()).to.have.length(0);
+
+      async function settleAndExpectAsPriced(): Promise<void> {
+        expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+        const co = await checkout("co1");
+        expect(co.status).to.equal("closed");
+        expect(co.summary?.totalPrice).to.equal(25);
+        expect((await bills())[0].data.amount).to.equal(25);
+        const items = (await itemsCol().get()).docs;
+        expect(items.map((d) => d.id)).to.deep.equal(["i0"]);
+        expect(items[0].data()).to.include({ description: "Brett", quantity: 1, totalPrice: 10 });
+        // Seen again by the reconcile: still one alert.
+        expect(await settleTerminalPayment(9001, "reconcile")).to.equal("already-settled");
+        const markers = await alertMarkers();
+        expect(markers.map((m) => m.id)).to.deep.equal(["9001_checkout-changed"]);
+      }
+
+      it("books what was priced when an item was added", async () => {
+        await seedOpenCheckout("co1");
+        const { reference } = await prepare("co1");
+        await itemsCol().doc("i1").set(item("Leim", 1, 4));
+        wallee.pay(9001, reference, 25);
+        await settleAndExpectAsPriced();
+      });
+
+      it("books what was priced when a quantity changed", async () => {
+        await seedOpenCheckout("co1");
+        const { reference } = await prepare("co1");
+        await itemsCol().doc("i0").update({ quantity: 3, totalPrice: 30 });
+        wallee.pay(9001, reference, 25);
+        await settleAndExpectAsPriced();
+      });
+
+      it("books what was priced when an item was removed", async () => {
+        await seedOpenCheckout("co1");
+        const { reference } = await prepare("co1");
+        await itemsCol().doc("i0").delete();
+        wallee.pay(9001, reference, 25);
+        await settleAndExpectAsPriced();
+      });
+
+      it("books the priced persons when the roster changed", async () => {
+        await seedOpenCheckout("co1");
+        const { reference } = await prepare("co1");
+        await getFirestore().collection("checkouts").doc("co1").update({
+          persons: [ADULT, { name: "Bob", email: "bob@example.com", userType: "erwachsen" }],
+        });
+        wallee.pay(9001, reference, 25);
+        await settleAndExpectAsPriced();
+        expect((await checkout("co1")).persons).to.have.length(1);
+      });
+
+      it("takes machine time that arrived later off the checkout", async () => {
+        const db = getFirestore();
+        await seedOpenCheckout("co1");
+        // Replace the material line by a machine row holding one session
+        // (0.5 h at CHF 20 = CHF 10, so the total stays 25).
+        await itemsCol().doc("i0").set(
+          item("Brett", 1, 10, { type: "machine", origin: "nfc", quantity: 0.5, unitPrice: 20 }),
+        );
+        const rowRef = itemsCol().doc("i0");
+        const usage = (id: string) =>
+          db.collection("usage_machine").doc(id).set({
+            userId: db.collection("users").doc(OWNER),
+            machine: db.collection("machine").doc("m1"),
+            checkoutItemRef: rowRef,
+            workshop: "holz",
+          });
+        await usage("u1");
+        const { reference } = await prepare("co1");
+        expect((await checkout("co1")).terminalAttempts?.["1"]?.machineUsageIds).to.deep.equal({
+          i0: ["u1"],
+        });
+        // A session uploaded during the payment accumulates onto the row.
+        await usage("u2");
+        await rowRef.update({ quantity: 1, totalPrice: 20 });
+        wallee.pay(9001, reference, 25);
+
+        expect(await settleTerminalPayment(9001, "webhook")).to.equal("settled");
+        expect((await rowRef.get()).data()).to.include({ quantity: 0.5, totalPrice: 10 });
+        const u1 = (await db.collection("usage_machine").doc("u1").get()).data();
+        const u2 = (await db.collection("usage_machine").doc("u2").get()).data();
+        expect(u1?.checkoutItemRef?.path).to.equal(rowRef.path);
+        expect(u2?.checkoutItemRef).to.equal(null);
+        expect((await alertMarkers()).map((m) => m.id)).to.deep.equal(["9001_checkout-changed"]);
+      });
     });
 
     it("leaves the checkout open for what isn't a paid payment of ours", async () => {

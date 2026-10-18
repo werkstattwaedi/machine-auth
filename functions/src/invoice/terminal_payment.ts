@@ -15,9 +15,11 @@
  *     `merchantReference`.
  *  2. Wallee confirms the payment by webhook (or the nightly reconcile
  *     finds it). `settleTerminalPayment` re-reads the transaction and, in
- *     one transaction, closes the checkout from the attempt and mints the
- *     bill already paid and committed. `onBillCreate` then renders and
- *     mails the Quittung (`isCommittedAtClose`).
+ *     one transaction, closes the checkout with exactly what the attempt
+ *     priced and mints the bill already paid and committed. `onBillCreate`
+ *     then renders and mails the Quittung (`isCommittedAtClose`). What
+ *     changed on the visit since the attempt was priced is put back to the
+ *     priced state and reported for a person to follow up.
  *
  * The client never tells the backend that something is paid; only Wallee
  * does. A faked approval in the kiosk UI leaves the checkout open.
@@ -27,23 +29,25 @@ import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import {
   getFirestore,
+  DocumentReference,
   FieldValue,
   Timestamp,
 } from "firebase-admin/firestore";
 import {
   chfToRappen,
   formatTerminalReference,
+  isMachineItem,
   parseTerminalReference,
 } from "@oww/shared";
 import type {
   CheckoutEntity,
+  CheckoutItemEntity,
   CheckoutSummaryEntity,
   TerminalAttemptEntity,
 } from "../types/firestore_entities";
 import {
   assertCheckoutPrincipal,
   effectiveUid,
-  itemsFingerprint,
   isAnonymousCaller,
   payerFromPersons,
   priceOpenCheckout,
@@ -143,9 +147,17 @@ export const prepareTerminalPaymentHandler = async (
     const checkout = snap.data() as CheckoutEntity;
     assertCheckoutPrincipal(checkout, callerUid, isAnonymous);
     if (checkout.status !== "open") {
+      const paidAtTerminal = checkout.paymentMethod === "wallee_terminal";
       throw new HttpsError("failed-precondition", "Dieser Besuch ist bereits abgeschlossen.", {
         reason: CHECKOUT_CLOSED_REASON,
-        paidAtTerminal: checkout.paymentMethod === "wallee_terminal",
+        paidAtTerminal,
+        // For the paid screen, which may not have priced an attempt yet.
+        ...(paidAtTerminal
+          ? {
+            amount: checkout.summary?.totalPrice ?? null,
+            payerEmail: payerFromPersons(checkout.persons ?? [])?.email ?? null,
+          }
+          : {}),
       });
     }
     if ((checkout.terminalAttemptCount ?? 0) >= MAX_TERMINAL_ATTEMPTS) {
@@ -155,10 +167,23 @@ export const prepareTerminalPaymentHandler = async (
       );
     }
 
-    const { summary, itemsKey } = await priceOpenCheckout(tx, resolved, checkout, data.summary);
+    const { summary, itemDocs } = await priceOpenCheckout(tx, resolved, checkout, data.summary);
     // A free visit has nothing to charge: it closes with "Abschliessen".
     if (summary.totalPrice <= 0) {
       throw new HttpsError("failed-precondition", "Für diesen Besuch ist nichts zu bezahlen.");
+    }
+
+    // Which machine sessions the machine rows hold now: a session uploaded
+    // later lands on the same row, and only the priced ones are paid.
+    const items: Record<string, CheckoutItemEntity> = {};
+    const machineUsageIds: Record<string, string[]> = {};
+    for (const doc of itemDocs) {
+      const item = doc.data() as CheckoutItemEntity;
+      items[doc.id] = item;
+      if (isMachineItem(item)) {
+        const usage = await tx.get(linkedUsageQuery(doc.ref));
+        machineUsageIds[doc.id] = usage.docs.map((d) => d.id);
+      }
     }
 
     const attempt = (checkout.terminalAttemptCount ?? 0) + 1;
@@ -173,7 +198,9 @@ export const prepareTerminalPaymentHandler = async (
       usageType: resolved.visitUsageType,
       persons: resolved.persons,
       summary,
-      itemsKey,
+      items,
+      machineUsageIds,
+      checkoutPersonsKey: stableKey(checkout.persons ?? []),
       preparedBy: callerUid,
       createdAt: Timestamp.now(),
     };
@@ -212,8 +239,6 @@ export type SettleOutcome =
   | "unmatched"
   /** The authorized amount differs from the attempt. */
   | "amount-mismatch"
-  /** The visit's items changed after the attempt was priced. */
-  | "items-changed"
   /** The checkout was already closed by something else: money twice. */
   | "double-charge";
 
@@ -322,7 +347,9 @@ export async function settleTransaction(
     });
   }
 
+  let changes: CheckoutChanges | null = null;
   const outcome = await db.runTransaction(async (tx): Promise<SettleOutcome> => {
+    changes = null;
     const snap = await tx.get(checkoutRef);
     const judged = judgeCheckout(
       snap.data() as CheckoutEntity | undefined,
@@ -331,12 +358,22 @@ export async function settleTransaction(
     );
     if (typeof judged === "string") return judged;
     const { checkout, attempt } = judged;
-    // The bill and summary come from the attempt, the Quittung's lines from
-    // the items: they must still be the ones that were priced.
+    // The person paid for what was priced: the Quittung's lines (read from
+    // the items) must add up to that, so the items go back to the snapshot.
+    // Reads first — a transaction can't read after writing.
     const itemsSnap = await tx.get(checkoutRef.collection("items"));
-    if (attempt.itemsKey !== undefined && itemsFingerprint(itemsSnap.docs) !== attempt.itemsKey) {
-      return "items-changed";
+    const current = new Map(itemsSnap.docs.map((d) => [d.id, d.data() as CheckoutItemEntity]));
+    const machineRowIds = new Set<string>();
+    for (const [id, item] of [...current, ...Object.entries(attempt.items)]) {
+      if (isMachineItem(item)) machineRowIds.add(id);
     }
+    const lateUsage: string[] = [];
+    for (const id of machineRowIds) {
+      const priced = new Set(attempt.machineUsageIds[id] ?? []);
+      const usage = await tx.get(linkedUsageQuery(checkoutRef.collection("items").doc(id)));
+      for (const doc of usage.docs) if (!priced.has(doc.id)) lateUsage.push(doc.id);
+    }
+    changes = diffAgainstAttempt(attempt, current, checkout, lateUsage);
 
     const billRef = db.collection("bills").doc();
     const paidAt = transaction.authorizedOn
@@ -355,9 +392,26 @@ export async function settleTransaction(
         walleeReceiptText: receiptText,
       },
     });
+    if (changes) {
+      const itemsCol = checkoutRef.collection("items");
+      for (const id of current.keys()) {
+        if (!(id in attempt.items)) tx.delete(itemsCol.doc(id));
+      }
+      for (const [id, item] of Object.entries(attempt.items)) {
+        const now = current.get(id);
+        if (!now || stableKey(now) !== stableKey(item)) tx.set(itemsCol.doc(id), item);
+      }
+      // Unbilled sessions go back to unlinked, as if never accumulated: the
+      // next upload of that machine type picks them up again.
+      const usageCol = db.collection("usage_machine");
+      for (const id of lateUsage) tx.update(usageCol.doc(id), { checkoutItemRef: null });
+    }
     tx.update(checkoutRef, {
       paymentMethod: "wallee_terminal",
       status: "closed",
+      // As priced — also undoing a CHK-40 switch to Reguläre Nutzung that
+      // machine time arriving during the payment caused (its sessions were
+      // unlinked above).
       usageType: attempt.usageType,
       persons: attempt.persons,
       closedAt: FieldValue.serverTimestamp(),
@@ -373,13 +427,89 @@ export async function settleTransaction(
   });
 
   await reportOutcome(outcome, transaction.id, logFields);
+  if (outcome === "settled" && changes) {
+    await alertOnce("checkout-changed", transaction.id, { ...logFields, changes });
+  }
   return outcome;
+}
+
+/** `usage_machine` records accumulated into a checkout's machine row. */
+function linkedUsageQuery(itemRef: DocumentReference) {
+  return getFirestore().collection("usage_machine").where("checkoutItemRef", "==", itemRef);
+}
+
+/**
+ * What changed on the visit since the attempt was priced, ids and
+ * quantities only (it goes to the logs). Null when nothing did.
+ */
+interface CheckoutChanges {
+  added: { id: string; description: string; quantity: number }[];
+  removed: { id: string; description: string; quantity: number }[];
+  changed: { id: string; description: string; quantityDelta: number }[];
+  lateUsageIds: string[];
+  personsChanged: boolean;
+}
+
+function diffAgainstAttempt(
+  attempt: TerminalAttemptEntity,
+  current: Map<string, CheckoutItemEntity>,
+  checkout: CheckoutEntity,
+  lateUsageIds: string[],
+): CheckoutChanges | null {
+  const changes: CheckoutChanges = {
+    added: [],
+    removed: [],
+    changed: [],
+    lateUsageIds,
+    personsChanged: stableKey(checkout.persons ?? []) !== attempt.checkoutPersonsKey,
+  };
+  for (const [id, item] of current) {
+    if (!(id in attempt.items)) {
+      changes.added.push({ id, description: item.description, quantity: item.quantity });
+    }
+  }
+  for (const [id, item] of Object.entries(attempt.items)) {
+    const now = current.get(id);
+    if (!now) {
+      changes.removed.push({ id, description: item.description, quantity: item.quantity });
+    } else if (stableKey(now) !== stableKey(item)) {
+      changes.changed.push({
+        id,
+        description: item.description,
+        quantityDelta: Math.round(((now.quantity ?? 0) - (item.quantity ?? 0)) * 1000) / 1000,
+      });
+    }
+  }
+  const any =
+    changes.added.length > 0 ||
+    changes.removed.length > 0 ||
+    changes.changed.length > 0 ||
+    lateUsageIds.length > 0 ||
+    changes.personsChanged;
+  return any ? changes : null;
+}
+
+/**
+ * A comparable string of Firestore data: keys sorted, references by path,
+ * timestamps by millis (JSON would expand a reference's whole client).
+ */
+export function stableKey(value: unknown): string {
+  return JSON.stringify(value, function (this: Record<string, unknown>, key, v) {
+    const raw = this[key];
+    if (raw instanceof DocumentReference) return `ref:${raw.path}`;
+    if (raw instanceof Timestamp) return `ts:${raw.toMillis()}`;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      );
+    }
+    return v;
+  });
 }
 
 /**
  * What the checkout says about a paid transaction for it: an outcome when
- * it can't settle, otherwise the attempt it settles. The items are checked
- * inside the settling transaction only.
+ * it can't settle, otherwise the attempt it settles.
  */
 function judgeCheckout(
   checkout: CheckoutEntity | undefined,
@@ -410,14 +540,11 @@ async function reportOutcome(
     case "settled":
       logger.info("terminal_payment_settled", { event: "terminal_payment_settled", ...logFields });
       break;
+    // A double charge is money for a checkout already closed — by another
+    // attempt, another method or a cancellation. All of these are refunded
+    // by hand in the Wallee portal for now (ADR-0051).
     case "unmatched":
     case "amount-mismatch":
-    // Paid for a version of the visit that no longer exists; the checkout
-    // stays open for the current one. Refunded by hand.
-    case "items-changed":
-    // Money arrived for a checkout that is already closed — by another
-    // attempt, another method or a cancellation. Refunded by hand in the
-    // Wallee portal for now (ADR-0051).
     case "double-charge":
       await alertOnce(outcome, transactionId, logFields);
       break;
@@ -430,11 +557,18 @@ async function reportOutcome(
 const ALERTS: Record<AlertOutcome, { event: string; level: "warn" | "error" }> = {
   "unmatched": { event: "terminal_unmatched_payment", level: "warn" },
   "amount-mismatch": { event: "terminal_amount_mismatch", level: "error" },
-  "items-changed": { event: "terminal_items_changed", level: "error" },
+  // Settled with what was paid; what changed on the visit since (items,
+  // late machine sessions, persons) is followed up by hand.
+  "checkout-changed": { event: "terminal_checkout_changed", level: "warn" },
   "double-charge": { event: "terminal_double_charge", level: "error" },
   "voided": { event: "terminal_payment_voided", level: "error" },
 };
-type AlertOutcome = "unmatched" | "amount-mismatch" | "items-changed" | "double-charge" | "voided";
+type AlertOutcome =
+  | "unmatched"
+  | "amount-mismatch"
+  | "checkout-changed"
+  | "double-charge"
+  | "voided";
 
 /** Markers outlive the reconcile's window, then Firestore TTL drops them. */
 const ALERT_MARKER_TTL_MS = 7 * 24 * 60 * 60 * 1000;

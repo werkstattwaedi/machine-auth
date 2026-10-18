@@ -272,7 +272,9 @@
           "usageType": "string",
           "persons": "[CheckoutPerson]",     // the roster as it will be stored
           "summary": "CheckoutSummary",
-          "itemsKey": "string",              // digest of the priced items
+          "items": "map<itemId, CheckoutItem>",      // the items as priced; settlement closes with these
+          "machineUsageIds": "map<itemId, [string]>", // usage_machine ids each machine row held when priced
+          "checkoutPersonsKey": "string",    // digest of the checkout's persons when priced (change alert)
           "preparedBy": "string",            // principal; modifiedBy on close
           "createdAt": "timestamp"
         }
@@ -548,7 +550,7 @@
     // Auto-deleted via the `expiresAt` TTL policy.
     "{transactionId}_{outcome}": {
       "transactionId": "number",   // Wallee transaction id
-      "outcome": "unmatched | amount-mismatch | items-changed | double-charge | voided",
+      "outcome": "unmatched | amount-mismatch | checkout-changed | double-charge | voided",
       "reference": "string | null", // the transaction's merchantReference ({P|S}-{checkoutId}-{n} for ours)
       "createdAt": "timestamp",
       "expiresAt": "timestamp"     // created + 7 days (past the reconcile window); Firestore TTL field

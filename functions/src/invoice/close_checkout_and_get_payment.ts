@@ -968,24 +968,6 @@ export function assertCheckoutPrincipal(
 }
 
 /**
- * A stable digest of a checkout's items as priced: which items, how many,
- * at what total. A terminal attempt records it so a payment that arrives
- * after the items changed can't close the visit with a summary its lines
- * don't add up to (ADR-0051).
- */
-export function itemsFingerprint(
-  docs: ReadonlyArray<{ id: string; data: () => unknown }>,
-): string {
-  return docs
-    .map((d) => {
-      const item = d.data() as Partial<CheckoutItemEntity>;
-      return `${d.id}:${item.quantity ?? ""}:${item.totalPrice ?? ""}`;
-    })
-    .sort()
-    .join("|");
-}
-
-/**
  * Prices an open checkout inside the close's transaction: reads its items,
  * runs the shared pricing tail and the identity-bound guards that need the
  * items. Throws `failed-precondition` on a guard violation.
@@ -995,7 +977,11 @@ export async function priceOpenCheckout(
   resolved: ResolvedExistingClose,
   checkout: CheckoutEntity,
   clientSummary: CheckoutSummaryEntity | undefined,
-): Promise<{ summary: CheckoutSummaryEntity; itemsKey: string }> {
+): Promise<{
+  summary: CheckoutSummaryEntity;
+  /** The item docs it priced, for a terminal attempt's snapshot. */
+  itemDocs: FirebaseFirestore.QueryDocumentSnapshot[];
+}> {
   // Load the items subcollection inside the transaction for the
   // server-side recompute.
   const itemsSnap = await tx.get(resolved.checkoutRef.collection("items"));
@@ -1017,7 +1003,7 @@ export async function priceOpenCheckout(
     assertMembershipBillingAddress(resolved.memberBillingAddress);
   }
   logSummaryDivergence(resolved.context, clientSummary, summary);
-  return { summary, itemsKey: itemsFingerprint(itemsSnap.docs) };
+  return { summary, itemDocs: itemsSnap.docs };
 }
 
 async function closeExistingCheckout(

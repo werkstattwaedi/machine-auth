@@ -345,8 +345,15 @@ export interface TerminalAttemptEntity {
   usageType: UsageType;
   persons: CheckoutPersonEntity[];
   summary: CheckoutSummaryEntity;
-  /** `itemsFingerprint` of the items it priced; settlement refuses on a change. */
-  itemsKey?: string;
+  /**
+   * The checkout's items as priced, by item doc id. Settlement closes the
+   * checkout with exactly these, whatever changed since (ADR-0051).
+   */
+  items: Record<string, CheckoutItemEntity>;
+  /** Ids of the `usage_machine` records linked to each machine row when priced, by item id. */
+  machineUsageIds: Record<string, string[]>;
+  /** `stableKey` of the checkout's persons when priced, to notice a change. */
+  checkoutPersonsKey: string;
   /** The principal that prepared it; stamped as `modifiedBy` on the close. */
   preparedBy: string;
   createdAt: Timestamp;
