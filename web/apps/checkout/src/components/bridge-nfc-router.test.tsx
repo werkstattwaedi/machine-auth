@@ -113,6 +113,7 @@ import { BridgeNfcRouter, confirmTagSwitch } from "./bridge-nfc-router"
 const PRISTINE = {
   preservable: false,
   identified: false,
+  committed: false,
   holderName: null as string | null,
   badgeTokenIds: [] as string[],
   autoStartPending: false,
@@ -189,6 +190,38 @@ describe("BridgeNfcRouter", () => {
     await vi.waitFor(() =>
       expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
     )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  // Issues #769/#752: on the confirmation page the checkout is closed — the
+  // guard reports `committed` and nothing preservable, whatever persons the
+  // wizard still holds.
+  it("identified session after the commit: wipe + reload, no dialog", async () => {
+    mockSessionState.mockReturnValue({
+      ...PRISTINE,
+      identified: true,
+      committed: true,
+      holderName: "Max Muster",
+    })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole("alertdialog")).toBeNull()
+  })
+
+  it("guest after the commit: wipe + reload, no discard dialog", async () => {
+    mockAuth.currentUser = { isAnonymous: true }
+    mockSessionState.mockReturnValue({ ...PRISTINE, committed: true })
+    render(<BridgeNfcRouter />)
+    tap(TAG_URL)
+    await vi.waitFor(() =>
+      expect(mockResetSession).toHaveBeenCalledWith({ keepWindowOpen: true }),
+    )
+    // Not in place: the wizard still holds the guest's persons.
     expect(mockNavigate).not.toHaveBeenCalled()
     expect(screen.queryByRole("alertdialog")).toBeNull()
   })

@@ -273,6 +273,30 @@ interface WizardProviderProps {
   pricingConfig: PricingConfig
 }
 
+/**
+ * The wizard's tap-time answer to BridgeNfcRouter. Once this session's
+ * checkout is committed (CHK-22) it is closed: the persons still held in the
+ * wizard are nothing to keep, so a badge tap switches without asking (KIO-6,
+ * issues #769/#752). The idle watcher keeps using the plain
+ * `hasPreservableState` — the confirmation page must still time out.
+ */
+export function kioskSessionSnapshot(
+  state: Parameters<typeof hasPreservableState>[0] & {
+    identified: boolean
+    committed: boolean
+    holderName: string | null
+    badgeTokenIds: string[]
+  },
+) {
+  return {
+    preservable: !state.committed && hasPreservableState(state),
+    identified: state.identified,
+    committed: state.committed,
+    holderName: state.holderName,
+    badgeTokenIds: state.badgeTokenIds,
+  }
+}
+
 /** Join a first/last name into a display string, or null when both are
  * empty/absent (so callers can fall back to a name-less phrasing). */
 function joinName(
@@ -561,6 +585,7 @@ export function WizardProvider({
     items,
     persons,
     identified: false,
+    committed: false,
     holderName: null as string | null,
     badgeTokenIds: [] as string[],
   })
@@ -597,17 +622,15 @@ export function WizardProvider({
     // discarded loses unrecoverable work (no badge to re-tap), so it needs
     // the honest, destructive dialog (issue #468).
     identified: isAccountLoggedIn || isTagIdentified,
+    committed: paymentData != null,
     holderName,
     badgeTokenIds,
   }
   useEffect(
     () =>
-      registerKioskSessionGuard(() => ({
-        preservable: hasPreservableState(guardStateRef.current),
-        identified: guardStateRef.current.identified,
-        holderName: guardStateRef.current.holderName,
-        badgeTokenIds: guardStateRef.current.badgeTokenIds,
-      })),
+      registerKioskSessionGuard(() =>
+        kioskSessionSnapshot(guardStateRef.current),
+      ),
     [],
   )
 
