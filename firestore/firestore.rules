@@ -332,12 +332,16 @@ service cloud.firestore {
       // generally-applicable join key — and forge protection drops out:
       // a session cannot tag a checkout with anyone else's UID. Admin
       // SDK writes bypass rules and may leave `firebaseUid` null.
-      allow create: if (request.resource.data.status == 'open' || request.resource.data.status == 'closed')
+      // Clients create open checkouts only: every close goes through
+      // closeCheckoutAndGetPayment, which prices it on the server. A
+      // client-created closed checkout would get a bill for whatever
+      // `summary.totalPrice` it carried (onCheckoutCreatedClosed) and
+      // count as a visit in the statistics export.
+      allow create: if request.resource.data.status == 'open'
         && request.resource.data.keys().hasOnly([
              'userId', 'status', 'usageType', 'created',
              'workshopsVisited', 'persons', 'modifiedBy', 'modifiedAt',
-             'firebaseUid',
-             'closedAt', 'notes', 'summary'
+             'firebaseUid', 'notes'
            ])
         && request.resource.data.get('firebaseUid', null) == request.auth.uid
         && (

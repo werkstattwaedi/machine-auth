@@ -115,9 +115,12 @@ describe("Checkout create rules", () => {
     )
   })
 
-  it("allows anonymous-auth client to create a closed checkout", async () => {
+  it("rejects anonymous-auth client creating a closed checkout", async () => {
+    // Every close goes through closeCheckoutAndGetPayment; a closed
+    // checkout created by a client would get a bill for its own
+    // summary.totalPrice (onCheckoutCreatedClosed).
     const db = anonAuthDb("anon-1")
-    await assertSucceeds(
+    await assertFails(
       addDoc(collection(db, "checkouts"), {
         userId: null,
         status: "closed",
@@ -237,9 +240,9 @@ describe("Checkout create rules", () => {
     )
   })
 
-  it("allows authenticated user to create a closed checkout (no items added)", async () => {
+  it("rejects the owner creating a closed checkout", async () => {
     const db = authedDb("u1")
-    await assertSucceeds(
+    await assertFails(
       addDoc(collection(db, "checkouts"), {
         userId: doc(db, "users/u1"),
         status: "closed",
@@ -253,6 +256,50 @@ describe("Checkout create rules", () => {
         closedAt: serverTimestamp(),
         notes: null,
         summary: { totalPrice: 15, entryFees: 15, machineCost: 0, materialCost: 0, tip: 0 },
+      }),
+    )
+  })
+
+  it("rejects an open checkout created with a summary or closedAt", async () => {
+    // Only the close callable prices a checkout; a client-supplied
+    // summary would be what the bill charges once it closes.
+    const db = authedDb("u1")
+    const base = {
+      userId: doc(db, "users/u1"),
+      status: "open",
+      usageType: "regular",
+      created: serverTimestamp(),
+      workshopsVisited: ["holz"],
+      persons: [],
+      modifiedBy: "u1",
+      modifiedAt: serverTimestamp(),
+      firebaseUid: "u1",
+    }
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        ...base,
+        summary: { totalPrice: 1, entryFees: 0, machineCost: 0, materialCost: 1, tip: 0 },
+      }),
+    )
+    await assertFails(
+      addDoc(collection(db, "checkouts"), { ...base, closedAt: serverTimestamp() }),
+    )
+  })
+
+  it("rejects an anonymous session creating an open checkout with a summary", async () => {
+    const db = anonAuthDb("anon-1")
+    await assertFails(
+      addDoc(collection(db, "checkouts"), {
+        userId: null,
+        status: "open",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: ["holz"],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+        firebaseUid: "anon-1",
+        summary: { totalPrice: 1, entryFees: 0, machineCost: 0, materialCost: 1, tip: 0 },
       }),
     )
   })
@@ -418,22 +465,25 @@ describe("Checkout items create rules", () => {
   })
 
   it("rejects items on a closed checkout", async () => {
-    // Create a closed checkout via one-shot create
-    const db = authedDb("u1")
-    await setDoc(doc(db, "checkouts", "co1"), {
-      userId: doc(db, "users/u1"),
-      status: "closed",
-      usageType: "regular",
-      created: serverTimestamp(),
-      workshopsVisited: [],
-      persons: [],
-      modifiedBy: null,
-      modifiedAt: serverTimestamp(),
-      firebaseUid: "u1",
-      closedAt: serverTimestamp(),
-      notes: null,
-      summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+    // Closed checkouts are server-written (the close callable).
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      const adminDb = ctx.firestore()
+      await setDoc(doc(adminDb, "checkouts", "co1"), {
+        userId: doc(adminDb, "users/u1"),
+        status: "closed",
+        usageType: "regular",
+        created: serverTimestamp(),
+        workshopsVisited: [],
+        persons: [],
+        modifiedBy: null,
+        modifiedAt: serverTimestamp(),
+        firebaseUid: "u1",
+        closedAt: serverTimestamp(),
+        notes: null,
+        summary: { totalPrice: 0, entryFees: 0, machineCost: 0, materialCost: 0, tip: 0 },
+      })
     })
+    const db = authedDb("u1")
 
     await assertFails(
       addDoc(collection(db, "checkouts", "co1", "items"), {
