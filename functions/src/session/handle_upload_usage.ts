@@ -9,6 +9,7 @@ import * as crypto from "crypto";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
   deriveVisitUsageType,
+  machineUsageBlocked,
   personUsageType,
   type UsageType,
 } from "@oww/shared";
@@ -440,13 +441,17 @@ async function accumulateForUser(
 }
 
 /**
- * Machine time means the owner worked in the workshop (CHK-40, ADR-0050): an
- * owner line on Begleitung / nur Materialbezug moves to Reguläre Nutzung, and
- * the stored visit type follows (which also ends a purchase-only checkout,
- * CHK-9). Owner-only types (volunteering/intern) and other persons stay as
- * they are. Returns the update, or null when nothing changes. Persons without
- * their own type (pre-#605) get the one they read as today, so moving the
- * checkout's type doesn't silently move theirs. Pure.
+ * Machine time on a visit where nobody else works in the workshop means the
+ * owner did (CHK-40, ADR-0050): when every person is on Begleitung / nur
+ * Materialbezug, the owner line moves to Reguläre Nutzung and the stored
+ * visit type follows (which also ends a purchase-only checkout, CHK-9). With
+ * anyone on another type the owner keeps Begleitung — a parent whose badge
+ * runs the machines for their kid (#799); machine time is billed in full
+ * either way, since that person makes the visit regular. Owner-only types
+ * (volunteering/intern) and other persons stay as they are. Returns the
+ * update, or null when nothing changes. Persons without their own type
+ * (pre-#605) get the one they read as today, so moving the checkout's type
+ * doesn't silently move theirs. Pure.
  */
 export function ownerSwitchForMachineTime(
   checkout: Pick<CheckoutEntity, "userId" | "persons" | "usageType">,
@@ -457,7 +462,7 @@ export function ownerSwitchForMachineTime(
   const persons = checkout.persons ?? [];
   const isOwner = (p: CheckoutPersonEntity) => p.userRef?.id === ownerId;
   const owner = persons.find(isOwner);
-  if (!owner || personUsageType(owner, fallback) !== "materialbezug") return null;
+  if (!owner || !machineUsageBlocked(persons, true, fallback)) return null;
 
   const next = persons.map((p) => ({
     ...p,

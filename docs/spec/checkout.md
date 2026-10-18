@@ -43,6 +43,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 ## Kosten
 
 - **CHK-44** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout, opened for them as *Reguläre Nutzung* if they have none, as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032, #105
+- **CHK-46** Machine time (CHK-44) is priced for the person whose badge unlocked the machine — the member price while a membership that lists them as a member is active (MEM-10, MEM-11) — whoever on the visit worked the machine. — #799, #745
 - **CHK-45** On Kosten, a machine row (CHK-44) unfolds to list the sessions behind it — machine, start time, duration — for a restricted session (ACC-4) as for a signed-in person. — #214, #648
 
 ## Usage type
@@ -69,7 +70,13 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | *Begleitung / nur Materialbezug* (every person has it) | machine time; Check Out says so in the Maschinen section and does not continue to payment — the type is changed on the check-in |
   | *Interne Nutzung* | a paid badge (a membership: MEM-6) |
 
-- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, the account holder's usage type becomes *Reguläre Nutzung* and the visit's type follows (CHK-29), every other person keeping theirs; nothing tells the account holder of the switch — their usage fee just appears in the Nutzungsgebühren on Check Out (CHK-31). — ADR-0050, #605, #778
+- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, what becomes of their usage type depends on the other persons, who keep theirs, and nothing tells the account holder of a switch — their usage fee just appears in the Nutzungsgebühren on Check Out (CHK-31) — ADR-0050, #605, #778, #799:
+
+  | Other persons on the checkout | Account holder | Visit's type (CHK-29) |
+  |---|---|---|
+  | none, or all on *Begleitung / nur Materialbezug* | becomes *Reguläre Nutzung* | becomes *Reguläre Nutzung* |
+  | anyone on another usage type | keeps *Begleitung / nur Materialbezug* | stays *Reguläre Nutzung*, so the machine time is billed in full (CHK-4) |
+
 - **CHK-5** A membership or badge bought without a visit opens a checkout with the buyer as its only person, on *Begleitung / nur Materialbezug* — a purchase-only checkout (CHK-9) that carries no usage fee (CHK-4). — ADR-0030, #660, ADR-0050, #605
 
 ## Check Out
