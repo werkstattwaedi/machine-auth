@@ -10,10 +10,17 @@
  *   - owner signed in → hand off to the root dispatcher (`/`)
  *   - a *different* member signed in (checkout unreadable) → "wrong account"
  *     hint using the id, not a blank screen
+ *   - a badge-tap (kiosk) session → a plain "can't open here" notice
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react"
 
 const CHECKOUT_ID = "co-abc123"
 
@@ -26,12 +33,17 @@ vi.mock("@tanstack/react-router", () => ({
     return { ...opts, useParams: () => ({ checkoutId: CHECKOUT_ID }) }
   },
   useNavigate: () => mockNavigate,
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 
-// Button pulls in Radix Slot; render its children directly for this test.
+// Button pulls in Radix Slot; render a plain button for this test.
 vi.mock("@modules/components/ui/button", () => ({
-  Button: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Button: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode
+    onClick?: () => void
+  }) => <button onClick={onClick}>{children}</button>,
 }))
 
 const mockUseAuth = vi.fn()
@@ -55,8 +67,12 @@ function renderRoute() {
   })
 }
 
+const mockSignOut = vi.fn()
+
 beforeEach(() => {
   mockNavigate.mockClear()
+  mockSignOut.mockReset()
+  mockSignOut.mockResolvedValue(undefined)
   mockUseAuth.mockReset()
   mockUseDocument.mockReset()
 })
@@ -71,6 +87,7 @@ describe("/checkout/$checkoutId", () => {
       loading: false,
       userDocLoading: false,
       sessionKind: null,
+      signOut: mockSignOut,
     })
     mockUseDocument.mockReturnValue({ data: null, loading: false, error: null })
 
@@ -91,6 +108,7 @@ describe("/checkout/$checkoutId", () => {
       loading: false,
       userDocLoading: false,
       sessionKind: "real",
+      signOut: mockSignOut,
     })
     mockUseDocument.mockReturnValue({
       data: { id: CHECKOUT_ID, userId: { id: "u1" }, status: "open" },
@@ -112,6 +130,7 @@ describe("/checkout/$checkoutId", () => {
       loading: false,
       userDocLoading: false,
       sessionKind: "real",
+      signOut: mockSignOut,
     })
     // A non-owner can't read the owner's checkout → permission error.
     mockUseDocument.mockReturnValue({
@@ -125,5 +144,64 @@ describe("/checkout/$checkoutId", () => {
     expect(await screen.findByText("Anderes Konto")).toBeTruthy()
     // Must not silently forward the wrong user into the dispatcher.
     expect(mockNavigate).not.toHaveBeenCalledWith({ to: "/" })
+  })
+
+  it("signs out before switching accounts, so /login doesn't bounce back (#771)", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: "fb-2", isAnonymous: false },
+      userDoc: { id: "u2" },
+      loading: false,
+      userDocLoading: false,
+      sessionKind: "real",
+      signOut: mockSignOut,
+    })
+    mockUseDocument.mockReturnValue({
+      data: null,
+      loading: false,
+      error: new Error("permission-denied"),
+    })
+    // The login page forwards a still-signed-in member to the redirect
+    // target, so the navigation must only happen once the sign-out settled.
+    let signedOut = false
+    mockSignOut.mockImplementation(async () => {
+      signedOut = true
+    })
+    mockNavigate.mockImplementation(() => {
+      expect(signedOut).toBe(true)
+    })
+
+    await renderRoute()
+    fireEvent.click(await screen.findByRole("button"))
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: "/login",
+        search: { redirect: `/checkout/${CHECKOUT_ID}` },
+      }),
+    )
+    expect(mockSignOut).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses a badge-tap (kiosk) session without signing it out", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: "tag:04abcdef", isAnonymous: false },
+      userDoc: { id: "u1" },
+      loading: false,
+      userDocLoading: false,
+      sessionKind: "tag",
+      signOut: mockSignOut,
+    })
+    // Even a still-pending read must not hold the notice back.
+    mockUseDocument.mockReturnValue({ data: null, loading: true, error: null })
+
+    await renderRoute()
+
+    expect(
+      await screen.findByTestId("checkout-link-unavailable"),
+    ).toBeTruthy()
+    // No account switch on the kiosk: no button, no sign-out, no navigation.
+    expect(screen.queryByRole("button")).toBeNull()
+    expect(mockSignOut).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

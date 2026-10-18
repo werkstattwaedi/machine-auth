@@ -17,7 +17,12 @@
  *   - Signed in as a different member (the owner's checkout is unreadable to
  *     them under security rules, surfaced as a permission error / no doc) →
  *     show a "wrong account" hint rather than a blank screen, offering a
- *     sign-out to switch accounts.
+ *     sign-out to switch accounts (signs out, then /login with a redirect
+ *     back here).
+ *   - Signed in only by a badge tap (`sessionKind === "tag"`) → a plain
+ *     "can't be opened here" notice. Badge sessions are minted only behind
+ *     the kiosk bearer, so this is the kiosk, where a mailed link can't be
+ *     pasted anyway; signing the kiosk session out from here would be wrong.
  *
  * NB: PR #551 (issue #535, `/denied`) introduces a parallel signed-in-user
  * mismatch pattern. This route was built independently off `main` (which does
@@ -26,7 +31,7 @@
  */
 
 import { useEffect, useRef } from "react"
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Loader2, AlertTriangle } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
 import { useDocument } from "@modules/lib/firestore"
@@ -48,6 +53,7 @@ function CheckoutByIdRoute() {
     loading: authLoading,
     userDocLoading,
     sessionKind,
+    signOut,
   } = useAuth()
 
   // The reminder always targets a real account holder, so only a signed-in
@@ -56,7 +62,9 @@ function CheckoutByIdRoute() {
     data: checkout,
     loading: checkoutLoading,
     error: checkoutError,
-  } = useDocument(user ? checkoutRef(db, checkoutId) : null)
+  } = useDocument(
+    user && sessionKind !== "tag" ? checkoutRef(db, checkoutId) : null,
+  )
 
   const signedIn = sessionKind === "real" || sessionKind === "tag"
   const principalLoading =
@@ -78,6 +86,9 @@ function CheckoutByIdRoute() {
       })
       return
     }
+
+    // Badge-tap (kiosk) session → the notice below; nothing to dispatch.
+    if (sessionKind === "tag") return
 
     // Signed in — wait for the checkout read to resolve.
     if (checkoutLoading) return
@@ -106,10 +117,15 @@ function CheckoutByIdRoute() {
     navigate,
   ])
 
+  // A badge-tap session only exists on the kiosk, where a reminder link from
+  // a mail can't be opened; refuse plainly instead of waiting on the read.
+  const isKioskSession =
+    !principalLoading && user != null && sessionKind === "tag"
+
   // Wrong-account / unreadable checkout: the signed-in member is not the
   // owner. Use the id as a hint and let them switch accounts.
   const isWrongAccount =
-    signedIn &&
+    sessionKind === "real" &&
     !principalLoading &&
     !checkoutLoading &&
     (checkoutError != null ||
@@ -117,6 +133,43 @@ function CheckoutByIdRoute() {
       (sessionKind === "real" &&
         userDoc != null &&
         checkout.userId?.id !== userDoc.id))
+
+  // Sign out *before* heading to /login: the login page forwards any
+  // signed-in member straight to its redirect target, so a plain link would
+  // bounce right back to this hint (#771).
+  const switchAccount = async () => {
+    dispatchedRef.current = true
+    try {
+      await signOut()
+    } catch (err) {
+      console.error("signOut failed", err)
+    }
+    navigate({
+      to: "/login",
+      search: { redirect: `/checkout/${checkoutId}` },
+    })
+  }
+
+  if (isKioskSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div
+          role="alert"
+          data-testid="checkout-link-unavailable"
+          className="max-w-md w-full rounded-lg border border-amber-300 bg-amber-50 p-6 text-center"
+        >
+          <AlertTriangle className="h-8 w-8 text-amber-600 mx-auto mb-3" />
+          <h1 className="text-lg font-semibold text-amber-900 mb-2">
+            Dieser Link kann hier nicht geöffnet werden
+          </h1>
+          <p className="text-sm text-amber-800">
+            Bitte öffne den Link aus der Erinnerung auf deinem eigenen Gerät,
+            um den Besuch abzuschliessen.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (isWrongAccount) {
     return (
@@ -131,13 +184,8 @@ function CheckoutByIdRoute() {
             dich mit dem Konto an, das die Erinnerung erhalten hat, um den
             Besuch abzuschliessen.
           </p>
-          <Button asChild variant="outline">
-            <Link
-              to="/login"
-              search={{ redirect: `/checkout/${checkoutId}` }}
-            >
-              Konto wechseln
-            </Link>
+          <Button variant="outline" onClick={switchAccount}>
+            Konto wechseln
           </Button>
         </div>
       </div>
