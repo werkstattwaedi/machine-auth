@@ -24,7 +24,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `BIL` | [billing.md](billing.md) | payment methods, documents, numbering, monthly run, corrections, payment booking |
 | `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in, the restricted session at the kiosk |
 | `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, the persons on it, usage types, usage fee, Check Out, Bezahlen — on any device |
-| `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, TWINT overlay, the payment terminal, idle reset |
+| `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, TWINT overlay, the Wallee terminal, idle reset |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
