@@ -105,7 +105,7 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
   | QR-Rechnung | the Rechnung was sent, and to which e-mail address (BIL-25) |
   | Sammelrechnung | the date of the next monthly run (BIL-19) the Sammelrechnung comes on, and to which e-mail address |
   | TWINT | the document was sent and to which e-mail address, and whom to contact if the TWINT payment did not go through (BIL-6) |
-  | *Karte / TWINT* | that it is paid, and that the Quittung was sent and to which e-mail address |
+  | *Karte / TWINT* | that it is paid, and to which e-mail address the Quittung will be sent (BIL-26, BIL-39) |
   | no e-mail address on record, any method | nothing was sent (BIL-37), and whom to contact |
 
 - **CHK-24** Only after a QR-Rechnung was confirmed can the person unfold the QR code of its QR slip, and never on a phone. — ADR-0020, #750

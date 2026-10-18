@@ -79,6 +79,7 @@ TWINT or at the payment terminal, and when the kiosk resets. The check-in itself
 
 - **KIO-23** When the connection to the payment terminal drops during a payment, Bezahlen says the payment is being checked and watches the checkout: whenever Wallee's confirmation closes it, the payment is shown as paid (KIO-22); after 10 s without it the person is told that no payment arrived and, should the terminal show it as paid, to contact the team instead of paying again, with "Nochmals versuchen" and "Zurück" as after a declined payment. — ADR-0051, #735, #792
 - **KIO-24** While a payment at the payment terminal is being started, waits for a card, runs or is being checked (KIO-22, KIO-23), a badge tap — registered or not — changes nothing at the kiosk, and the person is told to finish the payment at the terminal first. — #735, #792
+- **KIO-26** When a payment at the payment terminal is started (KIO-22) for a checkout that Wallee's confirmation has already closed (BIL-39), no payment is started and Bezahlen shows it as paid, as after the terminal's approval. — #788, #792
 
 ## Idle & reset
 
