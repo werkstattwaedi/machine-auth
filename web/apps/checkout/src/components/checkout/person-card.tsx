@@ -14,6 +14,7 @@ import { useId } from "react"
 import type { CheckoutPerson, PersonsAction } from "./use-checkout-state"
 import { ErrorBadge, FIELD_INPUT_OK, FIELD_INPUT_ERR } from "./field-error"
 import { UsageTypeSelect } from "./usage-type-select"
+import { WAIVED_TODAY_LABEL } from "./same-day-waiver"
 
 /**
  * Shared remove (X) affordance for a person on /checkin. Used by both the
@@ -48,6 +49,8 @@ export interface PersonUsageProps {
   othersPresent: boolean
   /** Live usage fee for this person; null while the pricing config is missing. */
   fee: number | null
+  /** Already billed on an earlier visit today (CHK-37): `fee` is 0. */
+  waivedToday?: boolean
 }
 
 const COLUMN_LABEL = "text-sm font-bold"
@@ -97,6 +100,14 @@ export function PersonUsageColumns({
         >
           {usage.fee === null ? "–" : formatCHF(usage.fee)}
         </div>
+        {usage.waivedToday && (
+          <div
+            data-testid="person-usage-fee-waived-today"
+            className="text-xs text-muted-foreground"
+          >
+            {WAIVED_TODAY_LABEL}
+          </div>
+        )}
       </div>
     </>
   )

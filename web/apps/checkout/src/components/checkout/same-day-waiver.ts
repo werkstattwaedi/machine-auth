@@ -17,6 +17,12 @@ import {
 import type { CheckoutDoc } from "@modules/lib/firestore-entities"
 import type { CheckoutPerson } from "./use-checkout-state"
 
+/**
+ * Shown beside a waived usage fee on the check-in and Check Out; the same
+ * wording as the invoice PDF's waived usage-fee row.
+ */
+export const WAIVED_TODAY_LABEL = "heute bereits abgerechnet"
+
 /** A roster person as the summary prices them. */
 export type PricedPerson = CheckoutPerson & { entryFeeWaivedToday?: boolean }
 
