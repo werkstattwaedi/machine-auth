@@ -644,8 +644,10 @@ function IdentityStrip({
     <div
       data-testid="identity-strip"
       // Name | Nutzungsart | Nutzungsgebühr (| remove) — the three columns
-      // stack on a phone, with the remove button staying top-right.
-      className="relative grid grid-cols-1 gap-4 rounded-[10px] bg-[#f6f6f5] px-4 py-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-start sm:px-6 sm:py-5 animate-in fade-in duration-200"
+      // stack on a phone, with the remove button staying top-right. The fee
+      // is a short amount, so its column gets half the share of the others
+      // (issue #797); as a 1fr track it never shrinks below its label.
+      className="relative grid grid-cols-1 gap-4 rounded-[10px] bg-[#f6f6f5] px-4 py-4 sm:grid-cols-[2fr_2fr_1fr_auto] sm:items-start sm:px-6 sm:py-5 animate-in fade-in duration-200"
     >
       <div className={cn("min-w-0", onRemove && "pr-10 sm:pr-0")}>
         <div className="truncate font-heading text-lg font-bold text-foreground">
