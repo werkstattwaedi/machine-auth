@@ -113,16 +113,6 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(actsAs())).data.activeMembership;
     }
 
-    // True when the user pointed to by `userIdRef` has a non-null
-    // `activeMembership`. Used to gate the `paymentMethod: "monthly"`
-    // write on a closed checkout — only Vereinsmitglieder may roll an
-    // open balance onto their monthly bill. The pointer is server-only
-    // (issue #745), so a client cannot forge its way past this check.
-    function hasActiveMembership(userIdRef) {
-      return userIdRef != null &&
-        get(userIdRef).data.get('activeMembership', null) != null;
-    }
-
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
       // Read: admin, the user themselves, a kiosk session acting on their
@@ -360,57 +350,28 @@ service cloud.firestore {
       // checkout): doc IDs are random Firebase IDs so this is no worse
       // than the existing items subcollection write rule.
       //
-      // Closed-checkout extension (#251): the principal (real, tag, or —
-      // for null-userId checkouts — the anonymous-auth caller) can
-      // write `paymentMethod` on the closed checkout. Not write-once —
-      // the user may switch tabs and the field tracks last selection.
-      // The commit-time ack itself lives on the bill and only the
-      // server may set it (acknowledgeBill callable / autoAcknowledgeBills
-      // cron); clients are denied writes on bills outright.
-      //
-      // Value validation: `rechnung` or `raisenow` always; `monthly` only
-      // when the user doc has an active membership. Anonymous flow on a
-      // null-userId checkout can't consult a membership doc, so monthly
-      // is intentionally denied.
-      //
-      // Payment terminal (ADR-0051): `wallee_terminal` is never a client
-      // value — only Wallee's confirmation sets it, together with the paid
-      // bill. A client-set one on an unconfirmed bill would turn the
-      // overnight commit's QR-Rechnung into a Quittung for money nobody
-      // received. The attempt fields are server-only too.
-      function notProviderConfirmedMethod() {
-        return request.resource.data.get('paymentMethod', null) != 'wallee_terminal';
-      }
+      // Payment method (#750, ADR-0051): the close callable commits
+      // `paymentMethod` together with the bill, and a correction
+      // (ADR-0042) creates a new checkout, so no client writes it — open
+      // or closed. A client-set method would contradict the bill already
+      // minted from it, and `wallee_terminal` is set only by Wallee's
+      // confirmation together with the paid bill. Closed and cancelled
+      // checkouts take no client writes at all. The terminal attempt
+      // fields are server-only too.
       allow update: if isAdmin() ||
         (isCheckoutPrincipalFor(resource.data.userId) &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'firebaseUid', 'remindersSent',
-           'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
-         ]) &&
-         notProviderConfirmedMethod()) ||
+           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+         ])) ||
         (resource.data.userId == null && isAnonymousAuth() &&
          resource.data.get('firebaseUid', null) == request.auth.uid &&
          resource.data.status == "open" &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
            'status', 'summary', 'closedAt', 'billRef', 'userId', 'firebaseUid', 'remindersSent',
-           'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
-         ]) &&
-         notProviderConfirmedMethod()) ||
-        (resource.data.status == "closed" &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-           'paymentMethod', 'modifiedBy', 'modifiedAt'
-         ]) &&
-         (
-           (isCheckoutPrincipalFor(resource.data.userId) && (
-             request.resource.data.paymentMethod in ['rechnung', 'raisenow'] ||
-             (request.resource.data.paymentMethod == 'monthly' &&
-              hasActiveMembership(resource.data.userId))
-           )) ||
-           (resource.data.userId == null && isAnonymousAuth() &&
-            resource.data.get('firebaseUid', null) == request.auth.uid &&
-            request.resource.data.paymentMethod in ['rechnung', 'raisenow'])
-         ));
+           'paymentMethod', 'terminalAttempts', 'terminalAttemptCount', 'walleeTransactionId'
+         ]));
       allow delete: if isAdmin();
 
       // Checkout items subcollection

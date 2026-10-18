@@ -377,16 +377,16 @@ describe("Checkout update: remindersSent is server-only (#531)", () => {
   })
 })
 
-describe("Checkout update: payment terminal fields are server-only (ADR-0051)", () => {
-  // Only Wallee's confirmation (settleTerminalPayment, Admin SDK) closes a
-  // checkout as `wallee_terminal`. A client-set value on an unconfirmed
-  // bill would let the overnight commit mail a Quittung for money nobody
-  // received; the attempt fields carry the priced close.
+describe("Checkout update: payment method and terminal fields are server-only (#750, ADR-0051)", () => {
+  // The close callable commits the method with the bill; only Wallee's
+  // confirmation (settleTerminalPayment, Admin SDK) closes a checkout as
+  // `wallee_terminal`. The attempt fields carry the priced close.
   it.each([
     ["terminalAttempts", { "1": { reference: "P-x-1", amount: 0.01 } }],
     ["terminalAttemptCount", 7],
     ["walleeTransactionId", 123],
     ["paymentMethod", "wallee_terminal"],
+    ["paymentMethod", "rechnung"],
   ])("owner cannot write %s on their open checkout", async (field, value) => {
     await createOpenCheckout("co-term1", "u1")
     await assertFails(
@@ -394,10 +394,10 @@ describe("Checkout update: payment terminal fields are server-only (ADR-0051)", 
     )
   })
 
-  it("owner can still note another method on the open checkout (positive control)", async () => {
+  it("owner can still edit the open checkout's notes (positive control)", async () => {
     await createOpenCheckout("co-term2", "u1")
     await assertSucceeds(
-      updateDoc(doc(authedDb("u1"), "checkouts", "co-term2"), { paymentMethod: "rechnung" }),
+      updateDoc(doc(authedDb("u1"), "checkouts", "co-term2"), { notes: "Holz" }),
     )
   })
 
@@ -422,7 +422,7 @@ describe("Checkout update: payment terminal fields are server-only (ADR-0051)", 
     )
   })
 
-  it("owner cannot claim wallee_terminal on a closed checkout", async () => {
+  it("owner can neither claim nor leave wallee_terminal on a closed checkout", async () => {
     await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore()
       await setDoc(doc(db, "checkouts", "co-term4"), {
@@ -441,7 +441,16 @@ describe("Checkout update: payment terminal fields are server-only (ADR-0051)", 
     await assertFails(
       updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "wallee_terminal" }),
     )
-    await assertSucceeds(
+    await assertFails(
+      updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "rechnung" }),
+    )
+    await getTestEnvironment().withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "checkouts", "co-term4"), {
+        paymentMethod: "wallee_terminal",
+        walleeTransactionId: 1003,
+      })
+    })
+    await assertFails(
       updateDoc(doc(db, "checkouts", "co-term4"), { paymentMethod: "rechnung" }),
     )
   })
