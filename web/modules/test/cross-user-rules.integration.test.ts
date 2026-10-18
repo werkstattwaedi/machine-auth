@@ -825,6 +825,51 @@ describe("cross-user: checkouts", () => {
     )
   })
 
+  // A client-created closed checkout gets a bill for its own
+  // summary.totalPrice (onCheckoutCreatedClosed) — closes go through the
+  // close callable only, for every principal.
+  it("denies tag-tap-as-alice creating a closed checkout for alice", async () => {
+    await assertCrossUserDenied(
+      "checkouts/{id} closed create allowed for a tag-tap session",
+      "firestore.rules:checkouts create (status == 'open')",
+      () =>
+        setDoc(doc(tagSessionDb("alice"), "checkouts", "co-forged"), {
+          userId: doc(tagSessionDb("alice"), "users/alice"),
+          status: "closed",
+          usageType: "regular",
+          created: serverTimestamp(),
+          workshopsVisited: ["holz"],
+          persons: [],
+          modifiedBy: null,
+          modifiedAt: serverTimestamp(),
+          firebaseUid: "tag:alice:s1",
+          closedAt: serverTimestamp(),
+          summary: { totalPrice: 1, entryFees: 0, machineCost: 0, materialCost: 1, tip: 0 },
+        }),
+    )
+  })
+
+  it("denies an anonymous-auth session creating a closed checkout", async () => {
+    await assertCrossUserDenied(
+      "checkouts/{id} closed create allowed for an anon session",
+      "firestore.rules:checkouts create (status == 'open')",
+      () =>
+        setDoc(doc(anonAuthDb("anon-x"), "checkouts", "co-forged"), {
+          userId: null,
+          status: "closed",
+          usageType: "regular",
+          created: serverTimestamp(),
+          workshopsVisited: ["holz"],
+          persons: [{ name: "Max", email: "someone@example.com", userType: "erwachsen" }],
+          modifiedBy: null,
+          modifiedAt: serverTimestamp(),
+          firebaseUid: "anon-x",
+          closedAt: serverTimestamp(),
+          summary: { totalPrice: 999, entryFees: 0, machineCost: 0, materialCost: 999, tip: 0 },
+        }),
+    )
+  })
+
   it("denies a different anon session from updating another anon session's open checkout (P0-2)", async () => {
     await seedAnonCheckout("co-anon", "anon-x")
     await assertCrossUserDenied(
