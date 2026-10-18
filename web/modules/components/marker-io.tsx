@@ -94,9 +94,12 @@ export function MarkerIO({ app }: MarkerIOProps) {
       window.Marker?.on?.("load", () => resolve())
     })
 
-    // Queued before the shim loads, so it replays before the launcher paints.
+    // The queued hide() replays before the launcher paints, but the widget's
+    // first render shows it again (prod, 2026-10-17) — hiding once more on
+    // "load" is what sticks.
     if (!shouldShowMarkerLauncher(import.meta.env.VITE_MARKER_LAUNCHER_VISIBLE)) {
       window.Marker.hide?.()
+      markerLoaded.then(() => window.Marker?.hide?.())
     }
 
     const script = document.createElement("script")
