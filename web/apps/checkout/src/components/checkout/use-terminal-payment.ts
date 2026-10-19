@@ -30,7 +30,7 @@ import type {
 } from "@oww/shared"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
-import { rpcCallable } from "@modules/lib/rpc"
+import { reportRpcError, rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { flushTerminalReport, trackTerminalReport } from "./pending-terminal-report"
 
@@ -78,6 +78,11 @@ export interface TerminalPaymentState {
   payerEmail: string
   /** Shown with "error" (German). */
   errorText: string | null
+  /**
+   * With "approved": the server never took the approval report (#812), so
+   * the checkout is still open although the terminal took the money.
+   */
+  reportFailed?: boolean
 }
 
 /** How long a lost connection is answered by watching the checkout. */
@@ -188,13 +193,13 @@ export function useTerminalPayment(args: {
   }, [])
 
   /**
-   * Tells the server the terminal approved the attempt. Best effort: if it
-   * never gets through, the checkout stays open as before #812 (and the
-   * failure reaches `logClientError` through `rpcCallable`); the screen
-   * shows the payment as done either way.
+   * Tells the server the terminal approved the attempt. If it never gets
+   * through, the checkout stays open: the screen still shows the payment
+   * (the terminal took it) but warns the person to tell the team, and the
+   * failure is logged as `terminal_approval_unreported` for the team's alert.
    */
   const reportApproval = useCallback(
-    (reportCheckoutId: string, attempt: number) => {
+    (run: number, reportCheckoutId: string, attempt: number, reference: string) => {
       const call = rpcCallable<{ checkoutId: string; attempt: number }, unknown>(
         functions,
         "billingCall",
@@ -209,7 +214,18 @@ export function useTerminalPayment(args: {
             const code = (err as { code?: unknown } | null)?.code
             const retryable = code === "functions/unavailable" ||
               code === "functions/internal" || code === "functions/deadline-exceeded"
-            if (!retryable || i >= APPROVAL_REPORT_RETRY_MS.length) return
+            if (!retryable || i >= APPROVAL_REPORT_RETRY_MS.length) {
+              // The reference names the checkout and attempt; no person data.
+              reportRpcError(
+                functions,
+                `terminal_approval_unreported ${reference}`,
+                "billingCall",
+                "reportTerminalApproval",
+                err,
+              )
+              update(run, { reportFailed: true })
+              return
+            }
             await new Promise((r) => setTimeout(r, APPROVAL_REPORT_RETRY_MS[i]))
           }
         }
@@ -217,7 +233,7 @@ export function useTerminalPayment(args: {
       // Every reset waits for it briefly (`runStartOver`).
       trackTerminalReport(send())
     },
-    [functions],
+    [functions, update],
   )
 
   const start = useCallback(async () => {
@@ -306,7 +322,9 @@ export function useTerminalPayment(args: {
       update(run, phaseForResult(result))
       // Even for an attempt the person already left: the terminal took the
       // money, so the checkout should not stay open.
-      if (result.outcome === "approved") reportApproval(checkoutId, prepared.attempt)
+      if (result.outcome === "approved") {
+        reportApproval(run, checkoutId, prepared.attempt, prepared.reference)
+      }
     } finally {
       unsubscribe?.()
     }
@@ -334,9 +352,12 @@ export function useTerminalPayment(args: {
   // After a dropped connection: Wallee closes the checkout within a second
   // of a payment that went through. Watch it before calling it lost — and
   // keep watching while "unknown" is shown, so a late confirmation still
-  // turns the screen to paid instead of offering to pay again.
+  // turns the screen to paid instead of offering to pay again. A lost
+  // approval report is watched too: Wallee's confirmation books the payment
+  // anyway, and then the warning is wrong.
   const watchedCheckoutId =
-    terminal?.phase === "checking" || terminal?.phase === "unknown"
+    terminal?.phase === "checking" || terminal?.phase === "unknown" ||
+      (terminal?.phase === "approved" && terminal.reportFailed)
       ? terminal.checkoutId
       : null
   useEffect(() => {
@@ -347,7 +368,7 @@ export function useTerminalPayment(args: {
       (snap) => {
         const doc = snap.data()
         if (doc && doc.status !== "open" && doc.paymentMethod === "wallee_terminal") {
-          update(run, { phase: "approved" })
+          update(run, { phase: "approved", reportFailed: false })
         }
       },
       () => {

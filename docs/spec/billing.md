@@ -22,7 +22,7 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone. — #251, #302, #757
 - **BIL-44** A checkout totalling more than CHF 0 can't be closed without a payment method. — #757
 - **BIL-39** A checkout paid by a verified payment is closed only when the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is its bill issued (BIL-16) already paid and the method committed; until then it has no bill and is open or awaiting payment (BIL-48), and a declined or abandoned payment leaves it open. — ADR-0051, #735, #812
-- **BIL-48** When the Wallee terminal approves the checkout's latest payment within 10 min of its start (KIO-22), the checkout is awaiting payment until Wallee's confirmation closes it (BIL-39); an approval of an earlier payment, or one more than 10 min after the start, leaves it open — #812:
+- **BIL-48** When the kiosk reports the Wallee terminal's approval of the checkout's latest payment within 10 min of that payment's start (KIO-22), the checkout is awaiting payment until Wallee's confirmation closes it (BIL-39); a report of an earlier payment, one more than 10 min after the start, or none reaching the server (KIO-27) leaves it open — #812:
 
   | What | While it awaits payment |
   |---|---|
@@ -109,7 +109,6 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 - [NEEDS CLARIFICATION] A renewal bill totalling CHF 0 (MEM-24) is issued paid (BIL-45) but mailed by nobody — neither the renewal letter nor the CHF 0 mail (BIL-26). Intended, or should it get one? — #790
-- [NEEDS CLARIFICATION] When the kiosk's report of the terminal's approval doesn't reach the server, the checkout stays open (BIL-48 doesn't apply) and nobody is alerted, although the person was told it is paid (KIO-22). Known gap, or should the kiosk keep retrying or warn? — #812
 
 ## Retired
 

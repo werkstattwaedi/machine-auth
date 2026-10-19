@@ -339,8 +339,19 @@ export interface CheckoutDoc extends AuditFields {
   status: "open" | "awaiting_payment" | "closed" | "cancelled"
   /** The approved attempt while awaiting payment (#812). */
   terminalApproval?: { attempt: number; reportedAt: Timestamp } | null
-  /** Priced terminal attempts by number (ADR-0051); the approved one's amount is what is due. */
-  terminalAttempts?: Record<string, { amount: number; reference: string }> | null
+  /**
+   * Priced terminal attempts by number (ADR-0051); the approved one's amount
+   * is what is due, its persons and usage type what was charged.
+   */
+  terminalAttempts?: Record<
+    string,
+    {
+      amount: number
+      reference: string
+      usageType?: CheckoutUsageType
+      persons?: CheckoutDoc["persons"]
+    }
+  > | null
   cancelledAt?: Timestamp | null
   cancelledBy?: string | null
   cancellationReason?: string | null

@@ -3,8 +3,9 @@
 
 /**
  * Check Out preview of the same-day usage-fee waiver (issue #268,
- * ADR-0050): the wizard reads the owner's closed checkouts and asks the
- * shared rule which persons are already covered today, so the summary
+ * ADR-0050): the wizard reads the owner's closed checkouts (and those
+ * awaiting payment, #812) and asks the shared rule which persons are
+ * already covered today, so the summary
  * shows the total the server will bill. The server decides again on
  * close — this only previews it.
  */
@@ -27,23 +28,29 @@ export const WAIVED_TODAY_LABEL = "heute bereits abgerechnet"
 export type PricedPerson = CheckoutPerson & { entryFeeWaivedToday?: boolean }
 
 function toSameDayCheckout(c: CheckoutDoc & { id: string }): SameDayCheckout {
+  // Awaiting payment (#812): the terminal charged what the approved attempt
+  // priced, and the approval report stands in for the close.
+  const approved = c.status === "awaiting_payment" && c.terminalApproval
+    ? c.terminalAttempts?.[String(c.terminalApproval.attempt)] ?? null
+    : null
   return {
     id: c.id,
     status: c.status,
     cancelledAt: c.cancelledAt ?? null,
     // Typed as a plain string on the doc; an unknown value prices as
     // regular (`usageDiscount`).
-    usageType: c.usageType as UsageType,
+    usageType: (approved?.usageType ?? c.usageType) as UsageType,
     created: c.created?.toDate?.() ?? null,
-    closedAt: c.closedAt?.toDate?.() ?? null,
-    persons: c.persons ?? [],
+    closedAt: (approved ? c.terminalApproval?.reportedAt : c.closedAt)?.toDate?.() ?? null,
+    persons: approved?.persons ?? c.persons ?? [],
   }
 }
 
 /**
  * `persons` with `entryFeeWaivedToday` set as the server would set it on
  * close. `openedAt` is the open checkout's `created` (now when it has none
- * yet); `closedCheckouts` the owner's closed checkouts.
+ * yet); `closedCheckouts` the owner's closed checkouts and those awaiting
+ * payment (#812).
  */
 export function withSameDayWaiver(
   persons: CheckoutPerson[],

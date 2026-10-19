@@ -540,9 +540,27 @@ export function WizardProvider({
         ]
       : []),
   )
+  // Visits awaiting payment (#812) count too; they have no closedAt to
+  // range on, and there are rarely more than one.
+  const { data: awaitingPayment } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "awaiting_payment"),
+        ]
+      : []),
+  )
   const feePersons = useMemo(
-    () => withSameDayWaiver(persons, ownerId, openedAt, closedToday, checkoutId),
-    [persons, ownerId, openedAt, closedToday, checkoutId],
+    () =>
+      withSameDayWaiver(
+        persons,
+        ownerId,
+        openedAt,
+        [...closedToday, ...awaitingPayment],
+        checkoutId,
+      ),
+    [persons, ownerId, openedAt, closedToday, awaitingPayment, checkoutId],
   )
 
   // Saved persons of the identified principal (account login or badge tap).

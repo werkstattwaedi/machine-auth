@@ -18,9 +18,11 @@ import type {
 
 const mockPrepare = vi.fn()
 const mockReport = vi.fn()
+const mockReportRpcError = vi.fn()
 vi.mock("@modules/lib/rpc", () => ({
   rpcCallable: (_functions: unknown, _group: string, method: string) =>
     method === "reportTerminalApproval" ? mockReport : mockPrepare,
+  reportRpcError: (...args: unknown[]) => mockReportRpcError(...args),
 }))
 vi.mock("@modules/lib/firebase-context", () => ({
   useDb: () => ({}),
@@ -108,6 +110,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   mockPrepare.mockReset()
+  mockReportRpcError.mockReset()
   mockReport.mockReset()
 })
 
@@ -165,7 +168,7 @@ describe("useTerminalPayment", () => {
     expect(mockReport).not.toHaveBeenCalled()
   })
 
-  it("still shows paid when the report fails, and flushReport waits for it", async () => {
+  it("still shows paid but warns and logs when the report fails, and flushReport waits for it", async () => {
     mockReport.mockRejectedValue(Object.assign(new Error("nope"), { code: "functions/failed-precondition" }))
     const { hook, finish } = setup()
     await act(async () => {
@@ -177,8 +180,28 @@ describe("useTerminalPayment", () => {
       await hook.result.current.flushReport()
     })
     expect(hook.result.current.terminal?.phase).toBe("approved")
+    expect(hook.result.current.terminal?.reportFailed).toBe(true)
+    expect(mockReportRpcError.mock.calls[0][1]).toMatch(/^terminal_approval_unreported /)
     // Refused by the server: not retried.
     expect(mockReport).toHaveBeenCalledTimes(1)
+  })
+
+  it("drops the warning once Wallee's confirmation closes the checkout", async () => {
+    mockReport.mockRejectedValue(Object.assign(new Error("nope"), { code: "functions/failed-precondition" }))
+    const { hook, finish } = setup()
+    await act(async () => {
+      void hook.result.current.start()
+    })
+    await flush()
+    await act(async () => finish("approved"))
+    await act(async () => {
+      await hook.result.current.flushReport()
+    })
+    expect(hook.result.current.terminal?.reportFailed).toBe(true)
+    act(() =>
+      snapshotListener?.({ data: () => ({ status: "closed", paymentMethod: "wallee_terminal" }) }),
+    )
+    expect(hook.result.current.terminal?.reportFailed).toBe(false)
   })
 
   it("retries a report the network dropped", async () => {
@@ -195,6 +218,8 @@ describe("useTerminalPayment", () => {
       await hook.result.current.flushReport()
     })
     expect(mockReport).toHaveBeenCalledTimes(2)
+    expect(hook.result.current.terminal?.reportFailed).toBeFalsy()
+    expect(mockReportRpcError).not.toHaveBeenCalled()
   })
 
   it("offers a retry after a decline with a fresh attempt", async () => {

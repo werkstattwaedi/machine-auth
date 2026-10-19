@@ -107,6 +107,27 @@ describe("withSameDayWaiver", () => {
     expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
+  // #812: the terminal charged the approved attempt — its persons count.
+  it("counts a visit awaiting payment by its approved attempt", () => {
+    const awaiting = closed({
+      status: "awaiting_payment",
+      closedAt: undefined,
+      persons: [],
+      terminalApproval: { attempt: 2, reportedAt: ts(morning) },
+      terminalAttempts: {
+        "1": { amount: 7.5, reference: "S-co-1", usageType: "regular", persons: [] },
+        "2": {
+          amount: 22.5,
+          reference: "S-co-2",
+          usageType: "regular",
+          persons: closed().persons,
+        },
+      },
+    })
+    const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [awaiting], "co-open")
+    expect(out.map((p) => p.entryFeeWaivedToday ?? false)).toEqual([true, true])
+  })
+
   it("never marks anyone on a guest check-in", () => {
     const out = withSameDayWaiver([kid], null, openedAt, [closed()], null)
     expect(out[0].entryFeeWaivedToday).toBeUndefined()

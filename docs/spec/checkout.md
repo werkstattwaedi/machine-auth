@@ -35,8 +35,9 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 
 ## Usage fee
 
-- **CHK-37** A person whose usage type carries a usage fee (CHK-4) pays none of it on a visit when they were already on another visit of the same account — opened on the same day, closed before this one and not cancelled — on a usage type whose fee is at least as high; otherwise they pay it in full, and on a guest's checkout nobody gets this. — #268, ADR-0050, #605, #759
+- **CHK-37** A person whose usage type carries a usage fee (CHK-4) pays none of it on a visit when they were already on another visit of the same account — opened on the same day, closed before this one (a visit awaiting payment as CHK-47 says) and not cancelled — on a usage type whose fee is at least as high; otherwise they pay it in full, and on a guest's checkout nobody gets this. — #268, ADR-0050, #605, #759, #812
 - **CHK-38** For CHK-37 the account holder is the same person by their account, and every other person — typed in or added from the saved persons (CHK-34) — by user type and name, the name compared ignoring case, extra spaces and word order. — ADR-0050, #605
+- **CHK-47** For CHK-37 a visit awaiting payment (BIL-48) counts as closed when the terminal's approval was reported, with the persons and usage types of the payment the terminal approved (BIL-40). — #812
 - **CHK-39** The waiver (CHK-37) is applied wherever a usage fee is billed — closing a checkout, and an admin correction as of the visit it replaces — and the check-in (CHK-43) and Check Out show the waived fee, saying it was already billed today, before the person pays. — ADR-0050, #605, #776
 - **CHK-43** On the check-in, each person's usage fee (CHK-4) is shown beside their usage type and follows it as it is changed. — #605
 
@@ -113,11 +114,11 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - **CHK-24** Only after a QR-Rechnung was confirmed can the person unfold the QR code of its QR slip, and never on a phone. — ADR-0020, #750
 - **CHK-25** On an own device the PDF download (BIL-15) is offered once the commit (CHK-22) is done, names the kind of document it is (BIL-1, BIL-8), and waits for the PDF to be generated instead of failing. — #750, #790
 - **CHK-27** After RaiseNow is committed, Bezahlen offers to open the paylink again. — #750
-- **CHK-26** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — what the person can do next depends on where they are — ADR-0022, #750, ADR-0051, #735:
+- **CHK-26** After the commit — for the Wallee terminal, once the terminal approved the payment (KIO-22) — what the person can do next depends on where they are — ADR-0022, #750, ADR-0051, #735, #812:
 
   | Where | Offered | Then |
   |---|---|---|
-  | the kiosk | "Fertig", filling over 8 s and then pressing itself; once the QR code was unfolded (CHK-24), or while a RaiseNow payment is still in the overlay (KIO-20), it waits to be pressed instead | the kiosk resets (KIO-8) |
+  | the kiosk | "Fertig", filling over 8 s and then pressing itself; once the QR code was unfolded (CHK-24), while a RaiseNow payment is still in the overlay (KIO-20), or once the Wallee terminal's approval couldn't be reported (KIO-27), it waits to be pressed instead | the kiosk resets (KIO-8) |
   | an own device, signed in | "Fertig", without countdown | the account's Nutzungsverlauf |
   | an own device, as a guest | no button; the person is told they can close the window | nothing — the guest is neither signed out nor sent anywhere |
 
@@ -138,7 +139,6 @@ in [billing.md](billing.md). Terms: see the [glossary](README.md#glossary).
 - [NEEDS CLARIFICATION] A person who signs in on the check-in of their own device while a checkout of theirs is open stays on the check-in, its persons filled from that checkout, instead of landing on Kosten (CHK-2); the same sign-in at the kiosk lands on Kosten (KIO-1). Intended?
 - [NEEDS CLARIFICATION] Only the app keeps a person to one open checkout (CHK-7); nothing on the server refuses a second one when two devices check in at once. Intended?
 - [NEEDS CLARIFICATION] After the commit (CHK-22) a reload, the browser's back or a deep link leaves Bezahlen for good: there is no open checkout, the person is sent to the check-in, and a guest has no way back to the PDF download (CHK-25) or the paylink (CHK-27) — the document is in the mail (BIL-26). Intended?
-- [NEEDS CLARIFICATION] A second visit started while the first still awaits payment (BIL-48) pays the usage fee again, since CHK-37 counts closed visits only; normally Wallee closes the first within a second. Intended, or should an awaiting visit count? — #812
 - [NEEDS CLARIFICATION] The unfolded sessions (CHK-45) show each session's wall-clock duration, while the row's minutes (CHK-44) are the billed time, so on a machine billed by active time (ADR-0032) the sessions don't add up to the row. Intended, or should the list show billed time?
 - [NEEDS CLARIFICATION] Only the app keeps a machine row read-only (CHK-44); the server accepts an edit or delete of it from the checkout's owner. Should the server refuse?
 - [NEEDS CLARIFICATION] A reminder link to a checkout that no longer exists tells even its account holder that it belongs to another account (CHK-42). Intended? → #802

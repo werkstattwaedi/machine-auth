@@ -12,7 +12,8 @@
  *   and person type — so a companion typed in again (or added from the
  *   saved persons) is recognised without being saved.
  * - Covered when the person is on another closed, non-cancelled visit of the
- *   same account that was *opened* on the same business day, on a usage
+ *   same account — or one awaiting payment at the Wallee terminal (#812),
+ *   whose fee the terminal already took — that was *opened* on the same business day, on a usage
  *   type whose fee is at least this line's — they pay the difference, which
  *   for every combination that can occur is all or nothing. A morning on
  *   Begleitung or Hangenmoos AG (no fee) covers nothing, so the regular
@@ -37,6 +38,13 @@ export interface SameDayPerson {
   usageType?: UsageType | null
 }
 
+/**
+ * Statuses of an earlier visit that count (#812): an awaiting one's persons
+ * and usage type are those of the approved terminal attempt — what the
+ * terminal charged.
+ */
+export const SAME_DAY_COUNTED_STATUSES: readonly string[] = ["closed", "awaiting_payment"]
+
 /** An earlier checkout of the same account. */
 export interface SameDayCheckout {
   id: string
@@ -45,7 +53,10 @@ export interface SameDayCheckout {
   usageType?: UsageType | null
   /** When the visit was opened — decides its business day. */
   created?: Date | null
-  /** When it was closed (legacy docs lack it: `created` stands in). */
+  /**
+   * When it was closed (legacy docs lack it: `created` stands in); for one
+   * awaiting payment, when the terminal's approval was reported.
+   */
   closedAt?: Date | null
   persons?: readonly SameDayPerson[] | null
 }
@@ -108,9 +119,9 @@ export function sameDayCoveredPersons(input: {
   const paid = new Map<string, number>()
   for (const c of input.earlierCheckouts) {
     if (input.currentCheckoutId && c.id === input.currentCheckoutId) continue
-    // `status == "closed"` already excludes cancelled visits (ADR-0042);
-    // checked here too so callers can't widen the query by accident.
-    if (c.status !== "closed" || c.cancelledAt) continue
+    // The query already excludes cancelled visits (ADR-0042); checked here
+    // too so callers can't widen it by accident.
+    if (!SAME_DAY_COUNTED_STATUSES.includes(c.status ?? "") || c.cancelledAt) continue
     // A badge/membership bought without a visit charged no usage fee.
     if (isPurchaseOnly(c)) continue
     if (!c.created || !isSameBusinessDay(c.created, openedAt)) continue

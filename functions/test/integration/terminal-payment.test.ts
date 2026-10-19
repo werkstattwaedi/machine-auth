@@ -383,6 +383,17 @@ describe("Wallee terminal payment (Integration)", () => {
       expect(await report("co1", attempt)).to.deep.equal({ status: "awaiting_payment" });
     });
 
+    it("counts a parked visit for the same-day usage fee", async () => {
+      await seedOpenCheckout("co1");
+      const first = await prepare("co1");
+      expect(first.amount).to.equal(25);
+      await report("co1", first.attempt);
+
+      // The next visit that day pays the material only (CHK-37).
+      await seedOpenCheckout("co2");
+      expect((await prepare("co2")).amount).to.equal(10);
+    });
+
     it("is a no-op when Wallee's confirmation came first", async () => {
       await seedOpenCheckout("co1");
       const { attempt, reference } = await prepare("co1");

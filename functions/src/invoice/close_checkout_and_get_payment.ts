@@ -43,6 +43,7 @@ import {
   isPaymentMethod,
   billPaymentMethodOf,
   machineUsageBlocked,
+  SAME_DAY_COUNTED_STATUSES,
   sameDayCoveredPersons,
   samedayPersonKey,
   type SameDayCheckout,
@@ -564,26 +565,31 @@ export async function markEntryFeeWaivedToday(
     return persons;
   }
 
-  // All closed checkouts this account owns, filtered to the opening
-  // business day in memory (Firestore can't express the 03:00 boundary
-  // without a precomputed key, and the per-account volume is tiny).
-  // `status == "closed"` excludes cancelled visits (ADR-0042).
+  // All closed (or awaiting-payment, #812) checkouts this account owns,
+  // filtered to the opening business day in memory (Firestore can't express
+  // the 03:00 boundary without a precomputed key, and the per-account volume
+  // is tiny). Neither status includes cancelled visits (ADR-0042).
   const priorSnap = await db
     .collection("checkouts")
     .where("userId", "==", ownerRef)
-    .where("status", "==", "closed")
+    .where("status", "in", [...SAME_DAY_COUNTED_STATUSES])
     .get();
 
   const earlierCheckouts: SameDayCheckout[] = priorSnap.docs.map((doc) => {
     const c = doc.data() as CheckoutEntity;
+    // Awaiting payment: the terminal charged what the approved attempt
+    // priced, and there is no close yet — the report stands in for it.
+    const approved = c.status === "awaiting_payment" && c.terminalApproval
+      ? c.terminalAttempts?.[String(c.terminalApproval.attempt)] ?? null
+      : null;
     return {
       id: doc.id,
       status: c.status,
       cancelledAt: c.cancelledAt ?? null,
-      usageType: c.usageType,
+      usageType: approved?.usageType ?? c.usageType,
       created: c.created?.toDate?.() ?? null,
-      closedAt: c.closedAt?.toDate?.() ?? null,
-      persons: c.persons ?? [],
+      closedAt: (approved ? c.terminalApproval?.reportedAt : c.closedAt)?.toDate?.() ?? null,
+      persons: approved?.persons ?? c.persons ?? [],
     };
   });
 
