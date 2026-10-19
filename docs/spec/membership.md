@@ -9,7 +9,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-1** A badge tap alone never buys a membership (ACC-4); buying takes a signed-in account, at the kiosk a code entered in the last 15 min (ACC-5). — ADR-0041
 - **MEM-2** A person with an active membership can't buy another one — renewal is automatic (MEM-24); a person whose membership expired can buy again.
 - **MEM-3** Buying adds the membership to the buyer's open checkout, or opens a purchase-only checkout without a usage fee, and goes straight to the checkout summary.
-- **MEM-4** A checkout holds at most one membership; while one waits there, the membership page only points to finishing that checkout.
+- **MEM-4** A checkout holds at most one membership, and while one waits in a checkout that is open or awaiting payment (BIL-49), no other can be bought: the membership page only points to finishing that open checkout, or says that the payment is being confirmed. — #812
 - **MEM-5** A checkout with a membership can't be closed without a complete postal address, and that address is saved to the buyer's profile.
 - **MEM-6** A checkout with a membership can't use the internal usage type. — #284
 - **MEM-7** A membership becomes active when its bill's payment method is committed — by the buyer (CHK-22) or by the provider's confirmation of a verified payment (BIL-39) — not when the payment is booked (BIL-34). — #251, ADR-0051, #757
@@ -23,6 +23,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-12** Wherever a membership is advertised, the only discount promised is cheaper machine use, never cheaper material. — #665
 - **MEM-13** A membership doesn't change the usage fee; member prices (MEM-10), paying by Sammelrechnung (BIL-4) and a free first badge (MEM-14) are its only benefits.
 - **MEM-14** A person's first badge is free if they are an active member or hold any permission; while they have an active badge, every further one costs the catalog price. — ADR-0030
+- **MEM-37** A badge that is registered, or on a checkout that is open or awaiting payment (BIL-49), can't be added to another checkout. — ADR-0030, #812
 
 ## Family
 

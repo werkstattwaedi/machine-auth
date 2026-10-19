@@ -1,8 +1,8 @@
 # Account & sign-in
 
 How a person signs in — e-mail code, SMS code, Google or badge — where each
-works, what a first sign-in asks for, and what a badge tap reaches at the
-kiosk. Terms: see the [glossary](README.md#glossary).
+works, what a first sign-in asks for, what a badge tap reaches at the
+kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 ## Ways to sign in
 
@@ -25,6 +25,10 @@ kiosk. Terms: see the [glossary](README.md#glossary).
 
 - **ACC-4** A restricted session reaches the checkout but not the account. — ADR-0041
 - **ACC-5** At the kiosk, an e-mail or SMS code opens the account for 15 min, entered at sign-in (ACC-1) or when a restricted session opens an account page. — ADR-0041
+
+## Nutzungsverlauf
+
+- **ACC-6** The Nutzungsverlauf lists each of the person's checkouts awaiting payment (BIL-49), with its amount, as a payment still being confirmed. — #812
 
 ## Open questions
 

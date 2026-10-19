@@ -21,15 +21,26 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-6** Confirming RaiseNow is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone. — #251, #302, #757
 - **BIL-44** A checkout totalling more than CHF 0 can't be closed without a payment method. — #757
-- **BIL-39** A checkout paid by a verified payment stays open until the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is it closed, its bill issued (BIL-16) already paid and the method committed, and a declined or abandoned payment leaves it open without a bill. — ADR-0051, #735
+- **BIL-39** A checkout paid by a verified payment is closed only when the payment provider confirms the payment to the server — for the Wallee terminal right after the payment, or the next night if that notice is lost — and never on the kiosk's or the person's word; only then is its bill issued (BIL-16) already paid and the method committed; until then it has no bill and is open or awaiting payment (BIL-49), and a declined or abandoned payment leaves it open. — ADR-0051, #735, #812
+- **BIL-49** When the kiosk reports the Wallee terminal's approval of the checkout's latest payment within 10 min of that payment's start (KIO-22), the checkout is awaiting payment until Wallee's confirmation closes it (BIL-39); a report of an earlier payment, one more than 10 min after the start, or none reaching the server (KIO-27) leaves it open — #812:
+
+  | What | While it awaits payment |
+  |---|---|
+  | changing anything on it | not possible |
+  | the person's open checkout (CHK-2, KIO-1, KIO-14) | it is none any more: the next check-in (CHK-3), machine time (CHK-44) or purchase (CHK-5, MEM-3) opens a new checkout |
+  | a membership or badge on it | still waits there: no other membership can be bought (MEM-4), and that badge can't be added to another checkout (MEM-37) |
+  | the reminder (CHK-41) | none is sent |
+  | its bill, and what it grants (MEM-7) | none yet |
+
+- **BIL-50** A checkout still awaiting payment (BIL-49) 30 min after the terminal's approval alerts the team within the hour, again every 7 days while it still awaits, and stays as it is until Wallee confirms it or the team resolves it by hand. — #812
 - **BIL-40** A verified payment (BIL-39) closes the checkout with exactly the persons and their usage types, the items, the donation and the amount priced when that payment was started, and its bill is paid as of the time the provider authorised the payment. — ADR-0051, #735, #788
-- **BIL-42** A change made to the checkout after a verified payment was started for it doesn't hold the payment up: the provider's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to the difference — ADR-0051, #788:
+- **BIL-42** A change made to the checkout after a verified payment was started for it doesn't hold the payment up: the provider's confirmation still closes the checkout as priced then (BIL-40), and the team is alerted to the difference — ADR-0051, #788, #812:
 
   | Changed after the start | On the closed checkout |
   |---|---|
   | an item added or removed, or a quantity changed | the items and quantities as priced |
   | a person added or removed, or a usage type changed (CHK-4, CHK-40) | the persons and usage types as priced |
-  | machine time arrived from a machine terminal (CHK-44), on an existing or a new machine row | the machine rows and their minutes as priced, leaving out the sessions that arrived later (CHK-44), which are billed neither there nor on a later checkout |
+  | machine time arrived from a machine terminal (CHK-44) while the checkout was still open (BIL-49), on an existing or a new machine row | the machine rows and their minutes as priced, leaving out the sessions that arrived later (CHK-44), which are billed neither there nor on a later checkout |
 
 - **BIL-43** A checkout takes at most ten payments started at the Wallee terminal, each start counting whether or not the terminal took it; an eleventh is refused, and the person is told to contact the team. — ADR-0051, #735
 - **BIL-8** A checkout totalling CHF 0 asks for no payment method, and unless it corrects an earlier bill (BIL-17, BIL-28) its document is a Beleg. — #237, #780
@@ -80,19 +91,19 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 - **BIL-30** A statement import matches payments by QR reference and lists unmatched, duplicate and cancelled-bill payments for manual handling; a payment with a different amount is booked with a warning.
 - **BIL-31** Booking a payment sends no mail and changes no document.
 - **BIL-34** Nothing but a verified payment (BIL-39) waits for payment: a committed bill grants what it bills (visit, badge, membership, renewal) at once, and whether it was paid is only established when payments are booked, or at issue for a CHF 0 bill (BIL-45); unpaid bills are followed up at reconciliation. — #746, ADR-0051
-- **BIL-41** In these cases a payment at the Wallee terminal changes no checkout or bill, and the money is handled by hand — ADR-0051, #735:
+- **BIL-41** In these cases a payment at the Wallee terminal changes no checkout or bill, and the money is handled by hand — ADR-0051, #735, #812:
 
   | Case | What stays |
   |---|---|
   | it arrives for a checkout already closed — by an earlier payment at the Wallee terminal or another method — or cancelled | the checkout and its bill as they are |
-  | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open |
+  | its amount differs from the one priced when it was started (BIL-40) | the checkout stays open, or awaiting payment (BIL-49) |
   | it is reversed after it closed the checkout | the checkout stays closed and its bill paid |
 - **BIL-45** A bill totalling CHF 0 counts as paid as soon as it is issued, without a booking (BIL-34), and its document and, where one is sent (BIL-26, BIL-28), its mail say that nothing is to be paid. — #237, #790
 
 ## Retention
 
 - **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive. — ADR-0038
-- **BIL-33** A person's data can't be erased while they have an unpaid bill. — ADR-0038
+- **BIL-33** A person's data can't be erased while they have an unpaid bill, an open checkout or one awaiting payment (BIL-49), or are named on such a checkout of someone else. — ADR-0038, #812
 
 ## Open questions
 

@@ -12,6 +12,8 @@
 // hard reload. In a browser tab there's no bridge, so `signOut` + reload is the
 // in-process reset.
 
+import { flushTerminalReport } from "./pending-terminal-report"
+
 export interface StartOverDeps {
   signOut: () => Promise<void>
   bridgeAvailable: boolean
@@ -39,6 +41,9 @@ export function startOverTarget(
 }
 
 export async function runStartOver(deps: StartOverDeps): Promise<void> {
+  // A Wallee terminal approval report still in flight must reach the server
+  // as this session before it is wiped (#812).
+  await flushTerminalReport()
   try {
     await deps.signOut()
   } catch (err) {

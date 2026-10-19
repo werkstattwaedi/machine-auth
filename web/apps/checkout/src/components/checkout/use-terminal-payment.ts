@@ -8,8 +8,11 @@
  * terminal, and Wallee's confirmation — not this screen — closes the
  * checkout and mails the Quittung (BIL-39).
  *
- * So the terminal's result only decides what this screen shows. After a
- * dropped connection ("unknown") nobody knows whether money moved; the
+ * So the terminal's result mostly decides what this screen shows. The one
+ * thing an approval also does is tell the server (`reportTerminalApproval`,
+ * #812), which parks the checkout as "awaiting payment" so the person, told
+ * "paid", no longer finds an open visit; it is still Wallee that closes it.
+ * After a dropped connection ("unknown") nobody knows whether money moved; the
  * checkout document does: a confirmed payment closes it within a second,
  * so it is watched for a while before the person may pay again.
  *
@@ -27,8 +30,9 @@ import type {
 } from "@oww/shared"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { checkoutRef } from "@modules/lib/firestore-helpers"
-import { rpcCallable } from "@modules/lib/rpc"
+import { reportRpcError, rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { flushTerminalReport, trackTerminalReport } from "./pending-terminal-report"
 
 /** The kiosk bridge's terminal methods (`useBridge`); absent outside the kiosk. */
 export interface TerminalBridge {
@@ -74,13 +78,22 @@ export interface TerminalPaymentState {
   payerEmail: string
   /** Shown with "error" (German). */
   errorText: string | null
+  /**
+   * With "approved": the server never took the approval report (#812), so
+   * the checkout is still open although the terminal took the money.
+   */
+  reportFailed?: boolean
 }
 
 /** How long a lost connection is answered by watching the checkout. */
 export const TERMINAL_CHECK_MS = 10_000
 
+/** Pauses between report retries; the server refusing it is final. */
+const APPROVAL_REPORT_RETRY_MS = [300, 1_000]
+
 interface PrepareResponse {
   checkoutId: string
+  attempt: number
   reference: string
   amount: number
   amountRappen: number
@@ -179,6 +192,50 @@ export function useTerminalPayment(args: {
     setTerminal((prev) => (prev ? { ...prev, ...patch } : prev))
   }, [])
 
+  /**
+   * Tells the server the terminal approved the attempt. If it never gets
+   * through, the checkout stays open: the screen still shows the payment
+   * (the terminal took it) but warns the person to tell the team, and the
+   * failure is logged as `terminal_approval_unreported` for the team's alert.
+   */
+  const reportApproval = useCallback(
+    (run: number, reportCheckoutId: string, attempt: number, reference: string) => {
+      const call = rpcCallable<{ checkoutId: string; attempt: number }, unknown>(
+        functions,
+        "billingCall",
+        "reportTerminalApproval",
+      )
+      const send = async () => {
+        for (let i = 0; ; i++) {
+          try {
+            await call({ checkoutId: reportCheckoutId, attempt })
+            return
+          } catch (err) {
+            const code = (err as { code?: unknown } | null)?.code
+            const retryable = code === "functions/unavailable" ||
+              code === "functions/internal" || code === "functions/deadline-exceeded"
+            if (!retryable || i >= APPROVAL_REPORT_RETRY_MS.length) {
+              // The reference names the checkout and attempt; no person data.
+              reportRpcError(
+                functions,
+                `terminal_approval_unreported ${reference}`,
+                "billingCall",
+                "reportTerminalApproval",
+                err,
+              )
+              update(run, { reportFailed: true })
+              return
+            }
+            await new Promise((r) => setTimeout(r, APPROVAL_REPORT_RETRY_MS[i]))
+          }
+        }
+      }
+      // Every reset waits for it briefly (`runStartOver`).
+      trackTerminalReport(send())
+    },
+    [functions, update],
+  )
+
   const start = useCallback(async () => {
     if (!checkoutId || !bridge.terminalPay) return
     if (phaseRef.current && TERMINAL_BUSY_PHASES.has(phaseRef.current)) return
@@ -263,10 +320,15 @@ export function useTerminalPayment(args: {
         reference: prepared.reference,
       })
       update(run, phaseForResult(result))
+      // Even for an attempt the person already left: the terminal took the
+      // money, so the checkout should not stay open.
+      if (result.outcome === "approved") {
+        reportApproval(run, checkoutId, prepared.attempt, prepared.reference)
+      }
     } finally {
       unsubscribe?.()
     }
-  }, [checkoutId, bridge, buildClosePayload, functions, prepare, terminal, update])
+  }, [checkoutId, bridge, buildClosePayload, functions, prepare, terminal, update, reportApproval])
 
   /**
    * Leaves the terminal: stops it if it still waits for a card. Once a card
@@ -290,9 +352,12 @@ export function useTerminalPayment(args: {
   // After a dropped connection: Wallee closes the checkout within a second
   // of a payment that went through. Watch it before calling it lost — and
   // keep watching while "unknown" is shown, so a late confirmation still
-  // turns the screen to paid instead of offering to pay again.
+  // turns the screen to paid instead of offering to pay again. A lost
+  // approval report is watched too: Wallee's confirmation books the payment
+  // anyway, and then the warning is wrong.
   const watchedCheckoutId =
-    terminal?.phase === "checking" || terminal?.phase === "unknown"
+    terminal?.phase === "checking" || terminal?.phase === "unknown" ||
+      (terminal?.phase === "approved" && terminal.reportFailed)
       ? terminal.checkoutId
       : null
   useEffect(() => {
@@ -303,7 +368,7 @@ export function useTerminalPayment(args: {
       (snap) => {
         const doc = snap.data()
         if (doc && doc.status !== "open" && doc.paymentMethod === "wallee_terminal") {
-          update(run, { phase: "approved" })
+          update(run, { phase: "approved", reportFailed: false })
         }
       },
       () => {
@@ -319,5 +384,5 @@ export function useTerminalPayment(args: {
     return () => clearTimeout(timer)
   }, [checking, update])
 
-  return { terminal, start, abort, clear }
+  return { terminal, start, abort, clear, flushReport: flushTerminalReport }
 }

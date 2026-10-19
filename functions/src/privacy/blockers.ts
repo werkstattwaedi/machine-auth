@@ -53,11 +53,19 @@ export async function findBlockers(
     for (const doc of [...byUser.docs, ...(byPrincipal?.docs ?? [])]) {
       if (seen.has(doc.id)) continue;
       seen.add(doc.id);
-      if ((doc.data() as CheckoutEntity).status === "open") {
+      const status = (doc.data() as CheckoutEntity).status;
+      if (status === "open") {
         blockers.push({
           type: "open-checkout",
           path: doc.ref.path,
           detail: "Offener Checkout — zuerst abschliessen oder löschen",
+        });
+      } else if (status === "awaiting_payment") {
+        // Money in flight (#812): Wallee's confirmation still closes it.
+        blockers.push({
+          type: "open-checkout",
+          path: doc.ref.path,
+          detail: "Terminal-Zahlung wartet auf Bestätigung durch Wallee",
         });
       }
     }
@@ -85,11 +93,12 @@ export async function findBlockers(
   }
 
   // Both kinds: a persons[] entry inside a currently-open checkout would
-  // break the active visit if redacted mid-flight.
+  // break the active visit if redacted mid-flight — or the close of one
+  // awaiting the terminal payment's confirmation (#812).
   if (subject.email || subject.uid) {
     const open = await db
       .collection("checkouts")
-      .where("status", "==", "open")
+      .where("status", "in", ["open", "awaiting_payment"])
       .get();
     for (const doc of open.docs) {
       const checkout = doc.data() as CheckoutEntity;

@@ -161,6 +161,10 @@ describe("sameDayCoveredPersons", () => {
     expect(covered([owner], [visit({ status: "open" })])).toEqual([false])
   })
 
+  it("counts a visit awaiting payment at the terminal (#812)", () => {
+    expect(covered([owner], [visit({ status: "awaiting_payment" })])).toEqual([true])
+  })
+
   it("ignores purchase-only checkouts (everyone on Begleitung, CHK-9)", () => {
     expect(covered([owner], [visit({ usageType: "materialbezug" })])).toEqual([false])
   })

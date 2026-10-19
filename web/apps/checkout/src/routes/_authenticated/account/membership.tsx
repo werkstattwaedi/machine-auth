@@ -119,6 +119,18 @@ function MembershipPage() {
   const { data: openCheckoutItems } = useCollection(
     openCheckout ? checkoutItemsCollection(db, openCheckout.id) : null,
   )
+  // A membership paid at the Wallee terminal still waits in its checkout
+  // until Wallee confirms the payment (#812, MEM-4): not active, but bought.
+  const { data: awaitingCheckouts } = useCollection(
+    ref ? checkoutsCollection(db) : null,
+    ...(ref
+      ? [where("userId", "==", ref), where("status", "==", "awaiting_payment")]
+      : []),
+  )
+  const awaitingCheckout = awaitingCheckouts[0] ?? null
+  const { data: awaitingCheckoutItems } = useCollection(
+    awaitingCheckout ? checkoutItemsCollection(db, awaitingCheckout.id) : null,
+  )
   // Resolve the membership catalog item via `config/catalog-references`
   // (same indirection `config/pricing` uses for entry fees). Then read
   // the catalog doc itself for prices. Two reactive reads chained; both
@@ -140,16 +152,25 @@ function MembershipPage() {
       }
       return { single: lookup("single"), family: lookup("family") }
     }, [membershipCatalog, discountLevel])
-  const pendingMembershipType: "single" | "family" | null = React.useMemo(() => {
+  const pendingMembership = React.useMemo((): {
+    type: "single" | "family"
+    awaitingPayment: boolean
+  } | null => {
     const membershipId = membershipDocRef?.id
     if (!membershipId) return null
-    for (const item of openCheckoutItems) {
-      if (item.catalogId?.id !== membershipId) continue
-      if (item.variantId === "single") return "single"
-      if (item.variantId === "family") return "family"
+    const typeIn = (items: typeof openCheckoutItems) => {
+      for (const item of items) {
+        if (item.catalogId?.id !== membershipId) continue
+        if (item.variantId === "single") return "single" as const
+        if (item.variantId === "family") return "family" as const
+      }
+      return null
     }
-    return null
-  }, [openCheckoutItems, membershipDocRef])
+    const awaitingType = typeIn(awaitingCheckoutItems)
+    if (awaitingType) return { type: awaitingType, awaitingPayment: true }
+    const openType = typeIn(openCheckoutItems)
+    return openType ? { type: openType, awaitingPayment: false } : null
+  }, [openCheckoutItems, awaitingCheckoutItems, membershipDocRef])
 
   const startPurchase = async (
     type: "single" | "family",
@@ -207,8 +228,11 @@ function MembershipPage() {
       <WrongAccountInviteNotice />
       <PendingInvitesBanner />
 
-      {pendingMembershipType ? (
-        <PendingMembershipCheckout type={pendingMembershipType} />
+      {pendingMembership ? (
+        <PendingMembershipCheckout
+          type={pendingMembership.type}
+          awaitingPayment={pendingMembership.awaitingPayment}
+        />
       ) : !membership ? (
         <NoMembership
           onPurchase={startPurchase}
@@ -618,9 +642,34 @@ export function StatusHero({
 
 function PendingMembershipCheckout({
   type,
+  awaitingPayment,
 }: {
   type: "single" | "family"
+  awaitingPayment: boolean
 }) {
+  const kind = type === "family" ? "Familien-" : "Einzel-"
+  if (awaitingPayment) {
+    return (
+      <Card data-testid="membership-awaiting-payment">
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">
+              {type === "family" ? <Users /> : <User />}
+              {type === "family" ? "Familie" : "Einzel"}
+            </Badge>
+            <Badge variant="outline">Zahlung wird bestätigt</Badge>
+          </div>
+          <h2 className="font-heading text-xl font-bold">
+            Zahlung wird bestätigt
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Du hast deine {kind}mitgliedschaft am Terminal bezahlt. Sobald die
+            Zahlung bestätigt ist, wird sie aktiviert.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
   return (
     <Card>
       <CardContent className="pt-6 space-y-4">

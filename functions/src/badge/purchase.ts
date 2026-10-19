@@ -156,6 +156,14 @@ export async function handleAddBadgeToCheckout(
     const existingCheckoutRef = openCheckoutsSnap.empty
       ? null
       : openCheckoutsSnap.docs[0].ref;
+    // A checkout the terminal approved still holds its badges until Wallee
+    // confirms it (#812): they count as pending, like the open one's.
+    const awaitingSnap = await tx.get(
+      database
+        .collection("checkouts")
+        .where("userId", "==", callerRef as DocumentReference)
+        .where("status", "==", "awaiting_payment")
+    );
 
     const tokensSnap = await tx.get(
       database
@@ -170,8 +178,8 @@ export async function handleAddBadgeToCheckout(
       throw new HttpsError("failed-precondition", REJECT_ALREADY_REGISTERED);
     }
 
-    // (2) Pending in any OTHER open checkout (needs the COLLECTION_GROUP
-    // index on items.tokenId). Closed checkouts resolve through (1): a
+    // (2) Pending in any OTHER open or awaiting-payment checkout (needs the
+    // COLLECTION_GROUP index on items.tokenId). Closed checkouts resolve through (1): a
     // closed checkout's badge item has either created the token doc or
     // been abandoned.
     const pendingSnap = await tx.get(
@@ -186,7 +194,8 @@ export async function handleAddBadgeToCheckout(
         continue;
       }
       const parentSnap = await tx.get(parentRef);
-      if (parentSnap.get("status") === "open") {
+      const parentStatus = parentSnap.get("status");
+      if (parentStatus === "open" || parentStatus === "awaiting_payment") {
         throw new HttpsError("failed-precondition", REJECT_IN_OTHER_CHECKOUT);
       }
     }
@@ -198,9 +207,12 @@ export async function handleAddBadgeToCheckout(
     // counting both owned tokens and badges already pending in this
     // checkout (buying three at once: first gratis, rest standard).
     let pendingBadgeItems = 0;
-    if (existingCheckoutRef) {
-      const itemsSnap = await tx.get(existingCheckoutRef.collection("items"));
-      pendingBadgeItems = itemsSnap.docs.filter((d) =>
+    for (const ref of [
+      ...(existingCheckoutRef ? [existingCheckoutRef] : []),
+      ...awaitingSnap.docs.map((d) => d.ref),
+    ]) {
+      const itemsSnap = await tx.get(ref.collection("items"));
+      pendingBadgeItems += itemsSnap.docs.filter((d) =>
         isBadgeItem(d.data() as CheckoutItemEntity)
       ).length;
     }

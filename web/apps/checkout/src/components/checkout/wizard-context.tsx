@@ -79,6 +79,7 @@ import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
 import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
 import { runStartOver } from "./start-over"
+import { flushTerminalReport } from "./pending-terminal-report"
 import {
   TERMINAL_BUSY_PHASES,
   useTerminalPayment,
@@ -539,9 +540,27 @@ export function WizardProvider({
         ]
       : []),
   )
+  // Visits awaiting payment (#812) count too; they have no closedAt to
+  // range on, and there are rarely more than one.
+  const { data: awaitingPayment } = useCollection(
+    identifiedUserRef ? checkoutsCollection(db) : null,
+    ...(identifiedUserRef
+      ? [
+          where("userId", "==", identifiedUserRef),
+          where("status", "==", "awaiting_payment"),
+        ]
+      : []),
+  )
   const feePersons = useMemo(
-    () => withSameDayWaiver(persons, ownerId, openedAt, closedToday, checkoutId),
-    [persons, ownerId, openedAt, closedToday, checkoutId],
+    () =>
+      withSameDayWaiver(
+        persons,
+        ownerId,
+        openedAt,
+        [...closedToday, ...awaitingPayment],
+        checkoutId,
+      ),
+    [persons, ownerId, openedAt, closedToday, awaitingPayment, checkoutId],
   )
 
   // Saved persons of the identified principal (account login or badge tap).
@@ -874,6 +893,8 @@ export function WizardProvider({
 
   // Reset wizard: clear local state, sign out tag/anon, navigate to /checkin.
   const resetWizard = useCallback(async () => {
+    // As in runStartOver: the terminal approval report goes out first (#812).
+    await flushTerminalReport()
     personsDispatch({ type: "RESET" })
     setTip(0)
     setPaymentData(null)

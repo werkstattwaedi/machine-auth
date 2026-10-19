@@ -16,6 +16,7 @@ import { useBridge } from "@modules/lib/use-bridge"
 import { StepCheckout } from "@/components/checkout/step-checkout"
 import { useWizardContext } from "@/components/checkout/wizard-context"
 import { PaymentConfirmation } from "@/components/checkout/payment-confirmation"
+import { AmberBox } from "@/components/checkout/terminal-payment-panel"
 import { CheckoutFinishBar } from "@/components/checkout/checkout-finish-bar"
 import { useIsPhone } from "@/components/checkout/use-is-phone"
 import {
@@ -37,7 +38,13 @@ export const Route = createFileRoute("/_wizard/checkout")({
 function CheckoutRoute() {
   const ctx = useWizardContext()
   if (ctx.terminal?.phase === "approved") {
-    return <TerminalDone amount={ctx.terminal.amount ?? 0} email={ctx.terminal.payerEmail} />
+    return (
+      <TerminalDone
+        amount={ctx.terminal.amount ?? 0}
+        email={ctx.terminal.payerEmail}
+        reportFailed={ctx.terminal.reportFailed === true}
+      />
+    )
   }
   if (ctx.paymentData && ctx.paymentChoice) {
     return <CheckoutDone paymentData={ctx.paymentData} choice={ctx.paymentChoice} />
@@ -218,7 +225,15 @@ function CheckoutDone({
  * within seconds, whether or not anyone still looks at it. Kiosk only, so
  * "Fertig" hands the kiosk to the next person after the countdown.
  */
-function TerminalDone({ amount, email }: { amount: number; email: string }) {
+function TerminalDone({
+  amount,
+  email,
+  reportFailed,
+}: {
+  amount: number
+  email: string
+  reportFailed: boolean
+}) {
   const ctx = useWizardContext()
   const isPhone = useIsPhone()
   return (
@@ -233,11 +248,22 @@ function TerminalDone({ amount, email }: { amount: number; email: string }) {
         qrOpen={false}
         onQrOpenChange={() => {}}
       />
+      {reportFailed && (
+        // The terminal took the money but the visit is still open (#812):
+        // without the team it would be charged again.
+        <div data-testid="terminal-report-failed">
+          <AmberBox>
+            Die Zahlung ist am Terminal durch, aber bei uns noch nicht verbucht. Bitte
+            melde dich beim Team und bezahle diesen Besuch nicht nochmals.
+          </AmberBox>
+        </div>
+      )}
       <div className="flex-1" />
       <CheckoutFinishBar
         kiosk={ctx.kiosk}
         signedIn={ctx.isAccountLoggedIn}
-        holdCountdown={false}
+        // Long enough to read the warning: wait for a tap.
+        holdCountdown={reportFailed}
         onFinish={() => void ctx.startOver()}
       />
     </div>

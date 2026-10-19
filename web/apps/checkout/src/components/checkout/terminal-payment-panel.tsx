@@ -114,7 +114,7 @@ function Status({
   )
 }
 
-function AmberBox({ children }: { children: React.ReactNode }) {
+export function AmberBox({ children }: { children: React.ReactNode }) {
   return (
     <div className="max-w-2xl rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 leading-relaxed">
       {children}

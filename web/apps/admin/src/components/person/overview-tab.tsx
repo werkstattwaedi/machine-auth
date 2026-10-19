@@ -60,7 +60,9 @@ export function PersonOverviewTab({
   const totals = billTotals(bills, Date.now())
   const openVisit = visits.find((v) => v.status === "open")
   const lastVisit = [...visits]
-    .filter((v) => v.status === "closed")
+    // One awaiting the terminal payment's confirmation (#812) is done for
+    // the person too, just not billed yet.
+    .filter((v) => v.status === "closed" || v.status === "awaiting_payment")
     .sort((a, b) => (b.created?.toMillis() ?? 0) - (a.created?.toMillis() ?? 0))[0]
   const lastUsage = [...usages].sort(
     (a, b) => (b.startTime?.toMillis() ?? 0) - (a.startTime?.toMillis() ?? 0),

@@ -3,10 +3,11 @@
 
 /**
  * Wallee entry points (ADR-0051): the webhook that settles a terminal
- * payment within a second of the tap, and the nightly reconcile that
- * catches whatever a lost delivery missed.
+ * payment within a second of the tap, the nightly reconcile that catches
+ * whatever a lost delivery missed, and the hourly alert on approvals
+ * Wallee never confirmed (#812).
  *
- * Both only *read* Wallee and hand the transaction to
+ * The first two only *read* Wallee and hand the transaction to
  * `settleTerminalPayment`; neither trusts a webhook body beyond its ids.
  */
 
@@ -22,6 +23,7 @@ import {
   walleeListenerName,
 } from "./wallee";
 import {
+  alertUnconfirmedApprovals,
   settleTerminalPayment,
   settleTransaction,
   type SettleOutcome,
@@ -225,5 +227,20 @@ export const reconcileTerminalPayments = onSchedule(
   },
   async () => {
     await runReconcileTerminalPayments();
+  },
+);
+
+export const alertUnconfirmedTerminalPayments = onSchedule(
+  {
+    // Hourly: an approval Wallee never saw (the terminal detached from the
+    // space, #812) should reach the team the same day, not the next night.
+    schedule: "15 * * * *",
+    timeZone: "Europe/Zurich",
+    timeoutSeconds: 60,
+  },
+  async () => {
+    // No terminal configured, nothing can be awaiting: skip the read.
+    if (!walleeConfig()) return;
+    await alertUnconfirmedApprovals();
   },
 );

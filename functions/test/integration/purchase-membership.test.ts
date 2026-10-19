@@ -233,6 +233,48 @@ describe("purchaseMembership (Integration)", () => {
     expect(itemsSnap.size).to.equal(1);
   });
 
+  it("refuses while a membership awaits the terminal payment's confirmation (#812)", async () => {
+    await seedUser("buyer-await");
+    const db = getFirestore();
+    const awaitingRef = await db.collection("checkouts").add({
+      userId: db.collection("users").doc("buyer-await"),
+      status: "awaiting_payment",
+      usageType: "materialbezug",
+      created: Timestamp.now(),
+      workshopsVisited: [],
+      persons: [
+        { name: "Test User", email: "buyer-await@example.com", userType: "erwachsen" },
+      ],
+      modifiedAt: Timestamp.now(),
+      modifiedBy: null,
+    } satisfies CheckoutEntity);
+    await awaitingRef.collection("items").add({
+      workshop: "diverses",
+      description: "Mitgliedschaft — Einzel (Jahr)",
+      origin: "manual",
+      catalogId: db.collection("catalog").doc(MEMBERSHIP_CATALOG_ID),
+      variantId: "single",
+      created: Timestamp.now(),
+      quantity: 1,
+      unitPrice: 50,
+      totalPrice: 50,
+    } satisfies CheckoutItemEntity);
+
+    try {
+      await handlePurchaseMembership({ type: "single" }, caller("buyer-await"));
+      throw new Error("expected already-exists, got success");
+    } catch (err: any) {
+      expect(err?.code).to.equal("already-exists");
+    }
+    // No new open checkout was opened for it.
+    const open = await db
+      .collection("checkouts")
+      .where("userId", "==", db.collection("users").doc("buyer-await"))
+      .where("status", "==", "open")
+      .get();
+    expect(open.empty).to.equal(true);
+  });
+
   it("refuses when the caller already has an active membership without renewExisting", async () => {
     await seedUser("buyer-3");
     const db = getFirestore();

@@ -166,6 +166,29 @@ export async function handlePurchaseMembership(
     totalPrice: unitPrice,
   };
 
+  // A membership on a checkout the terminal approved still waits there
+  // until Wallee confirms it (#812, MEM-4): not active yet, but bought.
+  // Read outside the transaction below, like the open-checkout lookup: a
+  // report racing this very purchase can still let a second one through.
+  const awaitingSnap = await database
+    .collection("checkouts")
+    .where("userId", "==", callerRef as DocumentReference)
+    .where("status", "==", "awaiting_payment")
+    .get();
+  for (const doc of awaitingSnap.docs) {
+    const items = await doc.ref.collection("items").get();
+    const kind = detectMembershipKindForItems(
+      items.docs.map((d) => d.data() as CheckoutItemEntity),
+      catalogDoc.id,
+    );
+    if (kind !== null) {
+      throw new HttpsError(
+        "already-exists",
+        "Eine Mitgliedschaft wartet auf die Zahlungsbestätigung.",
+      );
+    }
+  }
+
   const openCheckoutsSnap = await database
     .collection("checkouts")
     .where("userId", "==", callerRef as DocumentReference)
