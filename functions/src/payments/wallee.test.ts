@@ -66,6 +66,11 @@ const RAW_TRANSACTION = {
   merchantReference: "P-abcDEF0123456789wxyz-1",
   userInterfaceType: "TERMINAL",
   terminal: { id: 300 },
+  paymentConnectorConfiguration: {
+    name: "Test - Visa",
+    connector: { paymentMethodBrand: { id: 1461144365052, name: { "en-US": "Visa" } } },
+    paymentMethodConfiguration: { name: "Credit / Debit Card" },
+  },
 };
 
 describe("toWalleeTransaction", () => {
@@ -80,7 +85,36 @@ describe("toWalleeTransaction", () => {
       merchantReference: "P-abcDEF0123456789wxyz-1",
       userInterfaceType: "TERMINAL",
       terminalId: 300,
+      paymentBrand: "Visa",
     });
+  });
+
+  it("names TWINT by its payment method, which has no brand", () => {
+    const t = toWalleeTransaction({
+      ...RAW_TRANSACTION,
+      paymentConnectorConfiguration: {
+        name: "Test - Twint",
+        connector: {},
+        paymentMethodConfiguration: { name: "TWINT" },
+      },
+    });
+    expect(t.paymentBrand).to.equal("TWINT");
+  });
+
+  it("doesn't call a card without a resolved brand \"Credit / Debit Card\"", () => {
+    const t = toWalleeTransaction({
+      ...RAW_TRANSACTION,
+      paymentConnectorConfiguration: {
+        connector: {},
+        paymentMethodConfiguration: { name: "Credit / Debit Card" },
+      },
+    });
+    expect(t.paymentBrand).to.equal(null);
+  });
+
+  it("leaves the brand out when Wallee didn't resolve it", () => {
+    const { paymentConnectorConfiguration: _, ...bare } = RAW_TRANSACTION;
+    expect(toWalleeTransaction(bare).paymentBrand).to.equal(null);
   });
 });
 

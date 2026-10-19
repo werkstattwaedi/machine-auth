@@ -335,9 +335,28 @@ describe("buildInvoicePdf — content", () => {
     const text = await pdfText(walleeTerminalInvoice());
     expect(text).to.include("Quittung Self-Checkout");
     expect(text).to.include("Rechnungsnummer: RE-000014");
-    expect(text).to.include("Bezahlt via Karte/TWINT (Terminal)");
-    expect(text).to.include("VISA ****1234");
+    expect(text).to.include("Bezahlt mit Visa am 16.06.2025");
+    expect(text).to.include("XXXXXXXXXXXX1234");
     expect(text).to.not.include("Zahlteil");
+  });
+
+  it("Wallee terminal receipt gets its own numbered last page, without Übertrag", async () => {
+    const { text, numpages } = await pdfParsed(walleeTerminalInvoice());
+    expect(numpages).to.equal(2);
+    expect(footerLabels(text)).to.deep.equal(["Seite 1 / 2", "Seite 2 / 2"]);
+    expect(text).to.not.include("Übertrag");
+    // The receipt follows the paid notice, on the page after it.
+    const [page1, page2] = text.split("Seite 1 / 2");
+    expect(page1).to.include("Bezahlt mit Visa");
+    expect(page1).to.not.include("Zahlungsbeleg Terminal");
+    expect(page2).to.include("Zahlungsbeleg Terminal");
+  });
+
+  it("Wallee terminal payment without a known brand names the terminal", async () => {
+    const data = walleeTerminalInvoice();
+    data.terminalPaymentBrand = null;
+    const text = await pdfText(data);
+    expect(text).to.include("Am Zahlterminal bezahlt am 16.06.2025");
   });
 
   it("CHF 0 bill is a Beleg with a BL- number (#780)", async () => {

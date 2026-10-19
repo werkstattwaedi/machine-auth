@@ -38,11 +38,12 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 
 - **BIL-9** Every document's title and file name name its kind: Rechnung, Quittung, Beleg or Sammelrechnung — a Sammelrechnung collecting a single visit included. — #405, #426, ADR-0052, #763
 - **BIL-10** Only a Rechnung or Sammelrechnung with an amount due carries a QR slip; a Beleg for the Sammelrechnung says its amount is added to the next Sammelrechnung. — ADR-0044
-- **BIL-11** A Quittung names the payment method; it states that the payment was received only for a verified payment (BIL-39), and then also gives the payment date and, for the Wallee terminal, Wallee's cardholder receipt. — ADR-0051, #735
+- **BIL-11** A Quittung names the payment method — for the Wallee terminal, what the person paid with as Wallee reports it (a card brand or TWINT), or only that it was paid at the terminal when Wallee doesn't say; it states that the payment was received only for a verified payment (BIL-39), and then also gives the payment date and, for the Wallee terminal, Wallee's cardholder receipt (BIL-48). — ADR-0051, #735
 - **BIL-47** A RaiseNow Beleg names the payment method, and neither it nor its mail says that the payment was received. — ADR-0052, #763
 - **BIL-12** On a document, line items are grouped by workshop with a subtotal each, a membership is listed first, and a donation is listed as such. — #262, #464
 - **BIL-38** A document lists every person on the checkout with their user type, their usage type unless regular — *Nur Materialbezug* on a purchase-only checkout (CHK-9) — and the usage fee they pay, then one row per waived machine or material section naming the visit's type (CHK-29); a person whose usage fee is waived for an earlier visit that day (CHK-37) is listed at CHF 0 with the reason. — #284, #268, #269, ADR-0050, #605
 - **BIL-13** The QR slip is a separate last page, not counted in the document's page numbers. — #464
+- **BIL-48** Wallee's cardholder receipt on a Quittung (BIL-11) is a separate last page, counted in the document's page numbers, unlike the QR slip (BIL-13). — ADR-0051
 - **BIL-14** A document is addressed to the company for a company account, else the account holder, else the name given at check-in, and shows the postal address only when it is complete. — #269, #658
 - **BIL-35** A checkout produces one bill, to its account holder; the other persons on the visit are lines on that bill (CHK-11) and are never billed themselves. — ADR-0048, #747
 - **BIL-15** The person can download a document's PDF on their own device, not at the kiosk; a guest only in the browser session that closed the checkout, and only from Bezahlen after the commit (CHK-25). — #418, #750

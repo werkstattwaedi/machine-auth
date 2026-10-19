@@ -26,6 +26,7 @@ import {
   membershipRenewalInvoice,
   volunteeringDiscountInvoice,
   internDiscountInvoice,
+  walleeTerminalInvoice,
 } from "./invoice_test_fixtures";
 import type { InvoiceData } from "../../src/invoice/types";
 
@@ -173,6 +174,12 @@ describe("buildInvoicePdf — visual regression", function () {
   // so users don't think they need to pay again.
   it("TWINT-method invoice (no QR slip)", async () => {
     await compareAllPages("twint-method", raisenowMethodInvoice());
+  });
+
+  // ADR-0051: a terminal payment's Quittung names the card brand and puts
+  // Wallee's cardholder receipt on its own numbered, centred last page.
+  it("Wallee terminal Quittung (receipt on its own page)", async () => {
+    await compareAllPages("wallee-terminal", walleeTerminalInvoice());
   });
 
   // Issue #251: Sammelrechnung-method invoice. PDF shows a "Zahlweise:

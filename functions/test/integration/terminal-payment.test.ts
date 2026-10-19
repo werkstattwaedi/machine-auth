@@ -120,6 +120,7 @@ class FakeWallee implements WalleeApi {
       merchantReference: reference,
       userInterfaceType: "TERMINAL",
       terminalId: 300,
+      paymentBrand: "Mastercard",
       ...extra,
     });
   }
@@ -379,6 +380,7 @@ describe("Wallee terminal payment (Integration)", () => {
       expect(bill.data.paymentMethodConfirmationSource).to.equal("terminal");
       expect(bill.data.walleeTransactionId).to.equal(9001);
       expect(bill.data.walleeReceiptText).to.equal(RECEIPT);
+      expect(bill.data.walleePaymentBrand).to.equal("Mastercard");
       // onBillCreate runs PDF, mail and membership for it.
       expect(isCommittedAtClose(bill.data)).to.equal(true);
     });
