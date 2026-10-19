@@ -607,7 +607,13 @@ export async function trySendEmail(billId: string): Promise<boolean> {
         AMOUNT: bill.amount.toFixed(2),
         CURRENCY: bill.currency,
         KASSE_EMAIL: kasseEmail.value(),
-        PAYMENT_LABEL: paymentMethod ? PAYMENT_METHOD_INFO[paymentMethod].label : "",
+        // A terminal payment names what was paid with ("Visa"), like the
+        // Quittung does (BIL-11), and only the terminal when Wallee didn't
+        // say — the Quittung's "Am Zahlterminal bezahlt".
+        PAYMENT_LABEL:
+          bill.walleeTransactionId != null
+            ? bill.walleePaymentBrand || "Zahlterminal"
+            : paymentMethod ? PAYMENT_METHOD_INFO[paymentMethod].label : "",
         ...correctionVariables,
       }),
     );

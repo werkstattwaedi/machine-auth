@@ -106,12 +106,12 @@ interface SeedBillOptions {
   pdfGeneratedAt?: Timestamp | null;
   emailSentAt?: Timestamp | null;
   paymentMethodConfirmationTime?: Timestamp | null;
-  paymentMethodConfirmationSource?: "user" | "auto" | null;
+  paymentMethodConfirmationSource?: BillEntity["paymentMethodConfirmationSource"];
   paidVia?: BillEntity["paidVia"];
   checkoutIds?: string[];
   kind?: "invoice" | "beleg";
   /** Stored on the bill (ADR-0052); omitted seeds a pre-ADR-0052 bill. */
-  stored?: Pick<BillEntity, "paymentMethod" | "document">;
+  stored?: Partial<Pick<BillEntity, "paymentMethod" | "document" | "walleeTransactionId" | "walleePaymentBrand">>;
   source?: "checkout" | "membership-renewal";
   // Account holder; the close path copies `checkout.userId` here. Omitted
   // → the shared "u-bill-proc" owner.
@@ -1151,6 +1151,36 @@ describe("bill processing triggers (Integration)", () => {
         // Beleg filename contract from #405.
         expect(entity.attachments[0].filename).to.equal("Quittung-RE-000011.pdf");
       });
+
+      for (const [brand, label] of [["Visa", "Visa"], [null, "Zahlterminal"]] as const) {
+        it(`labels a terminal receipt mail "${label}" when Wallee reports ${brand ?? "no brand"} (BIL-11)`, async () => {
+          const billId = "bill-terminal";
+          await seedUser("u-bill-proc", { email: "payer@example.com" });
+          await seedCheckout("co-default", { paymentMethod: "wallee_terminal" });
+          await seedBill(billId, {
+            storagePath: "invoices/bill-terminal.pdf",
+            referenceNumber: 110,
+            paymentMethodConfirmationTime: Timestamp.now(),
+            paymentMethodConfirmationSource: "terminal",
+            paidVia: "wallee_terminal",
+            stored: {
+              paymentMethod: "wallee_terminal",
+              document: "quittung",
+              walleeTransactionId: 4711,
+              walleePaymentBrand: brand,
+            },
+          });
+
+          await trySendEmail(billId);
+          const [, entity] = resendSendStub.firstCall.args as [
+            string,
+            { template: { id: string; variables: Record<string, string> } },
+          ];
+          expect(entity.template.id).to.equal("test-bill-receipt-visit");
+          expectContractVariables(entity.template);
+          expect(entity.template.variables.PAYMENT_LABEL).to.equal(label);
+        });
+      }
 
       it("mails a TWINT Beleg on its own template, attached as Beleg-BL-… (#763)", async () => {
         const billId = "bill-twint-beleg";
