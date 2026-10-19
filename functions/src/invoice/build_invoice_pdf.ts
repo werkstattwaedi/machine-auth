@@ -71,8 +71,23 @@ const PAID_VIA_LABELS: Record<PaidVia, string> = {
   raisenow: " via TWINT",
   ebanking: " via E-Banking",
   free: "",
-  wallee_terminal: " via Karte/TWINT (Terminal)",
+  wallee_terminal: "",
 };
+
+/**
+ * The paid notice's heading. A terminal payment names what the person paid
+ * with ("Bezahlt mit Visa"), as Wallee reports it; "Karte/TWINT" would leave
+ * them guessing which.
+ */
+function paidHeading(data: InvoiceData, paidDate: string): string {
+  if (data.paidVia === "wallee_terminal") {
+    return data.terminalPaymentBrand
+      ? `Bezahlt mit ${data.terminalPaymentBrand} am ${paidDate}`
+      : `Am Zahlterminal bezahlt am ${paidDate}`;
+  }
+  const viaLabel = data.paidVia ? PAID_VIA_LABELS[data.paidVia] ?? "" : "";
+  return `Bezahlt${viaLabel} am ${paidDate}`;
+}
 
 /** Entry fee labels per user type */
 const USER_TYPE_LABELS: Record<string, string> = {
@@ -334,22 +349,26 @@ export async function buildInvoicePdf(
     } else if (isPaid) {
       // --- Paid notice ---
       y = ensureSpace(doc, y, 40);
-      const viaLabel = data.paidVia ? PAID_VIA_LABELS[data.paidVia] ?? "" : "";
-      const paidDateStr = formatDateOnly(data.paidAt!);
       doc.fontSize(11).font("Helvetica-Bold");
-      doc.text(`Bezahlt${viaLabel} am ${paidDateStr}`, MARGIN_LEFT, y);
+      doc.text(paidHeading(data, formatDateOnly(data.paidAt!)), MARGIN_LEFT, y);
       y += 16;
       doc.fontSize(9).font("Helvetica");
       doc.text("Diese Rechnung wurde bereits beglichen. Vielen Dank!", MARGIN_LEFT, y);
-      if (data.terminalReceiptText) {
-        y = renderTerminalReceipt(doc, y + 22, data.terminalReceiptText);
-      }
       if (isRenewal) {
         y += 20;
         y = renderVorstandSignoff(doc, y);
       }
 
-      addPageFooters(doc, data, doc.bufferedPageRange().count);
+      // Like the QR slip, the terminal's receipt is an attachment, not part
+      // of the bill's flow: it gets its own last page. Unlike the slip that
+      // page is numbered — it belongs to the document — but carries no
+      // "Übertrag" since nothing carries over onto it.
+      const contentPages = doc.bufferedPageRange().count;
+      if (data.terminalReceiptText) {
+        doc.addPage();
+        renderTerminalReceipt(doc, data.terminalReceiptText);
+      }
+      addPageFooters(doc, data, doc.bufferedPageRange().count, contentPages);
     } else if (paidMethodInfo) {
       // --- Paid-during-checkout notice (issue #251) ---
       // The user said they paid (TWINT via RaiseNow); we have no
@@ -459,12 +478,15 @@ export async function buildInvoicePdf(
 
 /**
  * Add page footers with page numbers and carry-over text.
- * @param contentPages Number of content pages (excludes QR bill page)
+ * @param contentPages Number of numbered pages (excludes QR bill page)
+ * @param flowPages Pages the bill's content flows across; numbered pages
+ *   after them (the terminal receipt) carry no "Übertrag"
  */
 function addPageFooters(
   doc: PDFKit.PDFDocument,
   data: InvoiceData,
-  contentPages: number
+  contentPages: number,
+  flowPages: number = contentPages,
 ): void {
   const totalPages = contentPages;
   const footerY = PAGE_HEIGHT - 40;
@@ -486,7 +508,7 @@ function addPageFooters(
     );
 
     // "Übertrag" on continuation pages (page 2+)
-    if (i > 0) {
+    if (i > 0 && i < flowPages) {
       doc.fontSize(8).font("Helvetica-Oblique");
       doc.text("Übertrag von vorheriger Seite", MARGIN_LEFT, 50, { lineBreak: false });
     }
@@ -575,29 +597,33 @@ function round2(n: number): number {
 }
 
 /**
- * Wallee's cardholder receipt for a terminal payment, printed verbatim:
- * Wallee requires the transaction details (masked card, Trm-Id, auth code)
- * on the customer's document (ADR-0051). Monospace keeps its 40-column
- * layout. Returns the y below it.
+ * Wallee's cardholder receipt for a terminal payment, printed verbatim on
+ * a page of its own: Wallee requires the transaction details (masked card,
+ * Trm-Id, auth code) on the customer's document (ADR-0051). Monospace keeps
+ * its 40-column layout; the block sits centred on the page, as the slip
+ * from a till would. Wallee's customer receipt is about 20 lines, far below
+ * the ~55 a page holds, so it never needs a page break.
  */
-function renderTerminalReceipt(
-  doc: PDFKit.PDFDocument,
-  startY: number,
-  text: string,
-): number {
+function renderTerminalReceipt(doc: PDFKit.PDFDocument, text: string): void {
   const lines = text.split("\n");
-  const lineHeight = 9.5;
-  let y = ensureSpace(doc, startY, 16 + lines.length * lineHeight);
-  doc.fontSize(9).font("Helvetica-Bold");
-  doc.text("Zahlungsbeleg Terminal", MARGIN_LEFT, y);
-  y += 14;
-  doc.fontSize(8).font("Courier");
+  const fontSize = 10;
+  const lineHeight = 12;
+  const headingGap = 24;
+  doc.fontSize(fontSize).font("Courier");
+  const blockWidth = Math.max(...lines.map((line) => doc.widthOfString(line)));
+  const x = MARGIN_LEFT + (CONTENT_WIDTH - blockWidth) / 2;
+  const blockHeight = headingGap + lines.length * lineHeight;
+  let y = Math.max(60, (USABLE_HEIGHT - blockHeight) / 2);
+
+  doc.fontSize(11).font("Helvetica-Bold");
+  doc.text("Zahlungsbeleg Terminal", MARGIN_LEFT, y, { width: CONTENT_WIDTH, align: "center" });
+  y += headingGap;
+  doc.fontSize(fontSize).font("Courier");
   for (const line of lines) {
-    doc.text(line, MARGIN_LEFT, y, { lineBreak: false });
+    doc.text(line, x, y, { lineBreak: false });
     y += lineHeight;
   }
   doc.font("Helvetica");
-  return y;
 }
 
 /** "Beste Grüsse / Der Vorstand" block on renewal invoices (issue #323). */

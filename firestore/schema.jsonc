@@ -402,10 +402,12 @@
       "paymentMethodConfirmationTime": "timestamp | null",
       "paymentMethodConfirmationSource": "user | auto | terminal | null",
       // Terminal payments only (ADR-0051), server-only: the Wallee
-      // transaction id and Wallee's cardholder receipt text (masked card
-      // number, auth code), printed on the Quittung.
+      // transaction id, Wallee's cardholder receipt text (masked card
+      // number, auth code), printed on the Quittung, and what was paid
+      // with ("Visa", "TWINT"), named in its paid notice.
       "walleeTransactionId": "number | null",
       "walleeReceiptText": "string | null",
+      "walleePaymentBrand": "string | null",
       // The committed payment method (ADR-0052): null until committed and
       // for a CHF 0 bill. What the bill does follows from its
       // PAYMENT_METHOD_INFO properties — an aggregated method ("monthly")

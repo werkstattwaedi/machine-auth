@@ -584,7 +584,30 @@ export function walleeTerminalInvoice(): InvoiceData {
   base.document = "quittung";
   base.paidAt = zurich(2025, 5, 16);
   base.paidVia = "wallee_terminal";
-  base.terminalReceiptText = "Trm-Id: 12345678\nVISA ****1234\nAuth: 654321";
+  base.terminalPaymentBrand = "Visa";
+  // Shape of Wallee's 40-column "Kunde" receipt (staging, 2026-10-19).
+  base.terminalReceiptText = [
+    "       Offene Werkstatt Wädenswil",
+    "          Tobelrainstrasse 25",
+    "           CH-8820 Wädenswil",
+    "              Switzerland",
+    "",
+    "          *** Kundenbeleg ***",
+    "",
+    "Buchung",
+    "Visa Credit contactless",
+    "XXXXXXXXXXXX1234",
+    "",
+    "16.06.2025                      14:02:11",
+    "Trm-Id:                         12345678",
+    "AID:" + " ".repeat(22) + "A0000000031010",
+    "Trx. Seq-Cnt:                         29",
+    "Trx. Ref-Nr:                      653502",
+    "Auth. Code:                       654321",
+    "Acq-Id:                      99999999998",
+    "",
+    "Total-EFT CHF:                     12.00",
+  ].join("\n");
   return base;
 }
 

@@ -57,6 +57,7 @@ export interface BillPaid {
   paidVia: PaidVia;
   walleeTransactionId: number | null;
   walleeReceiptText: string | null;
+  walleePaymentBrand: string | null;
 }
 
 interface BuildBillArgs {
@@ -111,6 +112,7 @@ export function buildBillEntity(args: BuildBillArgs): BillEntity {
     paidVia: isFree ? "free" : (args.paid?.paidVia ?? null),
     walleeTransactionId: args.paid?.walleeTransactionId ?? null,
     walleeReceiptText: args.paid?.walleeReceiptText ?? null,
+    walleePaymentBrand: args.paid?.walleePaymentBrand ?? null,
     pdfGeneratedAt: null,
     emailSentAt: null,
     paymentMethodConfirmationTime: ack?.time ?? null,

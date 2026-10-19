@@ -391,6 +391,7 @@ export async function settleTransaction(
         paidVia: "wallee_terminal",
         walleeTransactionId: transaction.id,
         walleeReceiptText: receiptText,
+        walleePaymentBrand: transaction.paymentBrand,
       },
     });
     if (changes) {

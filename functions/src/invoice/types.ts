@@ -66,10 +66,12 @@ export interface BillEntity {
   paymentMethodConfirmationSource: BillAckSource | null;
   // The Wallee transaction that paid the bill at the terminal, and the
   // cardholder receipt text Wallee rendered for it (masked card number,
-  // auth code — printed on the Quittung). Server-only; null otherwise and
+  // auth code — printed on the Quittung), and what was paid with ("Visa",
+  // "TWINT"; null when Wallee didn't say). Server-only; null otherwise and
   // on legacy docs (absent).
   walleeTransactionId?: number | null;
   walleeReceiptText?: string | null;
+  walleePaymentBrand?: string | null;
   // The committed payment method (ADR-0052): null until committed, and for
   // a CHF 0 bill. What the bill does follows from its PAYMENT_METHOD_INFO
   // properties — an aggregated method makes it a Beleg for the
@@ -187,6 +189,8 @@ export interface InvoiceData {
   paidVia?: PaidVia | null;
   /** Wallee's cardholder receipt of a terminal payment (bill `walleeReceiptText`). */
   terminalReceiptText?: string | null;
+  /** What a terminal payment was made with (bill `walleePaymentBrand`). */
+  terminalPaymentBrand?: string | null;
   /**
    * The bill's committed payment method; null for a CHF 0 bill and a
    * legacy one nobody committed. Gates the QR payment slip: a method paid
