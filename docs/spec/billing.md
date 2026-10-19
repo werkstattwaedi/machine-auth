@@ -102,13 +102,14 @@ Sammelrechnung, corrections and booking payments. Terms: see the
 ## Retention
 
 - **BIL-32** Bills are kept 3 years after payment (unpaid ones: after creation) and their PDFs 10 years in a locked archive. — ADR-0038
-- **BIL-33** A person's data can't be erased while they have an unpaid bill. — ADR-0038
+- **BIL-33** A person's data can't be erased while they have an unpaid bill, an open checkout or one awaiting payment (BIL-48), or are named on such a checkout of someone else. — ADR-0038, #812
 
 ## Open questions
 
 - [NEEDS CLARIFICATION] A partial payment (amount mismatch) is booked as fully paid (BIL-30). Intended?
 - [NEEDS CLARIFICATION] Correction mails for RaiseNow bills promise a refund or settlement of the difference, but there is no refund flow (ADR-0042 backlog). A rule, or a known gap?
 - [NEEDS CLARIFICATION] A renewal bill totalling CHF 0 (MEM-24) is issued paid (BIL-45) but mailed by nobody — neither the renewal letter nor the CHF 0 mail (BIL-26). Intended, or should it get one? — #790
+- [NEEDS CLARIFICATION] When the kiosk's report of the terminal's approval doesn't reach the server, the checkout stays open (BIL-48 doesn't apply) and nobody is alerted, although the person was told it is paid (KIO-22). Known gap, or should the kiosk keep retrying or warn? — #812
 
 ## Retired
 

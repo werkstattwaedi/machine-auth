@@ -25,11 +25,12 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in, the restricted session at the kiosk, the Nutzungsverlauf |
 | `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, the persons on it, usage types, usage fee, Check Out, Bezahlen — on any device |
 | `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset |
+| `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
 an id to find it. Other domains get a file when an issue first touches them — planned prefixes:
-`CAT` (catalog & materials), `MAC` (machine terminal), `ADM` (admin app).
+`CAT` (catalog & materials), `MAC` (machine terminal).
 Don't backfill a domain up front.
 
 ## Writing rules
