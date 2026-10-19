@@ -55,6 +55,12 @@ vi.mock("@modules/lib/use-bridge", () => ({
 }))
 
 vi.mock("@modules/lib/firebase-context", () => ({ useDb: () => ({}) }))
+// Only the masking flag (#668) reads the auth context; StepCheckin's own
+// tests cover it.
+vi.mock("@modules/lib/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@modules/lib/auth")>()),
+  useAuth: () => ({ sessionKind: null, isKioskElevated: false }),
+}))
 vi.mock("@modules/lib/firestore-helpers", () => ({
   userRef: (_db: unknown, id: string) => ({ id, path: `users/${id}` }),
 }))

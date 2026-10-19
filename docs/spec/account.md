@@ -25,6 +25,9 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 - **ACC-4** A restricted session reaches the checkout but not the account. — ADR-0041
 - **ACC-5** At the kiosk, an e-mail or SMS code opens the account for 15 min, entered at sign-in (ACC-1) or when a restricted session opens an account page. — ADR-0041
+- **ACC-6** The code that opens the account for a restricted session (ACC-5) goes only to the account's own e-mail address or its verified mobile number; no other address or number can be entered for it. — ADR-0041
+- **ACC-7** When a restricted session opens an account page, the e-mail address and the mobile number the code can go to (ACC-6) are shown only masked: of the e-mail address the first two characters of the name and of the domain plus the top-level domain, of the number the country code, the first two and the last two digits. — ADR-0041
+- **ACC-8** At the kiosk, while the account is not open (ACC-5), the check-in and the header menu show the e-mail address of every person with an account only masked as in ACC-7; once it is open, they show it in full. — #668
 
 ## Nutzungsverlauf
 
@@ -33,6 +36,8 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 ## Open questions
 
 - [NEEDS CLARIFICATION] A badge tapped on a phone is refused with a generic "could not be read" error; ADR-0022 promised a message that sends the person to the kiosk. Rule or gap?
+- [NEEDS CLARIFICATION] While the account is not open at the kiosk (ACC-8), Bezahlen still names the full e-mail address the document went to (CHK-23), so a found badge reveals it after the commit. Mask it there too? — #668
+- [NEEDS CLARIFICATION] A badge tap that first runs the welcome onboarding (ACC-2) shows the account's full e-mail address, its stored mobile number and its billing address on the data step, and the e-mail address again once the instructions mail is sent, although the account is not open (ACC-8). Intended? — #668
 
 ## Retired
 

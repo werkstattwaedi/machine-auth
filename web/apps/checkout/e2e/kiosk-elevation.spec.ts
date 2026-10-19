@@ -169,6 +169,40 @@ test.describe("Kiosk step-up elevation", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0)
   })
 
+  // Issue #668: a found badge must not reveal its owner's address — the
+  // card and the header menu show it masked until the step-up.
+  test("badge tap shows a masked e-mail until the session is elevated", async ({
+    page,
+  }) => {
+    await tapBadge2(page)
+    const strip = page.getByTestId("identity-strip")
+    await expect(strip).toContainText("ba•••@te•••.com")
+    await expect(strip).not.toContainText(BADGE2_EMAIL)
+
+    await page.getByTestId("app-menu-trigger").click()
+    const menu = page.getByRole("menu")
+    await expect(menu).toContainText("ba•••@te•••.com")
+    await expect(menu).not.toContainText(BADGE2_EMAIL)
+    await menu.getByRole("menuitem", { name: "Nutzungsverlauf", exact: true }).click()
+
+    await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
+    await page.getByTestId("kiosk-elevation-email").click()
+    const entry = await waitForLoginCode(BADGE2_EMAIL)
+    expect(entry, "debugCode should be present in emulator").toBeTruthy()
+    await page.getByTestId("checkin-code-input").fill(entry!.code)
+    await page.getByTestId("checkin-code-submit").click()
+    await expect(page).toHaveURL(/\/account\/usage/, { timeout: 10_000 })
+
+    // Back to the check-in client-side (keeps the elevated session).
+    await page.evaluate(() => {
+      window.history.pushState({}, "", "/checkin?kiosk")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
+    await expect(strip).toContainText(BADGE2_EMAIL, { timeout: 10_000 })
+    await page.getByTestId("app-menu-trigger").click()
+    await expect(page.getByRole("menu")).toContainText(BADGE2_EMAIL)
+  })
+
   test("badge tap → SMS code (linked phone) → account area", async ({
     page,
   }) => {
