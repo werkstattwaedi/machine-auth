@@ -28,7 +28,7 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 ## Nutzungsverlauf
 
-- **ACC-6** The Nutzungsverlauf lists each of the person's checkouts awaiting payment (BIL-48), with its amount, as a payment still being confirmed. — #812
+- **ACC-6** The Nutzungsverlauf lists each of the person's checkouts awaiting payment (BIL-49), with its amount, as a payment still being confirmed. — #812
 
 ## Open questions
 
