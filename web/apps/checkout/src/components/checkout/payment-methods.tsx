@@ -115,8 +115,8 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
     actionLabel: "Auf Sammelrechnung",
     instruction: ({ monthlyDate }) => (
       <>
-        Am <strong data-testid="monthly-date">{monthlyDate}</strong> kommt eine
-        Rechnung über alle offenen Posten.
+        Am <strong data-testid="monthly-date">{monthlyDate}</strong> senden wir
+        dir die Monatsrechnung bequem per E-Mail zu.
       </>
     ),
     commitLabel: "Auf Sammelrechnung setzen",
