@@ -61,6 +61,8 @@ export interface WalleeTransaction {
   merchantReference: string | null;
   userInterfaceType: string | null;
   terminalId: number | null;
+  /** What the person paid with ("Visa", "Mastercard", "TWINT"), if Wallee says. */
+  paymentBrand: string | null;
 }
 
 export interface WalleeListener {
@@ -141,10 +143,13 @@ async function createSdkApi(config: WalleeConfig, authKey: string): Promise<Wall
   const keys = new sdk.WebhookEncryptionKeysService(configuration);
   const listeners = new sdk.WebhookListenersService(configuration);
   const space = config.spaceId;
+  const expand = new Set(TRANSACTION_EXPAND);
 
   return {
     async getTransaction(id) {
-      return toWalleeTransaction(await transactions.getPaymentTransactionsId({ id, space }));
+      return toWalleeTransaction(
+        await transactions.getPaymentTransactionsId({ id, space, expand }),
+      );
     },
     async searchPaidTerminalTransactions(since) {
       const states = [...WALLEE_PAID_STATES].map((s) => `state:${s}`).join(" OR ");
@@ -159,6 +164,7 @@ async function createSdkApi(config: WalleeConfig, authKey: string): Promise<Wall
           limit: 100,
           offset,
           order: "authorizedOn:ASC",
+          expand,
         });
         const data = page.data ?? [];
         found.push(...data.map(toWalleeTransaction));
@@ -188,6 +194,16 @@ async function createSdkApi(config: WalleeConfig, authKey: string): Promise<Wall
     },
   };
 }
+
+/**
+ * Wallee leaves the connector configuration's references unresolved unless
+ * asked. The card brand hangs off its connector; TWINT has no brand there,
+ * only its payment method configuration (staging, 2026-10-19).
+ */
+const TRANSACTION_EXPAND = [
+  "paymentConnectorConfiguration.connector.paymentMethodBrand",
+  "paymentConnectorConfiguration.paymentMethodConfiguration",
+];
 
 /** Width of the terminal receipt Wallee renders for us (characters). */
 export const RECEIPT_WIDTH = 40;
@@ -228,6 +244,20 @@ function toDate(value: unknown): Date | null {
   return null;
 }
 
+/** Brand names are proper names, so any language will do; German first. */
+function localized(names: Record<string, string> | undefined): string | null {
+  if (!names) return null;
+  return names["de-CH"] || names["de-DE"] || names["en-US"] || Object.values(names)[0] || null;
+}
+
+/** The card method's configuration name says nothing about the card. */
+const GENERIC_CARD_METHOD_NAME = "Credit / Debit Card";
+
+/** A payment method without brands (TWINT) is named by its configuration. */
+function methodName(name: string | undefined): string | null {
+  return name && name !== GENERIC_CARD_METHOD_NAME ? name : null;
+}
+
 /**
  * Normalizes an SDK transaction (or the raw JSON of one, in tests).
  * Exported for unit tests.
@@ -242,7 +272,12 @@ export function toWalleeTransaction(raw: unknown): WalleeTransaction {
     merchantReference?: string;
     userInterfaceType?: string;
     terminal?: { id?: number };
+    paymentConnectorConfiguration?: {
+      connector?: { paymentMethodBrand?: { name?: Record<string, string> } };
+      paymentMethodConfiguration?: { name?: string };
+    };
   };
+  const connectorConfig = t.paymentConnectorConfiguration;
   return {
     id: Number(t.id),
     state: String(t.state ?? ""),
@@ -253,6 +288,9 @@ export function toWalleeTransaction(raw: unknown): WalleeTransaction {
     merchantReference: t.merchantReference ?? null,
     userInterfaceType: t.userInterfaceType ?? null,
     terminalId: typeof t.terminal?.id === "number" ? t.terminal.id : null,
+    paymentBrand:
+      localized(connectorConfig?.connector?.paymentMethodBrand?.name) ??
+      methodName(connectorConfig?.paymentMethodConfiguration?.name),
   };
 }
 

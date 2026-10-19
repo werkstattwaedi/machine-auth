@@ -299,6 +299,7 @@ async function assembleInvoiceData(
     paidAt: bill.paidAt?.toDate() ?? null,
     paidVia: bill.paidVia ?? null,
     terminalReceiptText: bill.walleeReceiptText ?? null,
+    terminalPaymentBrand: bill.walleePaymentBrand ?? null,
     paymentMethod,
     document: billDocumentOf(bill, legacyCheckoutMethod),
     source: bill.source ?? "checkout",

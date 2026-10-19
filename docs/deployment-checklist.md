@@ -341,8 +341,8 @@ next to the kiosk needs, in this order:
 
 Smoke test on staging with the test acquirer: CHF 3.00 approves, CHF 1.00
 declines (`docs/plans/wallee-terminal.md`). The checkout must close within
-seconds of the tap and the Quittung mail must say "Bezahlt … via
-Karte/TWINT (Terminal)" with the terminal receipt block in the PDF.
+seconds of the tap and the Quittung PDF must say "Bezahlt mit <brand>"
+(Visa, Mastercard, TWINT) with the terminal receipt on its own last page.
 
 ### Transactional mail templates (ADR-0046)
 
