@@ -91,7 +91,7 @@ firebase.runtime.*.json
 .dataconnect
 
 # Bazel
-bazel-*
+/bazel-*
 out/
 
 # Python
