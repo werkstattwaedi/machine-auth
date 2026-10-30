@@ -94,7 +94,7 @@ export function roundTo5(n: number): number {
 }
 
 /** Base-variant label by pricing model (shown in the picker's chooser). */
-const PRICING_MODEL_LABELS: Partial<Record<PricingModel, string>> = {
+export const PRICING_MODEL_LABELS: Partial<Record<PricingModel, string>> = {
   area: "Per m²",
   weight: "Per kg",
   length: "Per lm",

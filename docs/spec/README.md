@@ -26,11 +26,12 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, the persons on it, usage types, usage fee, Check Out, Bezahlen — on any device |
 | `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset |
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
+| `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
-an id to find it. Other domains get a file when an issue first touches them — planned prefixes:
-`CAT` (catalog & materials), `MAC` (machine terminal).
+an id to find it. Other domains get a file when an issue first touches them — planned prefix:
+`MAC` (machine terminal).
 Don't backfill a domain up front.
 
 ## Writing rules
@@ -174,6 +175,10 @@ still passes a different wrong promise.
 - **Saved person** — a further person, by name and user type, that an
   account keeps from an earlier check-in.
 - **Restricted session** — a kiosk session started by a badge tap.
+- **Variant** — one way a catalog item is sold, by a unit or in a named
+  format, with its own price.
+- **Price list** (*Preisliste*) — a printable sheet of catalog items with
+  their prices, made to hang in a workshop.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.

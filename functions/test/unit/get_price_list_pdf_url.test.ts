@@ -15,9 +15,9 @@ function base(): PriceListRenderData {
       {
         name: "Massivholz",
         showTitle: true,
-        unit: "m²",
+        priceColumns: [{ heading: "pro m²" }],
         rows: [
-          { code: "3001", produkt: "Ahorn", mass: "24 mm", preis: "62.30" },
+          { code: "3001", produkt: "Ahorn", mass: "24 mm", prices: ["62.30"] },
         ],
       },
     ],
@@ -48,7 +48,7 @@ describe("buildPriceListContentHash", () => {
   it("changes when a row's price changes", () => {
     const a = buildPriceListContentHash(base());
     const data = base();
-    data.categories[0].rows[0].preis = "63.00";
+    data.categories[0].rows[0].prices = ["63.00"];
     expect(buildPriceListContentHash(data)).to.not.equal(a);
   });
 
@@ -58,7 +58,7 @@ describe("buildPriceListContentHash", () => {
       code: "3002",
       produkt: "Ahorn",
       mass: "30 mm",
-      preis: "77.85",
+      prices: ["77.85"],
     });
     const reversed = base();
     reversed.categories[0].rows = [...data.categories[0].rows].reverse();

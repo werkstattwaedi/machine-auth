@@ -10,6 +10,8 @@ import {
   metallPriceList,
   keramikPriceList,
   longSingleCategoryPriceList,
+  laserPriceList,
+  maxColumnsPriceList,
 } from "./price_list_test_fixtures";
 import type { PriceListRenderData } from "../../src/price_list/types";
 
@@ -149,5 +151,13 @@ describe("buildPriceListPdf — visual regression", function () {
 
   it("long single category — repeated splits", async () => {
     await compareAllPages("long-category-price-list", longSingleCategoryPriceList());
+  });
+
+  it("laser — several prices per item, wrapped product names", async () => {
+    await compareAllPages("laser-price-list", laserPriceList());
+  });
+
+  it("five price columns — the most a table may have", async () => {
+    await compareAllPages("max-columns-price-list", maxColumnsPriceList());
   });
 });

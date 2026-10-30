@@ -7,8 +7,8 @@
  * @oww/shared so this stays in lockstep with the catalog wire format.
  *
  * The shapes mirror the design handoff ("Werkstatt-Preislisten"): one PDF =
- * one workshop, one or more category tables with Code / Produkt / Mass /
- * "Preis CHF/<unit>" columns.
+ * one workshop, one or more category tables with Code / Produkt / Mass and
+ * one "Preis CHF" column per way the section's items are sold.
  */
 
 import type { PricingModel } from "@oww/shared";
@@ -20,11 +20,30 @@ export interface PriceListRow {
   produkt: string;
   /** Size/dimension label ("24 mm", "Korn 60"); may be empty. */
   mass: string;
-  /** Price with two decimals, e.g. "62.30". */
-  preis: string;
+  /**
+   * One cell per entry in the category's `priceColumns`: price with two
+   * decimals ("62.30"), or null when this item isn't sold that way.
+   */
+  prices: (string | null)[];
 }
 
-/** One category table (heading + rows sharing a unit). */
+/** One price column of a category table. */
+export interface PriceListPriceColumn {
+  /**
+   * What the price is for, printed under "Preis CHF": "pro m²",
+   * "320 × 620 mm"; empty when there is nothing to qualify ("direct" prices).
+   */
+  heading: string;
+}
+
+/**
+ * More price columns than this can't be printed legibly next to Code, Produkt
+ * and Mass on A4 portrait. Deriving a section beyond it fails: silently
+ * leaving out a way the item is sold would misprice the wall list.
+ */
+export const MAX_PRICE_COLUMNS = 5;
+
+/** One category table (heading + rows sharing its price columns). */
 export interface PriceListCategory {
   name: string;
   /**
@@ -32,8 +51,7 @@ export interface PriceListCategory {
    * lists) — the design suppresses the duplicate heading.
    */
   showTitle: boolean;
-  /** Unit label for the price column header ("m²", "lfm", …; may be empty). */
-  unit: string;
+  priceColumns: PriceListPriceColumn[];
   rows: PriceListRow[];
 }
 
@@ -50,8 +68,8 @@ export interface PriceListRenderData {
 }
 
 /**
- * Map a pricing model to the unit printed in the "Preis CHF/<unit>" table
- * header. `direct` prices carry no unit (header is just "Preis CHF").
+ * Map a pricing model to the unit printed in the price column's "pro <unit>"
+ * heading. `direct` prices carry no unit (header is just "Preis CHF").
  */
 export function categoryUnit(pm: PricingModel): string {
   switch (pm) {
