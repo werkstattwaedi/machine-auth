@@ -24,7 +24,7 @@ function item(
     workshops: ["holz"],
     category: ["Massivholz"],
     variants: [
-      { pricingModel: "area", unitPrice: { default: 62.3, member: 55 } },
+      { id: "default", pricingModel: "area", unitPrice: { default: 62.3, member: 55 } },
     ],
     ...overrides,
   };
@@ -62,14 +62,14 @@ describe("derivePriceListRenderData", () => {
           labelName: "B128",
           workshops: ["keramik"],
           category: ["Tone"],
-          variants: [{ pricingModel: "weight", unitPrice: { default: 3.25 } }],
+          variants: [{ id: "default", pricingModel: "weight", unitPrice: { default: 3.25 } }],
         }),
         item({
           code: "4217",
           labelName: "B128 CHF",
           workshops: ["keramik"],
           category: ["Tone"],
-          variants: [{ pricingModel: "weight", unitPrice: { default: 3.55 } }],
+          variants: [{ id: "default", pricingModel: "weight", unitPrice: { default: 3.55 } }],
         }),
       ],
       OPTS,
@@ -78,7 +78,7 @@ describe("derivePriceListRenderData", () => {
     expect(data.color).to.equal("#f39a83");
     expect(data.categories).to.have.length(1);
     expect(data.categories[0].showTitle).to.equal(false);
-    expect(data.categories[0].unit).to.equal("kg");
+    expect(data.categories[0].priceColumns).to.deep.equal([{ heading: "pro kg" }]);
   });
 
   it("titles by the deepest common path element for nested categories", () => {
@@ -102,7 +102,7 @@ describe("derivePriceListRenderData", () => {
         item({
           code: "3186",
           category: ["Rundstäbe"],
-          variants: [{ pricingModel: "length", unitPrice: { default: 1.4 } }],
+          variants: [{ id: "default", pricingModel: "length", unitPrice: { default: 1.4 } }],
         }),
         item({ code: "3002", category: ["Massivholz"] }),
         item({ code: "3001", category: ["Massivholz"] }),
@@ -117,7 +117,7 @@ describe("derivePriceListRenderData", () => {
       "3001",
       "3002",
     ]);
-    expect(data.categories[1].unit).to.equal("lfm");
+    expect(data.categories[1].priceColumns).to.deep.equal([{ heading: "pro lfm" }]);
   });
 
   it("formats prices with two decimals from the canonical variant", () => {
@@ -126,7 +126,120 @@ describe("derivePriceListRenderData", () => {
       code: "3001",
       produkt: "Ahorn",
       mass: "24 mm",
-      preis: "62.30",
+      prices: ["62.30"],
+    });
+  });
+
+  describe("price columns", () => {
+    const m2 = (price: number) => ({
+      id: "default",
+      label: "Per m²",
+      pricingModel: "area" as const,
+      unitPrice: { default: price },
+    });
+    const cut = (id: string, label: string, price: number) => ({
+      id,
+      label: `Zuschnitt ${label}`,
+      pricingModel: "count" as const,
+      unitPrice: { default: price },
+    });
+    const laser = (code: string, variants: PriceListSourceItem["variants"]) =>
+      item({
+        code,
+        workshops: ["makerspace"],
+        category: ["Laser", "Sperrholz"],
+        variants,
+      });
+
+    it("prints formats smallest first, per-unit last, dash for what a row lacks", () => {
+      const data = derivePriceListRenderData(
+        [
+          laser("6010", [
+            m2(42.34),
+            cut("320-620", "320 × 620 mm", 8.4),
+            cut("500-1250", "500 × 1250 mm", 26.45),
+            cut("a3", "A3", 5.35),
+          ]),
+          laser("6001", [m2(24), cut("a3", "A3", 3)]),
+        ],
+        OPTS,
+      );
+      const [cat] = data.categories;
+      expect(cat.priceColumns.map((c) => c.heading)).to.deep.equal([
+        "A3",
+        "320 × 620 mm",
+        "500 × 1250 mm",
+        "pro m²",
+      ]);
+      expect(cat.rows.map((r) => r.prices)).to.deep.equal([
+        ["3.00", null, null, "24.00"],
+        ["5.35", "8.40", "26.45", "42.34"],
+      ]);
+    });
+
+    it("gives each unit of a mixed section its own column", () => {
+      const data = derivePriceListRenderData(
+        [
+          item({
+            code: "1",
+            variants: [
+              { id: "default", pricingModel: "weight", unitPrice: { default: 40 } },
+            ],
+          }),
+          item({
+            code: "2",
+            variants: [
+              { id: "default", pricingModel: "count", unitPrice: { default: 5 } },
+            ],
+          }),
+        ],
+        OPTS,
+      );
+      const [cat] = data.categories;
+      expect(cat.priceColumns.map((c) => c.heading)).to.deep.equal([
+        "pro kg",
+        "pro Stk",
+      ]);
+      expect(cat.rows.map((r) => r.prices)).to.deep.equal([
+        ["40.00", null],
+        [null, "5.00"],
+      ]);
+    });
+
+    it("names a labelled base variant instead of printing its unit", () => {
+      const size = (id: string, label: string, price: number) => ({
+        id,
+        label,
+        pricingModel: "count" as const,
+        unitPrice: { default: price },
+      });
+      const data = derivePriceListRenderData(
+        [
+          item({
+            variants: [
+              size("klein", "Klein", 10),
+              size("mittel", "Mittel", 20),
+              size("gross", "Gross", 30),
+            ],
+          }),
+        ],
+        OPTS,
+      );
+      expect(data.categories[0].priceColumns.map((c) => c.heading)).to.deep.equal(
+        ["Klein", "Mittel", "Gross"],
+      );
+    });
+
+    it("refuses a section with more price columns than fit, naming it", () => {
+      const variants = [
+        m2(100),
+        ...["a", "b", "c", "d", "e"].map((id) => cut(id, id, 1)),
+      ];
+      expect(() =>
+        derivePriceListRenderData([laser("6001", variants)], OPTS),
+      )
+        .to.throw(PriceListDeriveError, /Sperrholz.*6 price columns/)
+        .with.property("reason", "too-many-variants");
     });
   });
 

@@ -83,3 +83,31 @@ Two structural questions had to be settled:
 - *Auto-generating one list per workshop from the whole catalog* was
   rejected to keep the admin's ability to hand-pick what hangs on the wall;
   the single-workshop rule is enforced at generation time instead.
+
+## Amendment 2026-10-30: several prices per item
+
+The laser materials sell in cut formats next to their per-m² price, and a wall
+list showing only `variants[0]` hid what a member actually buys. This supersedes
+"the unit comes from `variants[0].pricingModel`", the single `Preis CHF/<unit>`
+head and the product half of "long cell text truncates".
+
+- **Every variant is printed**, one price column per way a section's items are
+  sold, derived in `derive_render_data.ts`: named formats smallest first (mean
+  price relative to the item's base, so a price change doesn't reorder them),
+  per-unit prices last, one column per unit (a section mixing kg and Stk no
+  longer prints both under the first item's unit). A row not sold in a column
+  shows a dash.
+- **Shrink, then cap.** Only sections with several prices fit Mass and prices to
+  their content; single-price sections keep the design's fixed columns, so
+  lists without variants only change in their two-line price head
+  (`Preis CHF` / `pro m²`, from the proposal). The real catalog needs at most 4
+  columns; 5 stays legible with wrapped headings. Beyond `MAX_PRICE_COLUMNS` (5)
+  generation fails with `failed-precondition` naming the section: dropping a
+  price silently would misinform the wall list, and a fixed limit of 3 (as in
+  the proposal) would already have hidden A3.
+- **Product names wrap to two lines** instead of truncating, because shrunken
+  columns make them collide on real data. Row heights are measured up front, so
+  the pagination math stays exact; the rules (≤ 12 rows together, ≥ 3 rows each
+  side) are unchanged. Mass still truncates.
+- "Zuschnitt" is dropped from format labels in the head; the column already sits
+  under `Preis CHF` and the word costs the width the column is short of.

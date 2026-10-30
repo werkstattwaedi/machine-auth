@@ -14,7 +14,11 @@
 import path from "node:path";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
-import type { PriceListCategory, PriceListRenderData } from "./types";
+import type {
+  PriceListCategory,
+  PriceListRenderData,
+  PriceListRow,
+} from "./types";
 
 const PX = 0.75; // CSS px → pt
 
@@ -31,29 +35,32 @@ const CAPTION = "#525252";
 const HAIRLINE = "#e5e5e5";
 const HEAD_RULE = "#d4d4d4";
 
-// Column layout: Code 58px · Produkt (flex) · Mass 110px · Preis 110px.
+// Column layout of a single-price table: Code 58px · Produkt (flex) · Mass
+// 110px · Preis 110px. Tables with several prices fit Mass and Preis to their
+// content instead (layoutTable).
 const COL_CODE_W = 58 * PX;
 const COL_MASS_W = 110 * PX;
 const COL_PRICE_W = 110 * PX;
-const COL_PROD_W = CONTENT_W - COL_CODE_W - COL_MASS_W - COL_PRICE_W;
 const CELL_PAD_R = 10 * PX;
+const PRICE_COL_GAP = 12 * PX;
+// Below this Produkt, the price headings wrap rather than squeeze it further.
+const MIN_PROD_W = 150;
 
 const X_CODE = MARGIN;
 const X_PROD = X_CODE + COL_CODE_W;
-const X_MASS = X_PROD + COL_PROD_W;
-const X_PRICE = X_MASS + COL_MASS_W;
 
 // Table rhythm (px → pt): 15px text in a 1.4 line box, 5px cell padding,
-// 1px hairline ⇒ deterministic 24 pt row height, which is what makes the
-// break-budget math below exact.
+// 1px hairline ⇒ 24 pt per one-line row. Rows are measured up front (the
+// product name wraps), which keeps the break-budget math below exact.
 const ROW_FONT = 15 * PX;
 const ROW_LINE = 15 * 1.4 * PX; // 15.75
 const CELL_PAD_Y = 5 * PX;
-const ROW_H = ROW_LINE + 2 * CELL_PAD_Y + 1 * PX; // 24
+const MAX_PROD_LINES = 2;
 
 const HEAD_FONT = 12 * PX;
 const HEAD_LINE = 12 * 1.4 * PX;
-const HEAD_H = HEAD_LINE + 5 * PX + 2 * PX; // text + padding + 2px rule
+const HEAD_RULE_H = 5 * PX + 2 * PX; // padding + 2px rule
+const PRICE_HEAD = "Preis CHF";
 
 const H2_FONT = 19 * PX;
 const H2_GAP = 8 * PX; // margin below heading
@@ -135,6 +142,36 @@ function truncateToWidth(
     }
   }
   return text.slice(0, lo) + ELLIPSIS;
+}
+
+/**
+ * Greedy word wrap at the document's current font and size; whatever doesn't
+ * fit in `maxLines` is truncated into the last line.
+ */
+function wrapLines(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const lines: string[] = [];
+  let line = "";
+  const words = text.split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length; i++) {
+    const candidate = line ? `${line} ${words[i]}` : words[i];
+    if (line && doc.widthOfString(candidate) > maxWidth) {
+      if (lines.length === maxLines - 1) {
+        line = words.slice(i - line.split(" ").length, words.length).join(" ");
+        break;
+      }
+      lines.push(truncateToWidth(doc, line, maxWidth));
+      line = words[i];
+    } else {
+      line = candidate;
+    }
+  }
+  lines.push(truncateToWidth(doc, line, maxWidth));
+  return lines;
 }
 
 /** Vertically center the current font inside a CSS line box of `lineH`. */
@@ -247,37 +284,157 @@ function renderHeader(
   return ruleY + 4 * PX;
 }
 
+/** Where a category's columns sit, and what its rows look like laid out. */
+interface TableLayout {
+  xMass: number;
+  massMax: number;
+  priceCols: { x: number; w: number; headLines: string[] }[];
+  /** Header text + padding + rule. */
+  headH: number;
+  /** Wrapped product name per row, parallel to `cat.rows`. */
+  produkt: string[][];
+}
+
+function rowHeight(lines: number): number {
+  return lines * ROW_LINE + 2 * CELL_PAD_Y + 1 * PX;
+}
+
+/**
+ * Column geometry of one category. A single-price table keeps the fixed design
+ * columns; with several prices Mass and the prices shrink to their content, so
+ * that only the tables that need the room give up Produkt width for it.
+ */
+function layoutTable(
+  doc: PDFKit.PDFDocument,
+  cat: PriceListCategory,
+): TableLayout {
+  const headings = cat.priceColumns.map((col) => sanitize(col.heading));
+
+  let massW = COL_MASS_W;
+  let priceWs = [COL_PRICE_W];
+  // The mass column may run into the price column's padding: the price is
+  // right-aligned, so its left half is always empty, and realistic mass
+  // strings ("20 × 20 × 2 mm" ≈ 79pt) overflow the CSS-padded 75pt.
+  let massMax = COL_MASS_W - 2;
+
+  if (cat.priceColumns.length > 1) {
+    doc.font(FONTS.body).fontSize(ROW_FONT);
+    const massText = Math.max(
+      0,
+      ...cat.rows.map((row) => doc.widthOfString(sanitize(row.mass))),
+    );
+    massW = massText > 0 ? Math.min(COL_MASS_W, massText + CELL_PAD_R) : 0;
+    massMax = massW;
+
+    doc.font(FONTS.bodySemi).fontSize(ROW_FONT);
+    const priceText = cat.priceColumns.map((_, c) =>
+      Math.max(
+        0,
+        ...cat.rows.map((row) => doc.widthOfString(row.prices[c] ?? "–")),
+      ),
+    );
+    doc.fontSize(HEAD_FONT);
+    // Narrowest a column can get: its longest unbreakable piece.
+    const floorWs = headings.map((heading, c) =>
+      Math.max(
+        priceText[c],
+        doc.widthOfString(PRICE_HEAD),
+        ...heading.split(/\s+/).map((word) => doc.widthOfString(word)),
+      ),
+    );
+    const fullWs = headings.map((heading, c) =>
+      Math.max(floorWs[c], doc.widthOfString(heading)),
+    );
+    const gaps = (cat.priceColumns.length - 1) * PRICE_COL_GAP;
+    const prodLeft = (ws: number[]) =>
+      CONTENT_W -
+      COL_CODE_W -
+      massW -
+      gaps -
+      ws.reduce((sum, w) => sum + w, 0);
+    priceWs = prodLeft(fullWs) >= MIN_PROD_W ? fullWs : floorWs;
+  }
+
+  const priceTotal =
+    priceWs.reduce((sum, w) => sum + w, 0) +
+    (priceWs.length - 1) * PRICE_COL_GAP;
+  const xFirstPrice = PAGE_W - MARGIN - priceTotal;
+  const xMass = xFirstPrice - massW;
+
+  doc.font(FONTS.bodySemi).fontSize(HEAD_FONT);
+  let x = xFirstPrice;
+  const priceCols = priceWs.map((w, c) => {
+    const col = {
+      x,
+      w,
+      headLines: [
+        PRICE_HEAD,
+        ...(headings[c] ? wrapLines(doc, headings[c], w, 3) : []),
+      ],
+    };
+    x += w + PRICE_COL_GAP;
+    return col;
+  });
+  const headLineCount = Math.max(
+    1,
+    ...priceCols.map((col) => col.headLines.length),
+  );
+
+  doc.font(FONTS.body).fontSize(ROW_FONT);
+  const prodMax = xMass - X_PROD - CELL_PAD_R;
+  const produkt = cat.rows.map((row) =>
+    wrapLines(doc, sanitize(row.produkt), prodMax, MAX_PROD_LINES),
+  );
+
+  return {
+    xMass,
+    massMax,
+    priceCols,
+    headH: headLineCount * HEAD_LINE + HEAD_RULE_H,
+    produkt,
+  };
+}
+
 /** Column-header row (repeats after page breaks). Returns y below it. */
 function renderTableHead(
   doc: PDFKit.PDFDocument,
   y: number,
   cat: PriceListCategory,
+  layout: TableLayout,
 ): number {
   doc.font(FONTS.bodySemi).fontSize(HEAD_FONT).fillColor(MUTED);
-  const textY = centerInLine(doc, y, HEAD_LINE);
+  const textBottom = y + layout.headH - HEAD_RULE_H;
+  // Everything sits on the header's last line; price columns stack upwards.
+  const textY = centerInLine(doc, textBottom - HEAD_LINE, HEAD_LINE);
   doc.text("Code", X_CODE, textY, { lineBreak: false });
   doc.text("Produkt", X_PROD, textY, { lineBreak: false });
   // A category where no row has a mass drops the floating "Mass" header
   // above the empty column.
   if (cat.rows.some((row) => row.mass)) {
-    doc.text("Mass", X_MASS, textY, { lineBreak: false });
+    doc.text("Mass", layout.xMass, textY, { lineBreak: false });
   }
-  const priceLabel = cat.unit ? `Preis CHF/${cat.unit}` : "Preis CHF";
-  doc.text(priceLabel, X_PRICE, textY, {
-    width: COL_PRICE_W,
-    align: "right",
-    lineBreak: false,
-  });
-  const ruleY = y + HEAD_LINE + 5 * PX;
+  for (const col of layout.priceCols) {
+    col.headLines.forEach((line, i) => {
+      const fromBottom = col.headLines.length - 1 - i;
+      doc.text(line, col.x, textY - fromBottom * HEAD_LINE, {
+        width: col.w,
+        align: "right",
+        lineBreak: false,
+      });
+    });
+  }
+  const ruleY = textBottom + 5 * PX;
   doc.rect(MARGIN, ruleY, CONTENT_W, 2 * PX).fill(HEAD_RULE);
   return ruleY + 2 * PX;
 }
 
-/** One table row (fixed ROW_H) with bottom hairline. */
+/** One table row with bottom hairline; prices and mass stay on its first line. */
 function renderRow(
   doc: PDFKit.PDFDocument,
   y: number,
-  row: PriceListCategory["rows"][number],
+  row: PriceListRow,
+  produkt: string[],
+  layout: TableLayout,
 ): void {
   doc.font(FONTS.body).fontSize(ROW_FONT);
   const textY = centerInLine(doc, y + CELL_PAD_Y, ROW_LINE);
@@ -286,31 +443,29 @@ function renderRow(
   doc.text(row.code, X_CODE, textY, { lineBreak: false });
 
   doc.fillColor(TEXT);
-  const prodMax = COL_PROD_W - CELL_PAD_R;
-  doc.text(
-    truncateToWidth(doc, sanitize(row.produkt), prodMax),
-    X_PROD,
-    textY,
-    {
-      lineBreak: false,
-    },
-  );
-  // The mass column may run into the price column's padding: the price is
-  // right-aligned, so its left half is always empty, and realistic mass
-  // strings ("20 × 20 × 2 mm" ≈ 79pt) overflow the CSS-padded 75pt.
-  const massMax = COL_MASS_W - 2;
-  doc.text(truncateToWidth(doc, sanitize(row.mass), massMax), X_MASS, textY, {
-    lineBreak: false,
+  produkt.forEach((line, i) => {
+    doc.text(line, X_PROD, textY + i * ROW_LINE, { lineBreak: false });
   });
+  doc.text(
+    truncateToWidth(doc, sanitize(row.mass), layout.massMax),
+    layout.xMass,
+    textY,
+    { lineBreak: false },
+  );
 
   doc.font(FONTS.bodySemi);
-  doc.text(row.preis, X_PRICE, textY, {
-    width: COL_PRICE_W,
-    align: "right",
-    lineBreak: false,
+  layout.priceCols.forEach((col, c) => {
+    const price = row.prices[c];
+    doc.fillColor(price == null ? MUTED : TEXT);
+    doc.text(price ?? "–", col.x, textY, {
+      width: col.w,
+      align: "right",
+      lineBreak: false,
+    });
   });
 
-  doc.rect(MARGIN, y + ROW_H - 1 * PX, CONTENT_W, 1 * PX).fill(HAIRLINE);
+  const h = rowHeight(produkt.length);
+  doc.rect(MARGIN, y + h - 1 * PX, CONTENT_W, 1 * PX).fill(HAIRLINE);
 }
 
 /** Category heading height + gap (0 when the heading is suppressed). */
@@ -383,15 +538,20 @@ export async function buildPriceListPdf(
 
     for (const cat of data.categories) {
       const rows = cat.rows;
+      const layout = layoutTable(doc, cat);
+      const heights = layout.produkt.map((lines) => rowHeight(lines.length));
       const h2H = headingH(doc, cat);
       // Space the category needs before its first row can render.
-      const leadH = SECTION_PAD + h2H + HEAD_H;
+      const leadH = SECTION_PAD + h2H + layout.headH;
       // ≤12 rows: the whole block moves to the next page if it doesn't fit.
       // Longer categories may split, but never with fewer than 3 rows on
       // either side of the break, so the lead-in requires 3 rows too.
       const keepRows =
         rows.length <= KEEP_TOGETHER_MAX_ROWS ? rows.length : MIN_SPLIT_ROWS;
-      if (y + leadH + keepRows * ROW_H > CONTENT_BOTTOM) {
+      const keepH = heights
+        .slice(0, keepRows)
+        .reduce((sum, h) => sum + h, 0);
+      if (y + leadH + keepH > CONTENT_BOTTOM) {
         y = newPage();
       }
 
@@ -401,11 +561,19 @@ export async function buildPriceListPdf(
         doc.text(sanitize(cat.name), MARGIN, y, { lineBreak: false });
         y += h2H;
       }
-      y = renderTableHead(doc, y, cat);
+      y = renderTableHead(doc, y, cat, layout);
 
       let i = 0;
       while (i < rows.length) {
-        let fit = Math.floor((CONTENT_BOTTOM - y) / ROW_H);
+        let fit = 0;
+        let fitBottom = y;
+        while (
+          i + fit < rows.length &&
+          fitBottom + heights[i + fit] <= CONTENT_BOTTOM
+        ) {
+          fitBottom += heights[i + fit];
+          fit++;
+        }
         const remaining = rows.length - i;
         if (fit < remaining) {
           // Widow rule: the continuation must receive at least 3 rows.
@@ -415,14 +583,14 @@ export async function buildPriceListPdf(
         } else {
           fit = remaining;
         }
-        for (const row of rows.slice(i, i + fit)) {
-          renderRow(doc, y, row);
-          y += ROW_H;
+        for (let r = i; r < i + fit; r++) {
+          renderRow(doc, y, rows[r], layout.produkt[r], layout);
+          y += heights[r];
         }
         i += fit;
         if (i < rows.length) {
           y = newPage();
-          y = renderTableHead(doc, y, cat);
+          y = renderTableHead(doc, y, cat, layout);
         }
       }
     }

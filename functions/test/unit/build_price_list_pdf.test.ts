@@ -8,6 +8,7 @@ import {
   metallPriceList,
   keramikPriceList,
   longSingleCategoryPriceList,
+  laserPriceList,
 } from "./price_list_test_fixtures";
 
 const pdfParse = require("pdf-parse");
@@ -54,9 +55,9 @@ describe("buildPriceListPdf — content", () => {
     expect(text).to.include("Schleifmittel");
     expect(text).to.include("Holzverbinder und Kleinteile");
     // Column headers carry the per-category unit
-    expect(text).to.include("Preis CHF/m²");
-    expect(text).to.include("Preis CHF/lfm");
-    expect(text).to.include("Preis CHF/Stk");
+    expect(text).to.include("pro m²");
+    expect(text).to.include("pro lfm");
+    expect(text).to.include("pro Stk");
     // Rows: code, produkt, mass, price (two decimals, no CHF prefix)
     expect(text).to.include("3001");
     expect(text).to.include("Ahorn");
@@ -75,7 +76,7 @@ describe("buildPriceListPdf — content", () => {
     const { text } = await pdfText(keramikPriceList());
     // "Tone" appears exactly once — as the page title, not again as h2.
     expect((text.match(/Tone/g) ?? []).length).to.equal(1);
-    expect(text).to.include("Preis CHF/kg");
+    expect(text).to.include("pro kg");
     // No row has a mass → the floating "Mass" column header is dropped.
     expect(text).to.not.include("Mass");
   });
@@ -145,6 +146,27 @@ describe("buildPriceListPdf — content", () => {
         ).to.be.at.least(3);
       }
     }
+  });
+
+  it("prints every price column and wraps long names instead of cutting them", async () => {
+    const { text } = await pdfText(laserPriceList());
+    for (const heading of ["A3", "320 × 620 mm", "500 × 1250 mm", "pro m²"]) {
+      expect(text).to.include(heading);
+    }
+    expect(text).to.include("107.00");
+    expect(text).to.include("(opal)");
+    expect(text).to.include("–"); // formats a row isn't sold in
+    expect(text).to.not.include("..."); // pdf-parse reads "…" as dots
+  });
+
+  it("cuts off a first word too wide for the shrunken product column", async () => {
+    const fixture = laserPriceList();
+    const word = "Donaudampfschifffahrtsgesellschaftskapitänsmützenabzeichen";
+    fixture.categories[0].rows[0].produkt = `${word} Linde`;
+    const { text } = await pdfText(fixture);
+    expect(text).to.include("...");
+    expect(text).to.not.include(word);
+    expect(text).to.include("Linde");
   });
 
   it("produces a sane byte size (sanity bounds)", async () => {
