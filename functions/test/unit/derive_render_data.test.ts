@@ -206,6 +206,27 @@ describe("derivePriceListRenderData", () => {
       ]);
     });
 
+    it("keeps the column order when the same items are picked in another order", () => {
+      const kg = item({
+        code: "2",
+        variants: [
+          { id: "default", pricingModel: "weight", unitPrice: { default: 40 } },
+        ],
+      });
+      const stk = item({
+        code: "1",
+        variants: [
+          { id: "default", pricingModel: "count", unitPrice: { default: 5 } },
+        ],
+      });
+      const forward = derivePriceListRenderData([kg, stk], OPTS);
+      const reversed = derivePriceListRenderData([stk, kg], OPTS);
+      expect(forward.categories).to.deep.equal(reversed.categories);
+      expect(forward.categories[0].priceColumns.map((c) => c.heading)).to.deep.equal(
+        ["pro Stk", "pro kg"],
+      );
+    });
+
     it("names a labelled base variant instead of printing its unit", () => {
       const size = (id: string, label: string, price: number) => ({
         id,

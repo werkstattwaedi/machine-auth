@@ -188,7 +188,9 @@ function derivePriceColumns(
       const col = priceColumnOf(variant, idx, variants.length);
       if (!columns.has(col.key)) columns.set(col.key, { ...col, ratios: [] });
       if (base > 0) {
-        columns.get(col.key)!.ratios.push((variant.unitPrice?.default ?? 0) / base);
+        columns
+          .get(col.key)!
+          .ratios.push((variant.unitPrice?.default ?? 0) / base);
       }
     });
   }
@@ -277,16 +279,18 @@ export function derivePriceListRenderData(
       // Heading = the path below the shared prefix; a category that IS the
       // prefix (single-category list) falls back to the title and is hidden.
       const name = group.path.slice(common.length).join(" – ") || title;
-      const { priceColumns, pricesOf } = derivePriceColumns(name, group.items);
-      const rows = group.items
+      // Sorted before the columns too: their ties resolve by first seen, and
+      // re-picking the same items must not change the printed list.
+      const sorted = group.items
         .slice()
-        .sort((a, b) => byCodeNumeric(a.code, b.code))
-        .map((item) => ({
-          code: item.code,
-          produkt: item.labelName || item.name,
-          mass: item.labelMass ?? "",
-          prices: pricesOf(item),
-        }));
+        .sort((a, b) => byCodeNumeric(a.code, b.code));
+      const { priceColumns, pricesOf } = derivePriceColumns(name, sorted);
+      const rows = sorted.map((item) => ({
+        code: item.code,
+        produkt: item.labelName || item.name,
+        mass: item.labelMass ?? "",
+        prices: pricesOf(item),
+      }));
       return { name, showTitle: name !== title, priceColumns, rows };
     });
 
