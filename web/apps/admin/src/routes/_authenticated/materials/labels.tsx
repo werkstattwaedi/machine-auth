@@ -20,6 +20,12 @@ import { PageHeader } from "@/components/admin/page-header"
 import { InventoryTabs } from "@/components/admin/inventory-tabs"
 import { FilterPills } from "@/components/admin/filter-pills"
 import { LabelPreview } from "@/printer/label-preview"
+import {
+  DEFAULT_LABEL_FORMAT,
+  LABEL_FORMAT_OPTIONS,
+  LABEL_FORMATS,
+  type LabelFormatId,
+} from "@/printer/label-formats"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import {
   renderMaterialLabel,
@@ -40,21 +46,10 @@ export const Route = createFileRoute("/_authenticated/materials/labels")({
 
 type CatalogRow = CatalogItemDoc & { id: string }
 
-const TAPE = "18mm" as const
-
-// Vertical calibration: the rendered bitmap is centred in its own pin
-// window, but on the physical tape the content prints biased toward one
-// edge (the head geometry doesn't match where the 18 mm tape actually
-// sits). Positive shifts content toward the higher-pin edge (down).
-// Calibrated against a real 18 mm print: offset 24 measured 2.8 mm top /
-// 1.3 mm bottom, so 13 centres it (~2 mm each side). To re-tune: measure
-// the top/bottom margins and adjust by (bottom−top)/2 × 14 dots
-// (360 DPI ⇒ 1 mm ≈ 14 dots).
-const LABEL_VERTICAL_OFFSET_DOTS = 13
-
 function labelInput(
   checkoutDomain: string,
   item: CatalogRow,
+  formatId: LabelFormatId,
 ): MaterialLabelInput {
   return {
     url: buildItemLabelQrUrl(checkoutDomain, item.code),
@@ -63,7 +58,7 @@ function labelInput(
     name: item.labelName ?? item.name,
     mass: item.labelMass,
     code: `#${item.code}`,
-    tape: TAPE,
+    format: LABEL_FORMATS[formatId],
   }
 }
 
@@ -74,6 +69,8 @@ function LabelsPage() {
   const [search, setSearch] = useState("")
   const [workshop, setWorkshop] = useState("all")
   const [cart, setCart] = useState<string[]>([])
+  const [formatId, setFormatId] = useState(DEFAULT_LABEL_FORMAT)
+  const format = LABEL_FORMATS[formatId]
 
   const print = useAsyncMutation({
     context: "admin.printLabelBatch",
@@ -127,13 +124,17 @@ function LabelsPage() {
         // sequential submission keeps the labels in cart order.
         for (const item of cartItems) {
           const bitmap = await renderMaterialLabel(
-            labelInput(checkoutDomain, item),
+            labelInput(checkoutDomain, item, formatId),
           )
           const bytes = buildRasterJob(bitmap, {
-            tape: TAPE,
-            verticalOffsetDots: LABEL_VERTICAL_OFFSET_DOTS,
+            tape: format.tape,
+            verticalOffsetDots: format.verticalOffsetDots,
           })
-          await enqueuePrintJob(db, { bytes, tape: TAPE, uid: user.uid })
+          await enqueuePrintJob(db, {
+            bytes,
+            tape: format.tape,
+            uid: user.uid,
+          })
         }
       })
     } catch {
@@ -244,8 +245,13 @@ function LabelsPage() {
               </button>
             )}
           </div>
+          <FilterPills
+            options={LABEL_FORMAT_OPTIONS}
+            value={formatId}
+            onChange={setFormatId}
+          />
           <p className="text-xs text-muted-foreground">
-            Vorschau · 18-mm-Band · QR-Code + Bezeichnung · Druck schwarz/weiss
+            Vorschau · QR-Code + Bezeichnung · Druck schwarz/weiss
           </p>
           {cartItems.length === 0 ? (
             <EmptyState
@@ -260,6 +266,7 @@ function LabelsPage() {
                   key={item.id}
                   item={item}
                   checkoutDomain={checkoutDomain}
+                  formatId={formatId}
                   enabled={canPrint}
                   onRemove={() =>
                     setCart((prev) => prev.filter((id) => id !== item.id))
@@ -287,21 +294,27 @@ function LabelsPage() {
 function CartLabel({
   item,
   checkoutDomain,
+  formatId,
   enabled,
   onRemove,
 }: {
   item: CatalogRow
   checkoutDomain: string
+  formatId: LabelFormatId
   enabled: boolean
   onRemove: () => void
 }) {
   const { bitmap, loading } = useLabelBitmap(
-    enabled ? labelInput(checkoutDomain, item) : null,
+    enabled ? labelInput(checkoutDomain, item, formatId) : null,
     enabled,
   )
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card p-2 pr-3">
-      <LabelPreview bitmap={bitmap} loading={loading} displayHeight={56} />
+      <LabelPreview
+        bitmap={bitmap}
+        loading={loading}
+        displayHeight={56 * LABEL_FORMATS[formatId].previewScale}
+      />
       <span className="flex-1 truncate text-sm font-medium">{item.name}</span>
       <Button
         variant="ghost"

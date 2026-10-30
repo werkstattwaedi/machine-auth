@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 import QRCode from "qrcode"
-import { TAPE_SPECS, type TapeKey, type Bitmap1 } from "@oww/shared"
+import { TAPE_SPECS, type Bitmap1 } from "@oww/shared"
+import type { LabelFormat } from "./label-formats"
 
-export type { TapeKey, Bitmap1 }
+export type { Bitmap1 }
 
 export interface MaterialLabelInput {
   /** Encoded into the QR code. */
@@ -15,10 +16,8 @@ export interface MaterialLabelInput {
   mass?: string
   /** Line 1 — `#` + 4-digit code, e.g. "#3160". Small, top of the text block. */
   code: string
-  /** Tape width — currently 18 mm only in production. */
-  tape: TapeKey
-  /** Uniform label length in mm (spec "Einheitslänge"). Default 72. */
-  widthMm?: number
+  /** Tape and uniform label length. */
+  format: LabelFormat
 }
 
 // Layout per the "Material label design system" handoff, option 2a
@@ -32,9 +31,14 @@ export interface MaterialLabelInput {
 // printable window), so we apply the spec's own scaling rule — scale
 // every dimension by printPins/212, keeping pixels square, the QR
 // square, and the whole 18 mm design proportionally mapped onto the
-// printable window.
+// printable window. Wider tapes scale the same design by their own
+// printPins.
 const SPEC_CANVAS_PX = 212
-const DEFAULT_LABEL_WIDTH_MM = 72
+// The name's shrink floor in dots, not spec pixels: it is a physical
+// legibility limit. Keeping it absolute also means a name that fits the
+// 18 mm label fits every format with at least as much text room — scaled,
+// the 36 × 100 mm label would run out of shrink range and grow past 100 mm.
+const NAME_MIN_DOTS = 39
 // The head's native feed-axis resolution. Unlike the tape-width (pin)
 // axis, the feed axis has no printable-window limit, so label length is
 // computed at true DPI — not through the `px()` squeeze.
@@ -97,13 +101,12 @@ function context2d(canvas: OffscreenCanvas): Ctx2d {
 export async function renderMaterialLabel(
   input: MaterialLabelInput,
 ): Promise<Bitmap1> {
-  const tape = TAPE_SPECS[input.tape]
+  const tape = TAPE_SPECS[input.format.tape]
   const height = tape.printPins
   const s = height / SPEC_CANVAS_PX
   const px = (specPx: number) => Math.round(specPx * s)
 
   const mass = input.mass?.trim() || null
-  const widthMm = input.widthMm ?? DEFAULT_LABEL_WIDTH_MM
 
   // QR sizing: integer module size nearest the spec's 15 mm target —
   // integer modules keep edges crisp through the 1-bit threshold step.
@@ -122,7 +125,6 @@ export async function renderMaterialLabel(
   const gapQrText = px(21)
   const rightMargin = px(24)
   const nameBasePx = px(59)
-  const nameMinPx = px(35)
   const nameStepPx = Math.max(1, px(3))
   // Code + mass a touch larger than the original spec's 38 px so the
   // small lines stay legible on tape (feedback from the first prints).
@@ -131,7 +133,7 @@ export async function renderMaterialLabel(
 
   // Uniform label length (spec "Einheitslänge"): fixed regardless of
   // content so labels line up flush on the shelf.
-  const width = labelWidthDots(widthMm)
+  const width = labelWidthDots(input.format.widthMm)
 
   // Make sure the label fonts are actually loaded before we measure —
   // otherwise measureText() uses fallback metrics and the layout is
@@ -152,14 +154,14 @@ export async function renderMaterialLabel(
   }
   let namePx = nameBasePx
   let nameMetrics = measureName(namePx)
-  while (nameMetrics.width > availName && namePx - nameStepPx >= nameMinPx) {
+  while (nameMetrics.width > availName && namePx - nameStepPx >= NAME_MIN_DOTS) {
     namePx -= nameStepPx
     nameMetrics = measureName(namePx)
   }
 
   // A name still overflowing at the minimum size extends the label
-  // instead of clipping ink — unreachable with the current catalog at
-  // 72 mm, but never cut ink even if it happens.
+  // instead of clipping ink — unreachable with the current catalog, but
+  // never cut ink even if it happens.
   const overflow =
     nameMetrics.width > availName
       ? Math.ceil(nameMetrics.width - availName)
