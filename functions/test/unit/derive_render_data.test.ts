@@ -151,7 +151,7 @@ describe("derivePriceListRenderData", () => {
         variants,
       });
 
-    it("prints formats smallest first, per-unit last, dash for what a row lacks", () => {
+    it("prints formats cheapest first, per-unit last, dash for what a row lacks", () => {
       const data = derivePriceListRenderData(
         [
           laser("6010", [

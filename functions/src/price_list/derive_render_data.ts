@@ -156,7 +156,7 @@ function priceColumnOf(
 }
 
 /**
- * Lay a section's items out into price columns: named options smallest first
+ * Lay a section's items out into price columns: named options cheapest first
  * (by price relative to the item's base, which stays put when prices change),
  * per-unit prices last. Items not sold in a column get a null cell.
  */

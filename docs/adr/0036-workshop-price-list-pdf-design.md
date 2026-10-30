@@ -92,7 +92,7 @@ list showing only `variants[0]` hid what a member actually buys. This supersedes
 head and the product half of "long cell text truncates".
 
 - **Every variant is printed**, one price column per way a section's items are
-  sold, derived in `derive_render_data.ts`: named formats smallest first (mean
+  sold, derived in `derive_render_data.ts`: named formats cheapest first (mean
   price relative to the item's base, so a price change doesn't reorder them),
   per-unit prices last, one column per unit (a section mixing kg and Stk no
   longer prints both under the first item's unit). A row not sold in a column
