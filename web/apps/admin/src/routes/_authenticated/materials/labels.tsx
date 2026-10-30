@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 // Inventar · Etiketten — selection-cart label printing. Left: search /
-// filter the catalog, add items (or all matches) to the cart. Right: the
+// filter the catalog, add items (or all matches) to the cart, each in the
+// variant its label should preselect. Right: the
 // cart with a live WYSIWYG preview per label, then send everything to
 // the Brother printer via the print-job queue (gateway prints).
 
@@ -27,12 +28,10 @@ import {
   type LabelFormatId,
 } from "@/printer/label-formats"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
-import {
-  renderMaterialLabel,
-  type MaterialLabelInput,
-} from "@/printer/render-material-label"
+import { renderMaterialLabel } from "@/printer/render-material-label"
 import { enqueuePrintJob } from "@/printer/enqueue-print-job"
-import { buildItemLabelQrUrl } from "@/printer/item-label-qr-url"
+import { materialLabelInput } from "@/printer/material-label-input"
+import { LabelVariantSelect } from "@/printer/label-variant-select"
 import { Button } from "@modules/components/ui/button"
 import { Card } from "@modules/components/ui/card"
 import { Input } from "@modules/components/ui/input"
@@ -46,20 +45,19 @@ export const Route = createFileRoute("/_authenticated/materials/labels")({
 
 type CatalogRow = CatalogItemDoc & { id: string }
 
-function labelInput(
-  checkoutDomain: string,
-  item: CatalogRow,
-  formatId: LabelFormatId,
-): MaterialLabelInput {
-  return {
-    url: buildItemLabelQrUrl(checkoutDomain, item.code),
-    // Curated label fields from the pricelist import when present; items
-    // created by hand fall back to the composed display name, no mass line.
-    name: item.labelName ?? item.name,
-    mass: item.labelMass,
-    code: `#${item.code}`,
-    format: LABEL_FORMATS[formatId],
-  }
+// One label in the cart: an item may be in it once per variant, since each
+// variant gets its own sticker.
+interface CartEntry {
+  itemId: string
+  variantId?: string
+}
+
+function firstVariantId(item: CatalogRow) {
+  return item.variants?.[0]?.id
+}
+
+function cartKey({ itemId, variantId }: CartEntry) {
+  return `${itemId}/${variantId ?? ""}`
 }
 
 function LabelsPage() {
@@ -68,7 +66,7 @@ function LabelsPage() {
   const { data: catalog, loading } = useCollection(catalogCollection(db))
   const [search, setSearch] = useState("")
   const [workshop, setWorkshop] = useState("all")
-  const [cart, setCart] = useState<string[]>([])
+  const [cart, setCart] = useState<CartEntry[]>([])
   const [formatId, setFormatId] = useState(DEFAULT_LABEL_FORMAT)
   const format = LABEL_FORMATS[formatId]
 
@@ -105,14 +103,22 @@ function LabelsPage() {
       .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
   }, [catalog, search, workshop])
 
-  const cartItems = cart
-    .map((id) => catalog.find((c) => c.id === id))
-    .filter((c): c is CatalogRow => !!c)
+  const cartItems = cart.flatMap((entry) => {
+    const item = catalog.find((c) => c.id === entry.itemId)
+    return item ? [{ entry, item }] : []
+  })
 
+  const inCart = (entry: CartEntry) =>
+    cart.some((e) => cartKey(e) === cartKey(entry))
+
+  // Adds each match's plain item label; a variant's label is a deliberate
+  // pick on its row, or the cart would fill with every cut of every item.
   const addAll = () => {
     setCart((prev) => [
       ...prev,
-      ...matches.map((m) => m.id).filter((id) => !prev.includes(id)),
+      ...matches
+        .map((m) => ({ itemId: m.id, variantId: firstVariantId(m) }))
+        .filter((e) => !prev.some((p) => cartKey(p) === cartKey(e))),
     ])
   }
 
@@ -122,9 +128,9 @@ function LabelsPage() {
       await print.mutate(async () => {
         // Sequential: the gateway prints one job at a time anyway, and
         // sequential submission keeps the labels in cart order.
-        for (const item of cartItems) {
+        for (const { entry, item } of cartItems) {
           const bitmap = await renderMaterialLabel(
-            labelInput(checkoutDomain, item, formatId),
+            materialLabelInput(checkoutDomain, item, format, entry.variantId),
           )
           const bytes = buildRasterJob(bitmap, {
             tape: format.tape,
@@ -181,34 +187,14 @@ function LabelsPage() {
             onChange={setWorkshop}
           />
           <Card className="divide-y px-4 py-1">
-            {matches.slice(0, 30).map((item) => {
-              const inCart = cart.includes(item.id)
-              return (
-                <div key={item.id} className="flex items-center gap-2 py-2 text-sm">
-                  <span className="flex-1">
-                    {item.name}{" "}
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {item.code}
-                    </span>
-                  </span>
-                  {inCart ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Check className="h-3.5 w-3.5" />
-                      im Korb
-                    </span>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCart((prev) => [...prev, item.id])}
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      Hinzufügen
-                    </Button>
-                  )}
-                </div>
-              )
-            })}
+            {matches.slice(0, 30).map((item) => (
+              <MatchRow
+                key={item.id}
+                item={item}
+                inCart={inCart}
+                onAdd={(entry) => setCart((prev) => [...prev, entry])}
+              />
+            ))}
             {matches.length === 0 && (
               <div className="py-4 text-sm text-muted-foreground">
                 Keine Treffer.
@@ -261,15 +247,18 @@ function LabelsPage() {
             />
           ) : (
             <div className="space-y-2">
-              {cartItems.map((item) => (
+              {cartItems.map(({ entry, item }) => (
                 <CartLabel
-                  key={item.id}
+                  key={cartKey(entry)}
                   item={item}
+                  variantId={entry.variantId}
                   checkoutDomain={checkoutDomain}
                   formatId={formatId}
                   enabled={canPrint}
                   onRemove={() =>
-                    setCart((prev) => prev.filter((id) => id !== item.id))
+                    setCart((prev) =>
+                      prev.filter((e) => cartKey(e) !== cartKey(entry)),
+                    )
                   }
                 />
               ))}
@@ -291,23 +280,64 @@ function LabelsPage() {
   )
 }
 
+function MatchRow({
+  item,
+  inCart,
+  onAdd,
+}: {
+  item: CatalogRow
+  inCart: (entry: CartEntry) => boolean
+  onAdd: (entry: CartEntry) => void
+}) {
+  const [variantId, setVariantId] = useState(firstVariantId(item))
+  const entry = { itemId: item.id, variantId }
+  return (
+    <div className="flex items-center gap-2 py-2 text-sm">
+      <span className="flex-1">
+        {item.name}{" "}
+        <span className="font-mono text-xs text-muted-foreground">
+          {item.code}
+        </span>
+      </span>
+      <LabelVariantSelect item={item} value={variantId} onChange={setVariantId} />
+      {inCart(entry) ? (
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <Check className="h-3.5 w-3.5" />
+          im Korb
+        </span>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => onAdd(entry)}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Hinzufügen
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function CartLabel({
   item,
+  variantId,
   checkoutDomain,
   formatId,
   enabled,
   onRemove,
 }: {
   item: CatalogRow
+  variantId?: string
   checkoutDomain: string
   formatId: LabelFormatId
   enabled: boolean
   onRemove: () => void
 }) {
-  const { bitmap, loading } = useLabelBitmap(
-    enabled ? labelInput(checkoutDomain, item, formatId) : null,
-    enabled,
+  const input = materialLabelInput(
+    checkoutDomain,
+    item,
+    LABEL_FORMATS[formatId],
+    variantId,
   )
+  const name = input.variant ? `${item.name} · ${input.variant}` : item.name
+  const { bitmap, loading } = useLabelBitmap(enabled ? input : null, enabled)
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-card p-2 pr-3">
       <LabelPreview
@@ -315,11 +345,11 @@ function CartLabel({
         loading={loading}
         displayHeight={56 * LABEL_FORMATS[formatId].previewScale}
       />
-      <span className="flex-1 truncate text-sm font-medium">{item.name}</span>
+      <span className="flex-1 truncate text-sm font-medium">{name}</span>
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={`${item.name} aus Korb entfernen`}
+        aria-label={`${name} aus Korb entfernen`}
         onClick={onRemove}
       >
         <X className="h-4 w-4 text-destructive" />

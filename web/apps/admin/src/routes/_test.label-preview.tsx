@@ -14,6 +14,7 @@ interface LabelPreviewSearch {
   url: string
   name: string
   mass: string
+  variant: string
   code: string
   format: LabelFormatId
 }
@@ -34,6 +35,7 @@ export const Route = createFileRoute("/_test/label-preview")({
     url: String(search.url ?? ""),
     name: String(search.name ?? ""),
     mass: String(search.mass ?? ""),
+    variant: String(search.variant ?? ""),
     code: String(search.code ?? ""),
     format: coerceFormat(search.format),
   }),
@@ -41,13 +43,14 @@ export const Route = createFileRoute("/_test/label-preview")({
 })
 
 function LabelPreviewTestPage() {
-  const { url, name, mass, code, format } = Route.useSearch()
+  const { url, name, mass, variant, code, format } = Route.useSearch()
   const { bitmap, loading } = useLabelBitmap(
     url && name && code
       ? {
           url,
           name,
           mass: mass || undefined,
+          variant: variant || undefined,
           code,
           format: LABEL_FORMATS[format],
         }

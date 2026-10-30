@@ -19,7 +19,8 @@ import { useAuth } from "@modules/lib/auth"
 import { buildRasterJob } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import { enqueuePrintJob } from "@/printer/enqueue-print-job"
-import { buildItemLabelQrUrl } from "@/printer/item-label-qr-url"
+import { materialLabelInput } from "@/printer/material-label-input"
+import { LabelVariantSelect } from "@/printer/label-variant-select"
 import { LabelPreview } from "@/printer/label-preview"
 import {
   DEFAULT_LABEL_FORMAT,
@@ -93,15 +94,10 @@ function CatalogDetailPage() {
   const canPrint = Boolean(checkoutDomain)
   const [formatId, setFormatId] = useState(DEFAULT_LABEL_FORMAT)
   const format = LABEL_FORMATS[formatId]
+  const [variantId, setVariantId] = useState<string>()
   const labelInput =
     canPrint && catalog
-      ? {
-          url: buildItemLabelQrUrl(checkoutDomain, catalog.code),
-          name: catalog.labelName ?? catalog.name,
-          mass: catalog.labelMass,
-          code: `#${catalog.code}`,
-          format,
-        }
+      ? materialLabelInput(checkoutDomain, catalog, format, variantId)
       : null
   const { bitmap: previewBitmap, loading: rendering } = useLabelBitmap(
     labelInput,
@@ -195,11 +191,18 @@ function CatalogDetailPage() {
           >
             <CatalogFormFields register={register} control={control} showActive />
             {canPrint && (
-              <FilterPills
-                options={LABEL_FORMAT_OPTIONS}
-                value={formatId}
-                onChange={setFormatId}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <FilterPills
+                  options={LABEL_FORMAT_OPTIONS}
+                  value={formatId}
+                  onChange={setFormatId}
+                />
+                <LabelVariantSelect
+                  item={catalog}
+                  value={variantId}
+                  onChange={setVariantId}
+                />
+              </div>
             )}
             <div className="flex flex-wrap gap-2">
               <Button type="submit" disabled={saving}>
@@ -216,8 +219,8 @@ function CatalogDetailPage() {
                     type="button"
                     variant="outline"
                     onClick={onPrint}
-                    // While a format switch re-renders, the bitmap still has
-                    // the previous tape's height and buildRasterJob would throw.
+                    // While a re-render runs, the bitmap is the previous choice:
+                    // the wrong variant, or a tape height buildRasterJob rejects.
                     disabled={print.loading || rendering || !previewBitmap}
                   >
                     {print.loading ? (

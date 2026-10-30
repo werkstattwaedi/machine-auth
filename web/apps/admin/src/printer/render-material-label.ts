@@ -14,6 +14,9 @@ export interface MaterialLabelInput {
   name: string
   /** Line 3 — curated `Etikett Mass`, e.g. "3 mm". Line omitted when absent. */
   mass?: string
+  /** Line 3, after the mass — the variant the label preselects, e.g.
+   *  "Zuschnitt A3". */
+  variant?: string
   /** Line 1 — `#` + 4-digit code, e.g. "#3160". Small, top of the text block. */
   code: string
   /** Tape and uniform label length. */
@@ -34,11 +37,11 @@ export interface MaterialLabelInput {
 // printable window. Wider tapes scale the same design by their own
 // printPins.
 const SPEC_CANVAS_PX = 212
-// The name's shrink floor in dots, not spec pixels: it is a physical
+// The shrink floor in dots, not spec pixels: it is a physical
 // legibility limit. Keeping it absolute also means a name that fits the
 // 18 mm label fits every format with at least as much text room — scaled,
 // the 36 × 100 mm label would run out of shrink range and grow past 100 mm.
-const NAME_MIN_DOTS = 39
+const TEXT_MIN_DOTS = 39
 // The head's native feed-axis resolution. Unlike the tape-width (pin)
 // axis, the feed axis has no printable-window limit, so label length is
 // computed at true DPI — not through the `px()` squeeze.
@@ -93,10 +96,10 @@ function context2d(canvas: OffscreenCanvas): Ctx2d {
  *
  * Layout, left to right: QR code (vertically centred), then a text
  * block spanning the QR's height — `#code` flush with the QR top, the
- * name big and centred on the QR's vertical middle, and the mass (when
- * present) flush with the QR bottom. Every label is the same fixed
- * length; only the name font shrinks (never code or mass) when a long
- * name would otherwise overflow.
+ * name big and centred on the QR's vertical middle, and the mass and
+ * variant (when present) flush with the QR bottom. Every label is the same
+ * fixed length; the name and bottom fonts shrink (never the code) when long
+ * text would otherwise overflow.
  */
 export async function renderMaterialLabel(
   input: MaterialLabelInput,
@@ -106,7 +109,9 @@ export async function renderMaterialLabel(
   const s = height / SPEC_CANVAS_PX
   const px = (specPx: number) => Math.round(specPx * s)
 
-  const mass = input.mass?.trim() || null
+  const bottomLine =
+    [input.mass?.trim(), input.variant?.trim()].filter(Boolean).join(" · ") ||
+    null
 
   // QR sizing: integer module size nearest the spec's 15 mm target —
   // integer modules keep edges crisp through the 1-bit threshold step.
@@ -125,7 +130,7 @@ export async function renderMaterialLabel(
   const gapQrText = px(21)
   const rightMargin = px(24)
   const nameBasePx = px(59)
-  const nameStepPx = Math.max(1, px(3))
+  const stepPx = Math.max(1, px(3))
   // Code + mass a touch larger than the original spec's 38 px so the
   // small lines stay legible on tape (feedback from the first prints).
   const codePx = px(46)
@@ -143,29 +148,36 @@ export async function renderMaterialLabel(
   const sctx = context2d(new OffscreenCanvas(1, 1))
 
   // Text block: left-aligned column right of the QR, up to the right
-  // margin. The name shrinks (spec steps, spec minimum) if it would
-  // overflow this width; code and mass never shrink.
+  // margin. The name and bottom line shrink (spec steps, down to the floor)
+  // if they would overflow this width; the code never shrinks.
   const textX = leftMargin + qrPx + gapQrText
   const availName = width - rightMargin - textX
 
-  const measureName = (sizePx: number) => {
-    sctx.font = `${NAME_WEIGHT} ${sizePx}px ${BITTER}`
-    return sctx.measureText(input.name)
+  const fitText = (text: string, weight: number, basePx: number) => {
+    const measure = (sizePx: number) => {
+      sctx.font = `${weight} ${sizePx}px ${BITTER}`
+      return sctx.measureText(text)
+    }
+    let sizePx = basePx
+    let metrics = measure(sizePx)
+    while (metrics.width > availName && sizePx - stepPx >= TEXT_MIN_DOTS) {
+      sizePx -= stepPx
+      metrics = measure(sizePx)
+    }
+    return { sizePx, metrics }
   }
-  let namePx = nameBasePx
-  let nameMetrics = measureName(namePx)
-  while (nameMetrics.width > availName && namePx - nameStepPx >= NAME_MIN_DOTS) {
-    namePx -= nameStepPx
-    nameMetrics = measureName(namePx)
-  }
+  const { sizePx: namePx, metrics: nameMetrics } = fitText(
+    input.name,
+    NAME_WEIGHT,
+    nameBasePx,
+  )
+  const bottom = bottomLine ? fitText(bottomLine, MASS_WEIGHT, massPx) : null
 
-  // A name still overflowing at the minimum size extends the label
-  // instead of clipping ink — unreachable with the current catalog, but
-  // never cut ink even if it happens.
+  // Text still overflowing at the minimum size extends the label instead
+  // of clipping ink: never cut ink, even if it means a longer label.
+  const widestText = Math.max(nameMetrics.width, bottom?.metrics.width ?? 0)
   const overflow =
-    nameMetrics.width > availName
-      ? Math.ceil(nameMetrics.width - availName)
-      : 0
+    widestText > availName ? Math.ceil(widestText - availName) : 0
   const finalWidth = width + overflow
 
   const canvas = new OffscreenCanvas(finalWidth, height)
@@ -207,12 +219,15 @@ export async function renderMaterialLabel(
   const qrMid = qrTop + qrPx / 2
   ctx.fillText(input.name, textX, Math.round(qrMid + (nameA - nameD) / 2))
 
-  // Line 3 — mass (optional): Bitter SemiBold, bottom edge flush with
-  // the QR bottom.
-  if (mass) {
-    ctx.font = `${MASS_WEIGHT} ${massPx}px ${BITTER}`
-    const massMetrics = ctx.measureText(mass)
-    ctx.fillText(mass, textX, qrBottom - massMetrics.actualBoundingBoxDescent)
+  // Line 3 — mass and variant (optional): Bitter SemiBold, bottom edge
+  // flush with the QR bottom.
+  if (bottomLine && bottom) {
+    ctx.font = `${MASS_WEIGHT} ${bottom.sizePx}px ${BITTER}`
+    ctx.fillText(
+      bottomLine,
+      textX,
+      qrBottom - bottom.metrics.actualBoundingBoxDescent,
+    )
   }
 
   // Threshold to 1-bit, packed column-major MSB-first.

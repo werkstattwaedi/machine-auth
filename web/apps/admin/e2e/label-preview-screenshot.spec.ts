@@ -83,6 +83,30 @@ test.describe("Label renderer visual regression", () => {
         format: "36x100",
       },
     },
+    {
+      // Longest real variant on the narrow tape: the bottom line must shrink
+      // to fit, and the QR carries the variant.
+      name: "variant-shrink-to-fit",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156/500-1250",
+        name: "3-Schichtplatte, Föhre",
+        mass: "19 mm",
+        variant: "Zuschnitt 500 × 1250 mm",
+        code: "#3156",
+      },
+    },
+    {
+      // The same variant fits the wide tape at full size.
+      name: "36x100-variant",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156/500-1250",
+        name: "3-Schichtplatte, Föhre",
+        mass: "19 mm",
+        variant: "Zuschnitt 500 × 1250 mm",
+        code: "#3156",
+        format: "36x100",
+      },
+    },
   ]
 
   for (const fixture of fixtures) {
