@@ -24,8 +24,13 @@ export function LabelVariantSelect({
 }) {
   const options = labelVariantOptions(item)
   if (options.length < 2) return null
+  // A variant no longer on the item prints as the plain label, so show that
+  // rather than a blank trigger.
+  const selected = options.some((o) => o.value === value)
+    ? value
+    : options[0].value
   return (
-    <Select value={value ?? options[0].value} onValueChange={onChange}>
+    <Select value={selected} onValueChange={onChange}>
       <SelectTrigger
         size="sm"
         className="w-56"
