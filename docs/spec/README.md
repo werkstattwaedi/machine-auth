@@ -179,6 +179,7 @@ still passes a different wrong promise.
   format, with its own price.
 - **Price list** (*Preisliste*) — a printable sheet of catalog items with
   their prices, made to hang in a workshop.
+- **Material label** (*Etikett*) — the printed tape label of a catalog item.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.
