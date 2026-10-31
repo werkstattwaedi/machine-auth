@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { createFileRoute } from "@tanstack/react-router"
-import { TAPE_SPECS, type TapeKey } from "@oww/shared"
+import {
+  DEFAULT_LABEL_FORMAT,
+  LABEL_FORMATS,
+  type LabelFormatId,
+} from "@/printer/label-formats"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import { LabelPreview } from "@/printer/label-preview"
 
@@ -10,14 +14,15 @@ interface LabelPreviewSearch {
   url: string
   name: string
   mass: string
+  variant: string
   code: string
-  tape: TapeKey
+  format: LabelFormatId
 }
 
-function coerceTape(value: unknown): TapeKey {
-  return typeof value === "string" && value in TAPE_SPECS
-    ? (value as TapeKey)
-    : "18mm"
+function coerceFormat(value: unknown): LabelFormatId {
+  return typeof value === "string" && value in LABEL_FORMATS
+    ? (value as LabelFormatId)
+    : DEFAULT_LABEL_FORMAT
 }
 
 // Test-only deep link for the Playwright screenshot spec. Renders the
@@ -30,17 +35,25 @@ export const Route = createFileRoute("/_test/label-preview")({
     url: String(search.url ?? ""),
     name: String(search.name ?? ""),
     mass: String(search.mass ?? ""),
+    variant: String(search.variant ?? ""),
     code: String(search.code ?? ""),
-    tape: coerceTape(search.tape),
+    format: coerceFormat(search.format),
   }),
   component: LabelPreviewTestPage,
 })
 
 function LabelPreviewTestPage() {
-  const { url, name, mass, code, tape } = Route.useSearch()
+  const { url, name, mass, variant, code, format } = Route.useSearch()
   const { bitmap, loading } = useLabelBitmap(
     url && name && code
-      ? { url, name, mass: mass || undefined, code, tape }
+      ? {
+          url,
+          name,
+          mass: mass || undefined,
+          variant: variant || undefined,
+          code,
+          format: LABEL_FORMATS[format],
+        }
       : null,
     true,
   )

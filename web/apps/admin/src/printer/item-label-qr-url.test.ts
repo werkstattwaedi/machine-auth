@@ -28,6 +28,12 @@ describe("buildItemLabelQrUrl", () => {
     expect(parsed.pathname).toBe("/visit/add/item/9011")
   })
 
+  it("appends the variant the checkout should preselect", () => {
+    expect(
+      buildItemLabelQrUrl("checkout.werkstattwaedi.ch", "3160", "500-1250"),
+    ).toBe("https://checkout.werkstattwaedi.ch/visit/add/item/3160/500-1250")
+  })
+
   it("works with a localhost dev domain that includes a port", () => {
     expect(buildItemLabelQrUrl("localhost:5173", "6011")).toBe(
       "https://localhost:5173/visit/add/item/6011",

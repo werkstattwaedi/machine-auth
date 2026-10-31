@@ -12,15 +12,22 @@ import { Card, CardContent } from "@modules/components/ui/card"
 import { Button } from "@modules/components/ui/button"
 import { useForm } from "react-hook-form"
 import { Loader2, Printer, Save } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useAuth } from "@modules/lib/auth"
 import { buildRasterJob } from "@oww/shared"
 import { useLabelBitmap } from "@/printer/use-label-bitmap"
 import { enqueuePrintJob } from "@/printer/enqueue-print-job"
-import { buildItemLabelQrUrl } from "@/printer/item-label-qr-url"
+import { materialLabelInput } from "@/printer/material-label-input"
+import { LabelVariantSelect } from "@/printer/label-variant-select"
 import { LabelPreview } from "@/printer/label-preview"
+import {
+  DEFAULT_LABEL_FORMAT,
+  LABEL_FORMAT_OPTIONS,
+  LABEL_FORMATS,
+} from "@/printer/label-formats"
+import { FilterPills } from "@/components/admin/filter-pills"
 import { CatalogFormFields, type CatalogFormValues } from "@/components/admin/catalog-form-fields"
 
 export const Route = createFileRoute(
@@ -85,15 +92,12 @@ function CatalogDetailPage() {
   // via Firestore. The only requirement is a configured checkout domain for
   // the QR deep link.
   const canPrint = Boolean(checkoutDomain)
+  const [formatId, setFormatId] = useState(DEFAULT_LABEL_FORMAT)
+  const format = LABEL_FORMATS[formatId]
+  const [variantId, setVariantId] = useState<string>()
   const labelInput =
     canPrint && catalog
-      ? {
-          url: buildItemLabelQrUrl(checkoutDomain, catalog.code),
-          name: catalog.labelName ?? catalog.name,
-          mass: catalog.labelMass,
-          code: `#${catalog.code}`,
-          tape: "18mm" as const,
-        }
+      ? materialLabelInput(checkoutDomain, catalog, format, variantId)
       : null
   const { bitmap: previewBitmap, loading: rendering } = useLabelBitmap(
     labelInput,
@@ -107,8 +111,11 @@ function CatalogDetailPage() {
     if (!previewBitmap || !user) return
     try {
       await print.mutate(async () => {
-        const bytes = buildRasterJob(previewBitmap, { tape: "18mm" })
-        await enqueuePrintJob(db, { bytes, tape: "18mm", uid: user.uid })
+        const bytes = buildRasterJob(previewBitmap, {
+          tape: format.tape,
+          verticalOffsetDots: format.verticalOffsetDots,
+        })
+        await enqueuePrintJob(db, { bytes, tape: format.tape, uid: user.uid })
       })
     } catch {
       // useAsyncMutation already toasted + logged.
@@ -183,7 +190,21 @@ function CatalogDetailPage() {
             className="space-y-4 max-w-lg"
           >
             <CatalogFormFields register={register} control={control} showActive />
-            <div className="flex gap-2">
+            {canPrint && (
+              <div className="flex flex-wrap items-center gap-2">
+                <FilterPills
+                  options={LABEL_FORMAT_OPTIONS}
+                  value={formatId}
+                  onChange={setFormatId}
+                />
+                <LabelVariantSelect
+                  item={catalog}
+                  value={variantId}
+                  onChange={setVariantId}
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
               <Button type="submit" disabled={saving}>
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -198,7 +219,9 @@ function CatalogDetailPage() {
                     type="button"
                     variant="outline"
                     onClick={onPrint}
-                    disabled={print.loading || !previewBitmap}
+                    // While a re-render runs, the bitmap is the previous choice:
+                    // the wrong variant, or a tape height buildRasterJob rejects.
+                    disabled={print.loading || rendering || !previewBitmap}
                   >
                     {print.loading ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -207,7 +230,11 @@ function CatalogDetailPage() {
                     )}
                     Etikett drucken
                   </Button>
-                  <LabelPreview bitmap={previewBitmap} loading={rendering} />
+                  <LabelPreview
+                    bitmap={previewBitmap}
+                    loading={rendering}
+                    displayHeight={72 * format.previewScale}
+                  />
                 </>
               )}
             </div>

@@ -12,8 +12,14 @@
  * `https://`.
  *
  * `domain` is the bare host (e.g. `checkout.werkstattwaedi.ch`) sourced
- * from `VITE_CHECKOUT_DOMAIN`.
+ * from `VITE_CHECKOUT_DOMAIN`. With a `variantId`, the checkout's picker
+ * opens with that variant preselected.
  */
-export function buildItemLabelQrUrl(domain: string, code: string): string {
-  return `https://${domain}/visit/add/item/${code}`
+export function buildItemLabelQrUrl(
+  domain: string,
+  code: string,
+  variantId?: string,
+): string {
+  const url = `https://${domain}/visit/add/item/${code}`
+  return variantId ? `${url}/${encodeURIComponent(variantId)}` : url
 }

@@ -63,6 +63,13 @@ test.describe("Inventar workspace", () => {
       maxDiffPixelRatio: 0.01,
     })
 
+    // Switching the format re-renders the cart's labels on the wider tape:
+    // 100 mm at 360 DPI long, the 36 mm tape's 454 pins high.
+    await page.getByRole("button", { name: "36 × 100 mm" }).click()
+    const canvas = page.getByTestId("label-preview-canvas").first()
+    await expect(canvas).toHaveAttribute("data-bitmap-width", "1417")
+    await expect(canvas).toHaveAttribute("data-bitmap-height", "454")
+
     // "Alle Treffer hinzufügen" pulls in the rest; "Korb leeren" resets.
     await page.getByRole("button", { name: /Alle Treffer hinzufügen/ }).click()
     await expect(page.getByText("Etiketten-Korb · 2")).toBeVisible()

@@ -61,6 +61,52 @@ test.describe("Label renderer visual regression", () => {
         code: "#7004",
       },
     },
+    {
+      // 36 × 100 mm format, three lines at the base size.
+      name: "36x100-short-name",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3160",
+        name: "MDF",
+        mass: "3 mm",
+        code: "#3160",
+        format: "36x100",
+      },
+    },
+    {
+      // 36 × 100 mm format: must shrink, and still stay exactly 100 mm long.
+      name: "36x100-shrink-to-fit",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/7004",
+        name: "Siebreiniger & Siebentschichter",
+        mass: "",
+        code: "#7004",
+        format: "36x100",
+      },
+    },
+    {
+      // Longest real variant on the narrow tape: the bottom line must shrink
+      // to fit, and the QR carries the variant.
+      name: "variant-shrink-to-fit",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156/500-1250",
+        name: "3-Schichtplatte, Föhre",
+        mass: "19 mm",
+        variant: "Zuschnitt 500 × 1250 mm",
+        code: "#3156",
+      },
+    },
+    {
+      // The same variant fits the wide tape at full size.
+      name: "36x100-variant",
+      query: {
+        url: "https://checkout.werkstattwaedi.ch/visit/add/item/3156/500-1250",
+        name: "3-Schichtplatte, Föhre",
+        mass: "19 mm",
+        variant: "Zuschnitt 500 × 1250 mm",
+        code: "#3156",
+        format: "36x100",
+      },
+    },
   ]
 
   for (const fixture of fixtures) {
