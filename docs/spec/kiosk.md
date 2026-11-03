@@ -93,7 +93,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
   | the account | 2 min |
   | the start screen, or a guest who has entered nothing | none |
 
-- **KIO-8** A reset signs the person out and clears everything they entered; the kiosk stays open and shows the start screen, or after a switch to another badge (KIO-6) the new person's check-in — ADR-0022, #415, #516, #689, #750, #769:
+- **KIO-8** A reset signs the person out and clears everything they entered; the kiosk stays open and shows the start screen, or after a switch to another badge (KIO-6) the new person's check-in — ADR-0022, #415, #516, #689, #750, #769, #828:
 
   | Trigger | Asked first |
   |---|---|
@@ -109,7 +109,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
 - **KIO-28** Closing the kiosk window resets the kiosk without asking, as "Neuer Checkout" does (KIO-8, KIO-25), and hides it to the tray instead of quitting; a badge tap brings the kiosk to the front, from the tray too. — #504
 - **KIO-14** An identified person's open checkout survives a reset and continues on their next badge tap or code sign-in (KIO-1). — ADR-0022, #415, #689
 - **KIO-15** A guest's checkout does not survive a reset. — ADR-0022, #415, #689
-- **KIO-16** After a visit is started — by "Besuch starten" (KIO-9) or by a second badge's tap (KIO-6) — the screen the kiosk lands on says for 6 s whose visit was started. — #732
+- **KIO-16** After a visit is started — by "Besuch starten" (KIO-9) or by a second badge's tap (KIO-6) — the screen the kiosk lands on says for 6 s whose visit was started. — #732, #828
 
 ## Open questions
 
