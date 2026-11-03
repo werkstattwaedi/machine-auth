@@ -93,7 +93,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
   | the account | 2 min |
   | the start screen, or a guest who has entered nothing | none |
 
-- **KIO-8** A reset signs the person out and clears everything they entered; the kiosk stays open and shows the start screen, or after a switch to another badge (KIO-6) the new person's check-in — ADR-0022, #415, #516, #689, #750, #769, #828:
+- **KIO-8** A reset signs the person out and clears everything they entered; the kiosk then shows the start screen, or after a switch to another badge (KIO-6) the new person's check-in, and stays open unless the reset came from closing the window (KIO-28) — ADR-0022, #415, #516, #689, #750, #769, #828:
 
   | Trigger | Asked first |
   |---|---|
@@ -104,11 +104,13 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
   | an unregistered badge over a guest's committed checkout (KIO-13) | no |
   | "Abmelden" in the header menu | no |
   | "Neuer Checkout" in the kiosk frame | only a guest with an open checkout |
+  | closing the kiosk window (KIO-28) | no |
 
 - **KIO-25** A reset (KIO-8) also stops the Wallee terminal if it still waits for a means of payment. — #735, #792
-- **KIO-28** Closing the kiosk window resets the kiosk without asking, as "Neuer Checkout" does (KIO-8, KIO-25), and hides it to the tray instead of quitting; a badge tap brings the kiosk to the front, from the tray too. — #504
+- **KIO-28** Closing the kiosk window resets the kiosk (KIO-8, KIO-25) and hides it to the tray instead of quitting; a badge tap brings the kiosk to the front, from the tray too. — #504
 - **KIO-14** An identified person's open checkout survives a reset and continues on their next badge tap or code sign-in (KIO-1). — ADR-0022, #415, #689
 - **KIO-15** A guest's checkout does not survive a reset. — ADR-0022, #415, #689
+- **KIO-29** When the kiosk is launched, its window opens in front and maximized, on the start screen. — #458, #828
 - **KIO-16** After a visit is started — by "Besuch starten" (KIO-9) or by a second badge's tap (KIO-6) — the screen the kiosk lands on says for 6 s whose visit was started. — #732, #828
 
 ## Open questions
@@ -121,6 +123,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
 - [NEEDS CLARIFICATION] A start that stalled past 8 s (KIO-6) can still land while "Benutzer wechseln?" is open: after a countdown or a click the kiosk then resets under the dialog to the start screen (KIO-8), and the dialog and the second badge's tap are gone; after a tap alone the visit exists although the dialog said none was started. Should a stalled start be abandoned, or should the dialog follow the late start? — #732
 - [NEEDS CLARIFICATION] A second registered badge while a RaiseNow payment is still in the overlay (KIO-20) switches the kiosk without asking, since RaiseNow is committed when the overlay opens (KIO-6, KIO-19); the switch does not close the overlay. What a badge tap during a payment does is for #735 to decide.
 - [NEEDS CLARIFICATION] Touches in the overlay don't count as activity for the idle time (KIO-7), so a person reading the Anleitung there (CHK-49) for 5 min gets the question whether they are still there under the overlay, unseen, and the kiosk resets 30 s later. Intended?
+- [NEEDS CLARIFICATION] Closing the kiosk window (KIO-28) does not wait for the kiosk's report of the Wallee terminal's approval (BIL-49) the way "Neuer Checkout" does; a close right after an approval can lose the report that KIO-27 relies on. Should the close send it first? — #828
 
 ## Retired
 
