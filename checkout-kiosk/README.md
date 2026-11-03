@@ -233,8 +233,9 @@ both sides).
 
 ### Single instance
 
-Only one kiosk runs per installation (issue #688). The kiosk starts hidden
-in the tray, so launching it a second time is an easy mistake — and two
+Only one kiosk runs per installation (issue #688). Closing the window only
+sends the kiosk to the tray, so launching it a second time is an easy
+mistake — and two
 instances both own the reader and race each other on every badge tap. A
 second launch therefore exits immediately, before it touches the session
 partition, the tray or the reader, and the already-running kiosk brings its

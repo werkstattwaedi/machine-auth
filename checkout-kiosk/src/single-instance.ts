@@ -5,8 +5,8 @@
 // reset-session.ts) so the continue-vs-quit decision is unit-testable without
 // importing electron.
 //
-// The kiosk starts hidden in the tray, so a second launch is an easy mistake:
-// nothing appears, the operator double-clicks the shortcut again. Every
+// The kiosk can sit closed in the tray, so a second launch is an easy mistake:
+// nothing seems to be running, the operator double-clicks the shortcut. Every
 // running instance then owns a PC/SC handle on the one reader and forwards
 // each tap to its own checkout webview; the backend accepts only the request
 // carrying the highest SDM read counter, so the instances race and whichever

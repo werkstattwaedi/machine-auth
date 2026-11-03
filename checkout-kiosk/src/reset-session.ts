@@ -3,15 +3,13 @@
 
 // Sequencing for the `bridge:reset-session` IPC handler (issue #516).
 // Extracted from main.ts (same pattern as renderer/reset-button.ts) so the
-// hide-vs-keep-open decision is unit-testable without importing electron.
+// abort-then-wipe order is unit-testable without importing electron.
 
 import type { ResetSessionOptions } from "./types"
 
 export interface ResetSessionDeps {
   /** Wipe the volatile kiosk partition (storage + cache). */
   clearSession: () => Promise<void>
-  /** Hide the kiosk window back to the tray. */
-  hideWindow: () => void
   /**
    * Stop a running terminal payment (absent when no terminal is
    * configured). Resolves once the abort is on its way.
@@ -54,19 +52,16 @@ export async function abortTerminalBestEffort(
 }
 
 /**
- * Clear the session, then autohide to the tray so the kiosk only reappears
- * when the next user taps a badge — the default for "Neuer Checkout" and the
- * renderer's fallback reset. A badge takeover (`confirmTagSwitch`) passes
- * `keepWindowOpen: true`: the next user is already standing at the kiosk, so
- * the window must stay in front while the wiped page reloads into /checkin
- * (issue #516 — it used to minimize to the tray mid-handoff).
+ * Stop any running terminal payment, then wipe the session. The window stays
+ * where it is: the kiosk no longer autohides to the tray after a reset, so the
+ * next user finds it in front. `opts` is still accepted because deployed web
+ * app builds send `{ keepWindowOpen: true }` on a badge takeover; it is a
+ * no-op now.
  */
 export async function performSessionReset(
   deps: ResetSessionDeps,
-  opts?: ResetSessionOptions
+  _opts?: ResetSessionOptions
 ): Promise<void> {
   await abortTerminalBestEffort(deps.abortTerminalPayment)
   await deps.clearSession()
-  if (opts?.keepWindowOpen) return
-  deps.hideWindow()
 }
