@@ -43,17 +43,18 @@ import { formatDate } from "@modules/lib/format"
 import { Checkbox } from "@modules/components/ui/checkbox"
 import { Dialog, DialogContent, DialogTitle } from "@modules/components/ui/dialog"
 import { cn } from "@modules/lib/utils"
+import { HELP_URL } from "@/lib/help-links"
 
 const TERMS_URL = "https://werkstattwaedi.ch/nutzungsbestimmungen"
 
-// Step-4 resource rows are placeholders (no real routes yet) — open in a new
-// tab so the member keeps their onboarding dialog. Wire to real URLs later.
+// Step-4 resource rows open in a new tab so the member keeps their onboarding
+// dialog. Only the Anleitung is a real page yet; the others are placeholders.
 const RESOURCE_LINKS = [
   {
     icon: BookOpen,
     title: "So funktioniert der neue Checkout",
     subtitle: "Check-in, Nutzung erfassen, bezahlen.",
-    href: "https://werkstattwaedi.ch/anleitung",
+    href: HELP_URL,
   },
   {
     icon: KeyRound,

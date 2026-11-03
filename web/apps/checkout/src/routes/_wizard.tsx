@@ -3,7 +3,12 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import { showNoCheckoutGate, wizardStep } from "@/components/checkout/wizard-gate"
-import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router"
+import {
+  createFileRoute,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
 import { signOut } from "firebase/auth"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
@@ -15,6 +20,7 @@ import { AlertTriangle, Loader2 } from "lucide-react"
 import { WizardProvider, useWizardContext } from "@/components/checkout/wizard-context"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import { StaleCheckoutBanner } from "@/components/checkout/stale-checkout-banner"
+import { LegacyRedirectBanner } from "@/components/checkout/legacy-redirect-banner"
 import { StartOverConfirm } from "@/components/checkout/start-over-confirm"
 import { useStartOverMenuEntry } from "@/components/checkout/start-over-menu-entry"
 import { KioskInactivityWatcher } from "@/components/checkout/kiosk-inactivity-watcher"
@@ -31,6 +37,7 @@ import { BadgeOfferCoordinator } from "@/components/checkout/badge-offer-coordin
 import { AccountMenu } from "@/components/account/account-menu"
 import { AppHeader } from "@modules/components/app-header/app-header"
 import { AppMenu } from "@modules/components/app-header/app-menu"
+import { HELP_MENU_ENTRY } from "@/lib/help-links"
 
 const wizardSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -42,6 +49,9 @@ const wizardSearchSchema = z.object({
   /** First name of the visitor whose kiosk visit was just started — the
    * start screen confirms it with a toast (issue #732). */
   started: z.optional(z.string()),
+  /** `legacy` when the old checkout forwarded the visitor here — shows the
+   * "Willkommen im neuen Checkout" banner. */
+  from: z.optional(z.string()),
 })
 
 export const Route = createFileRoute("/_wizard")({
@@ -191,6 +201,8 @@ function WizardChrome({
   kioskSession?: boolean
 }) {
   const { pathname } = useLocation()
+  const navigate = useNavigate({ from: Route.fullPath })
+  const { from } = Route.useSearch()
   const {
     openCheckout,
     pendingCheckout,
@@ -242,10 +254,13 @@ function WizardChrome({
               kioskSession={kioskSession}
             />
           ) : (
-            // Anonymous: "Problem melden", plus "Von vorne beginnen" while a
-            // visit is open (not under the kiosk bridge — its chrome has
-            // "Neuer Checkout"). Renders nothing when both are absent.
-            <AppMenu trailingItems={startOverEntry ? [startOverEntry] : []} />
+            // Anonymous: "Anleitung", "Problem melden", plus "Von vorne
+            // beginnen" while a visit is open (not under the kiosk bridge —
+            // its chrome has "Neuer Checkout").
+            <AppMenu
+              helpItems={[HELP_MENU_ENTRY]}
+              trailingItems={startOverEntry ? [startOverEntry] : []}
+            />
           )
         }
       />
@@ -259,6 +274,16 @@ function WizardChrome({
         <NoCheckoutGate />
       ) : (
         <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
+          <LegacyRedirectBanner
+            from={from}
+            // Drop only `from`: the tag tap and kiosk flag stay in the URL.
+            onDismiss={() =>
+              void navigate({
+                search: (prev) => ({ ...prev, from: undefined }),
+                replace: true,
+              })
+            }
+          />
           <h1 className="text-[26px] sm:text-[37px] font-extrabold tracking-[-0.01em] mb-6">
             Self-Checkout
           </h1>

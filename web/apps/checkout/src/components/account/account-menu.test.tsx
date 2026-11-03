@@ -109,6 +109,7 @@ describe("AccountMenu", () => {
       "Profil",
       "Nutzungsverlauf",
       "Mitgliedschaft",
+      "Anleitung",
       "Abmelden",
     ])
   })
@@ -171,6 +172,7 @@ describe("AccountMenu", () => {
       "Profil",
       "Nutzungsverlauf",
       "Mitgliedschaft",
+      "Anleitung",
       "Problem melden",
       "Abmelden",
     ])
@@ -209,7 +211,13 @@ describe("AccountMenu", () => {
     const rows = Array.from(sheet.querySelectorAll("nav a, nav button")).map(
       (el) => el.textContent,
     )
-    expect(rows).toEqual(["Nutzungsverlauf", "Mitgliedschaft", "Profil", "Abmelden"])
+    expect(rows).toEqual([
+      "Nutzungsverlauf",
+      "Mitgliedschaft",
+      "Profil",
+      "Anleitung",
+      "Abmelden",
+    ])
 
     await user.click(within(sheet).getByRole("button", { name: "Mitgliedschaft" }))
     expect(screen.queryByRole("dialog")).toBeNull()

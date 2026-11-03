@@ -60,6 +60,8 @@ export interface AuthenticatedLayoutProps {
    * matches the wizard's. The admin menu has none.
    */
   menuItems?: AppMenuEntry[]
+  /** Help links next to "Problem melden" (the checkout's "Anleitung"). */
+  helpItems?: AppMenuEntry[]
   /**
    * Where to send the user after an explicit "Abmelden". When set, the
    * logout button navigates here (a public page) instead of letting the
@@ -87,6 +89,7 @@ export function AuthenticatedLayout({
   wrapper: Wrapper,
   headerAction,
   menuItems,
+  helpItems,
   signOutRedirect,
   kiosk,
 }: AuthenticatedLayoutProps) {
@@ -279,6 +282,7 @@ export function AuthenticatedLayout({
             menuItems={menuItems}
             navItems={navItems}
             headerAction={headerAction}
+            helpItems={helpItems}
             onSignOut={handleSignOut}
           />
         }
