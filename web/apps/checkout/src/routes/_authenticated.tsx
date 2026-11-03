@@ -27,6 +27,7 @@ import { isCheckoutStale } from "@modules/lib/session-day"
 import { useBridge } from "@modules/lib/use-bridge"
 import { cn } from "@modules/lib/utils"
 import { runStartOver } from "@/components/checkout/start-over"
+import { HELP_MENU_ENTRY } from "@/lib/help-links"
 
 export const Route = createFileRoute("/_authenticated")({
   component: CheckoutAuthenticatedLayout,
@@ -55,6 +56,7 @@ function CheckoutAuthenticatedLayout() {
       gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       headerAction={<VisitCta />}
       menuItems={menuItems}
+      helpItems={[HELP_MENU_ENTRY]}
       signOutRedirect="/checkin"
       // Inside the Electron kiosk (ADR-0041) the member area is reached by an
       // OTP-elevated session; leaving it must be the same strong wipe as the

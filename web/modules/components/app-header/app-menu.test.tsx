@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, cleanup, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { type ReactNode } from "react"
-import { History, LogIn, RotateCcw, User } from "lucide-react"
+import { BookOpen, History, LogIn, RotateCcw, User } from "lucide-react"
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -113,6 +113,42 @@ describe("AppMenu — desktop dropdown", () => {
     expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
       "Abmelden",
     ])
+  })
+})
+
+describe("AppMenu — help entries", () => {
+  const help = { label: "Anleitung", icon: BookOpen, href: "https://example.com/hilfe" }
+
+  it("lists them before Problem melden as new-tab links in the dropdown", async () => {
+    installMarker()
+    render(<AppMenu identity={identity} menuItems={menuItems} helpItems={[help]} />)
+    await userEvent.setup().click(screen.getByRole("button", { name: "Konto-Menü" }))
+    await screen.findByRole("menu")
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Profil",
+      "Nutzungsverlauf",
+      "Anleitung",
+      "Problem melden",
+    ])
+    const link = screen.getByRole("menuitem", { name: "Anleitung" })
+    expect(link).toHaveAttribute("href", "https://example.com/hilfe")
+    expect(link).toHaveAttribute("target", "_blank")
+  })
+
+  it("shows them in the sheet's utility section next to the navigation", async () => {
+    setViewport(375)
+    render(<AppMenu identity={identity} navItems={navItems} helpItems={[help]} />)
+    await userEvent.setup().click(screen.getByRole("button", { name: "Menü" }))
+    const sheet = await screen.findByTestId("app-menu-sheet")
+    expect(within(sheet).getByRole("link", { name: "Anleitung" })).toHaveAttribute(
+      "target",
+      "_blank",
+    )
+  })
+
+  it("keep the anonymous menu from rendering nothing", () => {
+    render(<AppMenu helpItems={[help]} />)
+    expect(screen.getByTestId("app-menu-trigger")).toBeInTheDocument()
   })
 })
 

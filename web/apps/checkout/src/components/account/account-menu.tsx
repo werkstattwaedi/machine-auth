@@ -17,6 +17,7 @@ import { BadgeCheck, History, User } from "lucide-react"
 import { AppMenu, type AppMenuEntry } from "@modules/components/app-header/app-menu"
 import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 import { useWizardContext } from "@/components/checkout/wizard-context"
+import { HELP_MENU_ENTRY } from "@/lib/help-links"
 
 type AccountRoute = "/account/profile" | "/account/membership" | "/account/usage"
 
@@ -61,6 +62,7 @@ export function AccountMenu({
       // the header. The mobile sheet follows the member-area sidebar order.
       menuItems={[profile, usage, membership]}
       navItems={[usage, membership, profile]}
+      helpItems={[HELP_MENU_ENTRY]}
       onSignOut={() => void startOver()}
     />
   )

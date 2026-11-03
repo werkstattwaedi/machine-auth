@@ -8,9 +8,9 @@
 // and the way around the app were two hidden menus with nearly the same
 // contents; now there is one.
 //
-//   desktop (≥ md): dropdown — `menuItems`, "Problem melden", ─, trailing
+//   desktop (≥ md): dropdown — `menuItems`, help, "Problem melden", ─, trailing
 //   mobile  (< md): sheet from the right — `headerAction`, `navItems`, ─,
-//                   "Problem melden", trailing (it replaces the sidebar, so
+//                   help, "Problem melden", trailing (it replaces the sidebar, so
 //                   it follows the sidebar's order)
 //
 // Without an `identity` the trigger is the anonymous "Menü" pill, and when
@@ -48,6 +48,9 @@ export interface AppMenuEntry {
   icon: LucideIcon
   /** Route the entry links to. */
   to?: string
+  /** Off-site page, opened in a new tab (the kiosk shows it in its overlay).
+   *  Takes precedence over `to` and `onSelect`. */
+  href?: string
   search?: Record<string, unknown>
   /** Action instead of a link (e.g. the kiosk step-up before navigating). */
   onSelect?: () => void
@@ -73,6 +76,8 @@ export interface AppMenuProps {
   navItems?: AppMenuEntry[]
   /** Rendered above `navItems` in the sheet (the checkout's visit CTA). */
   headerAction?: ReactNode
+  /** Rendered right before "Problem melden" in both layouts (help links). */
+  helpItems?: AppMenuEntry[]
   /** Entries after the separator, before "Abmelden". */
   trailingItems?: AppMenuEntry[]
   /** Adds "Abmelden" as the last entry. */
@@ -116,6 +121,7 @@ export function AppMenu({
   menuItems = [],
   navItems = [],
   headerAction,
+  helpItems = [],
   trailingItems = [],
   onSignOut,
 }: AppMenuProps) {
@@ -148,6 +154,7 @@ export function AppMenu({
   const feedback: AppMenuEntry | null = feedbackSeen || isFeedbackAvailable()
     ? { label: "Problem melden", icon: MessageSquareWarning, onSelect: openFeedback }
     : null
+  const utility: AppMenuEntry[] = [...helpItems, ...(feedback ? [feedback] : [])]
   const trailing: AppMenuEntry[] = [
     ...trailingItems,
     ...(onSignOut
@@ -158,7 +165,7 @@ export function AppMenu({
   const hasNav = navItems.length > 0 || headerAction != null
   if (
     !identity &&
-    !feedback &&
+    utility.length === 0 &&
     menuItems.length === 0 &&
     trailing.length === 0 &&
     !hasNav
@@ -215,6 +222,21 @@ export function AppMenu({
       const className = nav
         ? navLinkClass(entry.primary)
         : `${NAV_LINK} ${NAV_LINK_HOVER}`
+      if (entry.href) {
+        return (
+          <a
+            key={entry.label}
+            href={entry.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={className}
+            onClick={close}
+          >
+            <Icon className="h-4 w-4" aria-hidden />
+            {entry.label}
+          </a>
+        )
+      }
       if (entry.to && !entry.onSelect) {
         return (
           <Link
@@ -256,10 +278,10 @@ export function AppMenu({
             ) : null,
             ...navItems.map((e) => sheetRow(e, true)),
           ],
-          [feedback, ...trailing].flatMap((e) => (e ? [sheetRow(e, false)] : [])),
+          [...utility, ...trailing].map((e) => sheetRow(e, false)),
         ]
       : [
-          feedback ? [sheetRow(feedback, false)] : [],
+          utility.map((e) => sheetRow(e, false)),
           trailing.map((e) => sheetRow(e, false)),
         ]
     const filled = sections.filter((s) => s.some(Boolean))
@@ -307,6 +329,16 @@ export function AppMenu({
 
   const dropdownItem = (entry: AppMenuEntry) => {
     const Icon = entry.icon
+    if (entry.href) {
+      return (
+        <DropdownMenuItem key={entry.label} asChild className={ITEM_CLASS}>
+          <a href={entry.href} target="_blank" rel="noopener noreferrer">
+            <Icon aria-hidden />
+            {entry.label}
+          </a>
+        </DropdownMenuItem>
+      )
+    }
     if (entry.to && !entry.onSelect) {
       return (
         <DropdownMenuItem key={entry.label} asChild className={ITEM_CLASS}>
@@ -328,7 +360,7 @@ export function AppMenu({
       </DropdownMenuItem>
     )
   }
-  const lead = [...menuItems, ...(feedback ? [feedback] : [])]
+  const lead = [...menuItems, ...utility]
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

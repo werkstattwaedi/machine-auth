@@ -15,11 +15,14 @@ import {
 import { useDb } from "@modules/lib/firebase-context"
 import { where } from "firebase/firestore"
 import { isCheckoutStale } from "@modules/lib/session-day"
+import { dispatchSearch } from "@/lib/dispatch-search"
 
 const indexSearchSchema = z.object({
   picc: z.optional(z.string()),
   cmac: z.optional(z.string()),
   kiosk: z.optional(z.string()),
+  /** `legacy` when the old checkout forwarded the visitor (banner). */
+  from: z.optional(z.string()),
 })
 
 /**
@@ -30,8 +33,8 @@ const indexSearchSchema = z.object({
  *   open checkout from today          →  /visit
  *   open checkout from a previous day →  /checkout (red/orange banner)
  *
- * Tag-auth params (picc/cmac/kiosk) and the kiosk flag are preserved on
- * the redirect so the wizard layer picks them up.
+ * Tag-auth params (picc/cmac/kiosk), the kiosk flag and `from` are
+ * preserved on the redirect so the wizard layer picks them up.
  */
 export const Route = createFileRoute("/")({
   validateSearch: indexSearchSchema,
@@ -41,7 +44,7 @@ export const Route = createFileRoute("/")({
 function RootDispatcher() {
   const db = useDb()
   const navigate = useNavigate()
-  const { picc, cmac, kiosk } = Route.useSearch()
+  const { picc, cmac, kiosk, from } = Route.useSearch()
   const {
     user,
     userDoc,
@@ -113,10 +116,7 @@ function RootDispatcher() {
     if (dispatchedRef.current) return
     if (principalLoading) return
 
-    const search: { picc?: string; cmac?: string; kiosk?: string } = {}
-    if (picc) search.picc = picc
-    if (cmac) search.cmac = cmac
-    if (kiosk !== undefined) search.kiosk = ""
+    const search = dispatchSearch({ picc, cmac, kiosk, from })
 
     // No principal at all → send the visitor to /checkin so the wizard
     // can collect their persons + create an anon principal on advance.
@@ -154,6 +154,7 @@ function RootDispatcher() {
     picc,
     cmac,
     kiosk,
+    from,
     navigate,
   ])
 

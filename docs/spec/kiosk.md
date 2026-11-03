@@ -120,6 +120,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
 - [NEEDS CLARIFICATION] A second badge over a check-in with a purchase-only checkout open tells the person that what is on the screen is lost (KIO-6), although that checkout is kept and comes back on their next tap (KIO-14). Should the dialog say so? — #732
 - [NEEDS CLARIFICATION] A start that stalled past 8 s (KIO-6) can still land while "Benutzer wechseln?" is open: after a countdown or a click the kiosk then resets under the dialog and hides (KIO-8); after a tap alone the visit exists although the dialog said none was started. Should a stalled start be abandoned, or should the dialog follow the late start? — #732
 - [NEEDS CLARIFICATION] A second registered badge while a RaiseNow payment is still in the overlay (KIO-20) switches the kiosk without asking, since RaiseNow is committed when the overlay opens (KIO-6, KIO-19); the switch does not close the overlay. What a badge tap during a payment does is for #735 to decide.
+- [NEEDS CLARIFICATION] Touches in the overlay don't count as activity for the idle time (KIO-7), so a person reading the Anleitung there (CHK-49) for 5 min gets the question whether they are still there under the overlay, unseen, and the kiosk resets 30 s later. Intended?
 
 ## Retired
 
