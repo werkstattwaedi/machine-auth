@@ -63,7 +63,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
   | *Interne Nutzung* | work on a project for the OWW itself | none | none | none | the identified person, if in the *Interne Nutzung* group, alone (CHK-51, CHK-52, CHK-53) |
 
 - **CHK-29** A visit's type is derived from its persons — the identified person's *Freiwilligengruppe* or *Interne Nutzung*; otherwise *Begleitung / nur Materialbezug* when every person has it; otherwise *Reguläre Nutzung* — and decides machine time and material (CHK-4), while each person's usage fee follows their own type. — ADR-0050, #605
-- **CHK-51** The identified person's own line offers the usage types by the Workspace groups their account is in (ADM-11), *Freiwilligengruppe* chosen for a volunteer; a type not offered is not shown at all, and no other line offers *Freiwilligengruppe* or *Interne Nutzung* — ADR-0053:
+- **CHK-51** The identified person's own line offers the usage types by the Workspace groups their account is in (ADM-11), *Freiwilligengruppe* chosen for a volunteer — except that a purchase-only checkout (CHK-5) keeps them on *Begleitung / nur Materialbezug*; a type not offered is not shown at all, and no other line offers *Freiwilligengruppe* or *Interne Nutzung* — ADR-0053:
 
   | In the group | Offered on their own line |
   |---|---|

@@ -73,7 +73,8 @@ correction, not at the visit.
 volunteer starts on *Freiwilligengruppe* (CHK-44). The owner switch for
 machine time (CHK-40) moves a volunteer off Begleitung to
 *Freiwilligengruppe*, not *Reguläre Nutzung*. A membership or badge bought
-without a visit still puts the buyer on Begleitung (CHK-5).
+without a visit still puts the buyer on Begleitung (CHK-5), and the check-in
+leaves a volunteer's purchase-only checkout there.
 
 **No confirmation sentence for Freiwilligengruppe (CHK-30).** The group says
 who the person is. *Interne Nutzung* keeps its sentence, because it is

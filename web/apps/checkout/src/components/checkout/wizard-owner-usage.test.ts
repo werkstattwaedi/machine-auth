@@ -37,6 +37,10 @@ describe("ownerUsageCorrection", () => {
     expect(ownerUsageCorrection([owner("intern"), visitor], "u1", ["intern"])).toBeNull()
   })
 
+  it("keeps a volunteer's purchase-only checkout on Begleitung (CHK-5)", () => {
+    expect(ownerUsageCorrection([owner("materialbezug")], "u1", ["volunteering"])).toBeNull()
+  })
+
   it("leaves everyone else alone", () => {
     expect(ownerUsageCorrection([owner("ermaessigt")], "u1", [])).toBeNull()
     expect(ownerUsageCorrection([visitor], "u1", ["volunteering"])).toBeNull()

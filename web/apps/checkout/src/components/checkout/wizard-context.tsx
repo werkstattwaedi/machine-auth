@@ -1486,7 +1486,9 @@ export function personLocalToDoc(
  * don't offer (CHK-51): the default for those groups — Freiwilligengruppe
  * for a volunteer, else Reguläre Nutzung. Null when it is fine or there is
  * no owner line. Interne Nutzung next to others is offered (disabled), so
- * it is left to the check-in to show. Pure; exported for tests.
+ * it is left to the check-in to show. A purchase-only checkout (everyone on
+ * Begleitung, CHK-5) keeps the buyer on Begleitung, volunteer or not.
+ * Pure; exported for tests.
  */
 export function ownerUsageCorrection(
   persons: readonly Pick<CheckoutPerson, "id" | "userId" | "usageType">[],
@@ -1496,6 +1498,7 @@ export function ownerUsageCorrection(
   if (!ownerId) return null
   const owner = persons.find((p) => p.userId === ownerId)
   if (!owner) return null
+  if (persons.every((p) => p.usageType === "materialbezug")) return null
   const offered = personUsageOptions({
     isOwner: true,
     anonymous: false,

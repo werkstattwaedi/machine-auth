@@ -13,7 +13,7 @@ What the team sees and does in the admin app. Terms: see the
 - **ADM-11** Every hour, and whenever an admin starts it, a sync sets for each account whether it is in the *Freiwilligengruppe* and whether it is in the *Interne Nutzung* group, by whether the account's e-mail address is in that Workspace group. — ADR-0053
 - **ADM-12** No client, an admin's included, can change whether an account is in a Workspace group; that is changed in Google Workspace only and reaches the account with the next sync (ADM-11). — ADR-0053
 - **ADM-13** The sync report lists, for each Workspace group, the addresses in it that match no account. — ADR-0053
-- **ADM-14** A volunteer who is not a member is shown as a warning on the sync report and on their user page in the admin app; *Freiwilligengruppe* does not require a membership (CHK-51). — ADR-0053
+- **ADM-14** A volunteer who is not a member is shown as a warning on the sync report and on their user page in the admin app. — ADR-0053
 
 ## Material labels
 
