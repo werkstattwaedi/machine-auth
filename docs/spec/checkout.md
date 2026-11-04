@@ -138,7 +138,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
 
 ## Help
 
-- **CHK-49** Every header menu of the checkout app — a guest's and an identified person's on the checkout steps, and the one in the account — offers the Anleitung, as does the last step of the welcome onboarding (ACC-2); it opens in a new tab, at the kiosk in an overlay on the kiosk itself. — #826
+- **CHK-49** Every header menu of the checkout app — a guest's and an identified person's on the checkout steps, and the one in the account — offers the Anleitung, as does the last step of the welcome onboarding (ACC-2) on an own device; it opens in a new tab, at the kiosk in an overlay on the kiosk itself. — #826
 - **CHK-50** A person forwarded by the previous checkout app is greeted on the step they land on — the check-in, or Kosten or Check Out (CHK-2) — by a notice that this app replaces it, linking to what is new and to the Anleitung, both in a new tab; the notice is gone once they close it or move on in the app, and the kiosk never shows it. — #826
 
 ## Open questions
