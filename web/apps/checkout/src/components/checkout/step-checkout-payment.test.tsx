@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Choosing the payment on the Check Out page (issue #750): the cards under
- * the total, a CHF 0 visit's single card, step 4 in place and "Zurück"
+ * Choosing the payment on the Check Out page (issue #750): the buttons in
+ * the footer (#833), a CHF 0 visit's single action, step 4 in place and "Zurück"
  * back to an editable step 3 that kept the donation.
  */
 
@@ -88,8 +88,8 @@ function folded(testId: string): boolean {
   return !!screen.getByTestId(testId).closest("[aria-hidden='true']")
 }
 
-describe("StepCheckout — payment choice (#750)", () => {
-  it("offers one card per method, nothing preselected, no way to skip ahead", () => {
+describe("StepCheckout — payment choice (#750, #833)", () => {
+  it("offers a footer button per offered method, nothing preselected, no way to skip ahead", () => {
     render(<Harness />)
     expect(screen.getByTestId("payment-option-rechnung")).toBeTruthy()
     expect(screen.getByTestId("payment-option-raisenow")).toBeTruthy()
@@ -97,21 +97,22 @@ describe("StepCheckout — payment choice (#750)", () => {
     expect(screen.queryByRole("button", { name: /Weiter/ })).toBeNull()
   })
 
-  it("choosing a card shows step 4 in place; its button commits that method", () => {
+  it("choosing a method shows step 4 in place; its button commits that method", () => {
     const onCommit = vi.fn(async () => {})
     render(<Harness onCommit={onCommit} />)
 
     fireEvent.click(screen.getByTestId("payment-option-rechnung"))
 
-    expect(folded("payment-option-rechnung")).toBe(true)
+    // The footer's pay buttons give way to the box's commit button (#833).
+    expect(screen.queryByTestId("payment-option-rechnung")).toBeNull()
     expect(screen.getByTestId("payment-frame")).toBeTruthy()
     expect(onCommit).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole("button", { name: "Rechnung senden" }))
+    fireEvent.click(screen.getByRole("button", { name: "Auf Rechnung bezahlen" }))
     expect(onCommit).toHaveBeenCalledWith("rechnung")
   })
 
-  it("TWINT commits from its pay button, not from choosing the card", () => {
+  it("TWINT commits from its pay button, not from choosing it in the footer", () => {
     const onCommit = vi.fn(async () => {})
     render(<Harness onCommit={onCommit} />)
 
@@ -143,7 +144,7 @@ describe("StepCheckout — payment choice (#750)", () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it("a CHF 0 visit offers the single free card, which commits at once (BIL-8)", () => {
+  it("a CHF 0 visit offers the single free action, which commits at once (BIL-8)", () => {
     const onCommit = vi.fn(async () => {})
     render(<Harness fee={0} onCommit={onCommit} />)
 
@@ -152,7 +153,7 @@ describe("StepCheckout — payment choice (#750)", () => {
     expect(onCommit).toHaveBeenCalledWith("free")
   })
 
-  it("a donation on a CHF 0 visit brings the payment cards back", () => {
+  it("a donation on a CHF 0 visit brings the payment buttons back", () => {
     render(<Harness fee={0} />)
     expect(screen.getByTestId("payment-option-free")).toBeTruthy()
 
@@ -180,7 +181,7 @@ describe("StepCheckout — the commit's hand-off", () => {
     const { rerender } = render(
       <StepCheckout {...base} config={config(15)} onCommit={async () => {}} submitting={false} />,
     )
-    fireEvent.click(screen.getByRole("button", { name: "Rechnung senden" }))
+    fireEvent.click(screen.getByRole("button", { name: "Auf Rechnung bezahlen" }))
     // The close is in flight and the closed checkout's fees are gone.
     rerender(<StepCheckout {...base} config={config(0)} onCommit={async () => {}} submitting />)
     expect(screen.getByTestId("payment-frame").textContent).toContain("15.00")
@@ -259,7 +260,7 @@ describe("StepCheckout — payment terminal (ADR-0051)", () => {
     errorText: phase === "error" ? "Das Terminal ist gerade nicht erreichbar." : null,
   })
 
-  it("choosing the card arms the terminal; there is no commit button", () => {
+  it("choosing the terminal arms it; there is no commit button", () => {
     const onStart = vi.fn()
     render(<TerminalHarness terminal={at("waiting")} onStart={onStart} />)
     fireEvent.click(screen.getByTestId("payment-option-wallee_terminal"))

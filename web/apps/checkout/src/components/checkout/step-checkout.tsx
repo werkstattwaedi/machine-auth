@@ -55,8 +55,9 @@ import {
 import { BadgeCheck, Nfc } from "lucide-react"
 import {
   Fold,
+  FOOTER_BUTTON,
+  PaymentFooterButtons,
   PaymentFrame,
-  PaymentOptionCards,
   PaymentStep,
 } from "./payment-options"
 import { firstOfNextMonth, type PaymentChoice } from "./payment-methods"
@@ -219,12 +220,12 @@ interface StepCheckoutProps {
   tip: number
   setTip: (n: number) => void
   /**
-   * The payment methods this person is offered, in configured order
-   * (client type + membership). A CHF 0 total offers the single "free"
-   * card instead.
+   * The payment methods this person is offered, one per footer slot in
+   * screen order (`paymentSlots`, #833). A CHF 0 total offers the single
+   * "free" action instead.
    */
   paymentMethods: PaymentMethod[]
-  /** The card chosen on step 3; non-null shows step 4 in place. */
+  /** The method chosen on step 3; non-null shows step 4 in place. */
   paymentChoice: PaymentChoice | null
   onPaymentChoiceChange: (choice: PaymentChoice | null) => void
   /**
@@ -236,7 +237,7 @@ interface StepCheckoutProps {
   /** Leaves step 3 for the visit page. */
   onBack: () => void
   /**
-   * The payment terminal (ADR-0051): choosing its card arms it at once
+   * The payment terminal (ADR-0051): choosing it arms it at once
    * (`onStartTerminal`); `onAbortTerminal` stops it if it still waits and
    * forgets the attempt.
    */
@@ -712,13 +713,30 @@ export function StepCheckout({
   // Move focus with the fold: the control that was clicked has just become
   // inert, so keyboard and screen-reader users land on the new content.
   const stepFourRef = useRef<HTMLDivElement>(null)
+  // The total sticks just above the footer, whose height changes with the
+  // device (stacked buttons on a phone) — measure it rather than guess.
+  const footerRef = useRef<HTMLDivElement>(null)
+  const [footerHeight, setFooterHeight] = useState(0)
+  useEffect(() => {
+    const el = footerRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(() => setFooterHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const wasChosen = useRef(false)
   useEffect(() => {
     if (paymentChoice && !wasChosen.current) {
       window.scrollTo({ top: 0 })
       stepFourRef.current?.focus({ preventScroll: true })
     } else if (!paymentChoice && wasChosen.current) {
-      document.getElementById("payment-options-heading")?.focus({ preventScroll: true })
+      // The first pay button — or, while they are disabled, "Zurück":
+      // focus on a disabled button would be lost to the page.
+      const footer = footerRef.current
+      ;(
+        footer?.querySelector<HTMLButtonElement>('[data-testid^="payment-option-"]:not(:disabled)') ??
+        footer?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+      )?.focus({ preventScroll: true })
     }
     wasChosen.current = !!paymentChoice
   }, [paymentChoice])
@@ -733,10 +751,10 @@ export function StepCheckout({
       }
     }
     onPaymentChoiceChange(choice)
-    // The free card's action is the commit itself: nothing to choose on a
+    // The free action is the commit itself: nothing to choose on a
     // step 4 that would only repeat "Abschliessen".
     if (choice === "free") commitChoice("free")
-    // The terminal card arms the terminal: the person pays there next.
+    // Choosing the terminal arms it: the person pays there next.
     if (choice === "wallee_terminal") onStartTerminal?.()
   }
 
@@ -775,7 +793,7 @@ export function StepCheckout({
       )}
 
       {/* Step 3: the summary, the donation, the total and the payment
-          cards. Folds away once a card is chosen (step 4). */}
+          buttons in the footer. Folds away once a method is chosen (step 4). */}
       <Fold open={!paymentChoice}>
       <div className="flex flex-col gap-6">
       {/* Block — Dein Besuch */}
@@ -1022,8 +1040,14 @@ export function StepCheckout({
         startCollapsed={isPhone}
       />
 
-      {/* Total — gold-swash highlight under amount */}
-      <div className="flex items-baseline justify-between pt-5 border-t-2 border-foreground">
+      {/* Total — gold-swash highlight under amount. Sticks above the
+          footer while the summary scrolls, so the amount the footer's
+          buttons pay stays in view (#833). */}
+      <div
+        data-testid="checkout-total"
+        className="sticky z-10 bg-background flex items-baseline justify-between pt-4 pb-3 border-t-2 border-foreground"
+        style={{ bottom: footerHeight }}
+      >
         <span className="font-heading font-bold text-2xl">Total</span>
         <div className="text-right">
           <span className="relative inline-block font-heading font-bold text-3xl tabular-nums">
@@ -1038,16 +1062,10 @@ export function StepCheckout({
           </span>
         </div>
       </div>
-
-      <PaymentOptionCards
-        choices={choices}
-        onChoose={handleChoose}
-        disabled={submitting || total < 0 || machinesBlocked}
-      />
       </div>
       </Fold>
 
-      {/* Step 4: the chosen card under the "Zu bezahlen" strip. */}
+      {/* Step 4: the chosen method under the "Zu bezahlen" strip. */}
       <Fold open={!!paymentChoice}>
         {shownChoice && (
           <div ref={stepFourRef} tabIndex={-1} className="outline-none">
@@ -1068,7 +1086,10 @@ export function StepCheckout({
       <div className="flex-1" />
 
       {/* Sticky bottom navigation */}
-      <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-between">
+      <div
+        ref={footerRef}
+        className="sticky bottom-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-background border-t border-border flex gap-3 justify-between items-stretch sm:items-center"
+      >
         {/* Until the commit "Zurück" leaves step 4 for an editable step 3
             (the donation and round-up survive: this component stays
             mounted); on step 3 it goes back to the visit. */}
@@ -1080,7 +1101,7 @@ export function StepCheckout({
           <button
             type="button"
             data-testid="terminal-cancel"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-foreground border border-border rounded-[3px] bg-white hover:bg-muted transition-colors"
+            className={cn(FOOTER_BUTTON, "gap-2 px-4 text-sm font-bold text-foreground border border-border bg-white hover:bg-muted transition-colors")}
             onClick={() => void leaveStepFour()}
           >
             Abbrechen
@@ -1088,13 +1109,27 @@ export function StepCheckout({
         ) : (
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-cog-teal border border-cog-teal rounded-[3px] bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50"
+            aria-label="Zurück"
+            className={cn(
+              FOOTER_BUTTON,
+              "shrink-0 gap-2 px-3.5 sm:px-4 text-sm font-bold text-cog-teal border border-cog-teal bg-white hover:bg-cog-teal-light transition-colors disabled:opacity-50",
+            )}
             onClick={paymentChoice ? () => void leaveStepFour() : onBack}
             disabled={submitting}
           >
             <ArrowLeft className="h-4 w-4" />
-            Zurück
+            {/* On a phone the arrow alone, so the pay buttons get the width. */}
+            <span className={paymentChoice ? undefined : "hidden sm:inline"}>Zurück</span>
           </button>
+        )}
+        {/* Step 3's payment buttons (#833). Unmounted on step 4: its own
+            commit button sits in the box, not the footer. */}
+        {!paymentChoice && (
+          <PaymentFooterButtons
+            choices={choices}
+            onChoose={handleChoose}
+            disabled={submitting || total < 0 || machinesBlocked}
+          />
         )}
       </div>
     </div>

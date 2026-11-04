@@ -86,7 +86,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
 
 - **CHK-13** On Check Out the person can add a donation of any amount, which is added to the total. — #250
 - **CHK-18** While the total, donation included, is not a whole franc, Check Out offers rounding it up to one of up to four suggested round amounts — none more than 10 % or CHF 5 above it, whichever is more, the smallest picked unless the person chooses another — and the difference is added to the donation (CHK-13). — #233, #250
-- **CHK-19** On Check Out, below the total, the person chooses one of the offered payment methods (BIL-2, BIL-4); none is chosen for them, and there is no other way on. — #650, #750
+- **CHK-19** On Check Out the person chooses one of the offered payment methods (BIL-2, BIL-4, BIL-51); none is chosen for them, and there is no other way on. — #650, #750, #833
 - **CHK-20** A checkout totalling CHF 0 offers one action that completes it in place of the payment methods (BIL-8); a donation (CHK-13) that makes the total positive brings the methods back. — #750
 
 ## Bezahlen

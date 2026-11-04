@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The payment part of the Check Out page (issue #750). Step 3 lists one
- * action card per method under the total; choosing one turns the page into
- * step 4 in place: the total becomes the grey "Zu bezahlen" strip of one
- * frame, and the chosen card's instruction and commit button sit below it.
- * Nothing is committed until that button — the checkout stays open and
- * "Zurück" returns to an editable step 3.
+ * The payment part of the Check Out page (issues #750, #833). Step 3 has
+ * one button per payment slot in its footer; choosing one turns the page
+ * into step 4 in place: the total becomes the grey "Zu bezahlen" strip of
+ * one frame, and the chosen method's instruction and commit button sit
+ * below it. Nothing is committed until that button — the checkout stays
+ * open and "Zurück" returns to an editable step 3.
  */
 
 import type { ReactNode } from "react"
-import { ChevronRight, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { cn } from "@modules/lib/utils"
 import { formatCHF } from "@modules/lib/format"
 import {
@@ -47,7 +47,9 @@ export function Fold({
       aria-hidden={!open}
       inert={!open}
     >
-      <div className="min-h-0 overflow-hidden">{children}</div>
+      {/* clip, not hidden: clipping doesn't make a scroll container, so
+          step 3's sticky total still sticks to the page (#833). */}
+      <div className="min-h-0 overflow-clip">{children}</div>
     </div>
   )
 }
@@ -68,61 +70,64 @@ export function ChoiceIcon({ choice }: { choice: PaymentChoice }) {
   )
 }
 
-interface PaymentOptionCardsProps {
+interface PaymentFooterButtonsProps {
   choices: PaymentChoice[]
   onChoose: (choice: PaymentChoice) => void
   disabled?: boolean
 }
 
-/** Step 3: "Wie möchtest du bezahlen?" and one action card per choice. */
-export function PaymentOptionCards({ choices, onChoose, disabled }: PaymentOptionCardsProps) {
-  const free = choices.length === 1 && choices[0] === "free"
+/**
+ * Step 3's payment buttons, in the sticky footer so the next step is always
+ * in view (#833): one per slot (`paymentSlots`), or "Abschliessen" for a
+ * CHF 0 visit. They only lead to step 4; nothing is committed here. All one
+ * height, the pay buttons one width; stacked full width on a phone.
+ */
+export function PaymentFooterButtons({ choices, onChoose, disabled }: PaymentFooterButtonsProps) {
   return (
-    <section aria-labelledby="payment-options-heading" className="flex flex-col gap-3">
-      <h2
-        id="payment-options-heading"
-        tabIndex={-1}
-        className="font-heading font-bold text-lg text-foreground outline-none"
-      >
-        {free ? "Nichts zu bezahlen" : "Wie möchtest du bezahlen?"}
-      </h2>
-      <div className="flex flex-col gap-2">
-        {choices.map((choice) => {
-          const ui = PAYMENT_CHOICE_UI[choice]
-          return (
-            <button
-              key={choice}
-              type="button"
-              disabled={disabled}
-              onClick={() => onChoose(choice)}
-              data-testid={`payment-option-${choice}`}
-              className="group w-full flex items-center gap-4 text-left rounded-lg border border-border bg-white px-4 sm:px-5 py-3.5 transition-colors hover:border-cog-teal/60 hover:bg-cog-teal-light disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChoiceIcon choice={choice} />
-              <span className="min-w-0 flex-1">
-                <span className="block font-heading font-semibold text-[15px] leading-tight text-foreground">
-                  {ui.title}
-                </span>
-                <span className="block mt-0.5 text-sm text-muted-foreground leading-snug">
-                  {ui.description}
-                </span>
-              </span>
-              <span className="shrink-0 hidden sm:inline-flex items-center gap-1 text-sm font-bold text-cog-teal">
-                {ui.actionLabel}
-                <ChevronRight className="h-4 w-4" />
-              </span>
-              <ChevronRight className="sm:hidden h-5 w-5 shrink-0 text-cog-teal" aria-hidden />
-            </button>
-          )
-        })}
-      </div>
-    </section>
+    <div
+      role="group"
+      aria-label="Bezahlen"
+      className="flex flex-col sm:flex-row gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-none"
+    >
+      {choices.map((choice) => {
+        const ui = PAYMENT_CHOICE_UI[choice]
+        // TWINT's styleguide wants its logo on its dark button.
+        const twint = choice === "raisenow"
+        return (
+          <button
+            key={choice}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChoose(choice)}
+            data-testid={`payment-option-${choice}`}
+            className={cn(
+              FOOTER_BUTTON,
+              "w-full sm:w-[250px] gap-2.5 px-5 text-[15px] font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
+              twint
+                ? "bg-[#262626] hover:bg-[#333333] active:bg-[#1a1a1a]"
+                : "bg-cog-teal hover:bg-cog-teal-dark",
+            )}
+          >
+            {twint ? (
+              <img src={TWINT_LOGO_URL} alt="" className="h-[26px] w-auto shrink-0" />
+            ) : (
+              choice !== "free" && <span className="shrink-0 [&_svg]:h-5 [&_svg]:w-5">{ui.icon}</span>
+            )}
+            <span className="truncate">{ui.actionLabel}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
+/** Every footer button's box (#833): one height, so the bar reads as one row. */
+export const FOOTER_BUTTON =
+  "inline-flex items-center justify-center h-12 sm:h-[52px] rounded-[4px]"
+
 /**
  * Step 4 and the confirmation: the grey header strip with the amount, the
- * chosen card's body below it in the same frame ("style B"). Neutral frame,
+ * chosen method's body below it in the same frame ("style B"). Neutral frame,
  * no teal: teal marks what is still to choose.
  */
 export function PaymentFrame({
@@ -174,8 +179,8 @@ interface PaymentStepProps {
 }
 
 /**
- * Step 4's body: the chosen card with its instruction and commit button —
- * or, for the payment terminal, the terminal's status: choosing that card
+ * Step 4's body: the chosen method with its instruction and commit button —
+ * or, for the payment terminal, the terminal's status: choosing it
  * already armed it, there is nothing to commit here (ADR-0051).
  */
 export function PaymentStep({

@@ -107,7 +107,7 @@ test.describe("Self-service badge purchase", () => {
     await page.getByRole("button", { name: "Zum Checkout" }).click()
     await expect(page.getByText("Dein Besuch")).toBeVisible()
     await page.getByTestId("payment-option-rechnung").click()
-    await page.getByRole("button", { name: "Rechnung senden" }).click()
+    await page.getByRole("button", { name: "Auf Rechnung bezahlen" }).click()
     await expect(page.getByTestId("payment-confirmation")).toBeVisible({
       timeout: 30_000,
     })

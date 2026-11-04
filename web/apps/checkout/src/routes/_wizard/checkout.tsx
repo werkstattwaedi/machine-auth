@@ -21,6 +21,7 @@ import { CheckoutFinishBar } from "@/components/checkout/checkout-finish-bar"
 import { useIsPhone } from "@/components/checkout/use-is-phone"
 import {
   firstOfNextMonth,
+  paymentSlots,
   type PaymentChoice,
   type PaymentData,
 } from "@/components/checkout/payment-methods"
@@ -31,8 +32,8 @@ export const Route = createFileRoute("/_wizard/checkout")({
   component: CheckoutRoute,
 })
 
-// Steps 3 and 4 (issue #750) on one page: the summary with the payment
-// cards, the chosen card in place, and — once the commit closed the
+// Steps 3 and 4 (issues #750, #833) on one page: the summary with the
+// payment buttons in its footer, the chosen method in place, and — once the commit closed the
 // checkout — its confirmation. The wizard layout gates this route when no
 // open checkout exists, except right after this session committed one.
 function CheckoutRoute() {
@@ -77,13 +78,14 @@ function CheckoutOpen() {
     ctx.kiosk ? "kiosk" : "web",
     { isMember: ctx.isMember },
   )
-  // The terminal card needs a kiosk build that drives a terminal; without
+  // The terminal needs a kiosk build that drives a terminal; without
   // one (the web, an older kiosk, a kiosk with no terminal configured) it
   // would arm nothing.
   const hasTerminal =
     bridge.features.includes(PAYMENT_TERMINAL_FEATURE) && !!bridge.terminalPay
   const offered = configured.filter((m) => m !== "wallee_terminal" || hasTerminal)
-  const methods: PaymentMethod[] = offered.length > 0 ? offered : ["rechnung"]
+  // The footer has room for two: the invoice and paying now (#833).
+  const methods: PaymentMethod[] = offered.length > 0 ? paymentSlots(offered) : ["rechnung"]
 
   const commit = async (choice: PaymentChoice) => {
     if (choice !== "raisenow") {

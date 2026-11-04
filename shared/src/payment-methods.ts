@@ -116,8 +116,8 @@ export const DEFAULT_PAYMENT_METHODS: readonly PaymentMethod[] = [
 ]
 
 /**
- * Parses an operations-config method list (comma-separated ids, in tab
- * order). Empty means "not configured" and yields the defaults; an unknown
+ * Parses an operations-config method list (comma-separated ids). Empty
+ * means "not configured" and yields the defaults; an unknown
  * id throws, so a typo in the config fails the deploy instead of silently
  * hiding a payment method.
  */
@@ -142,8 +142,10 @@ export function parsePaymentMethodList(
 export type PaymentMethodConfig = Readonly<Record<ClientType, readonly PaymentMethod[]>>
 
 /**
- * The methods to offer one customer, in tab order: the client type's
- * configured list minus the ones the customer is not eligible for.
+ * The methods one customer may be offered: the client type's configured
+ * list minus the ones the customer is not eligible for. The checkout
+ * narrows them to its two footer slots (`paymentSlots`, BIL-51); the
+ * configured order no longer decides what comes first.
  */
 export function enabledPaymentMethods(
   config: PaymentMethodConfig,
