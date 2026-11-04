@@ -27,7 +27,7 @@ describe("logClientError — payload sanitization", () => {
       sessionId: "abcd1234",
       context: "usage",
       code: "permission-denied",
-      message: "Missing or insufficient permissions.",
+      errorMessage: "Missing or insufficient permissions.",
       path: "/bills",
       uid: "user-42",
       userAgent: "Mozilla/5.0",
@@ -59,7 +59,7 @@ describe("logClientError — payload sanitization", () => {
       },
       null,
     );
-    expect(logFields.message).to.equal(null);
+    expect(logFields.errorMessage).to.equal(null);
     expect(logFields.sessionId).to.equal("abcd1234");
     expect(logFields.context).to.equal("usage");
     expect(logFields.code).to.equal("permission-denied");
@@ -98,6 +98,6 @@ describe("logClientError — payload sanitization", () => {
       null,
     );
     expect(logFields.code).to.equal(null);
-    expect(logFields.message).to.equal(null);
+    expect(logFields.errorMessage).to.equal(null);
   });
 });

@@ -77,7 +77,9 @@ export function buildClientErrorLogPayload(
       sessionId: sanitized.sessionId,
       context: sanitized.context,
       code: sanitized.code,
-      message: sanitized.message,
+      // Not `message`: the logger sets jsonPayload.message to its first
+      // argument ("clientError"), which would overwrite the client's text.
+      errorMessage: sanitized.message,
       path: sanitized.path,
       uid,
       userAgent: sanitized.userAgent,
