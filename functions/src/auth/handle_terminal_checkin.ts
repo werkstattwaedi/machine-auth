@@ -191,7 +191,9 @@ export async function handleTerminalCheckin(
     });
 
     if (staleCheckout) {
-      logger.warn("User has a stale open checkout from a prior business day", {
+      // Info: a member who forgot to check out last time is everyday
+      // business, and the terminal already tells them what to do.
+      logger.info("User has a stale open checkout from a prior business day", {
         userId: userDoc.id,
         machineId,
       });

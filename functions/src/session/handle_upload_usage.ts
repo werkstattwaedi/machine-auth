@@ -106,13 +106,12 @@ export async function handleUploadUsage(
     const wallClockSeconds = Math.max(0, checkOutUnix - checkInUnix);
     const billableSeconds = billsOnActiveTime ? activeSeconds : wallClockSeconds;
 
-    // Surface the likely firmware/config-rollout mismatch: an activity-billed
-    // machine reporting zero active time over a non-trivial session usually
-    // means old firmware (no activeSeconds) met a machine flipped to
-    // gateway_sensing. Billing 0 is still correct if the laser genuinely never
-    // cut, but this should be visible rather than silent.
+    // Info, not a warning: someone badging in and then not cutting is
+    // ordinary use. The line stays so a firmware/config mismatch (old
+    // firmware without activeSeconds on a gateway_sensing machine) can
+    // still be traced — it would show as every session on that machine.
     if (billsOnActiveTime && activeSeconds === 0 && wallClockSeconds > 60) {
-      logger.warn("sensed machine billed 0 active seconds over a >60s session", {
+      logger.info("sensed machine billed 0 active seconds over a >60s session", {
         machineId,
         userId: record.userId.value,
         wallClockSeconds,
