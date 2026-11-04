@@ -168,4 +168,4 @@ methods and documents in [billing.md](billing.md). Terms: see the
 - CHK-16 — #761 (the QR code on screen on every device while the QR-Rechnung was picked; now unfolded on request after sending, CHK-24)
 - CHK-17 — #761 (the completion dialog and its per-device follow-up; replaced by CHK-26)
 - CHK-12 — #759 (the same-day waiver now matches every person by name and waives what an earlier visit that day already charged: CHK-37..39)
-- CHK-32 — ADR-0053 (*Freiwilligengruppe* and *Interne Nutzung* both only for the identified person alone; now offered by Workspace group, CHK-51, refused outside it, CHK-53, and only *Interne Nutzung* stays alone, CHK-52)
+- CHK-32 — #832 (*Freiwilligengruppe* and *Interne Nutzung* both only for the identified person alone; now offered by Workspace group, CHK-51, refused outside it, CHK-53, and only *Interne Nutzung* stays alone, CHK-52)
