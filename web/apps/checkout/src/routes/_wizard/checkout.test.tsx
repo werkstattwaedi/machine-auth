@@ -306,7 +306,23 @@ describe("Check Out route — commit (#750)", () => {
       bridgeStub.features = ["nfc", "payment-terminal"]
       ;(bridgeStub as { terminalPay?: unknown }).terminalPay = vi.fn()
       renderRoute()
-      expect(stepProps?.paymentMethods).toEqual(["wallee_terminal", "rechnung"])
+      // Invoice first, paying now second (#833).
+      expect(stepProps?.paymentMethods).toEqual(["rechnung", "wallee_terminal"])
+    })
+
+    it("a kiosk that drives a terminal pays there, not by RaiseNow (BIL-51)", () => {
+      kioskMethods = ["rechnung", "raisenow", "wallee_terminal"]
+      bridgeStub.features = ["nfc", "payment-terminal"]
+      ;(bridgeStub as { terminalPay?: unknown }).terminalPay = vi.fn()
+      mockUseWizardContext.mockReturnValue(ctx({ kiosk: true }))
+      renderRoute()
+      expect(stepProps?.paymentMethods).toEqual(["rechnung", "wallee_terminal"])
+    })
+
+    it("a member's invoice is the Sammelrechnung only (BIL-51)", () => {
+      mockUseWizardContext.mockReturnValue(ctx({ isMember: true }))
+      renderRoute()
+      expect(stepProps?.paymentMethods).toEqual(["monthly", "raisenow"])
     })
 
     it("an approved terminal payment confirms from the attempt, with the kiosk countdown", async () => {

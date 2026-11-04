@@ -84,7 +84,7 @@ test.describe("Authenticated checkout", () => {
     // ── Step 3 → 4: choose the QR-Rechnung card, then commit it ──
     await page.getByTestId("payment-option-rechnung").click()
     await expect(page.getByText("Zu bezahlen")).toBeVisible()
-    await page.getByRole("button", { name: "Rechnung senden" }).click()
+    await page.getByRole("button", { name: "Auf Rechnung bezahlen" }).click()
 
     // ── Confirmation inline; signed in, "Fertig" leads to past visits ──
     await expect(page.getByTestId("payment-confirmation")).toBeVisible({

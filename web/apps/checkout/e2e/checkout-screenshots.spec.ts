@@ -142,7 +142,7 @@ async function goToSignedInSummary(page: Page, usageType?: string) {
 }
 
 /**
- * Choose a payment card on step 3 and wait for step 4 in place (issue
+ * Choose a payment method in the step 3 footer and wait for step 4 in place (issue
  * #750). The fold animates for ~420 ms; wait for the frame and then for the
  * folded summary to be gone so the shot is stable.
  */
@@ -466,7 +466,7 @@ test.describe("Checkout step screenshots", () => {
 
   // CHK-8 (#605): machine time with every person on „Begleitung / nur
   // Materialbezug" can't be billed — Check Out says so in Maschinen and
-  // disables the payment cards, instead of a server refusal on submit.
+  // disables the payment buttons, instead of a server refusal on submit.
   test("summary — machine usage with everyone on Begleitung is blocked", async ({ page }) => {
     await signIn(page)
     await page.goto("/")
@@ -492,7 +492,7 @@ test.describe("Checkout step screenshots", () => {
     await expect(page.getByText("Dein Besuch")).toBeVisible()
 
     await expect(page.getByTestId("machine-usage-blocked")).toBeVisible()
-    // Begleitung prices the machine time at CHF 0, so the one card offered
+    // Begleitung prices the machine time at CHF 0, so the one button offered
     // may be "Kostenlos" (#750) — whichever it is, it is disabled.
     const cards = page.locator('[data-testid^="payment-option-"]')
     await expect(cards.first()).toBeVisible()
@@ -570,7 +570,7 @@ test.describe("Checkout step screenshots", () => {
     await goToSignedInSummary(page)
     await choosePayment(page, "payment-option-rechnung")
 
-    await expect(page.getByRole("button", { name: "Rechnung senden" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Auf Rechnung bezahlen" })).toBeVisible()
     await expect(page).toHaveScreenshot("checkout-payment-rechnung.png")
   })
 
@@ -578,7 +578,7 @@ test.describe("Checkout step screenshots", () => {
     testInfo.setTimeout(60_000)
     await goToSignedInSummary(page)
     await choosePayment(page, "payment-option-rechnung")
-    await page.getByRole("button", { name: "Rechnung senden" }).click()
+    await page.getByRole("button", { name: "Auf Rechnung bezahlen" }).click()
 
     await expect(page.getByTestId("payment-confirmation")).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole("button", { name: /PDF herunterladen/ })).toBeVisible()
@@ -598,9 +598,9 @@ test.describe("Checkout step screenshots", () => {
   })
 
   // Issue #237 / #750: a CHF 0 visit ("Interne Nutzung", chosen on the
-  // check-in, #605) offers the single "Kostenlos" card instead of the
-  // payment methods; it closes at once.
-  test("Step 3 · zero amount (Interne Nutzung) — single 'Kostenlos' card, then done", async ({ page }, testInfo) => {
+  // check-in, #605) offers the single "Abschliessen" button (footer, #833)
+  // instead of the payment methods; it closes at once.
+  test("Step 3 · zero amount (Interne Nutzung) — single 'Abschliessen' button, then done", async ({ page }, testInfo) => {
     testInfo.setTimeout(60_000)
     // "Interne Nutzung" zeros entry + machine + material costs both client-
     // and server-side (issue #199), giving a CHF 0.00 bill.
@@ -609,7 +609,7 @@ test.describe("Checkout step screenshots", () => {
     const free = page.getByTestId("payment-option-free")
     await expect(free).toBeVisible()
     await expect(page.getByTestId("payment-option-rechnung")).toHaveCount(0)
-    // Scroll to the bottom: the shot is of the card.
+    // Scroll to the bottom: the shot is of the total and the footer.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
     await expect(page).toHaveScreenshot("checkout-payment-zero.png")
 

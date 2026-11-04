@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * UI side of the payment methods (issue #750): one entry per
- * `PaymentMethod` from `@oww/shared` with the copy of its card on step 3,
+ * UI side of the payment methods (issues #750, #833): one entry per
+ * `PaymentMethod` from `@oww/shared` with its button in the step 3 footer,
  * its instruction and commit button on step 4, and its confirmation.
- * Which methods a customer sees is decided by `enabledPaymentMethods`
- * (client type + membership), not here — adding an integration means one
- * shared table entry plus one entry below.
+ * Which methods a customer is offered is decided by `enabledPaymentMethods`
+ * (client type + membership) and narrowed to the footer's two slots by
+ * `paymentSlots` — adding an integration means one shared table entry, one
+ * entry below and its place in a slot.
  */
 
 import type { ReactNode } from "react"
@@ -40,7 +41,7 @@ export interface PaymentData {
   paymentMethod?: PaymentMethod | null
 }
 
-/** A card on step 3: a payment method, or the single card of a CHF 0 visit. */
+/** A footer button on step 3: a payment method, or the single action of a CHF 0 visit. */
 export type { PaymentChoice }
 
 // Swiss cross SVG for QR bill center overlay (SIX Swiss Payment Standards spec).
@@ -66,9 +67,7 @@ export interface PaymentChoiceUi {
   /** Render the icon on the brand's dark chip (TWINT styleguide). */
   darkIconChip?: boolean
   title: string
-  /** Step 3: one line under the title. */
-  description: string
-  /** Step 3: the teal action label on the right of the card. */
+  /** Step 3: the footer button that leads to step 4. */
   actionLabel: string
   /** Step 4: the instruction above the commit button. */
   instruction: (ctx: ChoiceCopyContext) => ReactNode
@@ -89,8 +88,7 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   rechnung: {
     icon: <FileText className="h-5 w-5" strokeWidth={1.6} />,
     title: PAYMENT_METHOD_INFO.rechnung.label,
-    description: "Rechnung per E-Mail, später mit der E-Banking-App bezahlen.",
-    actionLabel: "Rechnung erhalten",
+    actionLabel: "Auf Rechnung bezahlen",
     instruction: ({ email }) =>
       email ? (
         <>
@@ -99,7 +97,7 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
       ) : (
         "Wir schicken dir die Rechnung per E-Mail."
       ),
-    commitLabel: "Rechnung senden",
+    commitLabel: "Auf Rechnung bezahlen",
     doneStatus: "Rechnung gesendet",
     doneBox: ({ email }) =>
       email ? (
@@ -111,8 +109,7 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   monthly: {
     icon: <CalendarMark />,
     title: PAYMENT_METHOD_INFO.monthly.label,
-    description: "Kommt zu deinen offenen Posten, Rechnung am 1. des Monats.",
-    actionLabel: "Auf Sammelrechnung",
+    actionLabel: "Auf Rechnung bezahlen",
     instruction: ({ monthlyDate }) => (
       <>
         Am <strong data-testid="monthly-date">{monthlyDate}</strong> senden wir
@@ -134,7 +131,6 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
     icon: <img src={TWINT_LOGO_URL} alt="" className="h-5 w-auto" />,
     darkIconChip: true,
     title: PAYMENT_METHOD_INFO.raisenow.label,
-    description: "Jetzt mit der TWINT-App bezahlen.",
     actionLabel: "Mit TWINT bezahlen",
     instruction: () => "Bezahle direkt in der TWINT-App.",
     commitLabel: "Mit TWINT bezahlen",
@@ -165,7 +161,6 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   wallee_terminal: {
     icon: <CreditCard className="h-5 w-5" strokeWidth={1.6} />,
     title: PAYMENT_METHOD_INFO.wallee_terminal.label,
-    description: "Jetzt am Terminal neben dem Bildschirm bezahlen.",
     actionLabel: "Am Terminal bezahlen",
     instruction: () => "Folge den Anweisungen am Terminal.",
     commitLabel: "Am Terminal bezahlen",
@@ -181,7 +176,6 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
   free: {
     icon: <PartyPopper className="h-5 w-5" strokeWidth={1.6} />,
     title: "Kostenlos",
-    description: "Für diesen Besuch ist nichts zu bezahlen.",
     actionLabel: "Abschliessen",
     instruction: () => null,
     commitLabel: "Abschliessen",
@@ -201,6 +195,21 @@ export const PAYMENT_CHOICE_UI: Record<PaymentChoice, PaymentChoiceUi> = {
       </>
     ),
   },
+}
+
+/**
+ * The footer's two slots (#833), in screen order: the invoice — the
+ * Sammelrechnung where it is offered (members, BIL-4), so a member no longer
+ * gets a single QR-Rechnung — and paying now — the terminal where the kiosk
+ * drives one, the RaiseNow paylink otherwise. Either slot is left out when
+ * none of its methods is offered.
+ */
+export function paymentSlots(offered: readonly PaymentMethod[]): PaymentMethod[] {
+  const pick = (...candidates: PaymentMethod[]) =>
+    candidates.find((m) => offered.includes(m))
+  return [pick("monthly", "rechnung"), pick("wallee_terminal", "raisenow")].filter(
+    (m): m is PaymentMethod => m !== undefined,
+  )
 }
 
 /** "1. November": the first of the month after `now`, in Swiss German. */

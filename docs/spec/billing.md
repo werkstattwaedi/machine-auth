@@ -15,9 +15,16 @@ Sammelrechnung, corrections and booking payments. Terms: see the
   | RaiseNow | yes | no | no | Beleg, no QR slip |
   | Wallee terminal | yes, a verified payment (BIL-39) | no | no | Quittung, no QR slip |
 
-- **BIL-2** The kiosk and the own device each offer the methods configured for that client type, in the configured order — the Wallee terminal only at a kiosk set up to drive it. — ADR-0044, ADR-0051, #735
+- **BIL-2** The kiosk and the own device each offer the methods configured for that client type, as far as BIL-51 leaves them — the Wallee terminal only at a kiosk set up to drive it. — ADR-0044, ADR-0051, #735, #833
 - **BIL-3** When the configured methods can't be read, or none is left after eligibility, only the QR-Rechnung is offered. — ADR-0044
 - **BIL-4** Only an account holder with an active membership can pay by Sammelrechnung, a member identified by a badge tap included; anyone else — a visitor, the person buying their membership in that same checkout (MEM-7), a guest — is neither offered it nor accepted when asking for it. — ADR-0044, #414, #437, #750
+- **BIL-51** Of each kind of method below, a person is offered only the first that BIL-2 to BIL-4 allow them — #833:
+
+  | Paid (BIL-1) | First | Otherwise |
+  |---|---|---|
+  | afterwards | Sammelrechnung (BIL-4) | QR-Rechnung |
+  | during checkout | Wallee terminal | RaiseNow |
+
 - **BIL-6** Confirming RaiseNow is the person's own statement; the bill counts as paid only once the RaiseNow export is booked. — ADR-0020
 - **BIL-36** Confirming a payment method commits the bill at once and can't be undone. — #251, #302, #757
 - **BIL-44** A checkout totalling more than CHF 0 can't be closed without a payment method. — #757

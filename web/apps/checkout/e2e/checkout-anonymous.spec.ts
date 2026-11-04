@@ -66,10 +66,10 @@ test.describe("Anonymous checkout", () => {
     await expect(page.getByText("Max Muster")).toBeVisible()
 
     // ── Step 3 → 4: choose the QR-Rechnung card; the checkout stays open
-    // until "Rechnung senden" (issue #750). ──
+    // until "Auf Rechnung bezahlen" in the box (issues #750, #833). ──
     await page.getByTestId("payment-option-rechnung").click()
     await expect(page.getByText("Zu bezahlen")).toBeVisible()
-    await page.getByRole("button", { name: "Rechnung senden" }).click()
+    await page.getByRole("button", { name: "Auf Rechnung bezahlen" }).click()
 
     // ── Confirmation inline: the guest's own device offers the PDF and
     // says the window can be closed. ──
