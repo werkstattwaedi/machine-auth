@@ -127,9 +127,14 @@ describe("StepCheckin — per-person Nutzungsart (#605)", () => {
     expect(fees()).toEqual([formatCHF(0)])
   })
 
-  it("can't add persons while the owner has an owner-only type", () => {
-    render(<Harness initial={[self("volunteering")]} />)
+  it("can't add persons while the owner is on Interne Nutzung (CHK-52)", () => {
+    render(<Harness initial={[self("intern")]} />)
     expect(screen.getByRole("button", { name: /Person hinzufügen/ })).toBeDisabled()
+  })
+
+  it("lets a volunteer bring visitors (CHK-51)", () => {
+    render(<Harness initial={[self("volunteering")]} />)
+    expect(screen.getByRole("button", { name: /Person hinzufügen/ })).not.toBeDisabled()
   })
 
   it("can add persons on a regular owner line", () => {

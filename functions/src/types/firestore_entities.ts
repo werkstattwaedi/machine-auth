@@ -1,4 +1,5 @@
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
+import type { UsageGroup } from "@oww/shared";
 
 import type {
   DiscountLevel,
@@ -50,6 +51,10 @@ export interface UserEntity {
   // by onMembershipWritten + the daily expiry job. `null` → not a member.
   activeMembership?: DocumentReference | null;
   billingAddress?: BillingAddress | null; // Required when userType == "firma"
+  // The Workspace groups the account is in (ADR-0053): which of the
+  // Freiwilligengruppe / Interne Nutzung usage types it may claim. Written
+  // only by syncUsageGroups; absent = neither.
+  usageGroups?: UsageGroup[];
 }
 
 export interface TokenEntity {

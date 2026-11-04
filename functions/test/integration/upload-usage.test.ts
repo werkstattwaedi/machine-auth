@@ -314,6 +314,20 @@ describe("handleUploadUsage (Integration)", () => {
       ]);
     });
 
+    it("opens a volunteer's checkout on Freiwilligengruppe (CHK-44)", async () => {
+      await seedBaseFixtures();
+      const db = getFirestore();
+      await db.doc(`users/${TEST_USER_ID}`).update({ usageGroups: ["volunteering"] });
+
+      await handleUploadUsage(buildRequest([{}]), config);
+
+      const open = await db
+        .collection("checkouts")
+        .where("userId", "==", db.doc(`users/${TEST_USER_ID}`))
+        .get();
+      expect(open.docs.map((d) => d.data().usageType)).to.deep.equal(["volunteering"]);
+    });
+
     it("keeps an owner on Begleitung next to a paying companion", async () => {
       await seedBaseFixtures();
       const db = getFirestore();

@@ -10,6 +10,8 @@ import {
   USAGE_TYPE_ORDER,
   OWNER_ONLY_OTHERS_REASON,
   personUsageOptions,
+  defaultOwnerUsageType,
+  usageGroupsOf,
   deriveVisitUsageType,
   machineUsageBlocked,
   usageDeclaration,
@@ -144,46 +146,59 @@ describe("USAGE_TYPE_INFO (issue #570)", () => {
   })
 })
 
-// Issue #605: the Nutzungsart is chosen per person on the check-in.
-describe("personUsageOptions (issue #605)", () => {
-  it("offers the owner-only types on the identified person's line, last", () => {
-    const options = personUsageOptions({
+// Issue #605: the Nutzungsart is chosen per person on the check-in; the
+// group types follow the owner's Workspace groups (CHK-51, ADR-0053).
+describe("personUsageOptions (issue #605, CHK-51)", () => {
+  const common = ["regular", "materialbezug", "ermaessigt", "hangenmoos"]
+  const types = (opts: Partial<Parameters<typeof personUsageOptions>[0]>) =>
+    personUsageOptions({
       isOwner: true,
       anonymous: false,
       othersPresent: false,
-    })
-    expect(options.map((o) => o.type)).toEqual(USAGE_TYPE_ORDER)
-    expect(options.every((o) => o.disabledReason === undefined)).toBe(true)
+      ownerGroups: [],
+      ...opts,
+    }).map((o) => o.type)
+
+  it("offers the owner by their groups, group types last", () => {
+    expect(types({})).toEqual(common)
+    expect(types({ ownerGroups: ["intern"] })).toEqual([...common, "intern"])
+    expect(types({ ownerGroups: ["volunteering"] })).toEqual(["volunteering"])
+    expect(types({ ownerGroups: ["volunteering", "intern"] })).toEqual([
+      "volunteering",
+      "intern",
+    ])
     expect(USAGE_TYPE_ORDER.slice(-2)).toEqual(["volunteering", "intern"])
   })
 
-  it("disables them, with the reason, while others are on the visit", () => {
+  it("disables only Interne Nutzung, with the reason, while others are on the visit", () => {
     const options = personUsageOptions({
       isOwner: true,
       anonymous: false,
       othersPresent: true,
+      ownerGroups: ["volunteering", "intern"],
     })
     for (const o of options) {
       expect(o.disabledReason, o.type).toBe(
-        o.type === "volunteering" || o.type === "intern"
-          ? OWNER_ONLY_OTHERS_REASON
-          : undefined,
+        o.type === "intern" ? OWNER_ONLY_OTHERS_REASON : undefined,
       )
     }
   })
 
   it("never offers them to a further person or a guest check-in", () => {
-    const common = ["regular", "materialbezug", "ermaessigt", "hangenmoos"]
-    expect(
-      personUsageOptions({ isOwner: false, anonymous: false, othersPresent: true }).map(
-        (o) => o.type,
-      ),
-    ).toEqual(common)
-    expect(
-      personUsageOptions({ isOwner: true, anonymous: true, othersPresent: false }).map(
-        (o) => o.type,
-      ),
-    ).toEqual(common)
+    const both = ["volunteering", "intern"] as const
+    expect(types({ isOwner: false, othersPresent: true, ownerGroups: both })).toEqual(common)
+    expect(types({ anonymous: true, ownerGroups: both })).toEqual(common)
+  })
+
+  it("starts a volunteer on Freiwilligengruppe, everyone else on Reguläre Nutzung", () => {
+    expect(defaultOwnerUsageType(["volunteering"])).toBe("volunteering")
+    expect(defaultOwnerUsageType(["intern"])).toBe("regular")
+    expect(defaultOwnerUsageType([])).toBe("regular")
+  })
+
+  it("reads a users doc's groups, dropping anything unknown", () => {
+    expect(usageGroupsOf(undefined)).toEqual([])
+    expect(usageGroupsOf(["intern", "admin", 3])).toEqual(["intern"])
   })
 
   it("keeps a rehydrated selection displayable", () => {
@@ -192,6 +207,7 @@ describe("personUsageOptions (issue #605)", () => {
         isOwner: false,
         anonymous: false,
         othersPresent: true,
+        ownerGroups: [],
         current: "intern",
       }).map((o) => o.type),
     ).toContain("intern")
@@ -265,10 +281,10 @@ describe("usageDeclaration (issue #605)", () => {
     ).toBe("Du arbeitest heute nicht selbst in der Werkstatt.")
   })
 
-  it("has a sentence for every discounted type", () => {
+  it("has a sentence for every discounted type but Freiwilligengruppe (CHK-30)", () => {
     for (const ut of USAGE_TYPE_ORDER) {
       const d = usageDeclaration(ut, { firstName: "Mia", isSelf: false })
-      expect(d === null, ut).toBe(ut === "regular")
+      expect(d === null, ut).toBe(ut === "regular" || ut === "volunteering")
     }
   })
 })

@@ -4,8 +4,10 @@
 import { describe, expect, it } from "vitest"
 import type { DocumentReference } from "firebase/firestore"
 import type { CheckoutItemDoc } from "@modules/lib/firestore-entities"
+import type { UsageGroup } from "@oww/shared"
 import {
   correctionBlockedReason,
+  correctionUsageOptions,
   draftFromCheckout,
   estimateSummary,
   isUnchanged,
@@ -45,7 +47,7 @@ const items: Array<CheckoutItemDoc & { id: string }> = [
   } as unknown as CheckoutItemDoc & { id: string },
 ]
 
-function draft(): CorrectionDraft {
+function draft(ownerGroups: UsageGroup[] = ["volunteering", "intern"]): CorrectionDraft {
   return draftFromCheckout(
     {
       usageType: "regular",
@@ -57,6 +59,7 @@ function draft(): CorrectionDraft {
       summary: { totalPrice: 95.5, entryFees: 22.5, machineCost: 45, materialCost: 28, tip: 0, discountAmount: 0 },
     },
     items,
+    ownerGroups,
   )
 }
 
@@ -173,9 +176,9 @@ describe("validateDraft", () => {
     expect(validateDraft(d)).toEqual([])
   })
 
-  it("allows an owner-only type only on the owner alone (CHK-32)", () => {
+  it("allows Interne Nutzung only on the owner alone (CHK-52)", () => {
     const d = draft()
-    d.persons[0].usageType = "volunteering"
+    d.persons[0].usageType = "intern"
     // Owner, but not alone.
     expect(validateDraft(d)).toHaveLength(1)
     d.persons = [d.persons[0]]
@@ -184,6 +187,38 @@ describe("validateDraft", () => {
     const e = draft()
     e.persons[1].usageType = "intern"
     expect(validateDraft(e).length).toBeGreaterThan(0)
+  })
+
+  it("allows Freiwilligengruppe on the owner's line next to others (CHK-29)", () => {
+    const d = draft()
+    d.persons[0].usageType = "volunteering"
+    expect(validateDraft(d)).toEqual([])
+  })
+
+  it("refuses a group type outside the owner's groups (CHK-53)", () => {
+    const d = draft([])
+    d.persons = [{ ...d.persons[0], usageType: "volunteering" }]
+    expect(validateDraft(d)).toEqual([
+      "Freiwilligengruppe ist für dieses Konto nicht freigeschaltet.",
+    ])
+  })
+})
+
+describe("correctionUsageOptions (ADM-15)", () => {
+  it("offers the group types only on the owner's line, by the owner's groups", () => {
+    const d = draft(["volunteering"])
+    expect(correctionUsageOptions(d, 0)).toContain("volunteering")
+    expect(correctionUsageOptions(d, 0)).not.toContain("intern")
+    // A volunteer's line keeps every other type (unlike the check-in).
+    expect(correctionUsageOptions(d, 0)).toContain("regular")
+    expect(correctionUsageOptions(d, 1)).not.toContain("volunteering")
+  })
+
+  it("offers Interne Nutzung only while the owner is alone", () => {
+    const d = draft(["intern"])
+    expect(correctionUsageOptions(d, 0)).not.toContain("intern")
+    d.persons = [d.persons[0]]
+    expect(correctionUsageOptions(d, 0)).toContain("intern")
   })
 })
 

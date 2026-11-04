@@ -122,6 +122,9 @@ async function seedUser(
   userType: "erwachsen" | "kind" | "firma" = "erwachsen",
   // `null` seeds a login-less user (a legacy family-roster member).
   email: string | null = "alice@example.com",
+  // In both Workspace groups unless a test says otherwise, so the group
+  // usage types close (CHK-53) — the refusal has its own test.
+  usageGroups: string[] = ["volunteering", "intern"],
 ): Promise<void> {
   const db = getFirestore();
   await db.collection("users").doc(uid).set({
@@ -132,6 +135,7 @@ async function seedUser(
     permissions: [],
     roles: [],
     userType,
+    usageGroups,
   });
 }
 
@@ -1459,7 +1463,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId,
           usageType: "intern" as UsageType,
-          // Interne Nutzung is the owner's alone (CHK-32, issue #605): the
+          // Interne Nutzung is the owner's alone (CHK-52, issue #605): the
           // owner line carries their id, as the client sends it (#741).
           persons: [{ ...wire(ADULT), userId: uid }],
           summary: {
@@ -2162,7 +2166,7 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
         data: {
           checkoutId: opts.checkoutId ?? CHECKOUT_ID,
           usageType: opts.usageType ?? ("regular" as UsageType),
-          // An owner-only type needs the owner's line (CHK-32, ADR-0050).
+          // A group type needs the owner's line (CHK-53, ADR-0050).
           persons: [opts.usageType === "intern" ? { ...wire(ADULT), userId: UID } : ADULT],
           summary: ZERO_SUMMARY,
           paymentMethod,
@@ -2669,6 +2673,49 @@ describe("closeCheckoutAndGetPayment (Integration)", () => {
           }),
         "invalid-argument",
       );
+    });
+
+    it("refuses a group type for an account outside its group (CHK-53)", async () => {
+      const uid = "ppu-no-group";
+      await seedUser(uid, "erwachsen", "alice@example.com", []);
+      await seedCheckout("co-ppu-no-group", { ownerUid: uid });
+
+      await expectHttpsError(
+        () =>
+          call({
+            uid,
+            data: {
+              checkoutId: "co-ppu-no-group",
+              persons: [{ ...wire(ADULT), userId: uid, usageType: "volunteering" }],
+              summary: EMPTY_SUMMARY,
+            },
+          }),
+        "invalid-argument",
+      );
+    });
+
+    it("closes a volunteer's visit with a visitor on it (CHK-29)", async () => {
+      const uid = "ppu-volunteer-visitor";
+      await seedUser(uid, "erwachsen", "alice@example.com", ["volunteering"]);
+      await seedCheckout("co-ppu-volunteer-visitor", { ownerUid: uid });
+
+      await call({
+        uid,
+        data: {
+          checkoutId: "co-ppu-volunteer-visitor",
+          persons: [
+            { ...wire(ADULT), userId: uid, usageType: "volunteering" },
+            // Begleitung keeps the close free, so no payment method is due.
+            { ...wire(CHILD), usageType: "materialbezug" },
+          ],
+          summary: EMPTY_SUMMARY,
+        },
+      });
+      const snap = await getFirestore()
+        .collection("checkouts")
+        .doc("co-ppu-volunteer-visitor")
+        .get();
+      expect(snap.data()?.usageType).to.equal("volunteering");
     });
 
     it("refuses an owner-only type on a guest check-in", async () => {

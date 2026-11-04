@@ -8,7 +8,7 @@
 // the member gets exactly one mail with the corrected Sammelrechnung and
 // the changed Belege attached.
 
-import { isCollectedBeleg } from "@oww/shared"
+import { isCollectedBeleg, usageGroupsOf } from "@oww/shared"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { where } from "firebase/firestore"
@@ -307,12 +307,17 @@ function BelegCorrectionCard({
   const { data: items, loading: itemsLoading } = useCollection(
     checkoutDocRef ? checkoutItemsCollection(db, checkoutDocRef.id) : null,
   )
+  // The owner's groups now decide the group usage types (CHK-53, ADM-15).
+  const { data: owner, loading: ownerLoading } = useDocument(checkout?.userId ?? null)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (state || !checkoutDocRef || !checkout || itemsLoading) return
-    onInit(checkoutDocRef.id, draftFromCheckout(checkout, items))
-  }, [state, checkoutDocRef, checkout, items, itemsLoading, onInit])
+    if (state || !checkoutDocRef || !checkout || itemsLoading || ownerLoading) return
+    onInit(
+      checkoutDocRef.id,
+      draftFromCheckout(checkout, items, usageGroupsOf(owner?.usageGroups)),
+    )
+  }, [state, checkoutDocRef, checkout, items, itemsLoading, owner, ownerLoading, onInit])
 
   if (!checkoutDocRef) return null
   const reference = formatBillReference(beleg)

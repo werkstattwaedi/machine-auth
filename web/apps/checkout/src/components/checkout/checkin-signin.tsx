@@ -116,6 +116,7 @@ interface VerifyLoginCodeKioskResponse {
   email?: string
   userType?: string
   activeMembership?: boolean
+  usageGroups?: string[]
   /** Code sign-ins are OTP-elevated at mint (ADR-0041). */
   elevatedUntil?: number | null
 }
@@ -310,6 +311,7 @@ export function CheckinSignin({
       email: data.email,
       userType: data.userType,
       activeMembership: data.activeMembership,
+      usageGroups: data.usageGroups,
       elevatedUntil: data.elevatedUntil ?? null,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)
@@ -345,6 +347,7 @@ export function CheckinSignin({
       email: data.email,
       userType: data.userType,
       activeMembership: data.activeMembership,
+      usageGroups: data.usageGroups,
       elevatedUntil: data.elevatedUntil ?? null,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)

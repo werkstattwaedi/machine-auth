@@ -24,6 +24,7 @@ import { kioskBearer } from "../config/tag-secrets";
 import { parseIntParamOrDie } from "../auth/login-code/helpers";
 import { resolveVerifiedMembership } from "../membership/verified_membership";
 import type { UserEntity } from "../types/firestore_entities";
+import { usageGroupsOf, type UsageGroup } from "@oww/shared";
 
 /**
  * How long an OTP-elevated kiosk session may reach the member area
@@ -60,6 +61,11 @@ export interface KioskUserPayload {
   email?: string;
   userType?: string;
   activeMembership: boolean;
+  /**
+   * The Workspace groups the account is in (ADR-0053): which of
+   * Freiwilligengruppe / Interne Nutzung the check-in offers it (CHK-51).
+   */
+  usageGroups: UsageGroup[];
   /**
    * Epoch ms until which the minted session is elevated (ADR-0041), or
    * `null` for a plain checkout-only session. Mirrors the `elevatedUntil`
@@ -231,6 +237,7 @@ export async function buildKioskUserPayload(
     email: userData?.email,
     userType: userData?.userType,
     activeMembership: membership !== null,
+    usageGroups: usageGroupsOf(userData?.usageGroups),
     elevatedUntil,
   };
 }

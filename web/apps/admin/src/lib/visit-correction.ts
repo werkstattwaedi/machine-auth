@@ -20,9 +20,11 @@ import {
   MAX_CANCELLATION_REASON_LENGTH,
   USAGE_TYPE_DISCOUNTS,
   USAGE_TYPE_LABELS,
+  USAGE_TYPE_ORDER,
   computeCheckoutSummary,
   isCollectedBeleg,
   deriveVisitUsageType,
+  isAloneOnlyUsage,
   isOwnerOnlyUsage,
   machineUsageBlocked,
   partitionBadge,
@@ -31,6 +33,7 @@ import {
   type CheckoutSummary,
   type CorrectCheckoutEntry,
   type CorrectCheckoutItemType,
+  type UsageGroup,
   type UsageType,
 } from "@oww/shared"
 
@@ -68,10 +71,15 @@ export interface DraftItem {
 
 export interface CorrectionDraft {
   /**
-   * The checkout owner's user id: the only line that may carry an
-   * owner-only usage type (CHK-32). Null for a guest checkout.
+   * The checkout owner's user id: the only line that may carry a group
+   * usage type (CHK-53). Null for a guest checkout.
    */
   ownerId: string | null
+  /**
+   * The owner's Workspace groups as they stand now — a correction goes by
+   * them, not by the groups at the visit (CHK-53, ADM-15).
+   */
+  ownerGroups: UsageGroup[]
   persons: DraftPerson[]
   items: DraftItem[]
   tip: number
@@ -138,6 +146,7 @@ export function draftFromCheckout(
   checkout: Pick<CheckoutDoc, "usageType" | "persons" | "summary"> &
     Partial<Pick<CheckoutDoc, "userId">>,
   items: Array<CheckoutItemDoc & { id: string }>,
+  ownerGroups: readonly UsageGroup[] = [],
 ): CorrectionDraft {
   const ownerId = checkout.userId?.id ?? null
   const persons = checkout.persons ?? []
@@ -147,6 +156,7 @@ export function draftFromCheckout(
   const legacy = knownUsageType(checkout.usageType) ?? "regular"
   return {
     ownerId,
+    ownerGroups: [...ownerGroups],
     persons: persons.map((p) => {
       const isOwner = !!ownerId && p.userRef?.id === ownerId
       const fallback =
@@ -187,6 +197,27 @@ export function draftFromCheckout(
 }
 
 /** The roster as the shared usage-type helpers see it. */
+/**
+ * The usage types the correction editor offers on one line (ADM-15): the
+ * group types only on the owner's line, for the owner's groups, Interne
+ * Nutzung only while they are alone; every other type on every line, a
+ * volunteer's included. The line's current type is always kept so the
+ * select can show it (validateDraft then says why it can't stay).
+ */
+export function correctionUsageOptions(
+  draft: Pick<CorrectionDraft, "ownerId" | "ownerGroups" | "persons">,
+  index: number,
+): UsageType[] {
+  const person = draft.persons[index]
+  const isOwner = !!draft.ownerId && person?.userId === draft.ownerId
+  return USAGE_TYPE_ORDER.filter((t) => {
+    if (t === person?.usageType) return true
+    if (!isOwnerOnlyUsage(t)) return true
+    if (!isOwner || !draft.ownerGroups.includes(t as UsageGroup)) return false
+    return !isAloneOnlyUsage(t) || draft.persons.length === 1
+  })
+}
+
 function usagePersons(draft: Pick<CorrectionDraft, "ownerId" | "persons">) {
   return draft.persons.map((p) => ({
     usageType: p.usageType,
@@ -242,15 +273,18 @@ export function validateDraft(draft: CorrectionDraft): string[] {
       errors.push(`Position ${n}: Einzelpreis ist ungültig.`)
   })
   if (!(draft.tip >= 0) || !Number.isFinite(draft.tip)) errors.push("Trinkgeld darf nicht negativ sein.")
-  // Mirrors the server (CHK-32): Freiwilligengruppe / Interne Nutzung only
-  // on the owner's line while they are alone.
+  // Mirrors the server (CHK-52, CHK-53): Freiwilligengruppe / Interne
+  // Nutzung only on the owner's line and for the owner's groups; Interne
+  // Nutzung only while they are alone.
   const people = usagePersons(draft)
   draft.persons.forEach((p, i) => {
     if (!isOwnerOnlyUsage(p.usageType)) return
     const label = USAGE_TYPE_LABELS[p.usageType]
     if (!people[i].isOwner) {
       errors.push(`${label} ist nur für die angemeldete Person möglich.`)
-    } else if (draft.persons.length > 1) {
+    } else if (!draft.ownerGroups.includes(p.usageType as UsageGroup)) {
+      errors.push(`${label} ist für dieses Konto nicht freigeschaltet.`)
+    } else if (isAloneOnlyUsage(p.usageType) && draft.persons.length > 1) {
       errors.push(`${label} ist nicht möglich, solange weitere Personen erfasst sind.`)
     }
   })

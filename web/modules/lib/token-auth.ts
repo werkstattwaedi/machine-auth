@@ -32,6 +32,12 @@ export interface TokenUser {
    */
   activeMembership?: boolean
   /**
+   * The Workspace groups the account is in (ADR-0053), server-derived like
+   * `activeMembership`: the check-in offers Freiwilligengruppe / Interne
+   * Nutzung by them (CHK-51). A kiosk session never loads the users doc.
+   */
+  usageGroups?: string[]
+  /**
    * Epoch ms until which the kiosk session is OTP-elevated and may reach
    * the member area (ADR-0041); `null` for a plain badge-tap session.
    * Mirrors the `elevatedUntil` token claim (server-derived, never set
@@ -74,6 +80,7 @@ type VerifyTagResponse =
       email?: string
       userType?: string
       activeMembership?: boolean
+      usageGroups?: string[]
       elevatedUntil?: number | null
     }
   | {
@@ -232,6 +239,7 @@ export function useTokenAuth(
           email: data.email,
           userType: data.userType,
           activeMembership: data.activeMembership,
+          usageGroups: data.usageGroups,
           elevatedUntil: data.elevatedUntil ?? null,
         })
       } catch (err) {

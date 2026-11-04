@@ -68,6 +68,17 @@ export async function getCheckoutItems(checkoutId: string) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
+/**
+ * Put a user in the Workspace groups (ADR-0053) the way the sync does —
+ * the rules let no client write `usageGroups`. An empty list removes it.
+ */
+export async function setUsageGroups(uid: string, groups: string[]) {
+  await getAdminFirestore()
+    .collection("users")
+    .doc(uid)
+    .update({ usageGroups: groups.length > 0 ? groups : FieldValue.delete() })
+}
+
 /** Get a user document by Auth UID */
 export async function getUserDoc(uid: string) {
   const db = getAdminFirestore()

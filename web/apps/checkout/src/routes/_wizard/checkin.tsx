@@ -266,6 +266,7 @@ function CheckinRoute() {
         // checkout and always stays on the roster.
         ownerUserId={ctx.identifiedUserRef?.id ?? null}
         isMember={ctx.isMember}
+        ownerUsageGroups={ctx.ownerUsageGroups}
         config={ctx.pricingConfig}
         feePersons={ctx.feePersons}
         savedPersons={ctx.savedPersons}

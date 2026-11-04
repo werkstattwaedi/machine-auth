@@ -275,6 +275,7 @@ export { monthlyBillRun } from "./invoice/monthly_bill_run";
 // ack), not on checkout close (#251 / #302).
 export { onMembershipWritten } from "./membership/on_membership_written";
 export { dailyMembershipMaintenance } from "./membership/daily_maintenance";
+export { syncUsageGroups } from "./usage_groups/sync_usage_groups";
 
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";

@@ -632,6 +632,12 @@
       // Maintained by the onMembershipWritten trigger and the daily expiry job.
       "activeMembership": "DocumentReference | null",
 
+      // The Google Workspace groups the account is in (ADR-0053): which of
+      // the Freiwilligengruppe / Interne Nutzung usage types it may claim.
+      // Written only by the syncUsageGroups job (matched by `email`); the
+      // rules pin it for every client, admins included. Absent = neither.
+      "usageGroups": "('volunteering' | 'intern')[]",
+
       "billingAddress": { // Required when userType == "firma" (Rechnungsadresse)
         "company": "string", // Company name (required)
         "street": "string",

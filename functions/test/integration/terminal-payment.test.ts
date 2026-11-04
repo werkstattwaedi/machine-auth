@@ -314,6 +314,8 @@ describe("Wallee terminal payment (Integration)", () => {
 
       await seedOpenCheckout("free");
       await getFirestore().collection("checkouts").doc("free").collection("items").doc("i0").delete();
+      // Interne Nutzung needs the owner in its Workspace group (CHK-53).
+      await getFirestore().collection("users").doc(OWNER).update({ usageGroups: ["intern"] });
       await expectRejects(
         prepareTerminalPaymentHandler(
           request({

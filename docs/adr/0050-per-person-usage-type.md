@@ -1,6 +1,6 @@
 # ADR-0050: Usage Type per Person, Saved Persons
 
-**Status:** Accepted (amends the #570 usage-type design; resolves the companion cons of [ADR-0048](0048-family-membership-account-holders-only.md)). Amended 2026-10-18, issue #799: machine time switches the owner to Reguläre Nutzung only while every person is on Begleitung
+**Status:** Accepted (amends the #570 usage-type design; resolves the companion cons of [ADR-0048](0048-family-membership-account-holders-only.md)). Amended 2026-10-18, issue #799: machine time switches the owner to Reguläre Nutzung only while every person is on Begleitung. Amended 2026-11-04 by [ADR-0053](0053-usage-groups-from-workspace.md): Freiwilligengruppe / Interne Nutzung are gated by Workspace group, and only Interne Nutzung stays alone-only
 
 **Date:** 2026-10-16
 

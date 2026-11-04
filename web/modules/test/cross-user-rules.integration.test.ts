@@ -1940,6 +1940,60 @@ describe("cross-user: activeMembership is server-only", () => {
   })
 })
 
+// ADR-0053, ADM-12: `usageGroups` grants Freiwilligengruppe / Interne
+// Nutzung and mirrors Google Workspace. Only the sync (Admin SDK) writes
+// it — no client principal, an admin's included.
+describe("cross-user: usageGroups is sync-only", () => {
+  const RULE = "firestore.rules users create/update (usageGroupsUnchanged, ADR-0053)"
+
+  it("denies the owner creating their doc in a group", async () => {
+    const db = getTestEnvironment()
+      .authenticatedContext("mallory", { email: "mallory@test.com" })
+      .firestore()
+    await assertCrossUserDenied("users/{userId} create with usageGroups", RULE, () =>
+      setDoc(doc(db, "users", "mallory"), {
+        firstName: "Self",
+        lastName: "mallory",
+        email: "mallory@test.com",
+        roles: [],
+        permissions: [],
+        userType: "erwachsen",
+        usageGroups: ["volunteering"],
+      }),
+    )
+  })
+
+  it("denies the owner and an elevated kiosk session joining a group", async () => {
+    await seedUser("mallory")
+    await assertCrossUserDenied("users/{userId} update sets usageGroups", RULE, () =>
+      updateDoc(doc(authedDb("mallory"), "users", "mallory"), { usageGroups: ["intern"] }),
+    )
+    await assertCrossUserDenied("users/{userId} elevated kiosk update sets usageGroups", RULE, () =>
+      updateDoc(doc(elevatedTagSessionDb("mallory"), "users", "mallory"), {
+        usageGroups: ["volunteering"],
+      }),
+    )
+  })
+
+  it("denies an admin changing or clearing it", async () => {
+    await seedUser("alice")
+    await getAdminFirestore().doc("users/alice").update({ usageGroups: ["volunteering"] })
+    await assertCrossUserDenied("users/{userId} admin update changes usageGroups", RULE, () =>
+      updateDoc(doc(adminDb(), "users", "alice"), { usageGroups: ["volunteering", "intern"] }),
+    )
+    await assertCrossUserDenied("users/{userId} admin update clears usageGroups", RULE, () =>
+      updateDoc(doc(adminDb(), "users", "alice"), { usageGroups: [] }),
+    )
+  })
+
+  it("allows the owner and an admin editing other fields while it stays", async () => {
+    await seedUser("alice")
+    await getAdminFirestore().doc("users/alice").update({ usageGroups: ["volunteering"] })
+    await assertSucceeds(updateDoc(doc(authedDb("alice"), "users", "alice"), { firstName: "Alicia" }))
+    await assertSucceeds(updateDoc(doc(adminDb(), "users", "alice"), { lastName: "Admin" }))
+  })
+})
+
 describe("cross-user: device status (admin read only, ADR-0045)", () => {
   // Status docs are machine-written by the functions (Admin SDK) from the
   // gateway/kiosk reports. Nobody writes them through the rules, and only

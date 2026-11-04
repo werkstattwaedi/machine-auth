@@ -565,6 +565,7 @@ describe("assertBadgeItemsBelongToOwner (badge needs an identified owner)", () =
 describe("resolvePersonUsageTypes (issue #605)", () => {
   const ownerRef = { id: "owner" } as never;
   const owner: CheckoutPersonEntity = { ...adultPerson, userRef: ownerRef };
+  const BOTH = ["volunteering", "intern"] as const;
 
   function expectCode(fn: () => unknown, code: string, message?: RegExp) {
     try {
@@ -583,6 +584,7 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         { ...childPerson, usageType: "regular" },
       ],
       "owner",
+      BOTH,
     );
     expect(persons.map((p) => p.usageType)).to.deep.equal(["materialbezug", "regular"]);
     expect(usageType).to.equal("regular");
@@ -595,6 +597,7 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         { ...childPerson, usageType: "materialbezug" },
       ],
       null,
+      [],
     );
     expect(usageType).to.equal("materialbezug");
   });
@@ -603,22 +606,23 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
     const { usageType } = resolvePersonUsageTypes(
       [{ ...owner, usageType: "volunteering" }],
       "owner",
+      BOTH,
     );
     expect(usageType).to.equal("volunteering");
   });
 
   it("requires a usage type on every person", () => {
     expectCode(
-      () => resolvePersonUsageTypes([{ ...owner, usageType: "regular" }, childPerson], "owner"),
+      () => resolvePersonUsageTypes([{ ...owner, usageType: "regular" }, childPerson], "owner", BOTH),
       "invalid-argument",
       /Nutzungsart pro Person fehlt/,
     );
-    expectCode(() => resolvePersonUsageTypes([adultPerson], null), "invalid-argument");
+    expectCode(() => resolvePersonUsageTypes([adultPerson], null, []), "invalid-argument");
   });
 
   it("refuses an unknown usage type", () => {
     expectCode(
-      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "bogus" as never }], null),
+      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "bogus" as never }], null, []),
       "invalid-argument",
     );
   });
@@ -629,27 +633,52 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         resolvePersonUsageTypes(
           [{ ...owner, usageType: "regular" }, { ...childPerson, usageType: "intern" }],
           "owner",
+          BOTH,
         ),
       "invalid-argument",
       /nur für die angemeldete Person/,
     );
   });
 
-  it("refuses an owner-only type on the owner line while others are present", () => {
+  it("refuses Interne Nutzung on the owner line while others are present (CHK-52)", () => {
     expectCode(
       () =>
         resolvePersonUsageTypes(
           [{ ...owner, usageType: "intern" }, { ...childPerson, usageType: "regular" }],
           "owner",
+          BOTH,
         ),
       "invalid-argument",
       /solange weitere Personen erfasst sind/,
     );
   });
 
+  it("keeps a volunteer's Freiwilligengruppe next to visitors (CHK-29)", () => {
+    const { persons, usageType } = resolvePersonUsageTypes(
+      [{ ...owner, usageType: "volunteering" }, { ...childPerson, usageType: "regular" }],
+      "owner",
+      ["volunteering"],
+    );
+    expect(persons.map((p) => p.usageType)).to.deep.equal(["volunteering", "regular"]);
+    expect(usageType).to.equal("volunteering");
+  });
+
+  it("refuses a group type for an account outside its group (CHK-53)", () => {
+    expectCode(
+      () => resolvePersonUsageTypes([{ ...owner, usageType: "volunteering" }], "owner", ["intern"]),
+      "invalid-argument",
+      /nicht freigeschaltet/,
+    );
+    expectCode(
+      () => resolvePersonUsageTypes([{ ...owner, usageType: "intern" }], "owner", []),
+      "invalid-argument",
+      /nicht freigeschaltet/,
+    );
+  });
+
   it("refuses an owner-only type without an owner (guest check-in)", () => {
     expectCode(
-      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "volunteering" }], null),
+      () => resolvePersonUsageTypes([{ ...adultPerson, usageType: "volunteering" }], null, []),
       "invalid-argument",
     );
   });
@@ -660,6 +689,7 @@ describe("resolvePersonUsageTypes (issue #605)", () => {
         resolvePersonUsageTypes(
           [{ ...adultPerson, userRef: { id: "other" } as never, usageType: "intern" }],
           "owner",
+          BOTH,
         ),
       "invalid-argument",
     );

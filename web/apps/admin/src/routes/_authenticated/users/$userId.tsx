@@ -27,6 +27,7 @@ import { PersonProfileTab } from "@/components/person/profile-tab"
 import { PersonMembershipTab } from "@/components/person/membership-tab"
 import { PersonBadgesTab } from "@/components/person/badges-tab"
 import { PersonPermissionsTab } from "@/components/person/permissions-tab"
+import { USAGE_TYPE_LABELS, usageGroupsOf } from "@oww/shared"
 
 const TABS = [
   "overview",
@@ -91,6 +92,11 @@ function PersonWorkspace({
 
   const activeTab: PersonTab = tab ?? "overview"
   const name = formatFullName(user, "Person")
+  // ADR-0053: the Workspace groups, read-only here (ADM-12). A volunteer is
+  // expected to hold a membership but isn't required to (ADM-14).
+  const groups = usageGroupsOf(user.usageGroups)
+  const volunteerWithoutMembership =
+    groups.includes("volunteering") && membership?.status !== "active"
 
   return (
     <div className="space-y-4">
@@ -106,11 +112,25 @@ function PersonWorkspace({
           <Badge variant="outline">kein Mitglied</Badge>
         )}
         {user.roles?.includes("admin") && <Badge>Admin</Badge>}
+        {groups.map((g) => (
+          <Badge key={g} variant="outline" title="Verwaltet in Google Workspace">
+            {USAGE_TYPE_LABELS[g]}
+          </Badge>
+        ))}
         <span className="text-sm text-muted-foreground">
           {user.email ?? "keine E-Mail"}
           {user.phone ? ` · ${user.phone}` : ""}
         </span>
       </div>
+
+      {volunteerWithoutMembership && (
+        <div
+          data-testid="volunteer-without-membership"
+          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          In der Freiwilligengruppe, aber ohne aktive Mitgliedschaft.
+        </div>
+      )}
 
       <Tabs
         value={activeTab}

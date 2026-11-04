@@ -33,8 +33,8 @@ interface AddPersonMenuProps {
    */
   onDeleteSaved: (saved: SavedPersonEntry) => Promise<void>
   /**
-   * Why no person can be added right now (an owner-only usage type is
-   * selected, CHK-32); undefined = enabled.
+   * Why no person can be added right now (Interne Nutzung is selected,
+   * CHK-52); undefined = enabled.
    */
   disabledReason?: string
   /** The menu (and with it a delete confirmation) opened — a touch on the kiosk. */

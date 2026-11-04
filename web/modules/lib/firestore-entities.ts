@@ -26,6 +26,7 @@ import type {
   PaidVia,
   PaymentMethod,
   PricingModel,
+  UsageGroup,
 } from "@oww/shared"
 export type {
   CatalogVariant,
@@ -82,6 +83,12 @@ export interface UserDoc extends AuditFields {
   // before granting the member discount, so a stale denorm only ever costs
   // a brief extra read.
   activeMembership?: DocumentReference<MembershipDoc> | null
+  /**
+   * The Workspace groups the account is in (ADR-0053), written only by the
+   * `syncUsageGroups` job: which of Freiwilligengruppe / Interne Nutzung it
+   * may claim. Absent = neither.
+   */
+  usageGroups?: UsageGroup[]
   /**
    * Postal address. Required for every registered user (street/zip/city);
    * `company` is only set for `userType === "firma"`. Stored under the

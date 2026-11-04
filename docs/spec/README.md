@@ -136,6 +136,7 @@ still passes a different wrong promise.
 - **Admin** — a person with the `admin` claim.
 - **Guest** — a person using the app without signing in or tapping a badge.
 - **Identified person** — a person who signed in or tapped their badge.
+- **Volunteer** — a person whose account is in the *Freiwilligengruppe*.
 
 **Places**
 - **Own device** — the checkout app on the person's phone or computer.
@@ -152,6 +153,8 @@ still passes a different wrong promise.
   Nutzungsverlauf and Mitgliedschaft (the membership page).
 - **Anleitung** — the guide to the checkout app, a page on the workshop's
   website.
+- **Sync report** — the admin page with the outcome of the Workspace group
+  sync.
 
 **Things**
 - **Badge** — a person's NFC tag.
@@ -182,6 +185,9 @@ still passes a different wrong promise.
 - **Price list** (*Preisliste*) — a printable sheet of catalog items with
   their prices, made to hang in a workshop.
 - **Material label** (*Etikett*) — the printed tape label of a catalog item.
+- **Workspace group** — one of the two Google Workspace groups of e-mail
+  addresses, addresses outside the OWW included, that the team keeps: the
+  *Freiwilligengruppe* and the *Interne Nutzung* group.
 
 **Billing documents**
 - **Rechnung** — an invoice paid afterwards, with a QR slip.

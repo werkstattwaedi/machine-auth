@@ -6,6 +6,7 @@ import {
   clearCheckoutsDeep,
   clearCollections,
   seedMembershipState,
+  setUsageGroups,
   seedOpenCheckoutWithMembership,
   waitForLoginCode,
   openGuestSection,
@@ -41,6 +42,21 @@ async function goToSummary(page: Page) {
  * Pick a Nutzungsart on the check-in (issue #605: chosen per person there,
  * read-only on Check Out). `scope` is the person's strip or card.
  */
+/**
+ * The group usage types need the signed-in user in their Workspace group
+ * (CHK-51, ADR-0053); the describe's afterEach takes it out again.
+ */
+async function joinGroupFor(usageType: string | undefined) {
+  const group =
+    usageType === "Freiwilligengruppe"
+      ? "volunteering"
+      : usageType === "Interne Nutzung"
+        ? "intern"
+        : null
+  const uid = process.env.E2E_AUTH_USER_UID
+  if (group && uid) await setUsageGroups(uid, [group])
+}
+
 async function chooseUsageType(page: Page, scope: Locator, label: string) {
   await scope.getByTestId("usage-type-trigger").click()
   await page.getByRole("option", { name: label, exact: true }).click()
@@ -59,6 +75,7 @@ async function goToSummaryWithItems(
   { signedIn = false, usageType }: { signedIn?: boolean; usageType?: string } = {},
 ) {
   if (signedIn) {
+    await joinGroupFor(usageType)
     await signIn(page)
     // Logged-in user sees the pre-filled form; advance to workshops.
     await page.goto("/")
@@ -122,6 +139,7 @@ async function signIn(page: Page) {
  * (open → closed). Logged-in users also have no auto-reset timer.
  */
 async function goToSignedInSummary(page: Page, usageType?: string) {
+  await joinGroupFor(usageType)
   await signIn(page)
 
   // Navigate to checkout — logged-in user sees pre-filled form
@@ -180,6 +198,7 @@ test.describe("Checkout step screenshots", () => {
   test.afterEach(async () => {
     const uid = process.env.E2E_AUTH_USER_UID
     if (uid) await seedMembershipState(uid, { kind: "none" })
+    if (uid) await setUsageGroups(uid, [])
   })
 
   test("empty workshop form", async ({ page }) => {
@@ -440,15 +459,16 @@ test.describe("Checkout step screenshots", () => {
     await expect(card.getByTestId("usage-type-trigger")).toContainText("Reguläre Nutzung")
   })
 
-  // CHK-32 (#779): an owner-only Nutzungsart disables "Person hinzufügen";
-  // the reason is a tooltip, opened by a tap (mobile-chrome is touch, so
-  // this covers the kiosk), not a line under the button.
-  test("check-in — Freiwilligengruppe: add-person reason as tooltip", async ({ page }) => {
+  // CHK-52 (#779): Interne Nutzung disables "Person hinzufügen"; the reason
+  // is a tooltip, opened by a tap (mobile-chrome is touch, so this covers
+  // the kiosk), not a line under the button.
+  test("check-in — Interne Nutzung: add-person reason as tooltip", async ({ page }) => {
+    await joinGroupFor("Interne Nutzung")
     await signIn(page)
     await page.goto("/")
     const strip = page.getByTestId("identity-strip").first()
     await expect(strip).toBeVisible({ timeout: 10_000 })
-    await chooseUsageType(page, strip, "Freiwilligengruppe")
+    await chooseUsageType(page, strip, "Interne Nutzung")
 
     await expect(page.getByTestId("add-person")).toBeDisabled()
     const tooltip = page.locator('[data-slot="tooltip-content"]')
@@ -527,12 +547,12 @@ test.describe("Checkout step screenshots", () => {
       usageType: "Freiwilligengruppe",
     })
 
-    // A discounted type opens Nutzungsgebühren on arrival (CHK-31) with the
-    // confirmation box (CHK-30).
+    // A discounted type opens Nutzungsgebühren on arrival (CHK-31); a
+    // volunteer confirms nothing — the group says who they are (CHK-30).
     await expect(
       page.getByRole("button", { name: /Nutzungsgebühren/ }),
     ).toHaveAttribute("aria-expanded", "true")
-    await expect(page.getByTestId("usage-type-declaration")).toBeVisible()
+    await expect(page.getByTestId("usage-type-declaration")).toHaveCount(0)
 
     // Click a neutral spot so the screenshot is stable.
     await page.locator("h1").first().click()

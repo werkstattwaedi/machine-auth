@@ -34,6 +34,7 @@ export interface ExchangeKioskSessionResponse {
   email?: string
   userType?: string
   activeMembership?: boolean
+  usageGroups?: string[]
   elevatedUntil?: number | null
 }
 
@@ -132,6 +133,7 @@ export function useKioskSms() {
           email: data.email,
           userType: data.userType,
           activeMembership: data.activeMembership,
+          usageGroups: data.usageGroups,
           elevatedUntil: data.elevatedUntil ?? null,
         }
         await establishKioskSession(auth, data.customToken, tokenUser)

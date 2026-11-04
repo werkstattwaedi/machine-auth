@@ -10,7 +10,7 @@
 // authoritatively. The `_` in the file name keeps this route outside
 // `$checkoutId.tsx`, which renders no <Outlet/>.
 
-import { isCollectedBeleg } from "@oww/shared"
+import { isCollectedBeleg, usageGroupsOf } from "@oww/shared"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -74,6 +74,8 @@ function CorrectVisitPage() {
   const { data: bill, loading: billLoading } = useDocument(visit?.billRef ?? null)
   const { data: sammelrechnung } = useDocument(bill?.aggregatedIntoBillRef ?? null)
   const { data: catalogRefs } = useDocument(catalogReferencesRef(db))
+  // The owner's groups now decide the group usage types (CHK-53, ADM-15).
+  const { data: owner, loading: ownerLoading } = useDocument(visit?.userId ?? null)
   const pricing = usePricingConfig()
   const [draft, setDraft] = useState<CorrectionDraft | null>(null)
   const [original, setOriginal] = useState<CorrectionDraft | null>(null)
@@ -92,11 +94,11 @@ function CorrectVisitPage() {
   // Initialise the draft once the visit and its items have settled; later
   // snapshot updates must not clobber the admin's edits.
   useEffect(() => {
-    if (draft || !visit || itemsLoading) return
-    const initial = draftFromCheckout(visit, items)
+    if (draft || !visit || itemsLoading || ownerLoading) return
+    const initial = draftFromCheckout(visit, items, usageGroupsOf(owner?.usageGroups))
     setDraft(initial)
     setOriginal(initial)
-  }, [draft, visit, items, itemsLoading])
+  }, [draft, visit, items, itemsLoading, owner, ownerLoading])
 
   if (loading) return <PageLoading />
   if (!visit) return <div>Besuch nicht gefunden.</div>

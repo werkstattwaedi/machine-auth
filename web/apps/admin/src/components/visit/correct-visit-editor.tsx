@@ -8,7 +8,6 @@
 import { useRef } from "react"
 import {
   USAGE_TYPE_LABELS,
-  USAGE_TYPE_ORDER,
   USER_TYPE_LABELS,
   type UsageType,
   type UserType,
@@ -36,6 +35,7 @@ import {
 import {
   newItemRow,
   rowTotal,
+  correctionUsageOptions,
   type CorrectionDraft,
   type DraftItem,
   type DraftPerson,
@@ -117,7 +117,7 @@ export function CorrectVisitEditor({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {USAGE_TYPE_ORDER.map((ut) => (
+                      {correctionUsageOptions(draft, i).map((ut) => (
                         <SelectItem key={ut} value={ut}>
                           {USAGE_TYPE_LABELS[ut] ?? ut}
                         </SelectItem>
