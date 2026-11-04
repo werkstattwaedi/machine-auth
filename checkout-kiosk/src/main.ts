@@ -228,8 +228,8 @@ async function endSessionAndHide(): Promise<void> {
 function createTray(): void {
   tray = new Tray(appIcon())
   // Tooltip carries the version so the tray/taskbar hover identifies exactly
-  // which build is running — the window itself starts hidden, so this is the
-  // only always-visible place the version shows. `app.getVersion()` reads the
+  // which build is running — the window can be closed to the tray, so this is
+  // the only always-visible place the version shows. `app.getVersion()` reads the
   // single source of truth: the `version` field in package.json.
   tray.setToolTip(`${config.productName} v${app.getVersion()}`)
   tray.setContextMenu(
@@ -256,9 +256,8 @@ function createWindow(): void {
     height: config.windowOpts.height,
     frame: true,
     icon: appIcon(),
-    // Start hidden in the tray: during the transition phase the kiosk must
-    // never cover the browser running the old checkout. A badge tap (or the
-    // tray) brings it forward for users who opt into the new flow.
+    // Created hidden and shown on `ready-to-show` (below) so the first paint
+    // is the loaded page, not a blank frame.
     show: false,
     autoHideMenuBar: config.windowOpts.autoHideMenuBar,
     kiosk: false,
@@ -293,11 +292,9 @@ function createWindow(): void {
     void endSessionAndHide()
   })
 
-  // Start hidden in the tray: leave the window exactly as `show: false`
-  // created it. Do NOT maximize (or minimize) here — Electron's maximize()
-  // also shows a hidden window, which is how the old start-maximized call
-  // made the kiosk come up visible and full-screen on every launch.
-  // showWindow() maximizes when the kiosk is actually surfaced.
+  // The kiosk starts visible, in front and maximized. showWindow() does all
+  // three, the same way a badge tap does.
+  mainWindow.once("ready-to-show", () => showWindow())
 
   mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"))
 
@@ -465,17 +462,14 @@ ipcMain.on("bridge:start-over-ack", () => {
 ipcMain.handle("bridge:get-url", () => config.url)
 ipcMain.handle("bridge:bearer", () => config.bearer || null)
 // The single chokepoint for the web-confirm, badge-takeover, and fallback
-// reset paths. Default: autohide back to the tray so the kiosk only reappears
-// when the next user taps a badge. A badge takeover passes
-// `keepWindowOpen: true` so the window stays in front for the user who just
-// tapped (issue #516) — the decision lives in performSessionReset.
+// reset paths. Wipes the session and leaves the window in front for the next
+// user; only closing the window sends the kiosk to the tray.
 ipcMain.handle(
   "bridge:reset-session",
   (_event, opts?: ResetSessionOptions) =>
     performSessionReset(
       {
         clearSession,
-        hideWindow,
         abortTerminalPayment: terminal ? abortTerminalPayment : undefined,
       },
       opts

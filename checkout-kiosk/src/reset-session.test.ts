@@ -1,9 +1,9 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-// Regression net for issue #516: the badge-takeover reset must NOT autohide
-// the kiosk to the tray (the next user is standing in front of it), while
-// every other reset path keeps the hide-after-wipe default.
+// A reset aborts the terminal, wipes the session, and leaves the window alone:
+// the kiosk no longer autohides to the tray, whatever options the web app
+// passes (issue #516 originally only kept it open on a badge takeover).
 
 import { test } from "node:test"
 import assert from "node:assert/strict"
@@ -18,29 +18,22 @@ function makeDeps() {
       clearSession: async () => {
         calls.push("clearSession")
       },
-      hideWindow: () => {
-        calls.push("hideWindow")
-      },
     },
   }
 }
 
-test("default reset clears the session, then hides to the tray", async () => {
+test("default reset clears the session", async () => {
   const { calls, deps } = makeDeps()
   await performSessionReset(deps)
-  assert.deepEqual(calls, ["clearSession", "hideWindow"])
-})
-
-test("keepWindowOpen: false behaves like the default (clear, then hide)", async () => {
-  const { calls, deps } = makeDeps()
-  await performSessionReset(deps, { keepWindowOpen: false })
-  assert.deepEqual(calls, ["clearSession", "hideWindow"])
-})
-
-test("keepWindowOpen: true clears the session and never hides", async () => {
-  const { calls, deps } = makeDeps()
-  await performSessionReset(deps, { keepWindowOpen: true })
   assert.deepEqual(calls, ["clearSession"])
+})
+
+test("keepWindowOpen is accepted and changes nothing", async () => {
+  for (const keepWindowOpen of [true, false]) {
+    const { calls, deps } = makeDeps()
+    await performSessionReset(deps, { keepWindowOpen })
+    assert.deepEqual(calls, ["clearSession"])
+  }
 })
 
 test("a running terminal payment is aborted before the session is wiped", async () => {
@@ -51,7 +44,7 @@ test("a running terminal payment is aborted before the session is wiped", async 
       calls.push("abortTerminalPayment")
     },
   })
-  assert.deepEqual(calls, ["abortTerminalPayment", "clearSession", "hideWindow"])
+  assert.deepEqual(calls, ["abortTerminalPayment", "clearSession"])
 })
 
 test("a failing terminal abort does not stop the reset", async () => {
@@ -60,7 +53,7 @@ test("a failing terminal abort does not stop the reset", async () => {
     ...deps,
     abortTerminalPayment: () => Promise.reject(new Error("socket gone")),
   })
-  assert.deepEqual(calls, ["clearSession", "hideWindow"])
+  assert.deepEqual(calls, ["clearSession"])
 })
 
 test("a throwing terminal abort does not stop the reset", async () => {
@@ -71,7 +64,7 @@ test("a throwing terminal abort does not stop the reset", async () => {
       throw new Error("sync bug")
     },
   })
-  assert.deepEqual(calls, ["clearSession", "hideWindow"])
+  assert.deepEqual(calls, ["clearSession"])
 })
 
 test("a hanging terminal abort is given up after the cap", async () => {

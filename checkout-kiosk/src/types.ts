@@ -23,9 +23,10 @@ export interface NfcTagEvent {
   url?: string
 }
 
-// Options for `resetSession`. `keepWindowOpen` skips the autohide-to-tray so
-// a badge takeover keeps the kiosk in front for the next user (issue #516);
-// omitted/false keeps the default hide ("Neuer Checkout" / post-checkout).
+// Options for `resetSession`. `keepWindowOpen` used to skip the
+// autohide-to-tray on a badge takeover (issue #516). A reset never hides the
+// window any more, so it is a no-op, kept because deployed web app builds
+// still send it.
 export interface ResetSessionOptions {
   keepWindowOpen?: boolean
 }

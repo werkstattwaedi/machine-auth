@@ -47,7 +47,7 @@ test("lock denied: quits and tells the caller not to start", () => {
 test("lock granted: startup continues without quitting or raising", () => {
   const { calls, listeners, deps } = makeDeps(true)
   assert.equal(claimSingleInstance(deps), true)
-  // The kiosk starts hidden in the tray; claiming the lock must not surface it.
+  // Claiming the lock does not surface the window; main.ts shows it itself.
   assert.deepEqual(calls, ["requestLock", "onSecondInstance"])
   assert.equal(listeners.length, 1)
 })
