@@ -243,18 +243,6 @@ function WizardChrome({
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-background">
-      {/* Above the header, across the full width: it is about the app as a
-          whole, not about the step below. */}
-      <LegacyRedirectBanner
-        from={from}
-        // Drop only `from`: the tag tap and kiosk flag stay in the URL.
-        onDismiss={() =>
-          void navigate({
-            search: (prev) => ({ ...prev, from: undefined }),
-            replace: true,
-          })
-        }
-      />
       <AppHeader
         width="centered"
         menu={
@@ -286,6 +274,16 @@ function WizardChrome({
         <NoCheckoutGate />
       ) : (
         <div className="w-full max-w-[1000px] px-4 sm:px-6 py-6 flex-1 flex flex-col">
+          <LegacyRedirectBanner
+            from={from}
+            // Drop only `from`: the tag tap and kiosk flag stay in the URL.
+            onDismiss={() =>
+              void navigate({
+                search: (prev) => ({ ...prev, from: undefined }),
+                replace: true,
+              })
+            }
+          />
           <h1 className="text-[26px] sm:text-[37px] font-extrabold tracking-[-0.01em] mb-6">
             Self-Checkout
           </h1>
