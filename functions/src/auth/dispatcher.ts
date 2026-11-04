@@ -42,6 +42,7 @@ import { privacyEraseHandler } from "../privacy/erase_subject";
 import { privacyTrimHandler } from "../privacy/trim";
 import { statsSubjectSalt } from "../privacy/subject_key";
 import { auditIdentityHandler } from "./identity-audit";
+import { syncUsageGroupsHandler } from "../usage_groups/sync_usage_groups";
 
 const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
@@ -75,6 +76,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   // Admin-only doc↔Auth consistency check + backfill (ADR-0043), driven by
   // `privacy-cli.ts audit-identity` like the DSAR tooling above.
   auditIdentity: auditIdentityHandler,
+  // Admin-only: the sync report runs the Workspace group sync now (ADR-0053).
+  syncUsageGroups: syncUsageGroupsHandler,
 };
 
 export const authCall = onCall(

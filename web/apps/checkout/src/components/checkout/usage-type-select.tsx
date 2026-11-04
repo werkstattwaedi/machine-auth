@@ -7,6 +7,7 @@ import {
   USAGE_TYPE_INFO,
   USAGE_TYPE_LABELS,
   personUsageOptions,
+  type UsageGroup,
   type UsageType,
 } from "@modules/lib/pricing"
 import { cn } from "@modules/lib/utils"
@@ -15,15 +16,17 @@ interface UsageTypeSelectProps {
   id: string
   value: UsageType
   onChange: (t: UsageType) => void
-  /** Guest check-in: nobody is offered the owner-only types (CHK-32). */
+  /** Guest check-in: nobody is offered the group types (CHK-51). */
   anonymous: boolean
   /**
    * The identified person's own line — the only one that offers
    * Freiwilligengruppe / Interne Nutzung (issue #605).
    */
   isOwner: boolean
-  /** Anyone else is on the visit: the owner-only types show disabled. */
+  /** Anyone else is on the visit: Interne Nutzung shows disabled (CHK-52). */
   othersPresent: boolean
+  /** The identified person's Workspace groups: which group types show. */
+  ownerGroups: readonly UsageGroup[]
   /** Accessible name when no `<label htmlFor>` points at the trigger. */
   ariaLabel?: string
 }
@@ -47,12 +50,14 @@ export function UsageTypeSelect({
   anonymous,
   isOwner,
   othersPresent,
+  ownerGroups,
   ariaLabel,
 }: UsageTypeSelectProps) {
   const options = personUsageOptions({
     isOwner,
     anonymous,
     othersPresent,
+    ownerGroups,
     current: value,
   })
 

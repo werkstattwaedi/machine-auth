@@ -40,6 +40,7 @@ import { Route as AuthenticatedPriceListsIndexRouteImport } from "./routes/_auth
 import { Route as AuthenticatedPriceListsPriceListIdRouteImport } from "./routes/_authenticated/price-lists/$priceListId"
 import { Route as AuthenticatedUsersIndexRouteImport } from "./routes/_authenticated/users/index"
 import { Route as AuthenticatedUsersUserIdRouteImport } from "./routes/_authenticated/users/$userId"
+import { Route as AuthenticatedUsersGroupsRouteImport } from "./routes/_authenticated/users/groups"
 import { Route as AuthenticatedVisitsIndexRouteImport } from "./routes/_authenticated/visits/index"
 import { Route as AuthenticatedVisitsCheckoutIdRouteImport } from "./routes/_authenticated/visits/$checkoutId"
 import { Route as AuthenticatedInvoicesBillIdCorrectRouteImport } from "./routes/_authenticated/invoices/$billId_.correct"
@@ -214,6 +215,12 @@ const AuthenticatedUsersUserIdRoute =
     path: "/$userId",
     getParentRoute: () => AuthenticatedUsersRoute,
   } as any)
+const AuthenticatedUsersGroupsRoute =
+  AuthenticatedUsersGroupsRouteImport.update({
+    id: "/groups",
+    path: "/groups",
+    getParentRoute: () => AuthenticatedUsersRoute,
+  } as any)
 const AuthenticatedVisitsIndexRoute =
   AuthenticatedVisitsIndexRouteImport.update({
     id: "/",
@@ -264,6 +271,7 @@ export interface FileRoutesByFullPath {
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/users/groups": typeof AuthenticatedUsersGroupsRoute
   "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/invoices/": typeof AuthenticatedInvoicesIndexRoute
   "/machines/": typeof AuthenticatedMachinesIndexRoute
@@ -293,6 +301,7 @@ export interface FileRoutesByTo {
   "/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/users/groups": typeof AuthenticatedUsersGroupsRoute
   "/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/invoices": typeof AuthenticatedInvoicesIndexRoute
   "/machines": typeof AuthenticatedMachinesIndexRoute
@@ -331,6 +340,7 @@ export interface FileRoutesById {
   "/_authenticated/permissions/$permissionId": typeof AuthenticatedPermissionsPermissionIdRoute
   "/_authenticated/price-lists/$priceListId": typeof AuthenticatedPriceListsPriceListIdRoute
   "/_authenticated/users/$userId": typeof AuthenticatedUsersUserIdRoute
+  "/_authenticated/users/groups": typeof AuthenticatedUsersGroupsRoute
   "/_authenticated/visits/$checkoutId": typeof AuthenticatedVisitsCheckoutIdRoute
   "/_authenticated/invoices/": typeof AuthenticatedInvoicesIndexRoute
   "/_authenticated/machines/": typeof AuthenticatedMachinesIndexRoute
@@ -369,6 +379,7 @@ export interface FileRouteTypes {
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
+    | "/users/groups"
     | "/visits/$checkoutId"
     | "/invoices/"
     | "/machines/"
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | "/permissions/$permissionId"
     | "/price-lists/$priceListId"
     | "/users/$userId"
+    | "/users/groups"
     | "/visits/$checkoutId"
     | "/invoices"
     | "/machines"
@@ -435,6 +447,7 @@ export interface FileRouteTypes {
     | "/_authenticated/permissions/$permissionId"
     | "/_authenticated/price-lists/$priceListId"
     | "/_authenticated/users/$userId"
+    | "/_authenticated/users/groups"
     | "/_authenticated/visits/$checkoutId"
     | "/_authenticated/invoices/"
     | "/_authenticated/machines/"
@@ -675,6 +688,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedUsersUserIdRouteImport
       parentRoute: typeof AuthenticatedUsersRoute
     }
+    "/_authenticated/users/groups": {
+      id: "/_authenticated/users/groups"
+      path: "/groups"
+      fullPath: "/users/groups"
+      preLoaderRoute: typeof AuthenticatedUsersGroupsRouteImport
+      parentRoute: typeof AuthenticatedUsersRoute
+    }
     "/_authenticated/visits/": {
       id: "/_authenticated/visits/"
       path: "/"
@@ -798,11 +818,13 @@ const AuthenticatedPriceListsRouteWithChildren =
 
 interface AuthenticatedUsersRouteChildren {
   AuthenticatedUsersUserIdRoute: typeof AuthenticatedUsersUserIdRoute
+  AuthenticatedUsersGroupsRoute: typeof AuthenticatedUsersGroupsRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
 }
 
 const AuthenticatedUsersRouteChildren: AuthenticatedUsersRouteChildren = {
   AuthenticatedUsersUserIdRoute: AuthenticatedUsersUserIdRoute,
+  AuthenticatedUsersGroupsRoute: AuthenticatedUsersGroupsRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
 }
 

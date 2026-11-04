@@ -59,8 +59,12 @@ import type {
   CheckoutPersonDoc,
 } from "@modules/lib/firestore-entities"
 import {
+  defaultOwnerUsageType,
   deriveVisitUsageType,
   isOwnerOnlyUsage,
+  personUsageOptions,
+  usageGroupsOf,
+  type UsageGroup,
   type UserType,
   type UsageType,
 } from "@modules/lib/pricing"
@@ -121,6 +125,12 @@ export interface WizardContextValue {
    * payment tab and the "Vereinsmitglied" check-in badge (issue #414).
    */
   isMember: boolean
+  /**
+   * The identified person's Workspace groups (ADR-0053), from either
+   * identification mode like `isMember`: the check-in offers
+   * Freiwilligengruppe / Interne Nutzung by them (CHK-51).
+   */
+  ownerUsageGroups: UsageGroup[]
   /**
    * True while a tapped badge is being verified against the backend and the
    * Firebase session is established. The verify RPC + custom-token sign-in
@@ -507,6 +517,20 @@ export function WizardProvider({
   // was offered neither the monthly-bill option nor the badge (issue #414).
   const isMember = deriveIsMember(identifiedUserDoc, tokenUser)
 
+  // ADR-0053: which group types the identified person may claim — from the
+  // users doc for an account login, from the server's kiosk payload for a
+  // badge or kiosk code session (same dual source as `isMember`).
+  const groupsSource = isAccountLoggedIn
+    ? identifiedUserDoc?.usageGroups
+    : isTagIdentified
+      ? tokenUser?.usageGroups
+      : undefined
+  const groupsKey = usageGroupsOf(groupsSource).join(",")
+  const ownerUsageGroups = useMemo(
+    () => (groupsKey ? (groupsKey.split(",") as UsageGroup[]) : []),
+    [groupsKey],
+  )
+
   // Issue #605: each person carries their own usage type; the visit's is
   // derived from them (the owner's Freiwilligengruppe / Interne Nutzung,
   // else Begleitung when everyone accompanies, else regular).
@@ -605,6 +629,21 @@ export function WizardProvider({
     personsDispatch({ type: "REPLACE_PERSONS", persons: rehydrated })
     rehydratedRef.current = openCheckout.id
   }, [openCheckout, personsDispatch, ownerId])
+
+  // CHK-51: the owner's line holds only a type their groups offer — a
+  // volunteer lands on Freiwilligengruppe after the pre-fill (and on a
+  // checkout the terminal opened), an account that left a group drops back
+  // to Reguläre Nutzung.
+  useEffect(() => {
+    const fix = ownerUsageCorrection(persons, ownerId, ownerUsageGroups)
+    if (fix) {
+      personsDispatch({
+        type: "UPDATE_PERSON",
+        id: fix.id,
+        updates: { usageType: fix.usageType },
+      })
+    }
+  }, [persons, ownerId, ownerUsageGroups, personsDispatch])
 
   // Publish "does this session hold anything worth protecting?" to the
   // module-level kiosk session guard so BridgeNfcRouter (mounted at the
@@ -1170,6 +1209,7 @@ export function WizardProvider({
     identifiedUserDoc,
     identifiedUserRef,
     isMember,
+    ownerUsageGroups,
     tagAuthLoading,
     tagAuthError,
     unregisteredBadge,
@@ -1442,10 +1482,36 @@ export function personLocalToDoc(
 }
 
 /**
+ * The owner line's usage type when it holds one their Workspace groups
+ * don't offer (CHK-51): the default for those groups — Freiwilligengruppe
+ * for a volunteer, else Reguläre Nutzung. Null when it is fine or there is
+ * no owner line. Interne Nutzung next to others is offered (disabled), so
+ * it is left to the check-in to show. Pure; exported for tests.
+ */
+export function ownerUsageCorrection(
+  persons: readonly Pick<CheckoutPerson, "id" | "userId" | "usageType">[],
+  ownerId: string | null,
+  groups: readonly UsageGroup[],
+): { id: string; usageType: UsageType } | null {
+  if (!ownerId) return null
+  const owner = persons.find((p) => p.userId === ownerId)
+  if (!owner) return null
+  const offered = personUsageOptions({
+    isOwner: true,
+    anonymous: false,
+    othersPresent: persons.length > 1,
+    ownerGroups: groups,
+  })
+  if (offered.some((o) => o.type === owner.usageType)) return null
+  return { id: owner.id, usageType: defaultOwnerUsageType(groups) }
+}
+
+/**
  * The persons of an open checkout as the roster holds them. A person
  * without their own usage type (checkouts from before issue #605) takes the
  * checkout's — Freiwilligengruppe / Interne Nutzung only on the owner's
- * line while they are alone (CHK-32), everyone else on Reguläre Nutzung.
+ * line while they are alone (as ADR-0050 stored them), everyone else on
+ * Reguläre Nutzung; `ownerUsageCorrection` then applies the groups.
  */
 export function rehydratePersons(
   checkout: Pick<CheckoutDoc, "persons" | "usageType">,

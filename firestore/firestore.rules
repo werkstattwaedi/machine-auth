@@ -151,11 +151,15 @@ service cloud.firestore {
       // onMembershipWritten and the membership callables) sets it, and the
       // pointer grants member prices, Sammelrechnung, a free badge and the
       // family-roster read (issue #745).
+      //
+      // `usageGroups` MUST be absent: it grants Freiwilligengruppe / Interne
+      // Nutzung and only the Workspace sync writes it (ADR-0053).
       allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.roles == [] &&
                        request.resource.data.permissions == [] &&
                        request.resource.data.get('email', null) == request.auth.token.get('email', null) &&
                        request.resource.data.get('activeMembership', null) == null &&
+                       request.resource.data.get('usageGroups', null) == null &&
                        isValidUserProfile(request.resource.data);
 
       // `email` is the login lookup key and Firebase Auth follows it
@@ -177,13 +181,22 @@ service cloud.firestore {
                resource.data.get('activeMembership', null);
       }
 
+      // `usageGroups` mirrors the Workspace groups (ADR-0053, ADM-12): only
+      // the syncUsageGroups job (Admin SDK) writes it. No client — admins
+      // included — may change it; membership is changed in Workspace, and
+      // an admin edit would be undone by the next sync anyway.
+      function usageGroupsUnchanged() {
+        return request.resource.data.get('usageGroups', null) ==
+               resource.data.get('usageGroups', null);
+      }
+
       // Users can update their own doc but cannot change roles/permissions.
       // A plain tag-tap session cannot update users at all (its
       // request.auth.uid is synthetic, won't match userId, so the predicate
       // fails). An OTP-ELEVATED kiosk session (ADR-0041) may edit the
       // profile it acts on, under the same pins.
       // Firma users must provide a valid billing address.
-      allow update: if emailUnchanged() && (
+      allow update: if emailUnchanged() && usageGroupsUnchanged() && (
                        isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&

@@ -33,7 +33,7 @@ import { rpcCallable } from "./rpc"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 import { userRef } from "./firestore-helpers"
 import { formatFullName } from "./username-utils"
-import { type UserType } from "./pricing"
+import { usageGroupsOf, type UsageGroup, type UserType } from "./pricing"
 
 export interface BillingAddress {
   company: string
@@ -94,6 +94,8 @@ export interface UserDoc {
   // ID of the user's single active membership, denormalized from the
   // membership doc. `null` → not a member. Pricing keys off this.
   activeMembership: string | null
+  /** Workspace groups (ADR-0053), unknown values dropped. */
+  usageGroups?: UsageGroup[]
 }
 
 /**
@@ -371,6 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userType: data.userType ?? "erwachsen",
           billingAddress: data.billingAddress ?? null,
           activeMembership: data.activeMembership?.id ?? null,
+          usageGroups: usageGroupsOf(data.usageGroups),
         })
 
         // If user doc says admin but token doesn't have the claim,

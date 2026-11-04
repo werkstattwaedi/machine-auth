@@ -38,6 +38,7 @@ import {
   PAYMENT_METHOD_INFO,
   computeCheckoutSummary,
   deriveVisitUsageType,
+  isAloneOnlyUsage,
   isMachineItem,
   isOwnerOnlyUsage,
   isPaymentMethod,
@@ -50,6 +51,8 @@ import {
   USAGE_TYPE_DISCOUNTS,
   USAGE_TYPE_LABELS,
   usageDiscount,
+  usageGroupsOf,
+  type UsageGroup,
   type UsagePerson,
 } from "@oww/shared";
 import type { BillEntity } from "./types";
@@ -382,15 +385,17 @@ export function isUsageType(t: unknown): t is UsageType {
  * - Every person must carry a valid `usageType` (`invalid-argument`
  *   otherwise) — there is no visit-wide fallback for writes; only readers
  *   of historical docs fall back to `checkout.usageType`.
- * - An owner-only type (Freiwilligengruppe / Interne Nutzung) is refused on
- *   any line but the owner's (`userRef.id === ownerId`) and while anyone
- *   else is on the visit (CHK-32).
+ * - A group type (Freiwilligengruppe / Interne Nutzung) is refused on any
+ *   line but the owner's (`userRef.id === ownerId`) and unless the owner's
+ *   account is in its Workspace group (`ownerGroups`, CHK-53); Interne
+ *   Nutzung also while anyone else is on the visit (CHK-52).
  *
  * The visit's type is `deriveVisitUsageType` over the persons. Pure.
  */
 export function resolvePersonUsageTypes(
   persons: CheckoutPersonEntity[],
   ownerId: string | null,
+  ownerGroups: readonly UsageGroup[],
 ): { persons: CheckoutPersonEntity[]; usageType: UsageType } {
   if (!persons.every((p) => isUsageType(p.usageType))) {
     throw new HttpsError(
@@ -410,7 +415,13 @@ export function resolvePersonUsageTypes(
         `${USAGE_TYPE_LABELS[t]} ist nur für die angemeldete Person möglich.`,
       );
     }
-    if (persons.length > 1) {
+    if (!ownerGroups.includes(t as UsageGroup)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${USAGE_TYPE_LABELS[t]} ist für dieses Konto nicht freigeschaltet.`,
+      );
+    }
+    if (isAloneOnlyUsage(t) && persons.length > 1) {
       throw new HttpsError(
         "invalid-argument",
         `${USAGE_TYPE_LABELS[t]} ist nicht möglich, solange weitere Personen erfasst sind.`,
@@ -422,6 +433,20 @@ export function resolvePersonUsageTypes(
     persons.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
   );
   return { persons, usageType };
+}
+
+/**
+ * The Workspace groups of the checkout owner's account as they stand now
+ * (ADR-0053) — a close and a correction alike go by the groups at that
+ * moment (CHK-53). No owner, no groups.
+ */
+export async function loadOwnerUsageGroups(
+  db: FirebaseFirestore.Firestore,
+  ownerId: string | null,
+): Promise<UsageGroup[]> {
+  if (!ownerId) return [];
+  const snap = await db.collection("users").doc(ownerId).get();
+  return usageGroupsOf(snap.data()?.usageGroups);
 }
 
 /**
@@ -915,6 +940,7 @@ export async function resolveExistingClose(
   const typed = resolvePersonUsageTypes(
     resolveClosePersons(db, args.persons, ownerId, context),
     ownerId,
+    await loadOwnerUsageGroups(db, ownerId),
   );
   const persons = await verifySavedPersonIds(db, typed.persons, ownerId, context);
 
@@ -1218,6 +1244,7 @@ async function createAnonymousCheckout(
   const typed = resolvePersonUsageTypes(
     resolveClosePersons(db, args.persons, effectiveUserId ?? null, "createAnonymousCheckout"),
     effectiveUserId ?? null,
+    await loadOwnerUsageGroups(db, effectiveUserId ?? null),
   );
   const visitUsageType = typed.usageType;
 

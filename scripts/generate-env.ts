@@ -58,6 +58,11 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   // from .env.* makes the functions emulator prompt interactively and
   // hang every test run (the CLAUDE.md port-block gotcha).
   { envVar: "STATS_DATASET", jsonPath: "functions.statsDataset" },
+  // Workspace groups behind Freiwilligengruppe / Interne Nutzung (ADR-0053).
+  // Absent key → empty → that group isn't synced (its holders stay as they
+  // are) — the emulator and a fresh installation run without Workspace.
+  { envVar: "USAGE_GROUP_VOLUNTEERING_EMAIL", jsonPath: "functions.usageGroupVolunteeringEmail" },
+  { envVar: "USAGE_GROUP_INTERN_EMAIL", jsonPath: "functions.usageGroupInternEmail" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [

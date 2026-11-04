@@ -6,6 +6,14 @@ What the team sees and does in the admin app. Terms: see the
 ## Visits
 
 - **ADM-1** The admin app marks a checkout awaiting payment (BIL-49) as such, shows the amount the Wallee terminal approved, and can list only those checkouts. — #812
+- **ADM-15** The correction of a visit (BIL-21) offers *Freiwilligengruppe* and *Interne Nutzung* only on the account holder's line, each only while the account holder's account is in that type's Workspace group (ADM-11), and *Interne Nutzung* only while nobody else is on the visit (CHK-52), as the server requires (CHK-53); every other usage type is offered on every line, a volunteer's own included (unlike CHK-51). — ADR-0053
+
+## Workspace groups
+
+- **ADM-11** Every hour, and whenever an admin starts it, a sync sets for each account whether it is in the *Freiwilligengruppe* and whether it is in the *Interne Nutzung* group, by whether the account's e-mail address is in that Workspace group. — ADR-0053
+- **ADM-12** No client, an admin's included, can change whether an account is in a Workspace group; that is changed in Google Workspace only and reaches the account with the next sync (ADM-11). — ADR-0053
+- **ADM-13** The sync report lists, for each Workspace group, the addresses in it that match no account. — ADR-0053
+- **ADM-14** A volunteer who is not a member is shown as a warning on the sync report and on their user page in the admin app; *Freiwilligengruppe* does not require a membership (CHK-51). — ADR-0053
 
 ## Material labels
 

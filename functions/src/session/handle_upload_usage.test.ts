@@ -42,6 +42,22 @@ describe("ownerSwitchForMachineTime (CHK-40)", () => {
     expect(update!.usageType).to.equal("regular");
   });
 
+  it("moves a volunteer on Begleitung to Freiwilligengruppe (ADR-0053)", () => {
+    const update = ownerSwitchForMachineTime(
+      {
+        userId: ref("owner"),
+        usageType: "materialbezug",
+        persons: [owner("materialbezug"), guest("materialbezug")],
+      },
+      "volunteering",
+    );
+    expect(update!.persons.map((p) => p.usageType)).to.deep.equal([
+      "volunteering",
+      "materialbezug",
+    ]);
+    expect(update!.usageType).to.equal("volunteering");
+  });
+
   it("leaves the other persons on their own types", () => {
     const update = ownerSwitchForMachineTime({
       userId: ref("owner"),

@@ -294,6 +294,29 @@ breaks the kiosk self-service badge purchase. The public seed
 data comes from the operations repo's catalog fixtures, so add the badge
 item there before deploying this feature.
 
+### Workspace groups: Freiwilligengruppe / Interne Nutzung (ADR-0053)
+
+Who may check in as *Freiwilligengruppe* or *Interne Nutzung* comes from two
+Google Workspace groups, synced hourly onto `users.usageGroups` by
+`syncUsageGroups`. Without this setup nobody is offered either type.
+
+1. **Enable the Cloud Identity API** in the project:
+   `gcloud services enable cloudidentity.googleapis.com --project <project-id>`.
+2. **Let the functions read the groups:** in the Workspace admin console (or
+   the group's settings in Google Groups), add the functions' runtime
+   service account — `<project-number>-compute@developer.gserviceaccount.com`
+   unless the project uses a dedicated one — as an **owner** of both groups.
+   (Alternative: assign it the *Groups Reader* admin role.) No domain-wide
+   delegation and no key. Both groups must allow external members, since
+   members sign in with private addresses.
+3. **Operations config:** `functions.usageGroupVolunteeringEmail` and
+   `functions.usageGroupInternEmail` (the groups' addresses), then
+   `npm run generate-env`. An empty value leaves that group unsynced — its
+   holders stay as they are.
+4. After the functions deploy, open admin → Personen → **Gruppen**: the page
+   runs the sync and lists each group's accounts, the addresses that match
+   no account, and volunteers without a membership.
+
 ### SMS login codes (ADR-0031)
 
 Rolling out SMS login needs three switches, in this order:

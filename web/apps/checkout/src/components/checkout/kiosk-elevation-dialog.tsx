@@ -59,6 +59,7 @@ interface VerifyKioskElevationResponse {
   email?: string
   userType?: string
   activeMembership?: boolean
+  usageGroups?: string[]
   elevatedUntil?: number | null
 }
 
@@ -250,6 +251,7 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
         email: data.email,
         userType: data.userType,
         activeMembership: data.activeMembership,
+        usageGroups: data.usageGroups,
         elevatedUntil: data.elevatedUntil ?? null,
       }
       await establishKioskSession(auth, data.customToken, tokenUser)

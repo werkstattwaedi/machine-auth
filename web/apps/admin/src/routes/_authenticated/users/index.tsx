@@ -44,6 +44,7 @@ import {
   ScanLine,
   Search,
   Users,
+  UsersRound,
 } from "lucide-react"
 import { toast } from "sonner"
 import { CreateUserDialog } from "@/components/admin/create-user-dialog"
@@ -152,6 +153,13 @@ function PeoplePage() {
                 Badge scannen
               </Button>
             )}
+            {/* The Workspace group sync report (ADR-0053, ADM-11). */}
+            <Button variant="secondary" asChild>
+              <Link to="/users/groups">
+                <UsersRound className="mr-2 h-4 w-4" />
+                Gruppen
+              </Link>
+            </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Neue Person

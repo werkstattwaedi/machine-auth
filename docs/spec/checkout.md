@@ -44,27 +44,37 @@ methods and documents in [billing.md](billing.md). Terms: see the
 
 ## Kosten
 
-- **CHK-44** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout, opened for them as *Reguläre Nutzung* if they have none, as one row per machine type — its minutes the billed time of its sessions added up (ADR-0032), priced per hour (MEM-10) — and the app offers no way to edit or remove that row. — ADR-0032, #105
+- **CHK-44** Time on a machine unlocked with a person's badge at its machine terminal lands on their open checkout — opened for them if they have none, on *Reguläre Nutzung*, for a volunteer on *Freiwilligengruppe* — as one row per machine type, its minutes the billed time of its sessions added up (ADR-0032) and priced per hour (MEM-10), and the app offers no way to edit or remove that row. — ADR-0032, #105, ADR-0053
 - **CHK-46** Machine time (CHK-44) is priced for the person whose badge unlocked the machine — the member price while a membership that lists them as a member is active (MEM-10, MEM-11) — whoever on the visit worked the machine. — #799, #745
 - **CHK-45** On Kosten, a machine row (CHK-44) unfolds to list the sessions behind it — machine, start time, duration — for a restricted session (ACC-4) as for a signed-in person. — #214, #648
 - **CHK-48** With an open checkout, a link to a catalog item, such as a material label's QR code (ADM-3), opens that item on Kosten, ready to add, with the variant the link names preselected, or the item's first variant when the link names none or one the item doesn't have. — ADR-0026, #213
 
 ## Usage type
 
-- **CHK-4** Each person on the check-in has their own usage type, chosen there; it decides that person's usage fee, while the visit's type (CHK-29) decides machine time and material — #284, #570, ADR-0050, #605:
+- **CHK-4** Each person on the check-in has their own usage type, chosen there; it decides that person's usage fee, while the visit's type (CHK-29) decides machine time and material — #284, #570, ADR-0050, #605, ADR-0053:
 
   | Usage type | For | Usage fee | Machine time, as the visit's type | Material, as the visit's type | Who can choose it |
   |---|---|---|---|---|---|
-  | *Reguläre Nutzung* | everyone working in the workshop | full | full | full | everyone |
-  | *Ermässigte Nutzung (KulturLegi)* | KulturLegi holders | half | full | full | everyone |
-  | *Hangenmoos AG* | tenants of the Hangenmoos AG | none | full | full | everyone |
-  | *Begleitung / nur Materialbezug* | someone who only accompanies, or buys material or picks up a print without working in the workshop | none | not allowed (CHK-8) | full | everyone |
-  | *Freiwilligengruppe* | a workshop supervisor working on their own project | none | none | full | the identified person, alone (CHK-32) |
-  | *Interne Nutzung* | work on a project for the OWW itself | none | none | none | the identified person, alone (CHK-32) |
+  | *Reguläre Nutzung* | everyone working in the workshop | full | full | full | every line but a volunteer's own (CHK-51) |
+  | *Ermässigte Nutzung (KulturLegi)* | KulturLegi holders | half | full | full | every line but a volunteer's own (CHK-51) |
+  | *Hangenmoos AG* | tenants of the Hangenmoos AG | none | full | full | every line but a volunteer's own (CHK-51) |
+  | *Begleitung / nur Materialbezug* | someone who only accompanies, or buys material or picks up a print without working in the workshop | none | not allowed (CHK-8) | full | every line but a volunteer's own (CHK-51) |
+  | *Freiwilligengruppe* | volunteers | none | none | full | the identified person, if a volunteer (CHK-51, CHK-53) |
+  | *Interne Nutzung* | work on a project for the OWW itself | none | none | none | the identified person, if in the *Interne Nutzung* group, alone (CHK-51, CHK-52, CHK-53) |
 
 - **CHK-29** A visit's type is derived from its persons — the identified person's *Freiwilligengruppe* or *Interne Nutzung*; otherwise *Begleitung / nur Materialbezug* when every person has it; otherwise *Reguläre Nutzung* — and decides machine time and material (CHK-4), while each person's usage fee follows their own type. — ADR-0050, #605
-- **CHK-32** *Freiwilligengruppe* and *Interne Nutzung* can be chosen only by the identified person and only while nobody else is on the check-in; while one is chosen no further person can be added, and the server refuses them on any other line, next to other persons, or without an identified person. — ADR-0050, #605
-- **CHK-30** On Check Out, each person with a discounted usage type gets one sentence saying what the person closing the checkout confirms about them. — #570, ADR-0050, #605
+- **CHK-51** The identified person's own line offers the usage types by the Workspace groups their account is in (ADM-11), *Freiwilligengruppe* chosen for a volunteer; a type not offered is not shown at all, and no other line offers *Freiwilligengruppe* or *Interne Nutzung* — ADR-0053:
+
+  | In the group | Offered on their own line |
+  |---|---|
+  | neither | *Reguläre Nutzung*, *Ermässigte Nutzung (KulturLegi)*, *Hangenmoos AG*, *Begleitung / nur Materialbezug* |
+  | *Interne Nutzung* only | those four and *Interne Nutzung* (CHK-52) |
+  | *Freiwilligengruppe* only | *Freiwilligengruppe* |
+  | both | *Freiwilligengruppe* and *Interne Nutzung* (CHK-52) |
+
+- **CHK-52** *Interne Nutzung* can be chosen only while nobody else is on the check-in; while it is chosen no further person can be added, and the server refuses it next to other persons. — ADR-0050, #605, ADR-0053
+- **CHK-53** The server refuses *Freiwilligengruppe* and *Interne Nutzung* on any line but the identified person's own, without an identified person, and for a person whose account is not in that type's Workspace group (ADM-11) at that moment — when a checkout is closed and in an admin correction (BIL-21) alike, so a correction goes by the groups at the correction, not at the visit. — ADR-0050, #605, ADR-0053
+- **CHK-30** On Check Out, each person with a discounted usage type other than *Freiwilligengruppe* gets one sentence saying what the person closing the checkout confirms about them. — #570, ADR-0050, #605, ADR-0053
 - **CHK-31** The Nutzungsgebühren section on Check Out lists each person with their user type, usage type and fee, with nothing to change there, and starts open when any person has a discounted usage type, otherwise closed. — #570, ADR-0050, #605
 - **CHK-8** A checkout can't be closed with these visit types (CHK-29) and items together — #284, ADR-0050, #605:
 
@@ -73,11 +83,11 @@ methods and documents in [billing.md](billing.md). Terms: see the
   | *Begleitung / nur Materialbezug* (every person has it) | machine time; Check Out says so in the Maschinen section and does not continue to payment — the type is changed on the check-in |
   | *Interne Nutzung* | a paid badge (a membership: MEM-6) |
 
-- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, what becomes of their usage type depends on the other persons, who keep theirs, and nothing tells the account holder of a switch — their usage fee just appears in the Nutzungsgebühren on Check Out (CHK-31) — ADR-0050, #605, #778, #799:
+- **CHK-40** When machine time from a machine terminal reaches an open checkout whose account holder is on *Begleitung / nur Materialbezug*, what becomes of their usage type depends on the other persons, who keep theirs, and nothing tells the account holder of a switch — their usage fee just appears in the Nutzungsgebühren on Check Out (CHK-31) — ADR-0050, #605, #778, #799, ADR-0053:
 
   | Other persons on the checkout | Account holder | Visit's type (CHK-29) |
   |---|---|---|
-  | none, or all on *Begleitung / nur Materialbezug* | becomes *Reguläre Nutzung* | becomes *Reguläre Nutzung* |
+  | none, or all on *Begleitung / nur Materialbezug* | becomes *Reguläre Nutzung*, a volunteer *Freiwilligengruppe* | becomes *Reguläre Nutzung*, for a volunteer *Freiwilligengruppe* |
   | anyone on another usage type | keeps *Begleitung / nur Materialbezug* | stays *Reguläre Nutzung*, so the machine time is billed in full (CHK-4) |
 
 - **CHK-5** A membership or badge bought without a visit opens a checkout with the buyer as its only person, on *Begleitung / nur Materialbezug* — a purchase-only checkout (CHK-9) that carries no usage fee (CHK-4). — ADR-0030, #660, ADR-0050, #605
@@ -158,3 +168,4 @@ methods and documents in [billing.md](billing.md). Terms: see the
 - CHK-16 — #761 (the QR code on screen on every device while the QR-Rechnung was picked; now unfolded on request after sending, CHK-24)
 - CHK-17 — #761 (the completion dialog and its per-device follow-up; replaced by CHK-26)
 - CHK-12 — #759 (the same-day waiver now matches every person by name and waives what an earlier visit that day already charged: CHK-37..39)
+- CHK-32 — ADR-0053 (*Freiwilligengruppe* and *Interne Nutzung* both only for the identified person alone; now offered by Workspace group, CHK-51, refused outside it, CHK-53, and only *Interne Nutzung* stays alone, CHK-52)

@@ -262,12 +262,18 @@ export interface UsageTypeInfo {
   /** Who the type is for, as a sentence about the person ("Arbeitet …"). */
   appliesTo: string
   /**
-   * Only on the identified person's own line, and only while they are alone
-   * on the visit (issues #570, #605): the club needs to know *who* claimed
-   * to be a volunteer / on an internal project, and the type waives
-   * machines (and material) for the whole visit.
+   * Only on the identified person's own line, and only while their account
+   * is in the type's Workspace group (CHK-51, ADR-0053): the type waives
+   * machines (and material) for the whole visit, so it belongs to the
+   * account, not to whoever is typed in.
    */
   ownerOnly: boolean
+  /**
+   * Only while the identified person is alone on the visit (CHK-52): the
+   * type waives material too, which is not billed per person, so a paying
+   * companion's material would go on the club's tab.
+   */
+  aloneOnly: boolean
 }
 
 export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
@@ -275,16 +281,19 @@ export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
     effect: "",
     appliesTo: "Arbeitet heute in der Werkstatt.",
     ownerOnly: false,
+    aloneOnly: false,
   },
   ermaessigt: {
     effect: "50% Ermässigung auf Nutzungsgebühr",
     appliesTo: "Mit gültiger KulturLegi.",
     ownerOnly: false,
+    aloneOnly: false,
   },
   hangenmoos: {
     effect: "Nutzungsgebühr wird nicht verrechnet",
     appliesTo: "Wohnt in einer Wohnung der Hangenmoos AG.",
     ownerOnly: false,
+    aloneOnly: false,
   },
   materialbezug: {
     // Machine usage is impossible here (guarded server-side), so the
@@ -293,27 +302,64 @@ export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
     appliesTo:
       "Begleitet jemanden oder holt nur Material bzw. einen fertigen 3D-Druck ab.",
     ownerOnly: false,
+    aloneOnly: false,
   },
   volunteering: {
     effect: "Nutzungsgebühr und Maschinen werden nicht verrechnet",
-    appliesTo: "Betreut heute eine Werkstatt und arbeitet am eigenen Projekt.",
+    appliesTo: "Hilft in der Freiwilligengruppe mit.",
     ownerOnly: true,
+    aloneOnly: false,
   },
   intern: {
     effect: "Nutzungsgebühr, Maschinen und Material werden nicht verrechnet",
     appliesTo: "Arbeitet an einem Projekt für die OWW.",
     ownerOnly: true,
+    aloneOnly: true,
   },
 }
 
-/** Freiwilligengruppe / Interne Nutzung: the identified person's alone (CHK-32). */
+/**
+ * The usage types an account may claim only through Workspace group
+ * membership (ADR-0053), as synced onto `users.usageGroups`.
+ */
+export type UsageGroup = Extract<UsageType, "volunteering" | "intern">
+
+export const USAGE_GROUPS: readonly UsageGroup[] = ["volunteering", "intern"]
+
+export function isUsageGroup(value: unknown): value is UsageGroup {
+  return USAGE_GROUPS.includes(value as UsageGroup)
+}
+
+/**
+ * The groups of a users doc's `usageGroups`, ignoring anything unknown — a
+ * missing field (every account before ADR-0053) is no group.
+ */
+export function usageGroupsOf(value: unknown): UsageGroup[] {
+  return Array.isArray(value) ? value.filter(isUsageGroup) : []
+}
+
+/** Freiwilligengruppe / Interne Nutzung: the group member's own line (CHK-51). */
 export function isOwnerOnlyUsage(usageType: UsageType): boolean {
   return USAGE_TYPE_INFO[usageType]?.ownerOnly ?? false
 }
 
-/** Why an owner-only type can't be picked while others are on the visit. */
+/** Interne Nutzung: the identified person alone on the visit (CHK-52). */
+export function isAloneOnlyUsage(usageType: UsageType): boolean {
+  return USAGE_TYPE_INFO[usageType]?.aloneOnly ?? false
+}
+
+/** Why an alone-only type can't be picked while others are on the visit. */
 export const OWNER_ONLY_OTHERS_REASON =
   "Nicht wählbar, solange weitere Personen erfasst sind."
+
+/**
+ * The usage type the identified person's line starts on: a volunteer is on
+ * Freiwilligengruppe (CHK-51) — it is the only regular choice they have —
+ * everyone else on Reguläre Nutzung.
+ */
+export function defaultOwnerUsageType(groups: readonly UsageGroup[]): UsageType {
+  return groups.includes("volunteering") ? "volunteering" : "regular"
+}
 
 export interface UsageTypeOption {
   type: UsageType
@@ -322,25 +368,32 @@ export interface UsageTypeOption {
 }
 
 /**
- * The Nutzungsart options of one person on the check-in (issue #605), in
- * display order. The owner-only types appear only on the identified
- * person's own line — never for a guest check-in — and are disabled while
- * anyone else is on the visit; `current` is always kept so a rehydrated
- * selection can still be displayed.
+ * The Nutzungsart options of one person on the check-in (issue #605,
+ * CHK-51), in display order. The group types appear only on the identified
+ * person's own line — never for a guest check-in — and only for the groups
+ * their account is in; a volunteer's line offers nothing else. Interne
+ * Nutzung is disabled while anyone else is on the visit (CHK-52).
+ * `current` is always kept so a rehydrated selection can still be
+ * displayed.
  */
 export function personUsageOptions(opts: {
   isOwner: boolean
   anonymous: boolean
   othersPresent: boolean
+  /** The identified person's `usageGroups` (ADR-0053). */
+  ownerGroups: readonly UsageGroup[]
   current?: UsageType
 }): UsageTypeOption[] {
   const ownerLine = opts.isOwner && !opts.anonymous
-  return USAGE_TYPE_ORDER.filter(
-    (t) => t === opts.current || !isOwnerOnlyUsage(t) || ownerLine,
-  ).map((type) =>
-    isOwnerOnlyUsage(type) && opts.othersPresent
-      ? { type, disabledReason: OWNER_ONLY_OTHERS_REASON }
-      : { type },
+  const groups = ownerLine ? opts.ownerGroups : []
+  const volunteer = groups.includes("volunteering")
+  const offered = (t: UsageType) =>
+    isOwnerOnlyUsage(t) ? groups.includes(t as UsageGroup) : !volunteer
+  return USAGE_TYPE_ORDER.filter((t) => t === opts.current || offered(t)).map(
+    (type) =>
+      isAloneOnlyUsage(type) && opts.othersPresent
+        ? { type, disabledReason: OWNER_ONLY_OTHERS_REASON }
+        : { type },
   )
 }
 
@@ -429,8 +482,8 @@ export function usageDeclaration(
       return self
         ? "Du wohnst in einer Wohnung der Hangenmoos AG."
         : `${name} wohnt in einer Wohnung der Hangenmoos AG.`
-    case "volunteering":
-      return "Du bist heute als Werkstattbetreuung im Einsatz."
+    // Freiwilligengruppe needs no declaration: the Workspace group already
+    // says who is in it (CHK-30, ADR-0053).
     case "intern":
       return "Du arbeitest an einem OWW-internen Projekt."
     default:

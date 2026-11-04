@@ -6,6 +6,7 @@ import { Label } from "@modules/components/ui/label"
 import { formatCHF } from "@modules/lib/format"
 import {
   USER_TYPE_LABELS,
+  type UsageGroup,
   type UsageType,
   type UserType,
 } from "@modules/lib/pricing"
@@ -43,10 +44,12 @@ export function RemovePersonButton({
 
 /** What a person's Nutzungsart control needs to know (issue #605). */
 export interface PersonUsageProps {
-  /** Guest check-in: the owner-only types are offered to nobody. */
+  /** Guest check-in: the group types are offered to nobody. */
   anonymous: boolean
   /** Anyone besides this person is on the visit. */
   othersPresent: boolean
+  /** The identified person's Workspace groups (CHK-51, ADR-0053). */
+  ownerGroups: readonly UsageGroup[]
   /** Live usage fee for this person; null while the pricing config is missing. */
   fee: number | null
   /** Already billed on an earlier visit today (CHK-37): `fee` is 0. */
@@ -90,6 +93,7 @@ export function PersonUsageColumns({
           anonymous={usage.anonymous}
           isOwner={isOwner}
           othersPresent={usage.othersPresent}
+          ownerGroups={usage.ownerGroups}
         />
       </div>
       <div className="flex items-baseline gap-3 sm:block sm:space-y-1.5">

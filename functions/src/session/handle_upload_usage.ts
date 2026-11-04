@@ -8,9 +8,11 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import {
+  defaultOwnerUsageType,
   deriveVisitUsageType,
   machineUsageBlocked,
   personUsageType,
+  usageGroupsOf,
   type UsageType,
 } from "@oww/shared";
 import type {
@@ -271,6 +273,11 @@ async function accumulateForUser(
   // run yet — can't grant a member discount on a usage upload. When the
   // mismatch occurs we log it; persistent lag would warrant a closer look.
   const userDoc = await userRef.get();
+  // A volunteer's checkout opens and switches on Freiwilligengruppe
+  // (CHK-44, CHK-40, ADR-0053).
+  const ownerUsageType = defaultOwnerUsageType(
+    usageGroupsOf(userDoc.data()?.usageGroups),
+  );
   let discountLevel: DiscountLevel = "none";
   if (userDoc.exists) {
     const membership = await resolveVerifiedMembership(
@@ -323,7 +330,7 @@ async function accumulateForUser(
     await checkoutRef.set({
       userId: userRef,
       status: "open",
-      usageType: "regular",
+      usageType: ownerUsageType,
       created: Timestamp.now(),
       workshopsVisited: [workshop],
       persons: [],
@@ -342,8 +349,8 @@ async function accumulateForUser(
         modifiedAt: Timestamp.now(),
       });
     }
-    if (ownerSwitchForMachineTime(checkoutData as CheckoutEntity)) {
-      await switchOwnerToRegular(db, checkoutRef);
+    if (ownerSwitchForMachineTime(checkoutData as CheckoutEntity, ownerUsageType)) {
+      await switchOwnerForMachineTime(db, checkoutRef, ownerUsageType);
     }
   }
 
@@ -442,7 +449,8 @@ async function accumulateForUser(
 /**
  * Machine time on a visit where nobody else works in the workshop means the
  * owner did (CHK-40, ADR-0050): when every person is on Begleitung / nur
- * Materialbezug, the owner line moves to Reguläre Nutzung and the stored
+ * Materialbezug, the owner line moves to `ownerUsageType` — Reguläre
+ * Nutzung, for a volunteer Freiwilligengruppe (ADR-0053) — and the stored
  * visit type follows (which also ends a purchase-only checkout, CHK-9). With
  * anyone on another type the owner keeps Begleitung — a parent whose badge
  * runs the machines for their kid (#799); machine time is billed in full
@@ -454,6 +462,7 @@ async function accumulateForUser(
  */
 export function ownerSwitchForMachineTime(
   checkout: Pick<CheckoutEntity, "userId" | "persons" | "usageType">,
+  ownerUsageType: UsageType = "regular",
 ): { persons: CheckoutPersonEntity[]; usageType: UsageType } | null {
   const ownerId = checkout.userId?.id ?? null;
   if (!ownerId) return null;
@@ -465,7 +474,7 @@ export function ownerSwitchForMachineTime(
 
   const next = persons.map((p) => ({
     ...p,
-    usageType: isOwner(p) ? "regular" : personUsageType(p, fallback),
+    usageType: isOwner(p) ? ownerUsageType : personUsageType(p, fallback),
   }));
   const usageType = deriveVisitUsageType(
     next.map((p) => ({ usageType: p.usageType, isOwner: isOwner(p) })),
@@ -478,18 +487,19 @@ export function ownerSwitchForMachineTime(
  * writes `persons` too, so the switch re-reads them instead of overwriting a
  * concurrent edit with the roster read earlier.
  */
-async function switchOwnerToRegular(
+async function switchOwnerForMachineTime(
   db: admin.firestore.Firestore,
   checkoutRef: admin.firestore.DocumentReference,
+  ownerUsageType: UsageType,
 ): Promise<void> {
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(checkoutRef);
     const checkout = snap.data() as CheckoutEntity | undefined;
     if (!checkout || checkout.status !== "open") return;
-    const update = ownerSwitchForMachineTime(checkout);
+    const update = ownerSwitchForMachineTime(checkout, ownerUsageType);
     if (!update) return;
     tx.update(checkoutRef, { ...update, modifiedAt: Timestamp.now() });
-    logger.info("Machine time switched the owner to regular use", {
+    logger.info("Machine time switched the owner off Begleitung", {
       checkoutId: checkoutRef.id,
       usageType: update.usageType,
     });

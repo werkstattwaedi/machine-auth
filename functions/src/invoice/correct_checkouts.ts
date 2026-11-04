@@ -62,6 +62,7 @@ import { aggregateBelegeIntoInvoice } from "./monthly_bill_run";
 import {
   isUsageType,
   isValidItem,
+  loadOwnerUsageGroups,
   markEntryFeeWaivedToday,
   priceCheckoutItems,
   resolvePersonUsageTypes,
@@ -358,11 +359,13 @@ export const correctCheckoutsHandler = async (
       throw new HttpsError("not-found", `Besuch ${entry.checkoutId} nicht gefunden.`);
     }
     const r = entry.replacement;
-    // Same owner-only rules as the close (CHK-32); the owner is the
-    // original's account.
+    // Same group rules as the close (CHK-52, CHK-53); the owner is the
+    // original's account, with its groups as they stand now.
+    const ownerId = original.userId?.id ?? null;
     const typed = resolvePersonUsageTypes(
       keepOriginalSavedPersonIds(r.persons.map((p) => toPersonEntity(db, p)), original),
-      original.userId?.id ?? null,
+      ownerId,
+      await loadOwnerUsageGroups(db, ownerId),
     );
     // The original's opening day decides (ADR-0050). Only visits closed
     // before it count: a later visit waived because of the original must
