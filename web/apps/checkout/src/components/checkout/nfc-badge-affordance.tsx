@@ -184,7 +184,7 @@ function ErrorLayer({
  * teardrop OWW fob (gold stripe, keyring hole) gliding onto the black
  * ACS reader (white N-mark, cable stub, gold-blinking LED slit).
  */
-function ReaderScene() {
+export function ReaderScene() {
   return (
     <svg
       className="h-auto w-[150px] shrink-0 sm:w-[215px]"

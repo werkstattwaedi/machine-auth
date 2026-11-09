@@ -29,6 +29,7 @@ import type {
   CatalogItemDoc,
   CatalogReferencesDoc,
   ClientsConfigDoc,
+  CourseLinkDoc,
   CheckoutDoc,
   CheckoutItemDoc,
   ConfigDoc,
@@ -57,6 +58,11 @@ export function usersCollection(db: Firestore): CollectionReference<UserDoc> {
 
 export function userRef(db: Firestore, id: string): DocumentReference<UserDoc> {
   return doc(db, "users", id) as DocumentReference<UserDoc>
+}
+
+/** `courseLinks` (#842): participants linked to accounts; admin-readable. */
+export function courseLinksCollection(db: Firestore): CollectionReference<CourseLinkDoc> {
+  return collection(db, "courseLinks") as CollectionReference<CourseLinkDoc>
 }
 
 export function savedPersonsCollection(

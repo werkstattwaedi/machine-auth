@@ -128,9 +128,10 @@ export interface CourseDetail extends CourseSummary {
   closedAt: string | null
 }
 
-/** CRS-12: where the close choice starts. */
-export function closePreset(p: Pick<CourseParticipant, "link">): boolean {
+/** CRS-12: where the close choice starts; the leader's own account is always Nein. */
+export function closePreset(p: Pick<CourseParticipant, "link">, leaderUserId?: string): boolean {
   if (!p.link) return false
+  if (leaderUserId && p.link.userId === leaderUserId) return false
   if (p.link.alreadyHeld) return true
   return p.link.choice !== "no"
 }

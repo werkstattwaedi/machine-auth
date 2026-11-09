@@ -191,6 +191,11 @@ describe("courses (#842)", () => {
       await expectCode(() => link("p_anna", "anna@x.ch", true), "already-exists");
     });
 
+    it("refuses linking before the permission is picked (CRS-17)", async () => {
+      await getFirestore().doc(`courses/${OFFER}`).delete();
+      await expectCode(() => link("p_anna", "anna@x.ch"), "failed-precondition");
+    });
+
     it("refuses a participant of another course", async () => {
       await expectCode(() => link("p_nobody", "anna@x.ch"), "not-found");
     });
@@ -377,7 +382,7 @@ describe("courses (#842)", () => {
           ["petra@x.ch", "course-close-reminder"],
           ["office@x.ch", "course-close-office"],
         ]);
-        expect(sent[0].dims).to.deep.equal({ grants: "none" });
+        expect(sent[0].dims).to.deep.equal({});
         expect(sent[0].variables.COURSE_LINK).to.equal(`https://checkout.test/account/courses/${OFFER}`);
         await runSyncCourses(now);
         expect(sent).to.have.length(2);

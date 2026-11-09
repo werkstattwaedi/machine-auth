@@ -62,6 +62,7 @@ describe("close presets and reasons (CRS-12, CRS-13)", () => {
     expect(closePreset({ link: { ...link, choice: "no" } })).toBe(false)
     expect(closePreset({ link: { ...link, choice: "no", alreadyHeld: true } })).toBe(true)
     expect(closePreset({ link: null })).toBe(false)
+    expect(closePreset({ link: { ...link, alreadyHeld: true } }, "u")).toBe(false)
   })
   it("prefills the reason by the first case that applies", () => {
     const dates = [d1, d2]

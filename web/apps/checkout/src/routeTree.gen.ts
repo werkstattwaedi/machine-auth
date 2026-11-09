@@ -29,8 +29,12 @@ import { Route as AuthenticatedAccountMembershipRouteImport } from "./routes/_au
 import { Route as AuthenticatedAccountProfileRouteImport } from "./routes/_authenticated/account/profile"
 import { Route as AuthenticatedAccountUsageRouteImport } from "./routes/_authenticated/account/usage"
 import { Route as AuthonlyAccountCompleteProfileRouteImport } from "./routes/_authonly/account/complete-profile"
+import { Route as AuthenticatedAccountCoursesIndexRouteImport } from "./routes/_authenticated/account/courses/index"
 import { Route as WizardVisitAddIndexRouteImport } from "./routes/_wizard/visit/add.index"
 import { Route as AccountInviteMembershipIdInviteIdRouteImport } from "./routes/account/invite/$membershipId/$inviteId"
+import { Route as AuthenticatedAccountCoursesOfferIdIndexRouteImport } from "./routes/_authenticated/account/courses/$offerId/index"
+import { Route as AuthenticatedAccountCoursesOfferIdParticipantIdRouteImport } from "./routes/_authenticated/account/courses/$offerId/$participantId"
+import { Route as AuthenticatedAccountCoursesOfferIdCloseRouteImport } from "./routes/_authenticated/account/courses/$offerId/close"
 import { Route as WizardVisitAddListListIdRouteImport } from "./routes/_wizard/visit/add.list.$listId"
 import { Route as WizardVisitAddWorkshopWorkshopIdRouteImport } from "./routes/_wizard/visit/add.workshop.$workshopId"
 import { Route as WizardVisitAddItemCodeIndexRouteImport } from "./routes/_wizard/visit/add.item.$code.index"
@@ -137,6 +141,12 @@ const AuthonlyAccountCompleteProfileRoute =
     path: "/account/complete-profile",
     getParentRoute: () => AuthonlyRoute,
   } as any)
+const AuthenticatedAccountCoursesIndexRoute =
+  AuthenticatedAccountCoursesIndexRouteImport.update({
+    id: "/account/courses/",
+    path: "/account/courses/",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const WizardVisitAddIndexRoute = WizardVisitAddIndexRouteImport.update({
   id: "/add/",
   path: "/add/",
@@ -147,6 +157,24 @@ const AccountInviteMembershipIdInviteIdRoute =
     id: "/account/invite/$membershipId/$inviteId",
     path: "/account/invite/$membershipId/$inviteId",
     getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedAccountCoursesOfferIdIndexRoute =
+  AuthenticatedAccountCoursesOfferIdIndexRouteImport.update({
+    id: "/account/courses/$offerId/",
+    path: "/account/courses/$offerId/",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedAccountCoursesOfferIdParticipantIdRoute =
+  AuthenticatedAccountCoursesOfferIdParticipantIdRouteImport.update({
+    id: "/account/courses/$offerId/$participantId",
+    path: "/account/courses/$offerId/$participantId",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedAccountCoursesOfferIdCloseRoute =
+  AuthenticatedAccountCoursesOfferIdCloseRouteImport.update({
+    id: "/account/courses/$offerId/close",
+    path: "/account/courses/$offerId/close",
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const WizardVisitAddListListIdRoute =
   WizardVisitAddListListIdRouteImport.update({
@@ -191,9 +219,13 @@ export interface FileRoutesByFullPath {
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account/": typeof AuthenticatedAccountIndexRoute
   "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
+  "/account/courses/": typeof AuthenticatedAccountCoursesIndexRoute
   "/visit/add/": typeof WizardVisitAddIndexRoute
+  "/account/courses/$offerId/$participantId": typeof AuthenticatedAccountCoursesOfferIdParticipantIdRoute
+  "/account/courses/$offerId/close": typeof AuthenticatedAccountCoursesOfferIdCloseRoute
   "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/account/courses/$offerId/": typeof AuthenticatedAccountCoursesOfferIdIndexRoute
   "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
   "/visit/add/item/$code/": typeof WizardVisitAddItemCodeIndexRoute
 }
@@ -215,9 +247,13 @@ export interface FileRoutesByTo {
   "/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/account": typeof AuthenticatedAccountIndexRoute
   "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
+  "/account/courses": typeof AuthenticatedAccountCoursesIndexRoute
   "/visit/add": typeof WizardVisitAddIndexRoute
+  "/account/courses/$offerId/$participantId": typeof AuthenticatedAccountCoursesOfferIdParticipantIdRoute
+  "/account/courses/$offerId/close": typeof AuthenticatedAccountCoursesOfferIdCloseRoute
   "/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/account/courses/$offerId": typeof AuthenticatedAccountCoursesOfferIdIndexRoute
   "/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
   "/visit/add/item/$code": typeof WizardVisitAddItemCodeIndexRoute
 }
@@ -244,9 +280,13 @@ export interface FileRoutesById {
   "/_authonly/account/complete-profile": typeof AuthonlyAccountCompleteProfileRoute
   "/_authenticated/account/": typeof AuthenticatedAccountIndexRoute
   "/account/invite/$membershipId/$inviteId": typeof AccountInviteMembershipIdInviteIdRoute
+  "/_authenticated/account/courses/": typeof AuthenticatedAccountCoursesIndexRoute
   "/_wizard/visit/add/": typeof WizardVisitAddIndexRoute
+  "/_authenticated/account/courses/$offerId/$participantId": typeof AuthenticatedAccountCoursesOfferIdParticipantIdRoute
+  "/_authenticated/account/courses/$offerId/close": typeof AuthenticatedAccountCoursesOfferIdCloseRoute
   "/_wizard/visit/add/list/$listId": typeof WizardVisitAddListListIdRoute
   "/_wizard/visit/add/workshop/$workshopId": typeof WizardVisitAddWorkshopWorkshopIdRoute
+  "/_authenticated/account/courses/$offerId/": typeof AuthenticatedAccountCoursesOfferIdIndexRoute
   "/_wizard/visit/add/item/$code/$variantId": typeof WizardVisitAddItemCodeVariantIdRoute
   "/_wizard/visit/add/item/$code/": typeof WizardVisitAddItemCodeIndexRoute
 }
@@ -270,9 +310,13 @@ export interface FileRouteTypes {
     | "/account/complete-profile"
     | "/account/"
     | "/account/invite/$membershipId/$inviteId"
+    | "/account/courses/"
     | "/visit/add/"
+    | "/account/courses/$offerId/$participantId"
+    | "/account/courses/$offerId/close"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
+    | "/account/courses/$offerId/"
     | "/visit/add/item/$code/$variantId"
     | "/visit/add/item/$code/"
   fileRoutesByTo: FileRoutesByTo
@@ -294,9 +338,13 @@ export interface FileRouteTypes {
     | "/account/complete-profile"
     | "/account"
     | "/account/invite/$membershipId/$inviteId"
+    | "/account/courses"
     | "/visit/add"
+    | "/account/courses/$offerId/$participantId"
+    | "/account/courses/$offerId/close"
     | "/visit/add/list/$listId"
     | "/visit/add/workshop/$workshopId"
+    | "/account/courses/$offerId"
     | "/visit/add/item/$code/$variantId"
     | "/visit/add/item/$code"
   id:
@@ -322,9 +370,13 @@ export interface FileRouteTypes {
     | "/_authonly/account/complete-profile"
     | "/_authenticated/account/"
     | "/account/invite/$membershipId/$inviteId"
+    | "/_authenticated/account/courses/"
     | "/_wizard/visit/add/"
+    | "/_authenticated/account/courses/$offerId/$participantId"
+    | "/_authenticated/account/courses/$offerId/close"
     | "/_wizard/visit/add/list/$listId"
     | "/_wizard/visit/add/workshop/$workshopId"
+    | "/_authenticated/account/courses/$offerId/"
     | "/_wizard/visit/add/item/$code/$variantId"
     | "/_wizard/visit/add/item/$code/"
   fileRoutesById: FileRoutesById
@@ -485,6 +537,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthonlyAccountCompleteProfileRouteImport
       parentRoute: typeof AuthonlyRoute
     }
+    "/_authenticated/account/courses/": {
+      id: "/_authenticated/account/courses/"
+      path: "/account/courses"
+      fullPath: "/account/courses/"
+      preLoaderRoute: typeof AuthenticatedAccountCoursesIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     "/_wizard/visit/add/": {
       id: "/_wizard/visit/add/"
       path: "/add"
@@ -498,6 +557,27 @@ declare module "@tanstack/react-router" {
       fullPath: "/account/invite/$membershipId/$inviteId"
       preLoaderRoute: typeof AccountInviteMembershipIdInviteIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    "/_authenticated/account/courses/$offerId/": {
+      id: "/_authenticated/account/courses/$offerId/"
+      path: "/account/courses/$offerId"
+      fullPath: "/account/courses/$offerId/"
+      preLoaderRoute: typeof AuthenticatedAccountCoursesOfferIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/account/courses/$offerId/$participantId": {
+      id: "/_authenticated/account/courses/$offerId/$participantId"
+      path: "/account/courses/$offerId/$participantId"
+      fullPath: "/account/courses/$offerId/$participantId"
+      preLoaderRoute: typeof AuthenticatedAccountCoursesOfferIdParticipantIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/account/courses/$offerId/close": {
+      id: "/_authenticated/account/courses/$offerId/close"
+      path: "/account/courses/$offerId/close"
+      fullPath: "/account/courses/$offerId/close"
+      preLoaderRoute: typeof AuthenticatedAccountCoursesOfferIdCloseRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     "/_wizard/visit/add/list/$listId": {
       id: "/_wizard/visit/add/list/$listId"
@@ -535,6 +615,10 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAccountProfileRoute: typeof AuthenticatedAccountProfileRoute
   AuthenticatedAccountUsageRoute: typeof AuthenticatedAccountUsageRoute
   AuthenticatedAccountIndexRoute: typeof AuthenticatedAccountIndexRoute
+  AuthenticatedAccountCoursesIndexRoute: typeof AuthenticatedAccountCoursesIndexRoute
+  AuthenticatedAccountCoursesOfferIdParticipantIdRoute: typeof AuthenticatedAccountCoursesOfferIdParticipantIdRoute
+  AuthenticatedAccountCoursesOfferIdCloseRoute: typeof AuthenticatedAccountCoursesOfferIdCloseRoute
+  AuthenticatedAccountCoursesOfferIdIndexRoute: typeof AuthenticatedAccountCoursesOfferIdIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -542,6 +626,13 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAccountProfileRoute: AuthenticatedAccountProfileRoute,
   AuthenticatedAccountUsageRoute: AuthenticatedAccountUsageRoute,
   AuthenticatedAccountIndexRoute: AuthenticatedAccountIndexRoute,
+  AuthenticatedAccountCoursesIndexRoute: AuthenticatedAccountCoursesIndexRoute,
+  AuthenticatedAccountCoursesOfferIdParticipantIdRoute:
+    AuthenticatedAccountCoursesOfferIdParticipantIdRoute,
+  AuthenticatedAccountCoursesOfferIdCloseRoute:
+    AuthenticatedAccountCoursesOfferIdCloseRoute,
+  AuthenticatedAccountCoursesOfferIdIndexRoute:
+    AuthenticatedAccountCoursesOfferIdIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

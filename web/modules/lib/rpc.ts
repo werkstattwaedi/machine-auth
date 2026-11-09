@@ -37,6 +37,7 @@ export type RpcGroup =
   | "membershipCall"
   | "billingCall"
   | "catalogCall"
+  | "courseCall"
 
 /** Method names per group (mirrors the server-side dispatcher handler maps). */
 export const RpcMethod = {
@@ -84,6 +85,22 @@ export const RpcMethod = {
     "reportTerminalApproval",
     "adminMarkBillsPaid",
     "correctCheckouts",
+  ],
+
+  courseCall: [
+    "listMyCourses",
+    "getCourse",
+    "setCoursePermissionType",
+    "setAttendance",
+    "checkParticipantEmail",
+    "linkParticipant",
+    "assignCourseBadge",
+    "setParticipantChoice",
+    "closeCourse",
+    "listEdooboxLeaders",
+    "countLeaderCourses",
+    "setEdooboxLeader",
+    "unlinkCourseParticipant",
   ],
 
   catalogCall: [

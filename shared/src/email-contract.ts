@@ -71,11 +71,10 @@ export const EMAIL_CONTRACT = {
     variables: ["GREETING"],
   },
   // A course leader's course is past its last Termin and not closed yet
-  // (#842, CRS-16): days 1, 3 and 7. `grants` says whether the course gives
-  // a permission (then PERMISSION_NAME is used) or none.
+  // (#842, CRS-16): days 1, 3 and 7.
   "course-close-reminder": {
-    dims: { grants: ["permission", "none"] },
-    variables: ["LEADER_NAME", "COURSE_TITLE", "LAST_DATE", "PERMISSION_NAME", "COURSE_LINK"],
+    dims: {},
+    variables: ["LEADER_NAME", "COURSE_TITLE", "LAST_DATE", "COURSE_LINK"],
   },
   // Day 7 of an unclosed course, to the office (COURSE_OFFICE_EMAIL).
   "course-close-office": {

@@ -1,6 +1,13 @@
 # edoobox courses: Kursleitung in the checkout (#842)
 
-Status: **planned** 2026-11-09, design session on #842. Two PRs: the permission-grants prefactor (#843, Approach step 1), then the course feature (step 2). Meine Kurse for participants is the follow-up #844. The edoobox API was probed on the sandbox account on 2026-11-09 (see *edoobox API spike*); the client below follows its findings.
+Status: **implemented** 2026-11-10 (branch feat/edoobox-courses), design session on #842. Two PRs: the permission-grants prefactor (#843, Approach step 1), then the course feature (step 2). Meine Kurse for participants is the follow-up #844. The edoobox API was probed on the sandbox account on 2026-11-09 (see *edoobox API spike*); the client below follows its findings.
+
+**Implementation decisions (2026-11-09/10):**
+- *Which permission a course grants:* the course leader picks it once on the course page (a permission or «Keine»), before linking anyone; fixed for the leader after the first link (CRS-17). edoobox tags are the public workshop filter and only colour the course dot.
+- *Attendance:* edoobox's own Präsenzstatus, read from the account; `EDOOBOX_ATTENDANCE_STATUSES` (default `1,2,3,4`) names the ones the menu offers. No «Anwesend» footer.
+- *No status at any Termin* counts as «Nie anwesend» at the close. *Unlink* (admin) ends that course's temporary permission; a permission granted at the close stays.
+- *Listing:* a course past its last Termin stays on Kursleitung for 60 days if not closed.
+- *Mails:* the reminder has one wording for courses with and without a permission (no template dimension).
 
 ## Understanding
 Course leaders («Kursleitung») manage their edoobox courses in the checkout, ideally at the kiosk together with the participants. They link each participant to a checkout account (an existing one or one created from the edoobox data), assign badges, record attendance (written back to edoobox), and close the course, which turns the participant's temporary permission into a permanent one or drops it. Course data is read live from edoobox. Only links, permission choices and the close are stored locally.

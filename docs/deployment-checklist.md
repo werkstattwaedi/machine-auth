@@ -242,6 +242,11 @@ firebase functions:secrets:set TERMINAL_KEY
 # (one Wallee space). A placeholder is fine until the terminal is enabled
 # (see "Wallee payment terminal" below).
 firebase functions:secrets:set WALLEE_AUTH_KEY
+# edoobox API key + secret (#842): the installation's own edoobox account
+# (staging: a sandbox account). Placeholders are fine while
+# functions.edooboxApiBaseUrl is empty — the courses are then off.
+firebase functions:secrets:set EDOOBOX_API_KEY
+firebase functions:secrets:set EDOOBOX_API_SECRET
 # Stats subject-key salt (ADR-0039) — generate with `openssl rand -hex 32`,
 # DIFFERENT value per project (staging vs prod). Destroying this secret is
 # the retroactive-anonymization switch for all BigQuery stats rows.
@@ -337,6 +342,17 @@ Smoke test after deploy: verify a phone number on `/account/profile`
 (one SMS), then sign in with it on `/checkin`. On the kiosk, confirm the
 session lands as the ephemeral actsAs principal (the header shows no
 account avatar and "Besuch starten" appears).
+
+### edoobox courses (#842)
+
+Optional — the checkout works without it. Course leaders running their
+edoobox courses in the checkout (Kursleitung) need: an edoobox API key
+(`EDOOBOX_API_KEY` / `EDOOBOX_API_SECRET`, see the secrets above; rights as
+in `docs/deploy/2026-11-10-edoobox-courses.md`), `functions.edooboxApiBaseUrl`
+in the operations config, optionally `functions.edooboxAttendanceStatuses`
+and `functions.courseOfficeEmail`, and the `course-close-*` mail templates
+published. Then an admin links each course leader to their edoobox admin
+(Person → Profil → Kursleitung).
 
 ### Wallee payment terminal (ADR-0051)
 

@@ -173,6 +173,10 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
 
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
+  // The pick is fixed by the first link (CRS-17), so it must come first.
+  if (loaded.course.permission === undefined) {
+    throw new HttpsError("failed-precondition", "Wähle zuerst, welche Berechtigung der Kurs gibt.");
+  }
   const p = participantOf(loaded, participantId);
   if (p.link) throw new HttpsError("already-exists", "Diese Person ist schon verknüpft.");
   const db = leader.db;
@@ -214,8 +218,8 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
       participantName: formatFullName({ firstName: p.firstName, lastName: p.lastName }, email),
     };
     tx.create(linkRef, link);
-    // The pick of the permission is fixed from now on; keep the title for mails.
-    tx.set(db.collection("courses").doc(offerId), { title: loaded.detail.title, permission }, { merge: true });
+    // Keep the title for mails and the admin's lists.
+    tx.set(db.collection("courses").doc(offerId), { title: loaded.detail.title }, { merge: true });
     if (permission && choice !== "no") {
       const map = withTemporaryGrant(userSnap.get("permissions"), {
         permission,

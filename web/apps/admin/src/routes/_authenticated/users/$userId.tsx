@@ -24,6 +24,7 @@ import {
 } from "@modules/components/ui/tabs"
 import { PersonOverviewTab } from "@/components/person/overview-tab"
 import { PersonProfileTab } from "@/components/person/profile-tab"
+import { CourseLeaderCard } from "@/components/person/course-leader-card"
 import { PersonMembershipTab } from "@/components/person/membership-tab"
 import { PersonBadgesTab } from "@/components/person/badges-tab"
 import { PersonPermissionsTab } from "@/components/person/permissions-tab"
@@ -157,6 +158,7 @@ function PersonWorkspace({
         </TabsContent>
         <TabsContent value="profile">
           <PersonProfileTab userId={userId} user={user} />
+          <CourseLeaderCard userId={userId} user={user} />
         </TabsContent>
         <TabsContent value="membership">
           <PersonMembershipTab userId={userId} user={user} membership={membership} />

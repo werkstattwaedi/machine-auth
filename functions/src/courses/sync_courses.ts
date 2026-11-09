@@ -138,19 +138,15 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
         const day = due.includes(days as 1 | 3 | 7) ? days : null;
         if (day === null) continue;
         const title = course.title ?? (await api.getOffers([offerId]))[0]?.name ?? "Kurs";
-        const permissionName = course.permission
-          ? String((await course.permission.get()).get("name") ?? "")
-          : "";
         const lastDate = formatWorkshopDateTime(new Date(last.start), "EEEEEE d.M.");
         await send({
           to: email,
           mail: "course-close-reminder",
-          dims: { grants: permissionName ? "permission" : "none" },
+          dims: {},
           variables: {
             LEADER_NAME: leaderName,
             COURSE_TITLE: title,
             LAST_DATE: lastDate,
-            PERMISSION_NAME: permissionName,
             COURSE_LINK: `https://${resolveCheckoutDomain()}/account/courses/${offerId}`,
           },
         });
