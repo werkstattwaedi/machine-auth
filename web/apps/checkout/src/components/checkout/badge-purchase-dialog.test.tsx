@@ -4,7 +4,8 @@
 /**
  * BadgePurchaseDialog — the dry-run quote drives the price line (single
  * source of eligibility, server-side), confirm issues the real call and
- * closes, server rejections render inline and keep the dialog open.
+ * closes, server rejections render inline and keep the dialog open. A
+ * badge-tap session steps up (ADR-0041) before anything is quoted.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -49,6 +50,17 @@ vi.mock("@modules/hooks/use-async-mutation", () => ({
 
 const mutationError: { error: unknown } = { error: null }
 
+// Default: an elevated kiosk session (code sign-in) — no step-up.
+const authState = { sessionKind: "tag" as string, isKioskElevated: true }
+vi.mock("@modules/lib/auth", () => ({
+  useAuth: () => authState,
+}))
+
+const ensureElevated = vi.fn()
+vi.mock("./kiosk-elevation-dialog", () => ({
+  useKioskElevation: () => ({ ensureElevated }),
+}))
+
 import { BadgePurchaseDialog } from "./badge-purchase-dialog"
 
 const OFFER = { tokenId: "04c339aa1e1890", badgeVoucher: "voucher-1" }
@@ -59,6 +71,8 @@ describe("BadgePurchaseDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mutationError.error = null
+    authState.sessionKind = "tag"
+    authState.isKioskElevated = true
   })
 
   it("shows the gratis quote from the dry run", async () => {
@@ -111,6 +125,66 @@ describe("BadgePurchaseDialog", () => {
       await screen.findByText("Badge ist bereits registriert.")
     ).toBeInTheDocument()
     expect(screen.getByTestId("badge-purchase-confirm")).toBeDisabled()
+  })
+
+  it("a badge-tap session steps up before anything is quoted", async () => {
+    authState.isKioskElevated = false
+    addBadge.mockResolvedValue({
+      data: { checkoutId: null, tokenId: OFFER.tokenId, unitPrice: 5, free: false },
+    })
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <BadgePurchaseDialog offer={OFFER} onClose={() => {}} />
+    )
+
+    expect(screen.getByTestId("badge-purchase-stepup-note")).toBeInTheDocument()
+    expect(addBadge).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "Weiter" }))
+    expect(ensureElevated).toHaveBeenCalledTimes(1)
+    // Hidden while the step-up dialog is open.
+    await waitFor(() =>
+      expect(screen.queryByTestId("badge-purchase-dialog")).toBeNull()
+    )
+
+    // The code is confirmed: the session is elevated, the dialog returns
+    // with the quote.
+    authState.isKioskElevated = true
+    const [onElevated] = ensureElevated.mock.calls[0]
+    onElevated()
+    rerender(<BadgePurchaseDialog offer={OFFER} onClose={() => {}} />)
+    expect(await screen.findByText(/CHF\s*5/)).toBeInTheDocument()
+    expect(addBadge).toHaveBeenCalledWith({
+      badgeVoucher: "voucher-1",
+      dryRun: true,
+    })
+  })
+
+  it("a cancelled step-up brings the dialog back without a quote", async () => {
+    authState.isKioskElevated = false
+    const user = userEvent.setup()
+    render(<BadgePurchaseDialog offer={OFFER} onClose={() => {}} />)
+
+    await user.click(screen.getByRole("button", { name: "Weiter" }))
+    const [, onCancel] = ensureElevated.mock.calls[0]
+    onCancel()
+
+    expect(
+      await screen.findByTestId("badge-purchase-stepup-note")
+    ).toBeInTheDocument()
+    expect(addBadge).not.toHaveBeenCalled()
+  })
+
+  it("an own-device sign-in needs no step-up", async () => {
+    authState.sessionKind = "real"
+    authState.isKioskElevated = false
+    addBadge.mockResolvedValue({
+      data: { checkoutId: null, tokenId: OFFER.tokenId, unitPrice: 5, free: false },
+    })
+    render(<BadgePurchaseDialog offer={OFFER} onClose={() => {}} />)
+
+    expect(await screen.findByText(/CHF\s*5/)).toBeInTheDocument()
+    expect(ensureElevated).not.toHaveBeenCalled()
   })
 
   it("stays closed without an offer", () => {

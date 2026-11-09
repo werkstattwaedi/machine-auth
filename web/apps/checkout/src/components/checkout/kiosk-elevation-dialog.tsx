@@ -74,9 +74,9 @@ interface KioskElevationContextValue {
   /**
    * Run `next` with an elevated kiosk session: immediately when the session
    * already is, otherwise after the visitor completes the step-up dialog.
-   * Cancelling the dialog drops `next`.
+   * Cancelling the dialog drops `next` and runs `onCancel` instead.
    */
-  ensureElevated: (next: () => void) => void
+  ensureElevated: (next: () => void, onCancel?: () => void) => void
 }
 
 const KioskElevationContext = createContext<KioskElevationContextValue | null>(
@@ -102,6 +102,8 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
   // context reports the re-minted claims — navigating earlier would let the
   // member-area guard see an un-elevated tag session and bounce.
   const pendingNextRef = useRef<(() => void) | null>(null)
+  // Its counterpart for a step-up the visitor abandons.
+  const pendingCancelRef = useRef<(() => void) | null>(null)
   const [awaitingClaims, setAwaitingClaims] = useState(false)
 
   useEffect(() => {
@@ -110,12 +112,14 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
       setAwaitingClaims(false)
       const next = pendingNextRef.current
       pendingNextRef.current = null
+      pendingCancelRef.current = null
       next?.()
       return
     }
     // The re-minted claims normally land within a tick; if they never do
     // (token refresh hiccup), fail visibly instead of leaving the visitor
     // on a closed dialog with nothing happening.
+    // `onCancel` stays queued: the visitor leaves the error with "Abbrechen".
     const timer = window.setTimeout(() => {
       setAwaitingClaims(false)
       pendingNextRef.current = null
@@ -148,12 +152,13 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
   }, [functions])
 
   const ensureElevated = useCallback(
-    (next: () => void) => {
+    (next: () => void, onCancel?: () => void) => {
       if (isKioskElevated) {
         next()
         return
       }
       pendingNextRef.current = next
+      pendingCancelRef.current = onCancel ?? null
       prewarm(functions, "authCall")
       setStage({ kind: "options", options: null, error: null })
       void loadOptions()
@@ -164,8 +169,11 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
   const cancel = () => {
     if (busy) return
     pendingNextRef.current = null
+    const onCancel = pendingCancelRef.current
+    pendingCancelRef.current = null
     sms.clear()
     setStage({ kind: "closed" })
+    onCancel?.()
   }
 
   const sendEmail = async () => {

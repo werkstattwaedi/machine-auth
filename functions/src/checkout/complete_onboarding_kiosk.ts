@@ -10,7 +10,8 @@
  * session cannot write `users` docs (Firestore rules deliberately reject
  * synthetic uids). This callable is the sanctioned write path: the
  * ESTABLISHED kiosk session itself is the credential — the caller must be
- * signed in with a `tagCheckout` principal, and the write targets exactly
+ * signed in with an OTP-elevated `tagCheckout` principal (a code sign-in,
+ * or a badge tap that stepped up — ADR-0041), and the write targets exactly
  * the user named by its `actsAs` claim. No bearer needed: actsAs principals
  * only ever come out of the bearer-gated mint paths.
  *
@@ -29,7 +30,7 @@ import {
   HttpsError,
   type CallableRequest,
 } from "firebase-functions/v2/https";
-import { requireActsAs } from "./kiosk_session";
+import { requireElevatedActsAs } from "./kiosk_session";
 
 export interface OnboardingProfile {
   firstName: string;
@@ -104,7 +105,10 @@ function validateProfile(
 export const completeOnboardingKioskHandler = async (
   request: CallableRequest<CompleteOnboardingKioskInput>
 ): Promise<CompleteOnboardingKioskResult> => {
-  const userId = requireActsAs(request);
+  // Elevated only (ADR-0041): a badge tap alone must not set the name,
+  // phone and billing address of an account that was never onboarded, nor
+  // accept the terms in its owner's name.
+  const userId = requireElevatedActsAs(request);
   const { profile, termsAccepted } = request.data ?? {};
   if (profile == null && termsAccepted !== true) {
     throw new HttpsError("invalid-argument", "nothing to update");
