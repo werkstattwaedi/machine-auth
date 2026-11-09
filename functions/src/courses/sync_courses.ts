@@ -67,7 +67,8 @@ function toCourseDates(api: Awaited<ReturnType<EdooboxApi["listOfferDates"]>>): 
 
 /** CRS-11: rewrite or drop the temporary permissions of every open course with links. */
 async function syncGrants(db: Firestore, api: EdooboxApi, nowMs: number, report: CourseSyncReport): Promise<void> {
-  const links = await db.collection("courseLinks").get();
+  // Nein links hold no temporary permission; skip them.
+  const links = await db.collection("courseLinks").where("choice", "in", ["temp", "yes"]).get();
   const byOffer = new Map<string, CourseLinkEntity[]>();
   for (const d of links.docs) {
     const l = d.data() as CourseLinkEntity;
@@ -124,7 +125,10 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
     );
     try {
       const leaderDates = await api.listLeaderDates(leader.get("edooboxLeaderId"));
-      const offerIds = [...new Set(leaderDates.map((d) => d.offerId))];
+      // Reminders end on day 7: only offers with a Termin of this leader in
+      // the last ~8 days can be due, so old courses cost no reads.
+      const recent = nowMs - 8 * 86400_000;
+      const offerIds = [...new Set(leaderDates.filter((d) => Date.parse(d.end) >= recent).map((d) => d.offerId))];
       for (const offerId of offerIds) {
         const courseRef = db.collection("courses").doc(offerId);
         const course = ((await courseRef.get()).data() ?? {}) as CourseEntity;
@@ -153,6 +157,9 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
           },
         });
         report.reminders++;
+        // Record the leader's mail before the office's, so a failure there
+        // doesn't send the leader the same reminder again on a re-run.
+        await courseRef.set({ remindersSent: FieldValue.arrayUnion(`${day}:${leader.id}`), title }, { merge: true });
         const office = courseOfficeEmail.value().trim();
         const officeDue = day === 7 && office && !sent.includes("7:office");
         if (officeDue) {
@@ -163,11 +170,8 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
             variables: { LEADER_NAME: leaderName, COURSE_TITLE: title, LAST_DATE: lastDate },
           });
           report.officeNotices++;
+          await courseRef.set({ remindersSent: FieldValue.arrayUnion("7:office") }, { merge: true });
         }
-        await courseRef.set(
-          { remindersSent: FieldValue.arrayUnion(`${day}:${leader.id}`, ...(officeDue ? ["7:office"] : [])), title },
-          { merge: true }
-        );
       }
     } catch (err) {
       report.failures++;

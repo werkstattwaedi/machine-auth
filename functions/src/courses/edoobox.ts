@@ -135,12 +135,8 @@ export function setEdooboxApiForTest(api: EdooboxApi | null): void {
   testApi = api;
 }
 
-export class EdooboxError extends Error {
-  constructor(message: string, readonly status?: number, readonly code?: string) {
-    super(message);
-    this.name = "EdooboxError";
-  }
-}
+import { EdooboxError } from "./edoobox_error";
+export { EdooboxError };
 
 export function edooboxApi(): EdooboxApi {
   if (testApi) return testApi;
@@ -169,9 +165,16 @@ function rows(data: unknown): Json[] {
 }
 
 const PAGE = 500;
+/** A hanging edoobox must end in «nicht erreichbar», not the callable's deadline. */
+const REQUEST_TIMEOUT_MS = 15_000;
+/** Offers and users change rarely; a course page reads them on every click. */
+const CACHE_MS = 5 * 60_000;
 
 class HttpEdooboxApi implements EdooboxApi {
   private session: { token: string; edid: string; until: number } | null = null;
+  private loggingIn: Promise<{ token: string; edid: string }> | null = null;
+  private userCache = new Map<string, { at: number; user: EdooboxUser }>();
+  private offerCache: { at: number; offers: Json[] } | null = null;
   private statusCache: { at: number; statuses: AttendanceStatus[] } | null = null;
   private tagCache: { at: number; names: Map<string, string> } | null = null;
 
@@ -183,7 +186,16 @@ class HttpEdooboxApi implements EdooboxApi {
 
   private async login(): Promise<{ token: string; edid: string }> {
     if (this.session && this.session.until > Date.now()) return this.session;
+    // Parallel calls on a cold instance share one login.
+    this.loggingIn ??= this.doLogin().finally(() => {
+      this.loggingIn = null;
+    });
+    return this.loggingIn;
+  }
+
+  private async doLogin(): Promise<{ token: string; edid: string }> {
     const res = await fetch(`${this.base}/auth`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       method: "POST",
       headers: { "grant-type": "password", "Content-Type": "application/json" },
       body: JSON.stringify({ key: this.key, secret: this.secret }),
@@ -208,6 +220,7 @@ class HttpEdooboxApi implements EdooboxApi {
           .join("&")
       : "";
     const res = await fetch(`${this.base}${path}${qs}`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       method,
       headers: {
         edid,
@@ -269,11 +282,19 @@ class HttpEdooboxApi implements EdooboxApi {
     return names;
   }
 
+  /** Every offer's id, name and tags; one list call per few minutes. */
+  private async offerList(): Promise<Json[]> {
+    if (this.offerCache && Date.now() - this.offerCache.at < CACHE_MS) return this.offerCache.offers;
+    const offers = await this.list("/offer/list", undefined, ["id", "name", "tags"]);
+    this.offerCache = { at: Date.now(), offers };
+    return offers;
+  }
+
   async getOffers(offerIds: string[]): Promise<EdooboxOffer[]> {
     if (offerIds.length === 0) return [];
     const wanted = new Set(offerIds);
     const [offers, tagNames] = await Promise.all([
-      this.list("/offer/list", undefined, ["id", "name", "tags"]),
+      this.offerList(),
       this.tagNames().catch((err) => {
         logger.warn("edoobox tags unreadable", { err: String(err) });
         return new Map<string, string>();
@@ -319,14 +340,21 @@ class HttpEdooboxApi implements EdooboxApi {
   async getUsers(userIds: string[]): Promise<EdooboxUser[]> {
     const users = await Promise.all(
       [...new Set(userIds)].map(async (id) => {
+        const hit = this.userCache.get(id);
+        if (hit && Date.now() - hit.at < CACHE_MS) return hit.user;
         const body = await this.call("GET", `/user/${id}`);
-        const u = rows(body.data)[0] ?? body.data;
-        return {
+        // Keyed by id (`{ data: { user_…: {…} } }`, as the sandbox returns
+        // it), or flat when edoobox answers a single record directly.
+        const data = body.data as Json;
+        const u: Json = data && (data.first_name !== undefined || data.email !== undefined) ? data : (data?.[id] ?? rows(data)[0]);
+        const user = {
           id,
           firstName: String(u?.first_name ?? ""),
           lastName: String(u?.last_name ?? ""),
           email: String(u?.email ?? ""),
         };
+        this.userCache.set(id, { at: Date.now(), user });
+        return user;
       })
     );
     return users;

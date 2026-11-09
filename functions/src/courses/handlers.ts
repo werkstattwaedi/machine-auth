@@ -40,7 +40,7 @@ import { formatFullName } from "../util/username-utils";
 import { diversificationMasterKey } from "../config/tag-secrets";
 import { verifyBadgeVoucher } from "../badge/voucher";
 import { sendAccountInstructionsEmail } from "../checkout/account_instructions";
-import { edooboxApi } from "./edoobox";
+import { EdooboxError, edooboxApi } from "./edoobox";
 import {
   edooboxUnavailable,
   listMyCourses,
@@ -63,6 +63,10 @@ async function withEdoobox<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (err) {
     if (err instanceof HttpsError) throw err;
+    // Only edoobox's own failures and network/timeouts are «nicht
+    // erreichbar»; a bug must surface as one.
+    const network = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.name === "TypeError" && /fetch/i.test(err.message));
+    if (!(err instanceof EdooboxError) && !network) throw err;
     logger.warn("courseCall: edoobox failed", { err: String(err) });
     throw edooboxUnavailable(err);
   }
@@ -197,11 +201,17 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
 
   await db.runTransaction(async (tx) => {
     const linkRef = db.collection("courseLinks").doc(courseLinkId(offerId, participantId));
-    const [linkSnap, sameAccount, userSnap] = await Promise.all([
+    const [linkSnap, sameAccount, userSnap, courseSnap] = await Promise.all([
       tx.get(linkRef),
       tx.get(db.collection("courseLinks").where("offerId", "==", offerId).where("user", "==", target).limit(1)),
       tx.get(target),
+      tx.get(db.collection("courses").doc(offerId)),
     ]);
+    // The pick may have changed since the course was read (CRS-17).
+    const current = courseSnap.get("permission") ?? null;
+    if ((current?.id ?? null) !== (permission?.id ?? null)) {
+      throw new HttpsError("aborted", "Die Berechtigung des Kurses wurde eben geändert. Bitte nochmals versuchen.");
+    }
     if (linkSnap.exists) throw new HttpsError("already-exists", "Diese Person ist schon verknüpft.");
     if (!sameAccount.empty) {
       throw new HttpsError("already-exists", "Dieses Konto ist schon mit einer anderen Person in diesem Kurs verknüpft.");
@@ -297,8 +307,18 @@ export const assignCourseBadgeHandler = async (
   const link = linkedTarget(loaded, leader, participantId);
   const tokenRef = leader.db.collection("tokens").doc(voucher.tokenId);
   await leader.db.runTransaction(async (tx) => {
-    if ((await tx.get(tokenRef)).exists) {
+    const [token, existing] = await Promise.all([
+      tx.get(tokenRef),
+      tx.get(leader.db.collection("tokens").where("userId", "==", link.user)),
+    ]);
+    if (token.exists) {
       throw new HttpsError("already-exists", "Dieser Badge ist schon registriert.");
+    }
+    // A course hands out a person's first badge (CRS-9); one more for an
+    // account that has one is the office's job — and keeps a mislinked
+    // account from getting a stranger's badge.
+    if (existing.docs.some((t) => !t.get("deactivated"))) {
+      throw new HttpsError("already-exists", "Diese Person hat schon einen Badge.");
     }
     tx.create(tokenRef, {
       userId: link.user,
@@ -382,6 +402,8 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
     const userSnaps = linked.length ? await tx.getAll(...linked.map((p) => db.collection("users").doc(p.link!.userId))) : [];
     if (permission) {
       linked.forEach((p, i) => {
+        // A deleted account (erasure) has nothing left to grant or end.
+        if (!userSnaps[i].exists) return;
         const stored = userSnaps[i].get("permissions");
         const map = decided[p.participantId]
           ? withPermanentGrant(stored, { permission, offerId, grantedBy: leader.userRef, now })

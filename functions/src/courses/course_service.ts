@@ -108,15 +108,21 @@ function workshopOf(tags: readonly string[]): WorkshopId | null {
 /** CRS-8: the leader leads at least one Termin of the offer. */
 export async function requireLeadsOffer(api: EdooboxApi, leader: Leader, offerId: string): Promise<void> {
   const dates = await api.listLeaderDates(leader.adminId);
-  if (!dates.some((d) => d.offerId === offerId)) {
+  // Defence in depth: don't rely on edoobox honouring the filter alone.
+  if (!dates.some((d) => d.offerId === offerId && d.leaders.includes(leader.adminId))) {
     throw new HttpsError("permission-denied", "Diesen Kurs leitest du nicht.");
   }
 }
 
 export async function listMyCourses(leader: Leader, nowMs = Date.now()): Promise<CourseSummary[]> {
   const api = edooboxApi();
-  const leaderDates = await api.listLeaderDates(leader.adminId);
-  const offerIds = [...new Set(leaderDates.map((d) => d.offerId))];
+  const leaderDates = (await api.listLeaderDates(leader.adminId)).filter((d) => d.leaders.includes(leader.adminId));
+  // Narrow before fetching: an offer whose Termine this leader leads all
+  // ended before the cutoff can't be listed (CRS-2), so skip its reads.
+  const cutoffMs = nowMs - CLOSE_LISTING_DAYS * 86400_000;
+  const offerIds = [
+    ...new Set(leaderDates.filter((d) => Date.parse(d.end) >= cutoffMs).map((d) => d.offerId)),
+  ];
   if (offerIds.length === 0) return [];
 
   const courseDocs = await leader.db.getAll(...offerIds.map((id) => leader.db.collection("courses").doc(id)));

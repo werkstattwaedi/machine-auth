@@ -10,6 +10,7 @@
  */
 
 import { getFirestore } from "firebase-admin/firestore";
+import { EdooboxError } from "./edoobox_error";
 import type { AttendanceStatus } from "@oww/shared";
 import type {
   EdooboxAdmin,
@@ -68,7 +69,7 @@ export class InMemoryEdoobox implements EdooboxApi {
   constructor(public state: FakeEdooboxState = emptyFakeState()) {}
 
   private check(): void {
-    if (this.failing) throw new Error("edoobox fake: unavailable");
+    if (this.failing) throw new EdooboxError("edoobox fake: unavailable", 503);
   }
 
   async listLeaderDates(adminId: string) {
@@ -116,7 +117,7 @@ export class InMemoryEdoobox implements EdooboxApi {
   async updateAttendance(attendanceId: string, status: number) {
     this.check();
     const a = this.state.attendances.find((x) => x.attendanceId === attendanceId);
-    if (!a) throw new Error(`edoobox fake: no attendance ${attendanceId}`);
+    if (!a) throw new EdooboxError(`edoobox fake: no attendance ${attendanceId}`, 404);
     a.status = status;
   }
 

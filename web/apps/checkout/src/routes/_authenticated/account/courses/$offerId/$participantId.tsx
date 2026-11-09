@@ -22,6 +22,8 @@ import { Label } from "@modules/components/ui/label"
 import { Skeleton } from "@modules/components/ui/skeleton"
 import { cn } from "@modules/lib/utils"
 import { BadgeAssignDialog } from "@/components/courses/badge-assign-dialog"
+import { SegmentedChoice } from "@/components/courses/segmented-choice"
+import { COURSE_MESSAGE_CODES } from "@/lib/courses"
 import { EdooboxError } from "@/routes/_authenticated/account/courses/index"
 import { useCourse } from "@/lib/courses"
 
@@ -131,8 +133,8 @@ function LinkCard({ course, participant: p, reload, closed }: { course: CourseDe
   const [draft, setDraft] = useState(p.email)
   const [editing, setEditing] = useState(false)
   const [exists, setExists] = useState(p.accountExists)
-  const check = useAsyncMutation({ context: "courses.checkParticipantEmail" })
-  const link = useAsyncMutation({ context: "courses.linkParticipant" })
+  const check = useAsyncMutation({ context: "courses.checkParticipantEmail", serverMessageCodes: COURSE_MESSAGE_CODES })
+  const link = useAsyncMutation({ context: "courses.linkParticipant", serverMessageCodes: COURSE_MESSAGE_CODES })
 
   // A corrected e-mail is for matching only (CRS-6): ask whether it has an account.
   useEffect(() => {
@@ -236,7 +238,7 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
   const own = link.userId === userDoc?.id
   const [choice, setChoice] = useState<CourseChoice>(link.choice)
   const [badgeOpen, setBadgeOpen] = useState(false)
-  const save = useAsyncMutation({ context: "courses.setParticipantChoice", successMessage: "Gespeichert" })
+  const save = useAsyncMutation({ context: "courses.setParticipantChoice", successMessage: "Gespeichert", serverMessageCodes: COURSE_MESSAGE_CODES })
 
   const pick = async (c: CourseChoice) => {
     const before = choice
@@ -288,25 +290,13 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
             {own ? (
               <p className="text-sm text-muted-foreground">Für dein eigenes Konto vergibst du keine Berechtigung.</p>
             ) : link.alreadyHeld ? null : (
-              <div role="radiogroup" aria-label={`Berechtigung «${course.permission.name}»`} className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-                {CHOICES.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={choice === c.value}
-                    disabled={closed || save.loading}
-                    onClick={() => void pick(c.value)}
-                    className={cn(
-                      "flex flex-col items-center rounded-lg px-2 py-2 text-sm transition-colors",
-                      choice === c.value ? "bg-card font-semibold shadow-xs" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {c.label}
-                    <span className="text-xs font-normal text-muted-foreground">{c.hint}</span>
-                  </button>
-                ))}
-              </div>
+              <SegmentedChoice
+                label={`Berechtigung «${course.permission.name}»`}
+                options={CHOICES}
+                value={choice}
+                disabled={closed || save.loading}
+                onChange={(c) => void pick(c)}
+              />
             )}
           </div>
         )}

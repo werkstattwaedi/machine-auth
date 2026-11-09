@@ -8,7 +8,7 @@
  * (CRS-15).
  */
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, ChevronRight, Clock, Lock } from "lucide-react"
 import { dateHasStarted, type CourseDetail } from "@oww/shared"
@@ -32,7 +32,7 @@ import { cn } from "@modules/lib/utils"
 import { AttendanceCell } from "@/components/courses/attendance-cell"
 import { ZugangStatus, zugangState } from "@/components/courses/zugang-status"
 import { EdooboxError } from "@/routes/_authenticated/account/courses/index"
-import { formatCourseDay, formatCourseTime, isToday, useCourse } from "@/lib/courses"
+import { COURSE_MESSAGE_CODES, formatCourseDay, formatCourseTime, isToday, useCourse } from "@/lib/courses"
 
 export const Route = createFileRoute("/_authenticated/account/courses/$offerId/")({
   component: CoursePage,
@@ -95,22 +95,52 @@ function CourseView({
   const kiosk = useBridge().available
   const closed = !!course.closedAt
   const now = Date.now()
-  const setAttendance = useAsyncMutation({ context: "courses.setAttendance", successMessage: "In edoobox gespeichert" })
+  const setAttendance = useAsyncMutation({
+    context: "courses.setAttendance",
+    successMessage: "In edoobox gespeichert",
+    serverMessageCodes: COURSE_MESSAGE_CODES,
+  })
+  // One save per cell at a time: a second pick while the first is on its
+  // way would create a second attendance record in edoobox.
+  const [saving, setSaving] = useState<ReadonlySet<string>>(new Set())
+  const latest = useRef(course)
+  latest.current = course
+
+  const setCell = (participantId: string, dateId: string, status: number | undefined) => {
+    const c = latest.current
+    const next = {
+      ...c,
+      participants: c.participants.map((p) => {
+        if (p.participantId !== participantId) return p
+        const attendance = { ...p.attendance }
+        if (status === undefined) delete attendance[dateId]
+        else attendance[dateId] = status
+        return { ...p, attendance }
+      }),
+    }
+    latest.current = next
+    onChange(next)
+  }
 
   const onSet = async (participantId: string, dateId: string, status: number) => {
-    const before = course
-    onChange({
-      ...course,
-      participants: course.participants.map((p) =>
-        p.participantId === participantId ? { ...p, attendance: { ...p.attendance, [dateId]: status } } : p
-      ),
-    })
+    const key = `${participantId}|${dateId}`
+    if (saving.has(key)) return
+    const before = latest.current.participants.find((p) => p.participantId === participantId)?.attendance[dateId]
+    setCell(participantId, dateId, status)
+    setSaving((s) => new Set(s).add(key))
     try {
       await setAttendance.mutate(async () => {
         await rpcCallable(functions, "courseCall", "setAttendance")({ offerId: course.offerId, participantId, dateId, status })
       })
     } catch {
-      onChange(before)
+      // Put back only this cell; other cells may have changed meanwhile.
+      setCell(participantId, dateId, before)
+    } finally {
+      setSaving((s) => {
+        const n = new Set(s)
+        n.delete(key)
+        return n
+      })
     }
   }
 
@@ -179,7 +209,18 @@ function CourseView({
                   return (
                     <tr key={p.participantId} className={cn("border-t border-border", !closed && "cursor-pointer hover:bg-muted/30")} onClick={open}>
                       <td className="px-4 py-3 align-middle sm:px-6">
-                        <div className="font-semibold">{name}</div>
+                        {closed ? (
+                          <div className="font-semibold">{name}</div>
+                        ) : (
+                          <Link
+                            to="/account/courses/$offerId/$participantId"
+                            params={{ offerId: course.offerId, participantId: p.participantId }}
+                            className="font-semibold hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {name}
+                          </Link>
+                        )}
                         <div className="hidden text-muted-foreground sm:block">{p.email}</div>
                         <ZugangStatus state={z} className="mt-2 sm:hidden" />
                       </td>
@@ -193,7 +234,7 @@ function CourseView({
                               value={p.attendance[d.dateId]}
                               allStatuses={course.allStatuses}
                               offeredStatuses={course.offeredStatuses}
-                              disabled={closed || future}
+                              disabled={closed || future || saving.has(`${p.participantId}|${d.dateId}`)}
                               future={future}
                               onSet={(status) => void onSet(p.participantId, d.dateId, status)}
                             />

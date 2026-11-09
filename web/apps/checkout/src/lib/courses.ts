@@ -89,3 +89,14 @@ export function isToday(iso: string, now = new Date()): boolean {
 export function workshopColorVar(workshop: string | null): string {
   return workshop ? `var(--color-ws-${workshop})` : "var(--color-muted-foreground)"
 }
+
+/** Codes whose server message tells the course leader what happened (ADR-0025). */
+export const COURSE_MESSAGE_CODES = [
+  "functions/already-exists",
+  "functions/permission-denied",
+  "functions/failed-precondition",
+  "functions/not-found",
+  "functions/aborted",
+  "functions/unavailable",
+  "functions/invalid-argument",
+]

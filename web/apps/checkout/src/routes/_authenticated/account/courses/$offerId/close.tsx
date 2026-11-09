@@ -30,6 +30,8 @@ import { Label } from "@modules/components/ui/label"
 import { Skeleton } from "@modules/components/ui/skeleton"
 import { cn } from "@modules/lib/utils"
 import { EdooboxError } from "@/routes/_authenticated/account/courses/index"
+import { SegmentedChoice } from "@/components/courses/segmented-choice"
+import { COURSE_MESSAGE_CODES } from "@/lib/courses"
 import { useCourse } from "@/lib/courses"
 
 export const Route = createFileRoute("/_authenticated/account/courses/$offerId/close")({
@@ -76,7 +78,7 @@ function CloseForm({ course }: { course: CourseDetail }) {
   const [reasons, setReasons] = useState<Record<string, string>>(() =>
     Object.fromEntries(course.participants.map((p) => [p.participantId, defaultCloseReason(p, course.dates, statuses)]))
   )
-  const close = useAsyncMutation({ context: "courses.closeCourse" })
+  const close = useAsyncMutation({ context: "courses.closeCourse", serverMessageCodes: COURSE_MESSAGE_CODES })
   const granted = Object.values(choices).filter(Boolean).length
 
   const submit = async () => {
@@ -125,24 +127,14 @@ function CloseForm({ course }: { course: CourseDetail }) {
                   <div className="text-sm text-muted-foreground">{p.email}</div>
                 </div>
                 {perm && (
-                  <div role="radiogroup" aria-label={name(p)} className={cn("grid grid-cols-2 gap-1 rounded-xl bg-muted p-1", locked && "opacity-60")} title={locked ? (own ? "Für dein eigenes Konto nicht möglich" : "Ohne Konto keine Berechtigung") : undefined}>
-                    {[false, true].map((v) => (
-                      <button
-                        key={String(v)}
-                        type="button"
-                        role="radio"
-                        aria-checked={yes === v}
-                        disabled={locked}
-                        onClick={() => setChoices((c) => ({ ...c, [p.participantId]: v }))}
-                        className={cn(
-                          "min-w-16 rounded-lg px-3 py-1.5 text-sm",
-                          yes === v ? cn("bg-card font-semibold shadow-xs", v ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300") : "text-muted-foreground"
-                        )}
-                      >
-                        {v ? "Ja" : "Nein"}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedChoice
+                    label={name(p)}
+                    options={YES_NO}
+                    value={yes}
+                    disabled={locked}
+                    title={locked ? (own ? "Für dein eigenes Konto nicht möglich" : "Ohne Konto keine Berechtigung") : undefined}
+                    onChange={(v) => setChoices((c) => ({ ...c, [p.participantId]: v }))}
+                  />
                 )}
               </div>
               {perm && !yes && (
@@ -174,6 +166,11 @@ function CloseForm({ course }: { course: CourseDetail }) {
     </>
   )
 }
+
+const YES_NO = [
+  { value: false, label: "Nein", selectedClassName: "text-red-700 dark:text-red-300" },
+  { value: true, label: "Ja", selectedClassName: "text-emerald-700 dark:text-emerald-300" },
+] as const
 
 function Tag({ tone, children }: { tone: "err" | "warn" | "ok"; children: React.ReactNode }) {
   return (

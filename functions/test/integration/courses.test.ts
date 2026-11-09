@@ -281,6 +281,13 @@ describe("courses (#842)", () => {
         () => assignCourseBadgeHandler(req({ offerId: OFFER, participantId: "p_anna", badgeVoucher: voucher })),
         "already-exists"
       );
+      // A second, unregistered badge: the account has one already.
+      const second = mintBadgeVoucher({ tokenId: "04cccccccccccc", sdmCounter: 1 }, MASTER_KEY);
+      await expectCode(
+        () => assignCourseBadgeHandler(req({ offerId: OFFER, participantId: "p_anna", badgeVoucher: second })),
+        "already-exists"
+      );
+      expect((await getFirestore().doc("tokens/04cccccccccccc").get()).exists).to.equal(false);
     });
     it("refuses a forged voucher and an unlinked participant", async () => {
       await expectCode(

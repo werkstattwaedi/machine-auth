@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { COURSE_MESSAGE_CODES } from "@/lib/courses"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import { useFunctions } from "@modules/lib/firebase-context"
@@ -54,7 +55,16 @@ export function BadgeAssignDialog({ open, onOpenChange, offerId, participantId, 
   const functions = useFunctions()
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
-  const assign = useAsyncMutation({ context: "courses.assignBadge", successMessage: "Badge zugewiesen" })
+  const assign = useAsyncMutation({
+    context: "courses.assignBadge",
+    successMessage: "Badge zugewiesen",
+    serverMessageCodes: COURSE_MESSAGE_CODES,
+  })
+  // The listener reads these through refs, so it subscribes once per opening.
+  const mutateRef = useRef(assign.mutate)
+  mutateRef.current = assign.mutate
+  const doneRef = useRef({ onAssigned, onOpenChange })
+  doneRef.current = { onAssigned, onOpenChange }
 
   useEffect(() => {
     if (!open || !bridge.available) return
@@ -69,28 +79,34 @@ export function BadgeAssignDialog({ open, onOpenChange, offerId, participantId, 
       setBusy(true)
       try {
         const bearer = await resolveBridgeBearer()
-        const { data } = await rpcCallable<
-          { picc: string; cmac: string; bearer?: string },
-          { tokenId: string; registered: boolean; badgeVoucher?: string }
-        >(functions, "authCall", "probeTag")({ ...tap, bearer: bearer ?? undefined })
+        let data: { tokenId: string; registered: boolean; badgeVoucher?: string }
+        try {
+          ;({ data } = await rpcCallable<
+            { picc: string; cmac: string; bearer?: string },
+            { tokenId: string; registered: boolean; badgeVoucher?: string }
+          >(functions, "authCall", "probeTag")({ ...tap, bearer: bearer ?? undefined }))
+        } catch {
+          toast.error("Der Badge konnte nicht geprüft werden. Bitte nochmals auflegen.")
+          return
+        }
         if (data.registered || !data.badgeVoucher) {
           toast.error("Dieser Badge ist schon registriert. Bitte einen neuen Badge auflegen.")
           return
         }
         const badgeVoucher = data.badgeVoucher
-        await assign.mutate(async () => {
+        await mutateRef.current(async () => {
           await rpcCallable(functions, "courseCall", "assignCourseBadge")({ offerId, participantId, badgeVoucher })
         })
-        onAssigned()
-        onOpenChange(false)
+        doneRef.current.onAssigned()
+        doneRef.current.onOpenChange(false)
       } catch {
-        // probeTag failures: unreadable; assign failures are toasted by the hook.
+        // The hook toasted the assign failure.
       } finally {
         busyRef.current = false
         setBusy(false)
       }
     })
-  }, [open, bridge, functions, offerId, participantId, assign, onAssigned, onOpenChange])
+  }, [open, bridge, functions, offerId, participantId])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
