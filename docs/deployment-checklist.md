@@ -384,7 +384,7 @@ functions deploy:
 
 ```bash
 cd ../machine-auth-operations
-export RESEND_API_KEY=$(firebase functions:secrets:access RESEND_API_KEY -P oww-maco)
+resend login   # once; publishing needs full access — the functions' sending-only key is refused
 npm run email:publish -- --env staging   # then: --env prod
 ```
 
