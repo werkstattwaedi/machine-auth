@@ -63,6 +63,11 @@ const FUNCTIONS_PARAMS: VarMapping[] = [
   // are) — the emulator and a fresh installation run without Workspace.
   { envVar: "USAGE_GROUP_VOLUNTEERING_EMAIL", jsonPath: "functions.usageGroupVolunteeringEmail" },
   { envVar: "USAGE_GROUP_INTERN_EMAIL", jsonPath: "functions.usageGroupInternEmail" },
+  // edoobox courses (#842). Empty base URL switches the courses off; staging
+  // points at the edoobox sandbox. The key/secret are FUNCTIONS_SECRETS.
+  { envVar: "EDOOBOX_API_BASE_URL", jsonPath: "functions.edooboxApiBaseUrl" },
+  { envVar: "EDOOBOX_ATTENDANCE_STATUSES", jsonPath: "functions.edooboxAttendanceStatuses" },
+  { envVar: "COURSE_OFFICE_EMAIL", jsonPath: "functions.courseOfficeEmail" },
 ];
 
 const FUNCTIONS_SECRETS: VarMapping[] = [
@@ -71,6 +76,8 @@ const FUNCTIONS_SECRETS: VarMapping[] = [
   { envVar: "GATEWAY_API_KEY", jsonPath: "functions.gatewayApiKey" },
   { envVar: "RESEND_API_KEY", jsonPath: "functions.resendApiKey" },
   { envVar: "WALLEE_AUTH_KEY", jsonPath: "functions.walleeAuthKey" },
+  { envVar: "EDOOBOX_API_KEY", jsonPath: "functions.edooboxApiKey" },
+  { envVar: "EDOOBOX_API_SECRET", jsonPath: "functions.edooboxApiSecret" },
 ];
 
 const FUNCTIONS_RESEND: VarMapping[] = [
@@ -253,6 +260,10 @@ const TEST_FIXTURE_OVERRIDES: Record<string, string> = {
   GATEWAY_API_KEY: "ci-test-gateway-key",
   RESEND_API_KEY: "re_test_fake_ci_key",
   WALLEE_AUTH_KEY: "ci-test-wallee-key",
+  EDOOBOX_API_KEY: "ci-test-edoobox-key",
+  EDOOBOX_API_SECRET: "ci-test-edoobox-secret",
+  // The emulator serves edoobox from Firestore (courses/edoobox_fake.ts).
+  EDOOBOX_API_BASE_URL: "emulator-fake",
 };
 
 // --- Helpers ---

@@ -347,6 +347,10 @@ export async function eraseSubject(
   const savedPersons = subject.userRef
     ? (await subject.userRef.collection("savedPersons").get()).docs
     : [];
+  // The subject's links to edoobox course participants (#842).
+  const courseLinks = subject.userRef
+    ? (await deps.db.collection("courseLinks").where("user", "==", subject.userRef).get()).docs
+    : [];
   const loginCodes = subject.email
     ? (
         await deps.db
@@ -479,6 +483,7 @@ export async function eraseSubject(
     savedPersons.length,
     `delete ${savedPersons.length} saved person(s)`
   );
+  record(state, "courseLinks", courseLinks.length, `delete ${courseLinks.length} course link(s)`);
   record(state, "users", subject.userDocExists ? 1 : 0, "delete users doc");
   record(
     state,
@@ -644,6 +649,7 @@ export async function eraseSubject(
 
   // Before the users doc: a deleted parent doesn't delete its subcollection.
   await batchedDelete(deps.db, savedPersons.map((d) => d.ref));
+  await batchedDelete(deps.db, courseLinks.map((d) => d.ref));
 
   // Tokens + users doc in ONE batch (invariant: never a token without its
   // user — a dangling token hard-rejects badge-in but must not linger).

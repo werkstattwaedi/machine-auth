@@ -555,6 +555,38 @@
       }
     }
   },
+  // edoobox courses (#842, docs/spec/courses.md). Function-written only
+  // (courseCall + syncCourses); admins read. Course data itself stays in
+  // edoobox and is read live.
+  "courses": {
+    "{offerId}": { // edoobox offer id
+      "permission": "DocumentReference | null", // /permission/{id} the course grants; null = none; absent = not picked yet (CRS-17)
+      "permissionSetBy": "DocumentReference", // /users/{uid} of the course leader who picked it
+      "permissionSetAt": "timestamp",
+      "title": "string", // course title at the last write, for admin lists and mails
+      "closedAt": "timestamp | null", // set by closeCourse (CRS-15)
+      "closedBy": "DocumentReference | null",
+      "closeChoices": { "<participantId>": "boolean" }, // Ja/Nein at the close
+      "remindersSent": ["number"] // reminder days sent: 1, 3, 7 (CRS-16)
+    }
+  },
+  "courseLinks": {
+    "{offerId}_{participantId}": { // doc id = one link per participant (CRS-7)
+      "offerId": "string",
+      "participantId": "string", // edoobox participant id
+      "edooboxUserId": "string",
+      "user": "DocumentReference", // /users/{uid} the participant is linked to
+      "choice": "no | temp | yes", // permission choice (CRS-10)
+      "linkedBy": "DocumentReference", // /users/{uid} of the course leader
+      "linkedAt": "timestamp",
+      "offerTitle": "string",
+      "participantName": "string"
+    }
+  },
+  "testing_edoobox": {
+    // EMULATOR ONLY: the e2e tests' edoobox (functions/src/courses/edoobox_fake.ts).
+    "state": {}
+  },
   "tokens": {
     "{tokenId}": { // NTag UID (e.g., "04c339aa1e1890")
       "userId": "DocumentReference", // DocumentReference to /users/{userId}
@@ -625,6 +657,9 @@
       // Grants keyed by permission id (#843, shared/src/permission-grants.ts).
       // Function-only: rules pin it for every client, admins included
       // (grantPermission / revokePermission). Accounts start with {}.
+      // edoobox admin id: makes the account a course leader (#842, ADM-17).
+      // Function-written only (setEdooboxLeader); absent = not a leader.
+      "edooboxLeaderId": "string",
       "permissions": {
         "<permissionId>": {
           "permission": "DocumentReference", // /permission/{permissionId}

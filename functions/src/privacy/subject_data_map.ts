@@ -68,6 +68,28 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
       "Closed checkouts keep only the savedPersonId link.",
   },
   {
+    collection: "courseLinks",
+    piiFields: ["user", "edooboxUserId", "participantName", "linkedBy"],
+    legalBasis: "Contract (course participation — edoobox booking linked to the account, #842)",
+    retention: "Until erasure request",
+    erasure: "delete",
+    notes:
+      "Deleted where user == subject. The participant's data itself stays in " +
+      "edoobox (their own processor). linkedBy on other people's links points " +
+      "at the course leader and is left as a dangling identifier.",
+  },
+  {
+    collection: "courses",
+    piiFields: ["permissionSetBy", "closedBy", "closeChoices (keyed by edoobox participant id)"],
+    legalBasis: "Contract (course administration, #842)",
+    retention: "Until erasure request",
+    erasure: "none",
+    notes:
+      "Course-level record (permission picked, close). Refers to the course " +
+      "leader by ref and to participants only by edoobox ids; kept as " +
+      "dangling identifiers.",
+  },
+  {
     collection: "tokens",
     piiFields: ["doc id = NFC tag UID", "userId", "label"],
     legalBasis: "Contract (badge access)",

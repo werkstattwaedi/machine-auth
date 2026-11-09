@@ -239,6 +239,7 @@ export { authCall } from "./auth/dispatcher";
 export { membershipCall } from "./membership/dispatcher";
 export { billingCall } from "./invoice/dispatcher";
 export { catalogCall } from "./catalog/dispatcher";
+export { courseCall } from "./courses/dispatcher";
 
 // logClientError stays standalone: it's the unauthenticated, fire-and-forget
 // error reporter and must not depend on a dispatcher that may itself be failing.
@@ -276,6 +277,8 @@ export { monthlyBillRun } from "./invoice/monthly_bill_run";
 export { onMembershipWritten } from "./membership/on_membership_written";
 export { dailyMembershipMaintenance } from "./membership/daily_maintenance";
 export { syncUsageGroups } from "./usage_groups/sync_usage_groups";
+// edoobox courses (#842): temporary permissions + close reminders, daily.
+export { syncCourses } from "./courses/sync_courses";
 
 // Export scheduled cleanup
 export { cleanupAbandonedCheckouts } from "./checkout/cleanup_abandoned_checkouts";
