@@ -611,6 +611,16 @@ export interface PricingConfigDoc extends AuditFields {
 }
 
 /**
+ * Doc at `config/clients` (#845). `minVersion` is the oldest web-app release
+ * allowed to run: an older app shows its reload screen and the dispatchers
+ * refuse its calls. Set by `scripts/deploy/set-min-client-version.ts`;
+ * absent or null = no minimum.
+ */
+export interface ClientsConfigDoc {
+  minVersion?: string | null
+}
+
+/**
  * Doc at `config/catalog-references`. Singleton lookup table for catalog
  * items referenced by production code. The seed writes this alongside
  * the catalog itself; ops can rebind a reference to a fresh catalog doc

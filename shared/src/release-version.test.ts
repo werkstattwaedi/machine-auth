@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it } from "vitest"
-import { latestRelease, parseBuildVersion, versionStanding } from "./release-version"
+import { isBelowMinVersion, latestRelease, parseBuildVersion, versionStanding } from "./release-version"
 
 describe("parseBuildVersion", () => {
   it("reads releases, dev builds and dirty builds", () => {
@@ -46,5 +46,26 @@ describe("versionStanding", () => {
   it("can't judge what it can't read", () => {
     expect(versionStanding(null, "2026.10.3")).toBe("unknown")
     expect(versionStanding("dev", "2026.10.3")).toBe("unknown")
+  })
+})
+
+describe("isBelowMinVersion", () => {
+  it("compares releases numerically", () => {
+    expect(isBelowMinVersion("2026.9.30", "2026.10.2")).toBe(true)
+    expect(isBelowMinVersion("2026.10.10", "2026.10.2")).toBe(false)
+    expect(isBelowMinVersion("2026.10.2", "2026.10.2")).toBe(false)
+  })
+
+  it("judges a build by the release it is based on", () => {
+    expect(isBelowMinVersion("2026.11.3-dev.4+g1a2b3c4d", "2026.11.4")).toBe(true)
+    expect(isBelowMinVersion("2026.11.4-dev.1+g1a2b3c4d.dirty", "2026.11.4")).toBe(false)
+  })
+
+  it("never blocks what isn't a release version", () => {
+    expect(isBelowMinVersion("dev", "2026.11.4")).toBe(false)
+    expect(isBelowMinVersion("0.0.0-dev+g1a2b3c4d", "2026.11.4")).toBe(false)
+    expect(isBelowMinVersion(undefined, "2026.11.4")).toBe(false)
+    expect(isBelowMinVersion("2026.11.3", null)).toBe(false)
+    expect(isBelowMinVersion("2026.11.3", "2026-11-4")).toBe(false)
   })
 })

@@ -29,6 +29,7 @@ import { toast } from "sonner"
 import { useFunctions } from "../lib/firebase-context"
 import { getClientSessionId } from "../lib/client-session"
 import { BUILD_VERSION } from "../lib/build-version"
+import { isClientOutdatedError } from "../lib/client-outdated"
 
 /** Structured error returned by `useAsyncMutation`. */
 export interface MutationError {
@@ -237,6 +238,9 @@ export function useAsyncMutation<T = void>(
           originalError: err,
         }
         setState({ loading: false, error: structured })
+        // An outdated app (#845) gets the blocking reload screen from
+        // rpc.ts; a toast behind it and a client-error log would be noise.
+        if (isClientOutdatedError(err)) throw err
         toast.error(message)
 
         // Telemetry is fire-and-forget — never let it interfere with

@@ -28,6 +28,7 @@ import type {
   BillDoc,
   CatalogItemDoc,
   CatalogReferencesDoc,
+  ClientsConfigDoc,
   CheckoutDoc,
   CheckoutItemDoc,
   ConfigDoc,
@@ -286,6 +287,13 @@ export function pricingConfigRef(
   db: Firestore,
 ): DocumentReference<PricingConfigDoc> {
   return doc(db, "config", "pricing") as DocumentReference<PricingConfigDoc>
+}
+
+/** Typed handle to the singleton `config/clients` document (#845). */
+export function clientsConfigRef(
+  db: Firestore,
+): DocumentReference<ClientsConfigDoc> {
+  return doc(db, "config", "clients") as DocumentReference<ClientsConfigDoc>
 }
 
 /** Typed handle to the singleton `config/catalog-references` document. */

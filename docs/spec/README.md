@@ -27,6 +27,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset |
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
+| `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
@@ -144,6 +145,7 @@ still passes a different wrong promise.
 - **Machine terminal** — the device on a machine that unlocks it.
 - **Wallee terminal** — the Wallee payment terminal next to the kiosk, and
   the payment method paid there.
+- **Web app** — the checkout app or the admin app.
 
 **Screens**
 - **Check-in, Kosten, Check Out, Bezahlen** — the four steps of the checkout
@@ -185,6 +187,9 @@ still passes a different wrong promise.
 - **Price list** (*Preisliste*) — a printable sheet of catalog items with
   their prices, made to hang in a workshop.
 - **Material label** (*Etikett*) — the printed tape label of a catalog item.
+- **Deployed version** — the release of a web app that is currently served.
+- **Minimum version** — the oldest release of the web apps that the team
+  allows to be used; none unless the team sets one.
 - **Workspace group** — one of the two Google Workspace groups of e-mail
   addresses, addresses outside the OWW included, that the team keeps: the
   *Freiwilligengruppe* and the *Interne Nutzung* group.

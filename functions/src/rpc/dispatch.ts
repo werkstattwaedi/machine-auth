@@ -18,7 +18,9 @@
 
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
+import { isBelowMinVersion, parseBuildVersion } from "@oww/shared";
 import { BUILD_VERSION } from "../util/build_info";
+import { getMinClientVersion } from "./min_client_version";
 
 export type RpcHandler = (
   request: CallableRequest<any>
@@ -27,7 +29,16 @@ export type RpcHandler = (
 interface RpcEnvelope {
   method?: string;
   payload?: unknown;
+  /** Release version of the calling web app (#845); absent for scripts. */
+  clientVersion?: string;
 }
+
+/**
+ * `details.reason` of the `failed-precondition` a client older than
+ * `config/clients.minVersion` gets; the web client shows its reload screen
+ * on it (`web/modules/lib/client-version.tsx`).
+ */
+export const CLIENT_OUTDATED_REASON = "client-outdated";
 
 export function dispatchRpc(
   group: string,
@@ -55,5 +66,30 @@ export function dispatchRpc(
     ...request,
     data: request.data?.payload,
   } as CallableRequest<any>;
+  // Only a call that reports a release version is checked: scripts (privacy
+  // CLI) and web apps from before #845 send none, and "dev" builds are never
+  // blocked. The Firestore lookup is skipped for them too.
+  const clientVersion = request.data?.clientVersion;
+  if (typeof clientVersion === "string" && parseBuildVersion(clientVersion)) {
+    return refuseOutdated(group, method, clientVersion).then(() =>
+      handler(subRequest)
+    );
+  }
   return handler(subRequest);
+}
+
+async function refuseOutdated(
+  group: string,
+  method: string,
+  clientVersion: string
+): Promise<void> {
+  const min = await getMinClientVersion();
+  if (!isBelowMinVersion(clientVersion, min)) return;
+  // Expected after every forced update — not an error (log policy).
+  logger.info("rpc refused: client outdated", { group, method, clientVersion, min });
+  throw new HttpsError(
+    "failed-precondition",
+    "Diese Version der App ist veraltet. Bitte lade die Seite neu.",
+    { reason: CLIENT_OUTDATED_REASON, minVersion: min }
+  );
 }
