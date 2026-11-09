@@ -139,5 +139,16 @@ describe("dispatchRpc", () => {
       });
       expect(await call("2026.1.1")).to.equal("done");
     });
+
+    it("waits a minute before reading again after a failed read", async () => {
+      let attempts = 0;
+      setMinClientVersionLoaderForTest(async () => {
+        attempts++;
+        throw new Error("unavailable");
+      });
+      await call("2026.1.1");
+      await call("2026.1.1");
+      expect(attempts).to.equal(1);
+    });
   });
 });

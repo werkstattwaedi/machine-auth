@@ -37,7 +37,10 @@ export async function getMinClientVersion(now = Date.now()): Promise<string | nu
     // An unreadable config must not take every callable down: let the call
     // through and try again on the next one.
     logger.warn("min client version unreadable", { err: String(err) });
-    return cached?.value ?? null;
+    // Keep the last known value (or none) for another minute instead of
+    // adding a failing read to every call during an outage.
+    cached = { value: cached?.value ?? null, at: now };
+    return cached.value;
   }
   return cached.value;
 }

@@ -30,7 +30,7 @@ import {
 } from "firebase/functions"
 import { getClientSessionId } from "./client-session"
 import { BUILD_VERSION } from "./build-version"
-import { reportClientOutdated } from "./client-outdated"
+import { isClientOutdatedError, reportClientOutdated } from "./client-outdated"
 
 export type RpcGroup =
   | "authCall"
@@ -114,14 +114,6 @@ export function rpcCallable<Req = unknown, Res = unknown>(
   }
 }
 
-/** The dispatcher's refusal of an outdated client (`CLIENT_OUTDATED_REASON`). */
-export function isClientOutdatedError(err: unknown): boolean {
-  const e = err as { code?: unknown; details?: { reason?: unknown } } | null
-  return (
-    e?.code === "functions/failed-precondition" &&
-    e.details?.reason === "client-outdated"
-  )
-}
 
 /**
  * Fire-and-forget telemetry for a failed RPC whose error is otherwise
@@ -137,6 +129,7 @@ export function reportRpcError(
   method: string,
   err: unknown
 ): void {
+  if (isClientOutdatedError(err)) return
   const sessionId = getClientSessionId()
   const e = (err ?? {}) as { code?: unknown; name?: unknown; message?: unknown }
   const code = String(e.code ?? e.name ?? "unknown")

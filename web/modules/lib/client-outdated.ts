@@ -26,6 +26,20 @@ export function subscribeClientOutdated(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+/**
+ * The dispatcher's refusal of an outdated client (`CLIENT_OUTDATED_REASON`
+ * in `functions/src/rpc/dispatch.ts`). Callers that toast or log errors skip
+ * it: the reload screen already says what to do, and an expected refusal is
+ * not a client error (log policy).
+ */
+export function isClientOutdatedError(err: unknown): boolean {
+  const e = err as { code?: unknown; details?: { reason?: unknown } } | null
+  return (
+    e?.code === "functions/failed-precondition" &&
+    e.details?.reason === "client-outdated"
+  )
+}
+
 /** Tests only. */
 export function resetClientOutdatedForTest(): void {
   outdated = false

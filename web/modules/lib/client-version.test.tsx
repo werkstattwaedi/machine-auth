@@ -89,6 +89,41 @@ describe("ClientVersionGateView", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull()
   })
 
+  it("shows the hint once per deployed version, not again on re-render", async () => {
+    const props = {
+      build: "2026.11.3",
+      kiosk: false,
+      fetchDeployed: async () => "2026.11.4",
+      reload: vi.fn(),
+    }
+    const { rerender } = render(<ClientVersionGateView {...props} minVersion={null} />)
+    await waitFor(() => expect(toastMock).toHaveBeenCalledOnce())
+    rerender(<ClientVersionGateView {...props} minVersion="2026.1.1" />)
+    rerender(<ClientVersionGateView {...props} minVersion={null} />)
+    expect(toastMock).toHaveBeenCalledOnce()
+  })
+
+  it("reloads once a later check finds the new build", async () => {
+    const reload = vi.fn()
+    let served = "2026.11.3"
+    render(
+      <ClientVersionGateView
+        build="2026.11.3"
+        minVersion="2026.11.4"
+        kiosk={false}
+        fetchDeployed={async () => served}
+        reload={reload}
+      />,
+    )
+    await waitFor(() => expect(screen.getByRole("alertdialog")).toBeTruthy())
+    expect(reload).not.toHaveBeenCalled()
+    served = "2026.11.4"
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"))
+    })
+    await waitFor(() => expect(reload).toHaveBeenCalledOnce())
+  })
+
   it("shows no hint at the kiosk", async () => {
     const fetchDeployed = vi.fn(async () => "2026.11.4")
     render(

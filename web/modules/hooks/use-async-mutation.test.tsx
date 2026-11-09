@@ -267,6 +267,29 @@ describe("useAsyncMutation", () => {
     expect(result.current.error?.message).toBe("Speichern fehlgeschlagen")
   })
 
+  it("neither toasts nor reports the refusal of an outdated app (#845)", async () => {
+    const { result } = renderHook(
+      () => useAsyncMutation({ context: "test.outdated", errorMessage: "Fehler" }),
+      { wrapper: createWrapper() },
+    )
+    const refusal = Object.assign(firebaseError("functions/failed-precondition", "veraltet"), {
+      details: { reason: "client-outdated" },
+    })
+
+    let thrown: unknown
+    await act(async () => {
+      try {
+        await result.current.mutate(() => Promise.reject(refusal))
+      } catch (err) {
+        thrown = err
+      }
+    })
+
+    expect(thrown).toBe(refusal)
+    expect(mockToastError).not.toHaveBeenCalled()
+    expect(mockLogClientErrorCallable).not.toHaveBeenCalled()
+  })
+
   it("maps FunctionsError code unavailable to the offline German message", async () => {
     const { result } = renderHook(
       () => useAsyncMutation({ context: "test.unavailable" }),

@@ -16,7 +16,7 @@
  * blocked — so this never shows up in screenshot baselines.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { toast } from "sonner"
 import { isBelowMinVersion } from "@oww/shared"
 import { Button } from "../components/ui/button"
@@ -33,6 +33,10 @@ import { useBridge } from "./use-bridge"
 const POLL_MS = 15 * 60_000
 const RELOAD_KEY = "oww.clientVersionReload"
 const UPDATE_TOAST_ID = "client-version-update"
+
+// Module-level so the default is the same function on every render; the
+// effects below depend on it.
+const defaultReload = () => window.location.reload()
 
 export type ClientVersionState = "ok" | "update-available" | "outdated"
 
@@ -115,7 +119,7 @@ export function ClientVersionGateView({
   minVersion,
   kiosk,
   fetchDeployed = fetchDeployedVersion,
-  reload = () => window.location.reload(),
+  reload = defaultReload,
 }: {
   build: string
   minVersion: string | null
@@ -152,31 +156,35 @@ export function ClientVersionGateView({
     }
   }, [build, check])
 
-  // Outdated: ask again right away (the deploy may be minutes old) and
-  // reload once the new build is there.
+  // Outdated: ask for the deployed version right away (the deploy may be
+  // minutes old); the polling above keeps asking after that.
+  useEffect(() => {
+    if (state === "outdated") void check()
+  }, [state, check])
+
+  // Reload once a deployed build meets the minimum — re-evaluated whenever
+  // a poll brings a new deployed version.
   useEffect(() => {
     if (state !== "outdated") return
-    let cancelled = false
-    void check().then((v) => {
-      if (cancelled) return
-      if (shouldAutoReload({ build, deployed: v, minVersion, lastReloadFor: readLastReload() })) {
-        writeLastReload(v!)
-        reload()
-      }
-    })
-    return () => {
-      cancelled = true
+    if (shouldAutoReload({ build, deployed, minVersion, lastReloadFor: readLastReload() })) {
+      writeLastReload(deployed!)
+      reload()
     }
-  }, [state, build, minVersion, check, reload])
+  }, [state, build, deployed, minVersion, reload])
 
+  // One hint per deployed version: a dismissed toast stays dismissed until
+  // yet another version is deployed.
+  const hintedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (state !== "update-available" || kiosk) return
+    if (state !== "update-available" || kiosk || !deployed) return
+    if (hintedFor.current === deployed) return
+    hintedFor.current = deployed
     toast("Eine neue Version ist verfügbar.", {
       id: UPDATE_TOAST_ID,
       duration: Infinity,
       action: { label: "Neu laden", onClick: () => reload() },
     })
-  }, [state, kiosk, reload])
+  }, [state, kiosk, deployed, reload])
 
   if (state !== "outdated") return null
   return <OutdatedScreen onReload={reload} />
