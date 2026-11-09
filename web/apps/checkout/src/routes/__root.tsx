@@ -6,6 +6,7 @@ import { FirebaseProvider } from "@modules/lib/firebase-context"
 import { AuthProvider } from "@modules/lib/auth"
 import { Toaster } from "@modules/components/ui/sonner"
 import { MarkerIO } from "@modules/components/marker-io"
+import { ClientVersionGate } from "@modules/lib/client-version"
 import { auth, db, functions } from "@modules/lib/firebase"
 import { BridgeNfcRouter } from "@/components/bridge-nfc-router"
 import { KioskElevationProvider } from "@/components/checkout/kiosk-elevation-dialog"
@@ -29,6 +30,7 @@ function RootLayout() {
           <KioskStatusReporter />
           <Outlet />
           <Toaster />
+          <ClientVersionGate />
           <MarkerIO app="checkout" />
         </KioskElevationProvider>
       </AuthProvider>

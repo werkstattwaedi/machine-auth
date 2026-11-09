@@ -30,6 +30,7 @@ import {
 } from "firebase/functions"
 import { getClientSessionId } from "./client-session"
 import { BUILD_VERSION } from "./build-version"
+import { reportClientOutdated } from "./client-outdated"
 
 export type RpcGroup =
   | "authCall"
@@ -96,11 +97,30 @@ export function rpcCallable<Req = unknown, Res = unknown>(
   group: RpcGroup,
   method: string
 ): (payload: Req) => Promise<HttpsCallableResult<Res>> {
-  const fn = httpsCallable<{ method: string; payload: Req }, Res>(
-    functions,
-    group
+  const fn = httpsCallable<
+    { method: string; payload: Req; clientVersion: string },
+    Res
+  >(functions, group)
+  return async (payload: Req) => {
+    try {
+      // The dispatcher refuses an app older than config/clients.minVersion
+      // (#845); that refusal opens the reload screen instead of leaving the
+      // user with a puzzling error toast only.
+      return await fn({ method, payload, clientVersion: BUILD_VERSION })
+    } catch (err) {
+      if (isClientOutdatedError(err)) reportClientOutdated()
+      throw err
+    }
+  }
+}
+
+/** The dispatcher's refusal of an outdated client (`CLIENT_OUTDATED_REASON`). */
+export function isClientOutdatedError(err: unknown): boolean {
+  const e = err as { code?: unknown; details?: { reason?: unknown } } | null
+  return (
+    e?.code === "functions/failed-precondition" &&
+    e.details?.reason === "client-outdated"
   )
-  return (payload: Req) => fn({ method, payload })
 }
 
 /**

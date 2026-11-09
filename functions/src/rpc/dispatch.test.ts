@@ -3,7 +3,9 @@
 
 import { expect } from "chai";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { dispatchRpc, type RpcHandler } from "./dispatch";
+import { HttpsError } from "firebase-functions/v2/https";
+import { CLIENT_OUTDATED_REASON, dispatchRpc, type RpcHandler } from "./dispatch";
+import { setMinClientVersionLoaderForTest } from "./min_client_version";
 
 function makeRequest(
   data: unknown,
@@ -79,5 +81,63 @@ describe("dispatchRpc", () => {
     )
       .to.throw()
       .with.property("code", "invalid-argument");
+  });
+
+  describe("minimum client version (#845)", () => {
+    let loads = 0;
+    const handlers: Record<string, RpcHandler> = { doThing: () => "done" };
+    const call = (clientVersion?: string) =>
+      dispatchRpc(
+        "test",
+        handlers,
+        makeRequest({ method: "doThing", payload: {}, clientVersion })
+      );
+
+    beforeEach(() => {
+      loads = 0;
+      setMinClientVersionLoaderForTest(async () => {
+        loads++;
+        return "2026.11.4";
+      });
+    });
+    afterEach(() => setMinClientVersionLoaderForTest(undefined));
+
+    it("refuses a client older than the minimum", async () => {
+      try {
+        await call("2026.11.3");
+        expect.fail("expected a refusal");
+      } catch (err) {
+        expect(err).to.be.instanceOf(HttpsError);
+        expect((err as HttpsError).code).to.equal("failed-precondition");
+        expect((err as HttpsError).details).to.deep.equal({
+          reason: CLIENT_OUTDATED_REASON,
+          minVersion: "2026.11.4",
+        });
+      }
+    });
+
+    it("lets the minimum and newer through", async () => {
+      expect(await call("2026.11.4")).to.equal("done");
+      expect(await call("2026.12.1")).to.equal("done");
+    });
+
+    it("never checks calls without a release version", async () => {
+      expect(await call(undefined)).to.equal("done");
+      expect(await call("dev")).to.equal("done");
+      expect(loads).to.equal(0);
+    });
+
+    it("reads the minimum once a minute, not per call", async () => {
+      await call("2026.11.4");
+      await call("2026.11.5");
+      expect(loads).to.equal(1);
+    });
+
+    it("lets calls through while the config is unreadable", async () => {
+      setMinClientVersionLoaderForTest(async () => {
+        throw new Error("unavailable");
+      });
+      expect(await call("2026.1.1")).to.equal("done");
+    });
   });
 });

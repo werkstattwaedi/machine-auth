@@ -10,7 +10,8 @@ vi.mock("firebase/functions", () => ({
 }))
 
 import { httpsCallable } from "firebase/functions"
-import { prewarm, reportRpcError, resetPrewarmForTest } from "./rpc"
+import { prewarm, reportRpcError, resetPrewarmForTest, rpcCallable } from "./rpc"
+import { isClientReportedOutdated, resetClientOutdatedForTest } from "./client-outdated"
 
 const functions = {} as Functions
 
@@ -130,5 +131,40 @@ describe("reportRpcError", () => {
     expect(() =>
       reportRpcError(functions, "ctx", "authCall", "resolveTag", new Error("e")),
     ).not.toThrow()
+  })
+})
+
+describe("rpcCallable", () => {
+  beforeEach(() => {
+    callableMock.mockReset()
+    resetClientOutdatedForTest()
+  })
+
+  it("sends the app's version with every call (#845)", async () => {
+    callableMock.mockResolvedValue({ data: 1 })
+    await rpcCallable(functions, "authCall", "createUser")({ a: 1 })
+    expect(callableMock).toHaveBeenCalledExactlyOnceWith({
+      method: "createUser",
+      payload: { a: 1 },
+      clientVersion: "dev",
+    })
+  })
+
+  it("raises the reload screen when the server refuses an outdated app", async () => {
+    const refusal = Object.assign(new Error("veraltet"), {
+      code: "functions/failed-precondition",
+      details: { reason: "client-outdated", minVersion: "2026.11.4" },
+    })
+    callableMock.mockRejectedValue(refusal)
+    await expect(rpcCallable(functions, "authCall", "createUser")({})).rejects.toBe(refusal)
+    expect(isClientReportedOutdated()).toBe(true)
+  })
+
+  it("leaves other failed preconditions alone", async () => {
+    callableMock.mockRejectedValue(
+      Object.assign(new Error("x"), { code: "functions/failed-precondition" }),
+    )
+    await expect(rpcCallable(functions, "authCall", "createUser")({})).rejects.toThrow("x")
+    expect(isClientReportedOutdated()).toBe(false)
   })
 })

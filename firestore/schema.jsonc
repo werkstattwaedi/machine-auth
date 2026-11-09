@@ -366,6 +366,12 @@
       // install) bootstraps with it set.
       "referenceNumberFormat": "shifted-v1"
     },
+    // Oldest web-app release allowed to run (#845, docs/spec/apps.md). Set by
+    // scripts/deploy/set-min-client-version.ts; absent/null = no minimum.
+    // Public read (the apps listen to it signed out too), admin write.
+    "clients": {
+      "minVersion": "string | null" // e.g. "2026.11.4"
+    },
     "catalog-references": {
 
       "membership": "DocumentReference", // DocumentReference to the Mitgliedschaft catalog item (variants: "single", "family")

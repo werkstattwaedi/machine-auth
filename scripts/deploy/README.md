@@ -122,6 +122,7 @@ component in the record. None of them stops for one-off steps yet.
 | `deploy-record.ts` | Record a deploy or a manual ops event (`event --env … --note …`) |
 | `deploy-log.ts` | Pure log and `STATE.md` rendering behind `deploy-record.ts` |
 | `device-status-read.ts` | Read what the terminals, gateways and kiosks report running (ADC) |
+| `set-min-client-version.ts` | Set or clear the minimum web-app version (`config/clients.minVersion`, #845): older open apps reload, their calls are refused (ADC) |
 | `setup-bigquery.ts` | Create or extend the `stats` dataset, tables and views |
 
 Tests sit next to their scripts and run with `npm run test:scripts`.

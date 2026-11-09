@@ -6,6 +6,7 @@ import { FirebaseProvider } from "@modules/lib/firebase-context"
 import { AuthProvider } from "@modules/lib/auth"
 import { Toaster } from "@modules/components/ui/sonner"
 import { MarkerIO } from "@modules/components/marker-io"
+import { ClientVersionGate } from "@modules/lib/client-version"
 import { auth, db, functions } from "@modules/lib/firebase"
 
 export const Route = createRootRoute({
@@ -18,6 +19,7 @@ function RootLayout() {
       <AuthProvider>
         <Outlet />
         <Toaster />
+        <ClientVersionGate />
         <MarkerIO app="admin" />
       </AuthProvider>
     </FirebaseProvider>

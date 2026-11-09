@@ -66,3 +66,21 @@ export function versionStanding(
   if (p.dev !== null || p.dirty) return "dev"
   return "current"
 }
+
+/**
+ * Whether a client built as `build` is older than the minimum version the
+ * server asks for (`config/clients.minVersion`, #845). Compares the release a
+ * build is based on, so `2026.11.3-dev.4+g…` is below `2026.11.4` and
+ * `2026.11.4-dev.1+g…` is not. A build or minimum that isn't a release
+ * version — `dev` (local and e2e builds), absent, unreadable — is never
+ * below: a typo in the config must not lock every client out.
+ */
+export function isBelowMinVersion(
+  build: string | null | undefined,
+  min: string | null | undefined,
+): boolean {
+  const b = parseBuildVersion(build)
+  const m = parseBuildVersion(min)
+  if (!b || !m || b.release[0] === 0) return false
+  return compareRelease(b, m) < 0
+}
