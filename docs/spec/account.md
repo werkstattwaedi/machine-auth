@@ -23,7 +23,7 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 ## At the kiosk
 
-- **ACC-4** A restricted session reaches the checkout; the account, buying a badge (MEM-38) and the welcome onboarding (ACC-2) only after a code (ACC-5). — ADR-0041, #849
+- **ACC-4** A restricted session reaches the checkout; the account, buying a badge (MEM-38) and the welcome onboarding past its first step (ACC-2) only after a code (ACC-5). — ADR-0041, ADR-0022, #849
 - **ACC-5** At the kiosk, an e-mail or SMS code opens for 15 min what a restricted session reaches only after one (ACC-4); it is entered at sign-in (ACC-1), or asked for when that is wanted without a code. — ADR-0041, #849
 
 ## Nutzungsverlauf
