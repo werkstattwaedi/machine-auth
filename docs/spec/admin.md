@@ -15,6 +15,10 @@ What the team sees and does in the admin app. Terms: see the
 - **ADM-13** The sync report lists, for each Workspace group, the addresses in it that match no account. — ADR-0053
 - **ADM-14** A volunteer who is not a member is shown as a warning on the sync report and on their user page in the admin app. — ADR-0053
 
+## Permissions
+
+- **ADM-16** In the admin app, an admin grants or removes a person's permissions (MAC-2) on the Berechtigungen tab of the person's page, which lists the permissions they hold, each with when and by whom it was granted where that is recorded, and sets the permissions a machine requires (MAC-1) on the machine's settings tab. — ADR-0033, #843
+
 ## Material labels
 
 - **ADM-2** An admin prints one material label from a catalog item's page, or every label in the cart of the *Etiketten* tab in one go, and sees each label's preview, as it will print, beforehand. — ADR-0033, #337, #490

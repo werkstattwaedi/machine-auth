@@ -66,7 +66,7 @@ test.describe("Imported-member welcome onboarding", () => {
       email: IMPORTED_EMAIL,
       phone: "+41792489428",
       roles: [],
-      permissions: [],
+      permissions: {},
       userType: "erwachsen",
       termsAcceptedAt: null,
       billingAddress: {

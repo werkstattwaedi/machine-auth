@@ -5,7 +5,7 @@ import { describe, it, expect } from "vitest"
 import { TestFixture } from "./fixtures"
 
 describe("TestFixture", () => {
-  it("seeds users with permission refs", () => {
+  it("seeds users with permissions as the grant map (#843)", () => {
     const { db } = new TestFixture()
       .withPermission({ id: "laser", name: "Laser" })
       .withUser({ id: "u1", firstName: "Max", lastName: "Muster", permissions: ["laser"] })
@@ -14,9 +14,10 @@ describe("TestFixture", () => {
     const userData = db.getData("users", "u1")!
     expect(userData.firstName).toBe("Max")
     expect(userData.lastName).toBe("Muster")
-    const perms = userData.permissions as { path: string }[]
-    expect(perms).toHaveLength(1)
-    expect(perms[0].path).toBe("permission/laser")
+    const grants = userData.permissions as Record<string, { permission: { path: string }; source: string }>
+    expect(Object.keys(grants)).toEqual(["laser"])
+    expect(grants.laser.permission.path).toBe("permission/laser")
+    expect(grants.laser.source).toBe("legacy")
   })
 
   it("seeds machines with permission and maco refs", () => {

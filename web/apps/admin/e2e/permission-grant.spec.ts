@@ -14,29 +14,33 @@ import {
   GRANT_TARGET_USER_ID,
 } from "./global-setup"
 
-interface PermissionRefShape {
-  id: string
-  path?: string
+interface GrantShape {
+  source?: string
+  grantedBy?: { id: string } | null
+}
+
+/** The grant map (#843), keyed by permission id. */
+async function readGrants(userId: string): Promise<Record<string, GrantShape>> {
+  const db = getAdminFirestore()
+  const snap = await db.collection("users").doc(userId).get()
+  return (snap.data()?.permissions ?? {}) as Record<string, GrantShape>
 }
 
 async function readUserPermissions(userId: string): Promise<string[]> {
-  const db = getAdminFirestore()
-  const snap = await db.collection("users").doc(userId).get()
-  const data = snap.data() ?? {}
-  const refs = (data.permissions ?? []) as PermissionRefShape[]
-  return refs.map((p) => p.id)
+  return Object.keys(await readGrants(userId))
 }
 
 test.describe("Berechtigungen tab: grant and revoke", () => {
   test.beforeEach(async () => {
     await clearCollections("loginCodes")
     // Reset the grant target user back to "no `fraese`" so tests are
-    // independent of run order.
+    // independent of run order. `update`, not a merge-set: a merge would
+    // keep the map's existing keys.
     const db = getAdminFirestore()
     await db
       .collection("users")
       .doc(GRANT_TARGET_USER_ID)
-      .set({ permissions: [] }, { merge: true })
+      .update({ permissions: {} })
   })
 
   test("admin grants a permission via the picker", async ({ page }) => {
@@ -61,6 +65,10 @@ test.describe("Berechtigungen tab: grant and revoke", () => {
         message: `permissions on ${GRANT_TARGET_USER_ID} should include ${GRANTABLE_PERMISSION_ID}`,
       })
       .toContain(GRANTABLE_PERMISSION_ID)
+    // Granted through the server, which records who granted it (ADM-16).
+    const grant = (await readGrants(GRANT_TARGET_USER_ID))[GRANTABLE_PERMISSION_ID]
+    expect(grant.source).toBe("admin")
+    expect(grant.grantedBy?.id).toBeTruthy()
   })
 
   test("admin revokes a permission from its card", async ({ page }) => {
@@ -70,10 +78,14 @@ test.describe("Berechtigungen tab: grant and revoke", () => {
     await db
       .collection("users")
       .doc(GRANT_TARGET_USER_ID)
-      .set(
-        { permissions: [db.doc(`permission/${GRANTABLE_PERMISSION_ID}`)] },
-        { merge: true },
-      )
+      .update({
+        [`permissions.${GRANTABLE_PERMISSION_ID}`]: {
+          permission: db.doc(`permission/${GRANTABLE_PERMISSION_ID}`),
+          grantedAt: null,
+          grantedBy: null,
+          source: "legacy",
+        },
+      })
 
     await signInWithEmailCode(page, ADMIN_EMAIL)
     await page.goto(`/users/${GRANT_TARGET_USER_ID}?tab=permissions`)

@@ -622,7 +622,19 @@
       "phone": "string | null",
       "firstName": "string", // First name (e.g., "Michael")
       "lastName": "string", // Last name (e.g., "Schneider")
-      "permissions": ["DocumentReference"], // Array of DocumentReferences to /permission/{permissionId}
+      // Grants keyed by permission id (#843, shared/src/permission-grants.ts).
+      // Function-only: rules pin it for every client, admins included
+      // (grantPermission / revokePermission). Accounts start with {}.
+      "permissions": {
+        "<permissionId>": {
+          "permission": "DocumentReference", // /permission/{permissionId}
+          "grantedAt": "timestamp | null", // null = legacy (from before #843, not in the audit log)
+          "grantedBy": "DocumentReference | null", // /users/{uid} of the admin or course leader
+          "source": "admin | course | legacy",
+          "course": { "offerId": "string" }, // optional: the edoobox course that granted it (#842)
+          "windows": [{ "from": "timestamp", "until": "timestamp" }] // optional: set = temporary
+        }
+      },
       "roles": ["admin"], // "vereinsmitglied" is no longer a role — membership is its own entity
       "termsAcceptedAt": "timestamp | null", // When user accepted terms of service
       "userType": "erwachsen | kind | firma", // User type for pricing

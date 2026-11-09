@@ -143,7 +143,7 @@ async function seedUser(uid: string, overrides: Record<string, unknown> = {}) {
       lastName: uid,
       email: `${uid}@test.com`,
       roles: [],
-      permissions: [],
+      permissions: {},
       userType: "erwachsen",
       activeMembership: null,
       ...overrides,
@@ -538,7 +538,7 @@ describe("cross-user: users", () => {
       userType: "erwachsen",
       termsAcceptedAt: serverTimestamp(),
       roles: [],
-      permissions: [],
+      permissions: {},
       phone: null,
       billingAddress: null,
       created: serverTimestamp(),
@@ -614,16 +614,29 @@ describe("cross-user: users", () => {
     )
   })
 
-  it("denies self-registration granting a non-empty permissions array (P0-1)", async () => {
+  it("denies self-registration granting permissions (P0-1)", async () => {
+    const laser = doc(signupDb("mallory"), "permission", "laser")
     await assertCrossUserDenied(
       "users/{id} create self-grants machine permissions",
-      "firestore.rules:users create (permissions == [])",
+      "firestore.rules:users create (permissions == {})",
       () =>
         setDoc(
           doc(signupDb("mallory"), "users", "mallory"),
           signupDoc({
-            permissions: [doc(signupDb("mallory"), "permission", "laser")],
+            permissions: {
+              laser: { permission: laser, grantedAt: null, grantedBy: null, source: "admin" },
+            },
           }),
+        ),
+    )
+    // The list shape from before #843 is refused too.
+    await assertCrossUserDenied(
+      "users/{id} create self-grants machine permissions (legacy list)",
+      "firestore.rules:users create (permissions == {})",
+      () =>
+        setDoc(
+          doc(signupDb("mallory"), "users", "mallory"),
+          signupDoc({ permissions: [laser] }),
         ),
     )
   })
@@ -1839,7 +1852,7 @@ describe("cross-user: activeMembership is server-only", () => {
       lastName: uid,
       email: `${uid}@test.com`,
       roles: [],
-      permissions: [],
+      permissions: {},
       userType: "erwachsen",
       ...extra,
     }
@@ -1956,7 +1969,7 @@ describe("cross-user: usageGroups is sync-only", () => {
         lastName: "mallory",
         email: "mallory@test.com",
         roles: [],
-        permissions: [],
+        permissions: {},
         userType: "erwachsen",
         usageGroups: ["volunteering"],
       }),
@@ -1989,6 +2002,58 @@ describe("cross-user: usageGroups is sync-only", () => {
   it("allows the owner and an admin editing other fields while it stays", async () => {
     await seedUser("alice")
     await getAdminFirestore().doc("users/alice").update({ usageGroups: ["volunteering"] })
+    await assertSucceeds(updateDoc(doc(authedDb("alice"), "users", "alice"), { firstName: "Alicia" }))
+    await assertSucceeds(updateDoc(doc(adminDb(), "users", "alice"), { lastName: "Admin" }))
+  })
+})
+
+// #843, MAC-2: `permissions` is the grant map (who, when, from where). The
+// rules can't check a map rewritten as a whole, so no client principal
+// writes it — an admin's included; admins go through grantPermission /
+// revokePermission (authCall).
+describe("cross-user: permissions are function-only", () => {
+  const RULE = "firestore.rules users update (permissionsUnchanged, #843)"
+  const grant = (db: ReturnType<typeof adminDb>) => ({
+    laser: {
+      permission: doc(db, "permission", "laser"),
+      grantedAt: null,
+      grantedBy: null,
+      source: "admin",
+    },
+  })
+
+  it("denies the owner and an elevated kiosk session granting themselves one", async () => {
+    await seedUser("mallory")
+    await assertCrossUserDenied("users/{userId} owner grants a permission", RULE, () =>
+      updateDoc(doc(authedDb("mallory"), "users", "mallory"), {
+        permissions: grant(authedDb("mallory")),
+      }),
+    )
+    await assertCrossUserDenied("users/{userId} elevated kiosk grants a permission", RULE, () =>
+      updateDoc(doc(elevatedTagSessionDb("mallory"), "users", "mallory"), {
+        permissions: grant(elevatedTagSessionDb("mallory")),
+      }),
+    )
+  })
+
+  it("denies an admin writing it directly", async () => {
+    await seedUser("alice")
+    await assertCrossUserDenied("users/{userId} admin writes permissions", RULE, () =>
+      updateDoc(doc(adminDb(), "users", "alice"), { permissions: grant(adminDb()) }),
+    )
+  })
+
+  it("allows the owner and an admin editing other fields while it stays", async () => {
+    await seedUser("alice", {
+      permissions: {
+        laser: {
+          permission: getAdminFirestore().doc("permission/laser"),
+          grantedAt: null,
+          grantedBy: null,
+          source: "legacy",
+        },
+      },
+    })
     await assertSucceeds(updateDoc(doc(authedDb("alice"), "users", "alice"), { firstName: "Alicia" }))
     await assertSucceeds(updateDoc(doc(adminDb(), "users", "alice"), { lastName: "Admin" }))
   })

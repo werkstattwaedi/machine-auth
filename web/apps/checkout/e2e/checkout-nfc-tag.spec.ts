@@ -178,7 +178,7 @@ test.describe("NFC tag checkout", () => {
       email: "switch-parent@test.com",
       userType: "erwachsen",
       roles: [],
-      permissions: [],
+      permissions: {},
       termsAcceptedAt: FieldValue.serverTimestamp(),
       created: FieldValue.serverTimestamp(),
     })

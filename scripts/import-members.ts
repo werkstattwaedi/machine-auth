@@ -445,7 +445,7 @@ async function applyImport(
         lastName: r.lastName,
         email: r.email,
         phone: r.phone,
-        permissions: [],
+        permissions: {},
         roles: [],
         termsAcceptedAt: null,
         userType: "erwachsen",

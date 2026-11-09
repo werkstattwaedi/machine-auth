@@ -144,7 +144,7 @@ describe("signupKiosk + sendAccountInstructions (Integration)", () => {
       expect(doc.get("termsAcceptedAt")).to.not.be.null;
       expect(doc.get("billingAddress")).to.be.null;
       expect(doc.get("roles")).to.deep.equal([]);
-      expect(doc.get("permissions")).to.deep.equal([]);
+      expect(doc.get("permissions")).to.deep.equal({});
       expect(doc.get("phone")).to.be.null;
       // The instructions email was "sent" (emulator: logged) and stamped.
       expect(result.emailSent).to.equal(true);

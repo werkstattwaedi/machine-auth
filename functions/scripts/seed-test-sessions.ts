@@ -38,7 +38,7 @@ async function seedTestData() {
         lastName: 'User',
         created: Timestamp.now(),
         roles: ['vereinsmitglied'],
-        permissions: [],
+        permissions: {},
       });
       console.log(`✓ User created: ${userRef.id}\n`);
     }

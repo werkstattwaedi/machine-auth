@@ -15,7 +15,7 @@ import {
   UserEntity,
 } from "../types/firestore_entities";
 import { formatFullName } from "../util/username-utils";
-import { isSameBusinessDay, rejectionCause } from "@oww/shared";
+import { heldPermissionIds, isSameBusinessDay, rejectionCause } from "@oww/shared";
 import { resolveCheckoutDomain } from "../util/checkout-domain";
 import { buildDeniedUrl, zurichDateKey } from "./denied_url";
 
@@ -138,12 +138,10 @@ export async function handleTerminalCheckin(
     const machineData = machineDoc.data() as MachineEntity;
     const requiredPermission = machineData.requiredPermission ?? [];
     if (requiredPermission.length > 0) {
-      const userPermissionPaths = new Set(
-        (userData.permissions ?? []).map((ref) => ref.path)
-      );
+      const held = new Set(heldPermissionIds(userData.permissions, Date.now()));
       const missing = requiredPermission
-        .map((ref) => ref.path)
-        .filter((path) => !userPermissionPaths.has(path));
+        .map((ref) => ref.id)
+        .filter((id) => !held.has(id));
       if (missing.length > 0) {
         logger.warn("User missing required permission for machine", {
           userId: userDoc.id,

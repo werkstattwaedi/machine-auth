@@ -158,7 +158,7 @@ export async function handleSignupKiosk(
     billingAddress: profile.billingAddress,
     created: FieldValue.serverTimestamp(),
     roles: [],
-    permissions: [],
+    permissions: {},
     phone: null,
   };
   try {

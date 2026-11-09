@@ -35,7 +35,7 @@ import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, type DocumentReference } from "firebase-admin/firestore";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -160,12 +160,30 @@ function assertNoDanglingRefs(mode: "full" | "structural"): void {
   }
 }
 
+/**
+ * A users fixture lists its permissions as refs (easy to write by hand, and
+ * the ops repo's fixtures do); the doc stores the grant map (#843).
+ */
+function withGrantMap(fields: Record<string, unknown>): Record<string, unknown> {
+  const list = fields.permissions;
+  if (!Array.isArray(list)) return fields;
+  const grants: Record<string, unknown> = {};
+  for (const ref of list as DocumentReference[]) {
+    grants[ref.id] = { permission: ref, grantedAt: null, grantedBy: null, source: "legacy" };
+  }
+  return { ...fields, permissions: grants };
+}
+
 async function seedCollection(
   collectionName: string,
   data: Record<string, Record<string, unknown>>,
 ) {
   for (const [id, fields] of Object.entries(data)) {
-    await db.collection(collectionName).doc(id).set(resolveValue(fields) as Record<string, unknown>);
+    const resolved = resolveValue(fields) as Record<string, unknown>;
+    await db
+      .collection(collectionName)
+      .doc(id)
+      .set(collectionName === "users" ? withGrantMap(resolved) : resolved);
   }
   console.log(`  ${collectionName}: ${Object.keys(data).length} docs`);
 }

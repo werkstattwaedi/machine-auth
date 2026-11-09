@@ -220,7 +220,7 @@ export async function handleAcceptInviteNewAccount(
             : {
                 created: now,
                 roles: [],
-                permissions: [],
+                permissions: {},
                 phone: null,
               }),
         } satisfies Partial<UserEntity> & Record<string, unknown>,

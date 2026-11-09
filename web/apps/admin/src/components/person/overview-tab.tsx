@@ -27,6 +27,7 @@ import { billTotals } from "@/lib/bill-status"
 import { formatCHF, formatDate, formatDateTime } from "@modules/lib/format"
 import { formatDuration } from "@/lib/duration"
 import { Clock, MoveRight } from "lucide-react"
+import { grantedPermissionIds } from "@oww/shared"
 
 export function PersonOverviewTab({
   userId,
@@ -164,7 +165,7 @@ export function PersonOverviewTab({
         />
         <OverviewCard
           label="Berechtigungen"
-          value={`${user.permissions?.length ?? 0} erteilt`}
+          value={`${grantedPermissionIds(user.permissions).length} erteilt`}
           link={
             <TabLink userId={userId} tab="permissions">
               Tab öffnen

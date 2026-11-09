@@ -1,5 +1,5 @@
 import { DocumentReference, Timestamp } from "firebase-admin/firestore";
-import type { UsageGroup } from "@oww/shared";
+import type { PermissionGrants, UsageGroup } from "@oww/shared";
 
 import type {
   DiscountLevel,
@@ -43,7 +43,10 @@ export interface UserEntity {
   // Contact number, E.164. The Auth-linked (SMS login) number must be null
   // or equal to this; a mismatch unlinks it (ADR-0043).
   phone?: string | null;
-  permissions: DocumentReference[]; // References to /permission/{permissionId}
+  // Grants keyed by permission id (#843); read through heldPermissionIds /
+  // grantedPermissionIds (@oww/shared). The ref list is the shape from
+  // before scripts/migrate-permission-grants.ts.
+  permissions: PermissionGrants<DocumentReference, Timestamp> | DocumentReference[];
   roles: string[];
   termsAcceptedAt?: Timestamp | null;
   userType?: "erwachsen" | "kind" | "firma";

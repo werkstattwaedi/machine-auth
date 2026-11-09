@@ -28,11 +28,11 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 | `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |
+| `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, permissions |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
-an id to find it. Other domains get a file when an issue first touches them — planned prefix:
-`MAC` (machine terminal).
+an id to find it. Other domains get a file when an issue first touches them.
 Don't backfill a domain up front.
 
 ## Writing rules
@@ -160,6 +160,8 @@ still passes a different wrong promise.
 
 **Things**
 - **Badge** — a person's NFC tag.
+- **Permission** (*Berechtigung*) — a named qualification, such as for the
+  laser cutter, that a machine can require and a person's account can hold.
 - **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
   it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was

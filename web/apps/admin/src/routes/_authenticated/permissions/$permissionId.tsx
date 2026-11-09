@@ -4,14 +4,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useDocument, useCollection } from "@modules/lib/firestore"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { rpcCallable } from "@modules/lib/rpc"
+import { grantedPermissionIds } from "@oww/shared"
 import {
   permissionRef,
   machineRef,
   machinesCollection,
-  userRef,
   usersCollection,
 } from "@modules/lib/firestore-helpers"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { formatFullName } from "@modules/lib/username-utils"
 import { PageLoading } from "@modules/components/page-loading"
 import { PageHeader } from "@/components/admin/page-header"
@@ -53,6 +55,14 @@ function PermissionDetailPage() {
   const { data: allUsers } = useCollection(usersCollection(db))
   const { data: allMachines } = useCollection(machinesCollection(db))
   const { update, loading: saving } = useFirestoreMutation()
+  const functions = useFunctions()
+  // Removing it from a person goes through the server (#843): the rules
+  // pin `users.permissions` for every client.
+  const revokeMutation = useAsyncMutation({
+    context: "admin.permission.revoke",
+    successMessage: "Berechtigung entfernt",
+    errorMessage: "Berechtigung konnte nicht entfernt werden",
+  })
   const [revokeTarget, setRevokeTarget] = useState<{
     type: "user" | "machine"
     id: string
@@ -73,7 +83,7 @@ function PermissionDetailPage() {
   const referencingUsers = useMemo(
     () =>
       allUsers.filter((u) =>
-        (u.permissions ?? []).some((p) => p.id === permissionId),
+        grantedPermissionIds(u.permissions).includes(permissionId),
       ),
     [allUsers, permissionId],
   )
@@ -104,16 +114,16 @@ function PermissionDetailPage() {
     if (!revokeTarget) return
 
     if (revokeTarget.type === "user") {
-      const user = allUsers.find((u) => u.id === revokeTarget.id)
-      if (!user) return
-      const filtered = (user.permissions ?? [])
-        .filter((p) => p.id !== permissionId)
-        .map((p) => permissionRef(db, p.id))
-      await update(
-        userRef(db, revokeTarget.id),
-        { permissions: filtered },
-        { successMessage: "Berechtigung entfernt" },
-      )
+      try {
+        await revokeMutation.mutate(async () => {
+          await rpcCallable(functions, "authCall", "revokePermission")({
+            userId: revokeTarget.id,
+            permissionId,
+          })
+        })
+      } catch {
+        return
+      }
     } else {
       const machine = allMachines.find((m) => m.id === revokeTarget.id)
       if (!machine) return

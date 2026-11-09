@@ -68,6 +68,7 @@ import {
   MoveRight,
   Save,
 } from "lucide-react"
+import { heldPermissionIds } from "@oww/shared"
 
 const TABS = ["overview", "reports", "settings"] as const
 type MachineTab = (typeof TABS)[number]
@@ -249,7 +250,7 @@ function MachineOverview({
     requiredIds.length === 0
       ? null
       : allUsers.filter((u) => {
-          const held = new Set((u.permissions ?? []).map((p) => p.id))
+          const held = new Set(heldPermissionIds(u.permissions, Date.now()))
           return requiredIds.every((id) => held.has(id))
         }).length
 

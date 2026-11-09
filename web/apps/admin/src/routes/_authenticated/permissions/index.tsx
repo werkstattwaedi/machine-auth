@@ -35,6 +35,7 @@ import { Plus, Trash2, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { serverTimestamp } from "firebase/firestore"
 import { type ColumnDef } from "@tanstack/react-table"
+import { grantedPermissionIds } from "@oww/shared"
 
 export const Route = createFileRoute("/_authenticated/permissions/")({
   component: PermissionsPage,
@@ -53,7 +54,7 @@ function PermissionsPage() {
     if (!deleteTarget) return null
     const id = deleteTarget.id
     const referencingUsers = users.filter((u: UserDoc & { id: string }) =>
-      (u.permissions ?? []).some((p) => p.id === id)
+      grantedPermissionIds(u.permissions).includes(id)
     )
     const referencingMachines = machines.filter((m: MachineDoc & { id: string }) =>
       (m.requiredPermission ?? []).some((p) => p.id === id)
