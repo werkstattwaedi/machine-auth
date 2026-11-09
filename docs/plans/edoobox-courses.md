@@ -13,7 +13,7 @@ Course leaders («Kursleitung») manage their edoobox courses in the checkout, i
 
 **Course page.** Back link «Kursleitung», title = course, subtitle «Sa 31.10. · Sa 7.11. · 9:00–12:00 · gibt «Lasercutter»», button «Kurs abschliessen» (from the start of the last Termin). Card «Teilnehmende», a table:
 - *Teilnehmer:in*: name plus edoobox e-mail.
-- *Anwesenheit*: group header with one column per Termin (header = date only; today's in teal). Doodle-style full cells: present = green with ✓, absent in the past = light red with ✗, today not yet set = hatched. A click toggles the cell and writes to edoobox immediately (toast «In edoobox gespeichert»). Future Termine are not clickable. Footer row «Anwesend» shows «6 / 7» per Termin.
+- *Anwesenheit*: group header with one column per Termin (header = date only; today's in teal). Doodle-style full cells showing the edoobox *Präsenzstatus*: its symbol (✓, ✓>, ❶, ①…) in its edoobox colour on a light tint of that colour; no status yet = hatched. A click opens a menu of the offered statuses (symbol, name; the current one checked) plus «Kein Status» below a divider; picking one writes to edoobox immediately (toast «In edoobox gespeichert»). Future Termine are not clickable. No footer row. Statuses (name, symbol, colour, *Anwesenheit* %) come from edoobox (`GET /settings/list` → `attendance_config`); a status counts as present when its Anwesenheit is above 0 % (Anwesend, Frühzeitig gegangen), as absent when it is 0 % (Entschuldigt, Unentschuldigt, …), status 0 «Kein Status» = not recorded. Mockup state `course-menu`.
 - *Zugang*: three icons (Konto, Badge, Berechtigung). Done = green. The next open step = yellow filled, with the action in bold next to it: «Konto verknüpfen» / «Badge zuweisen» (on the teacher's own device: «Badge am Kiosk zuweisen»). Not reachable yet = grey dashed. Permission: Vorläufig = teal, Ja/already held = green, Nein = red. With Nein, no badge step is suggested. Tooltip/aria-label spells out the state.
 - Chevron; a row click opens the person page.
 - Mobile (<640 px): the Zugang icons + next step move under the name, the e-mail and the Zugang column are hidden, only the name + date cells remain.
@@ -28,7 +28,7 @@ Course leaders («Kursleitung») manage their edoobox courses in the checkout, i
 **Kurs abschliessen.** Title «Kurs abschliessen», subtitle «Wer «Lasercutter» behält». One row per participant with a Nein/Ja segmented control:
 - Preset Ja for Vorläufig/Ja and for already permitted people (tag «Schon berechtigt», green, next to the name). Nein for choice Nein.
 - No account: Nein fixed (greyed out), red tag «Kein Konto».
-- Missed Termine: gold tag «An 1 Termin abwesend» / «Nie anwesend».
+- Missed Termine: gold tag «An 1 Termin abwesend» / «Nie anwesend» — counted from statuses at 0 % (not from «Kein Status»).
 - On Nein, a field appears with the label «Grund (Notiz in edoobox)», prefilled with «Kein Konto», «Nicht teilgenommen» (absent from every Termin) or «Nicht an allen Terminen teilgenommen», otherwise empty. The reason goes to edoobox as a note (`POST /v2/note`, pinned to booking + offer + participant user).
 - Footer «4 erhalten «Lasercutter»», «Abbrechen» / «Abschliessen». Toast «Kurs abgeschlossen».
 - Ja grants the permission permanently. Nein never takes away a permission held before the course.
@@ -114,7 +114,8 @@ permissions: {
 - `listLeaderDates(adminId)` — `GET /date/list?filter=[{"property":"admin","value":adminId}]` (a date's `leader` is a list of admin ids; the plain `?admin=` query is ignored)
 - `getOffers(ids)` — `GET /offer/list` with `fields` incl. `shareurl` (relative: prefix the account's booking-site base)
 - `attendanceTable(offerId, dateId)` — `GET /attendance/list/table?filter=[offer, date]` → `participants` (`participant_*` + `user`), `attendances` (`type` per participant and date), `dates`. Its `first_name`/`last_name` are swapped; take names and e-mail from `GET /user/{id}`
-- `setAttendance` — `POST /attendance {date, type, participant}` creates, `PUT /attendance/{id}` changes. edoobox accepts future dates: our server enforces CRS-4
+- `setAttendance` — `POST /attendance {date, type, participant}` creates, `PUT /attendance/{id}` changes; `type` is the status number. edoobox accepts future dates: our server enforces CRS-4
+- `attendanceStatuses()` — `GET /settings/list` → `attendance_config` (`status`, `val` symbol, `color`, `counter` = Anwesenheit %, `help` = name for the editable ones; 0–2 are locked: Kein Status, Anwesend, Frühzeitig gegangen), cached per instance
 - `listAdmins()` — `GET /admin/list`
 - `createNote` — `POST /note {subject, message, todo:false, type:2, pinned:{booking,offer,user}}`
 
@@ -222,5 +223,5 @@ Spec lines: prefactor `Spec: MAC-1..3 (added), MAC-1 (changed), ADM-16 (added), 
 - **Baselines that change:** the checkout sidebar («Kursleitung» only appears for a linked leader, so existing baselines should stay; check `profile`/`usage`/`membership`), and the admin person Profil tab (`users-screenshots` `person-overview`) because of the new card. Regenerate through the `update_snapshots` dispatch, not locally.
 
 ## Risks / open questions
-- Attendance `type` values 1–4: confirm which is present/absent before the client maps them.
+- Attendance statuses are account settings (decided 2026-11-09): the only config is which ones the menu offers, `EDOOBOX_ATTENDANCE_STATUSES` (default `1,2,3,4`, in menu order); everything else is read from edoobox. A configured number edoobox doesn't know is dropped from the menu with a warning log. Spec rules CRS-4, CRS-12, CRS-13 need rewording for statuses instead of present/absent (spec-expert, with the implementation).
 - The sandbox account's lifetime (see Testing against edoobox).
