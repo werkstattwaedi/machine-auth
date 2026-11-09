@@ -34,6 +34,7 @@ import type {
   PricingModel,
 } from "@modules/lib/workshop-config"
 import {
+  compareNatural,
   filterByCategoryPrefix,
   nextLevelValues,
 } from "@modules/lib/categories"
@@ -375,7 +376,7 @@ function PickerBody({
     // Search across name, code, category path, description and variant
     // labels with diacritic folding (#452) — not just name + code.
     const matches = byCategory.filter((c) => matchesCatalogQuery(c, query))
-    return [...matches].sort((a, b) => a.name.localeCompare(b.name, "de"))
+    return [...matches].sort((a, b) => compareNatural(a.name, b.name))
   }, [catalogItems, categoryPrefix, query])
 
   // A narrower result set keeps the list's old scroll offset. With few

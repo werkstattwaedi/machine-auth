@@ -13,13 +13,23 @@ import type { CatalogItemDoc } from "./firestore-entities"
  * don't apply to any visible item never become visible chips.
  */
 
+/**
+ * Orders catalog labels the way a person reads them: runs of digits compare
+ * by value, so "Korn 60" comes before "Korn 240" and "6 × 6" before
+ * "10 × 10" (#823). Plain `localeCompare` sorts them as text.
+ */
+export const compareNatural: (a: string, b: string) => number = new Intl.Collator(
+  "de-CH",
+  { numeric: true },
+).compare
+
 /** A catalog item with at least the `category` field of `CatalogItemDoc`. */
 export type CategorizedItem = Pick<CatalogItemDoc, "category">
 
 /**
  * The set of unique values at one path depth among the given items,
  * restricted to items whose category begins with `prefix`. Order:
- * alphabetical (de-CH locale) so the picker chips are stable.
+ * alphabetical (de-CH locale, numbers by value) so the picker chips are stable.
  *
  * Items without a value at `prefix.length` are skipped — that depth
  * simply doesn't apply to them, the picker doesn't render a chip for
@@ -35,7 +45,7 @@ export function nextLevelValues(
     const next = item.category?.[prefix.length]
     if (next != null && next !== "") set.add(next)
   }
-  return [...set].sort((a, b) => a.localeCompare(b, "de-CH"))
+  return [...set].sort(compareNatural)
 }
 
 /**
