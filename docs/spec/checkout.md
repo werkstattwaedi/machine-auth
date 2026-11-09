@@ -159,6 +159,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
 - [NEEDS CLARIFICATION] The unfolded sessions (CHK-45) show each session's wall-clock duration, while the row's minutes (CHK-44) are the billed time, so on a machine billed by active time (ADR-0032) the sessions don't add up to the row. Intended, or should the list show billed time?
 - [NEEDS CLARIFICATION] Only the app keeps a machine row read-only (CHK-44); the server accepts an edit or delete of it from the checkout's owner. Should the server refuse?
 - [NEEDS CLARIFICATION] A reminder link to a checkout that no longer exists tells even its account holder that it belongs to another account (CHK-42). Intended? → #802
+- [NEEDS CLARIFICATION] The *Material hinzufügen* picker on Kosten — whatever it was opened from, a price list's QR code included — lists its items alphabetically by name and its category filters alphabetically, comparing digits as text, so "Korn 100" comes before "Korn 60"; no decision records this order. Intended? → #823
 
 ## Retired
 
