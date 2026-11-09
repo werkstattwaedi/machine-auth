@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 import {
+  compareNatural,
   filterByCategoryPrefix,
   itemCountForPrefix,
   nextLevelValues,
@@ -65,6 +66,44 @@ describe("nextLevelValues", () => {
   })
   it("dedupes repeated values", () => {
     expect(nextLevelValues(items, ["Holzplatten"])).toHaveLength(2)
+  })
+  it("orders numbers by value, not as text (#823)", () => {
+    const grits = ["Korn 240", "Korn 60/80", "Korn 120"].map((g) => ({
+      category: ["Schleifmittel", g],
+    }))
+    expect(nextLevelValues(grits, ["Schleifmittel"])).toEqual([
+      "Korn 60/80",
+      "Korn 120",
+      "Korn 240",
+    ])
+  })
+})
+
+describe("compareNatural", () => {
+  it("sorts item names the way the price list reads (#823)", () => {
+    const names = [
+      "Dreiecksschleifer Korn 100",
+      "Dreiecksschleifer Korn 240",
+      "Dreiecksschleifer Korn 60",
+      "Dreiecksschleifer Korn 80",
+      "Vierkantstahl 10 × 10",
+      "Vierkantstahl 6 × 6",
+    ]
+    expect([...names].sort(compareNatural)).toEqual([
+      "Dreiecksschleifer Korn 60",
+      "Dreiecksschleifer Korn 80",
+      "Dreiecksschleifer Korn 100",
+      "Dreiecksschleifer Korn 240",
+      "Vierkantstahl 6 × 6",
+      "Vierkantstahl 10 × 10",
+    ])
+  })
+  it("still folds umlauts like the de-CH locale", () => {
+    expect(["Zange", "Äste", "Ahorn"].sort(compareNatural)).toEqual([
+      "Ahorn",
+      "Äste",
+      "Zange",
+    ])
   })
 })
 

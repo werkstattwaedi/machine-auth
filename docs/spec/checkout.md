@@ -48,6 +48,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
 - **CHK-46** Machine time (CHK-44) is priced for the person whose badge unlocked the machine — the member price while a membership that lists them as a member is active (MEM-10, MEM-11) — whoever on the visit worked the machine. — #799, #745
 - **CHK-45** On Kosten, a machine row (CHK-44) unfolds to list the sessions behind it — machine, start time, duration — for a restricted session (ACC-4) as for a signed-in person. — #214, #648
 - **CHK-48** With an open checkout, a link to a catalog item, such as a material label's QR code (ADM-3), opens that item on Kosten, ready to add, with the variant the link names preselected, or the item's first variant when the link names none or one the item doesn't have. — ADR-0026, #213
+- **CHK-54** The *Material hinzufügen* picker on Kosten lists its items alphabetically by name and its category filters alphabetically, a run of digits compared by its value ("Korn 60" before "Korn 100"), whatever it was opened from and whatever is searched. — #823
 
 ## Usage type
 
@@ -159,7 +160,6 @@ methods and documents in [billing.md](billing.md). Terms: see the
 - [NEEDS CLARIFICATION] The unfolded sessions (CHK-45) show each session's wall-clock duration, while the row's minutes (CHK-44) are the billed time, so on a machine billed by active time (ADR-0032) the sessions don't add up to the row. Intended, or should the list show billed time?
 - [NEEDS CLARIFICATION] Only the app keeps a machine row read-only (CHK-44); the server accepts an edit or delete of it from the checkout's owner. Should the server refuse?
 - [NEEDS CLARIFICATION] A reminder link to a checkout that no longer exists tells even its account holder that it belongs to another account (CHK-42). Intended? → #802
-- [NEEDS CLARIFICATION] The *Material hinzufügen* picker on Kosten — whatever it was opened from, a price list's QR code included — lists its items alphabetically by name and its category filters alphabetically, comparing digits as text, so "Korn 100" comes before "Korn 60"; no decision records this order. Intended? → #823
 
 ## Retired
 
