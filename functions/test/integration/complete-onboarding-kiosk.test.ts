@@ -23,16 +23,24 @@ import {
   type CompleteOnboardingKioskInput,
 } from "../../src/checkout/complete_onboarding_kiosk";
 
-/** A synthetic kiosk-session request acting on `userId`. */
+/**
+ * A synthetic kiosk-session request acting on `userId` — OTP-elevated by
+ * default (ADR-0041); `elevated: false` is a plain badge tap.
+ */
 function kioskRequest(
   userId: string,
-  data: CompleteOnboardingKioskInput
+  data: CompleteOnboardingKioskInput,
+  { elevated = true } = {}
 ): CallableRequest<CompleteOnboardingKioskInput> {
   return {
     data,
     auth: {
       uid: `tag:${userId}:nonce`,
-      token: { tagCheckout: true, actsAs: userId },
+      token: {
+        tagCheckout: true,
+        actsAs: userId,
+        ...(elevated ? { elevatedUntil: Date.now() + 15 * 60 * 1000 } : {}),
+      },
     },
   } as unknown as CallableRequest<CompleteOnboardingKioskInput>;
 }
@@ -104,6 +112,23 @@ describe("completeOnboardingKiosk (Integration)", () => {
         } as unknown as CallableRequest<CompleteOnboardingKioskInput>),
       "permission-denied"
     );
+  });
+
+  it("rejects a plain badge-tap session — the step-up comes first", async () => {
+    await expectHttpsError(
+      () =>
+        completeOnboardingKioskHandler(
+          kioskRequest(
+            "member1",
+            { profile: PROFILE, termsAccepted: true },
+            { elevated: false }
+          )
+        ),
+      "permission-denied"
+    );
+    const snap = await getFirestore().collection("users").doc("member1").get();
+    expect(snap.get("firstName")).to.equal("Fanziska");
+    expect(snap.get("termsAcceptedAt")).to.equal(null);
   });
 
   it("applies step-2 profile edits without touching roles/permissions/terms", async () => {

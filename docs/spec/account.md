@@ -19,12 +19,12 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 ## First sign-in
 
-- **ACC-2** A signed-in person without a complete profile completes the welcome onboarding before anything else, on an own device and at the kiosk alike. — ADR-0022, #595
+- **ACC-2** A signed-in person without a complete profile completes the welcome onboarding before anything else, on an own device and at the kiosk alike — a restricted session after a code (ACC-4). — ADR-0022, #595, #849
 
 ## At the kiosk
 
-- **ACC-4** A restricted session reaches the checkout but not the account. — ADR-0041
-- **ACC-5** At the kiosk, an e-mail or SMS code opens the account for 15 min, entered at sign-in (ACC-1) or when a restricted session opens an account page. — ADR-0041
+- **ACC-4** A restricted session reaches the checkout; the account, buying a badge (MEM-38) and the welcome onboarding past its first step (ACC-2) only after a code (ACC-5). — ADR-0041, ADR-0022, #849
+- **ACC-5** At the kiosk, an e-mail or SMS code opens for 15 min what a restricted session reaches only after one (ACC-4); it is entered at sign-in (ACC-1), or asked for when that is wanted without a code. — ADR-0041, #849
 
 ## Nutzungsverlauf
 
@@ -32,6 +32,7 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 ## Open questions
 
+- [NEEDS CLARIFICATION] A restricted session with an incomplete profile whose account has neither an e-mail address nor a mobile number verified for SMS sign-in can't enter a code (ACC-5), so it can't complete the welcome onboarding at the kiosk (ACC-2, ACC-4). What does it get instead — and the same for a person who cancels the code? — #849
 - [NEEDS CLARIFICATION] A badge tapped on a phone is refused with a generic "could not be read" error; ADR-0022 promised a message that sends the person to the kiosk. Rule or gap?
 
 ## Retired

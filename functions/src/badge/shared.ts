@@ -4,14 +4,15 @@
 /**
  * Shared utilities for the self-service badge purchase module:
  *  - Badge catalog resolution via `config/catalog-references.badge`.
- *  - Caller resolution that ACCEPTS kiosk actsAs sessions (unlike the
- *    membership module's `callerUserRef` — badge purchase happens at the
- *    kiosk, so the tag/email-code session IS the expected principal).
+ *  - Caller resolution that accepts kiosk actsAs sessions only while
+ *    ELEVATED (ADR-0041) — badge purchase happens at the kiosk, but a badge
+ *    tap alone must not add a second credential to an account.
  *  - Badge item detection and the free-first-badge eligibility rule.
  */
 
 import { heldPermissionIds } from "@oww/shared";
 import { HttpsError } from "firebase-functions/v2/https";
+import { isElevatedNow } from "../checkout/kiosk_session";
 import type {
   DocumentReference,
   DocumentSnapshot,
@@ -63,10 +64,12 @@ export async function loadBadgeCatalog(
 }
 
 /**
- * The user-doc reference the caller acts for. Accepts real logins AND kiosk
- * actsAs sessions (badge tap or email-code sign-in — ADR-0022); rejects
+ * The user-doc reference the caller acts for. Accepts real logins and kiosk
+ * actsAs sessions that proved an OTP (`elevatedUntil`, ADR-0041); rejects
  * unauthenticated and Firebase-anonymous callers (a badge must be bound to
- * an account).
+ * an account) and a plain badge-tap session: whoever holds someone else's
+ * badge could otherwise buy a second one on that account — a credential
+ * that survives the owner blocking the lost badge.
  */
 export function effectiveCallerRef(
   database: Firestore,
@@ -87,6 +90,12 @@ export function effectiveCallerRef(
   }
   const actsAs = authToken?.["actsAs"];
   if (typeof actsAs === "string" && actsAs.length > 0) {
+    if (!isElevatedNow(authToken)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Bitte bestätige dich am Kiosk mit einem Code."
+      );
+    }
     return database.collection("users").doc(actsAs);
   }
   return database.collection("users").doc(authUid);

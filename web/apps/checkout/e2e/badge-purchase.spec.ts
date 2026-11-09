@@ -8,8 +8,10 @@
  *  1. An unassigned (pre-personalized, no tokens doc) badge tapped with no
  *     session → the sign-in-first notice; the voucher is parked.
  *  2. The visitor then identifies with their own registered badge → the
- *     parked purchase offer resumes WITHOUT a re-tap, priced server-side
- *     (the seeded NFC user already owns a badge → CHF 5, not gratis).
+ *     parked purchase offer resumes WITHOUT a re-tap. A badge tap alone
+ *     can't buy (ADR-0041): the offer asks for a code first, and only the
+ *     elevated session gets the server-side price (the seeded NFC user
+ *     already owns a badge → CHF 5, not gratis).
  *  3. Confirming adds the line item; closing the checkout associates the
  *     badge: `tokens/{uid}` exists with the buyer's ref and the purchase
  *     tap's SDM counter.
@@ -20,7 +22,11 @@ import { FieldValue } from "firebase-admin/firestore"
 import { readFileSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import { clearCollections, getAdminFirestore } from "./helpers"
+import {
+  clearCollections,
+  getAdminFirestore,
+  waitForLoginCode,
+} from "./helpers"
 import {
   NFC_TAG_UID,
   NFC_USER_ID,
@@ -40,7 +46,7 @@ function readE2eData(): {
 }
 
 test.beforeEach(async () => {
-  await clearCollections("checkouts")
+  await clearCollections("checkouts", "loginCodes")
   const db = getAdminFirestore()
   // Registered badge: reset the replay counter (each project re-runs with
   // the same counter-0 tap URL). Unassigned badge: delete any association a
@@ -84,6 +90,20 @@ test.describe("Self-service badge purchase", () => {
     await expect(page.getByTestId("badge-purchase-dialog")).toBeVisible({
       timeout: 15_000,
     })
+
+    // ── 2b. Badge-tap session: step up with an e-mail code first ──
+    await expect(page.getByTestId("badge-purchase-stepup-note")).toBeVisible()
+    await page.getByTestId("badge-purchase-confirm").click()
+    await expect(page.getByTestId("kiosk-elevation-dialog")).toBeVisible()
+    await page.getByTestId("kiosk-elevation-email").click()
+    const entry = await waitForLoginCode("nfc@test.com")
+    expect(entry, "debugCode should be present in emulator").toBeTruthy()
+    await page.getByTestId("checkin-code-input").fill(entry!.code)
+    await page.getByTestId("checkin-code-submit").click()
+    await expect(page.getByTestId("badge-purchase-dialog")).toBeVisible({
+      timeout: 15_000,
+    })
+
     // The NFC user already owns a badge → the new one costs the catalog
     // price, no gratis first-badge.
     await expect(page.getByTestId("badge-purchase-price")).toContainText("5")

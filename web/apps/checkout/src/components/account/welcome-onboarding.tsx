@@ -228,6 +228,9 @@ export interface WelcomeOnboardingViewProps {
   /** Step-4 content override — the kiosk swaps the member-area links for
    *  the instructions-email offer. Default: resource links (+ family note). */
   resourcesStep?: React.ReactNode
+  /** Runs on leaving step 1, before the profile form shows the stored data.
+   *  Return false to stay on step 1 — the kiosk's step-up (ADR-0041). */
+  beforeProfile?: () => Promise<boolean>
   onDone: () => void
 }
 
@@ -247,6 +250,7 @@ export function WelcomeOnboardingView({
   persistProfile,
   persistTerms,
   resourcesStep,
+  beforeProfile,
   onDone,
 }: WelcomeOnboardingViewProps) {
   const [step, setStep] = useState(1)
@@ -322,6 +326,10 @@ export function WelcomeOnboardingView({
 
   const goNext = async () => {
     if (saving) return
+    if (step === 1 && beforeProfile) {
+      if (await beforeProfile()) setStep(2)
+      return
+    }
     if (step === 2) {
       if (await saveProfile()) setStep(3)
       return

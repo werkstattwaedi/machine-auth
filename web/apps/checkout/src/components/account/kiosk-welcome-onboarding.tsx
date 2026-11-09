@@ -18,18 +18,23 @@
  *    issue #358);
  *  - step 4 swaps the member-area links for the account-instructions email
  *    offer: family members, Belege & Co. live in the member area, which the
- *    kiosk cannot open.
+ *    kiosk cannot open;
+ *  - a session signed in by badge tap alone steps up with a code on leaving
+ *    step 1 (ADR-0041): whoever holds someone else's badge must neither see
+ *    the stored profile nor set it, nor accept the terms in their name. The
+ *    callable refuses such a session too; code sign-ins skip the step.
  */
 
 import { useState } from "react"
 import { Loader2, Mail, MailCheck } from "lucide-react"
-import { isProfileComplete } from "@modules/lib/auth"
+import { isProfileComplete, useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useDocument } from "@modules/lib/firestore"
 import { userRef } from "@modules/lib/firestore-helpers"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { rpcCallable } from "@modules/lib/rpc"
 import { Button } from "@modules/components/ui/button"
+import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 import {
   WelcomeOnboardingView,
   type OnboardingProfileUpdate,
@@ -47,6 +52,8 @@ export function KioskWelcomeOnboarding({ userId }: { userId: string }) {
   const { mutate, loading: saving } = useAsyncMutation({
     context: "checkout.kioskOnboarding",
   })
+  const { isKioskElevated } = useAuth()
+  const { ensureElevated } = useKioskElevation()
 
   // Latch on first doc load (mirrors the own-device wrapper): accepting
   // terms in step 3 completes the profile, and the dialog must survive
@@ -109,6 +116,17 @@ export function KioskWelcomeOnboarding({ userId }: { userId: string }) {
       persistProfile={persistProfile}
       persistTerms={persistTerms}
       resourcesStep={<StepResourcesKiosk email={userDoc.email ?? ""} />}
+      beforeProfile={
+        isKioskElevated
+          ? undefined
+          : () =>
+              new Promise<boolean>((resolve) =>
+                ensureElevated(
+                  () => resolve(true),
+                  () => resolve(false),
+                ),
+              )
+      }
       onDone={() => setDone(true)}
     />
   )

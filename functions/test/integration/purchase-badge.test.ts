@@ -94,11 +94,18 @@ async function seedMember(uid: string, listed = true): Promise<void> {
   await seedUser(uid, { activeMembership: membershipRef });
 }
 
-/** Kiosk actsAs session caller (badge tap or email-code sign-in). */
-function kioskCaller(userId: string) {
+/**
+ * Kiosk actsAs session caller. Elevated by default (code sign-in, or a badge
+ * tap that stepped up — ADR-0041); `elevated: false` is a plain badge tap.
+ */
+function kioskCaller(userId: string, { elevated = true } = {}) {
   return {
     authUid: `tag:${userId}:nonce`,
-    authToken: { tagCheckout: true, actsAs: userId } as Record<string, unknown>,
+    authToken: {
+      tagCheckout: true,
+      actsAs: userId,
+      ...(elevated ? { elevatedUntil: Date.now() + 15 * 60 * 1000 } : {}),
+    } as Record<string, unknown>,
   };
 }
 
@@ -452,6 +459,31 @@ describe("addBadgeToCheckout (Integration)", () => {
         ),
       "permission-denied"
     );
+  });
+
+  it("rejects a plain badge-tap session and an expired step-up", async () => {
+    await seedMember("u-tap");
+    for (const authToken of [
+      kioskCaller("u-tap", { elevated: false }).authToken,
+      { ...kioskCaller("u-tap").authToken, elevatedUntil: Date.now() - 1000 },
+    ]) {
+      for (const dryRun of [true, false]) {
+        await expectHttpsError(
+          () =>
+            handleAddBadgeToCheckout(
+              { badgeVoucher: voucherFor(TOKEN_ID), dryRun },
+              { authUid: "tag:u-tap:nonce", authToken },
+              MASTER_KEY
+            ),
+          "permission-denied"
+        );
+      }
+    }
+    const open = await getFirestore()
+      .collection("checkouts")
+      .where("userId", "==", getFirestore().doc("users/u-tap"))
+      .get();
+    expect(open.empty).to.equal(true);
   });
 
   it("accepts a real (non-kiosk) signed-in caller too", async () => {

@@ -12,6 +12,12 @@
  * The quote is a `dryRun` of the same callable, so eligibility logic
  * exists exactly once, server-side (permissions aren't client-visible for
  * kiosk sessions).
+ *
+ * A session signed in by badge tap alone must step up first (ADR-0041): the
+ * server refuses it, since whoever holds someone else's badge could
+ * otherwise buy a second one on that account. The dialog then explains the
+ * code step, hides while the step-up dialog is open, and quotes once the
+ * session is elevated. Code sign-ins are elevated already and skip it.
  */
 
 import { useEffect, useState } from "react"
@@ -20,6 +26,7 @@ import { useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
 import { formatCHF } from "@modules/lib/format"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { useAuth } from "@modules/lib/auth"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@modules/components/ui/alert-dialog"
+import { useKioskElevation } from "./kiosk-elevation-dialog"
 
 export interface BadgePurchaseOffer {
   tokenId: string
@@ -64,6 +72,13 @@ export function BadgePurchaseDialog({
   onClose: () => void
 }) {
   const functions = useFunctions()
+  const { sessionKind, isKioskElevated } = useAuth()
+  const { ensureElevated } = useKioskElevation()
+  const needsStepUp = sessionKind === "tag" && !isKioskElevated
+  // The step-up dialog is open: hide this one rather than stack two modals;
+  // it comes back either way (elevated → quote, cancelled → the user can
+  // still cancel the purchase here).
+  const [steppingUp, setSteppingUp] = useState(false)
   const [quote, setQuote] = useState<AddBadgeResponse | null>(null)
   const [quoteError, setQuoteError] = useState<string | null>(null)
   const purchase = useAsyncMutation<AddBadgeResponse>({
@@ -75,7 +90,7 @@ export function BadgePurchaseDialog({
   const voucher = offer?.badgeVoucher ?? null
 
   useEffect(() => {
-    if (!voucher) {
+    if (!voucher || needsStepUp) {
       setQuote(null)
       setQuoteError(null)
       return
@@ -101,10 +116,22 @@ export function BadgePurchaseDialog({
     return () => {
       cancelled = true
     }
-  }, [voucher, functions])
+  }, [voucher, needsStepUp, functions])
+
+  const stepUp = () => {
+    setSteppingUp(true)
+    ensureElevated(
+      () => setSteppingUp(false),
+      () => setSteppingUp(false),
+    )
+  }
 
   const confirm = async () => {
     if (!voucher) return
+    if (needsStepUp) {
+      stepUp()
+      return
+    }
     try {
       await purchase.mutate(async () => {
         const addBadge = rpcCallable<AddBadgeRequest, AddBadgeResponse>(
@@ -129,7 +156,7 @@ export function BadgePurchaseDialog({
       : null)
 
   return (
-    <AlertDialog open={offer !== null}>
+    <AlertDialog open={offer !== null && !steppingUp}>
       <AlertDialogContent
         onEscapeKeyDown={(e) => e.preventDefault()}
         data-testid="badge-purchase-dialog"
@@ -143,7 +170,15 @@ export function BadgePurchaseDialog({
         </AlertDialogHeader>
 
         <div className="py-1" data-testid="badge-purchase-price">
-          {inlineError ? (
+          {needsStepUp ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="badge-purchase-stepup-note"
+            >
+              Zur Sicherheit bestätigst du zuerst mit einem Code, dass du das
+              bist.
+            </p>
+          ) : inlineError ? (
             <p className="text-sm text-destructive" role="alert">
               {inlineError}
             </p>
@@ -173,13 +208,21 @@ export function BadgePurchaseDialog({
           </AlertDialogAction>
           <AlertDialogAction
             onClick={() => void confirm()}
-            disabled={!quote || !!quoteError || purchase.loading}
+            disabled={
+              needsStepUp
+                ? false
+                : !quote || !!quoteError || purchase.loading
+            }
             data-testid="badge-purchase-confirm"
           >
             {purchase.loading && (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             )}
-            {quote?.free ? "Badge übernehmen" : "Badge kaufen"}
+            {needsStepUp
+              ? "Weiter"
+              : quote?.free
+                ? "Badge übernehmen"
+                : "Badge kaufen"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -73,3 +73,7 @@ Idempotency and safety: `tx.create` per token (a trigger retry no-ops), per-item
 - **Rejected: representing unassigned badges as owner-less `tokens` docs.** Would have weakened the `TokenEntity.userId` invariant every consumer relies on, required a migration for personalization tooling, and made "unassigned" writable state instead of derived absence.
 - **Rejected: association at bill-ack (membership pattern).** The badge is a physical object already in the buyer's pocket; a badge that doesn't open machines until payment confirmation is a support burden, not a safeguard.
 - **Rejected: client-computed price display.** Kiosk sessions don't see `permissions`; extending the verify payload would leak permission data to a public terminal and duplicate the eligibility rule. The `dryRun` quote keeps one source of truth at the cost of one extra callable round-trip when the dialog opens.
+
+## Amendment (2026-11): step-up required at the kiosk
+
+`effectiveCallerRef` now accepts a kiosk `actsAs` principal only while it is OTP-elevated (`elevatedUntil`, ADR-0041), for the dry-run quote too. A badge tap alone let whoever held someone else's badge buy a second one on that account — a credential that survives the owner blocking the lost badge. The kiosk purchase dialog asks for the code before it quotes; code sign-ins are elevated at mint and see no extra step. Same change for `completeOnboardingKiosk` (ADR-0022 amendment, #595): the welcome onboarding asks for the code on leaving its first step. Spec: MEM-38, ACC-4.

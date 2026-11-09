@@ -24,6 +24,7 @@ renewal, cancellation and expiry. Terms: see the
 - **MEM-13** A membership doesn't change the usage fee; member prices (MEM-10), paying by Sammelrechnung (BIL-4) and a free first badge (MEM-14) are its only benefits.
 - **MEM-14** A person's first badge is free if they are an active member or hold any permission; while they have an active badge, every further one costs the catalog price. — ADR-0030
 - **MEM-37** A badge that is registered, or on a checkout that is open or awaiting payment (BIL-49), can't be added to another checkout. — ADR-0030, #812
+- **MEM-38** At the kiosk, buying a badge takes a code entered in the last 15 min (ACC-4, ACC-5), which the offer (KIO-13) asks for before it shows the price. — ADR-0041, #849
 
 ## Family
 
