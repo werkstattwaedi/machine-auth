@@ -1,6 +1,6 @@
 # edoobox courses: Kursleitung in the checkout (#842)
 
-Status: **planned** 2026-11-09, design session on #842. Two PRs: the permission-grants prefactor (#843, Approach step 1), then the course feature (step 2). Meine Kurse for participants is the follow-up #844. Before the edoobox client is written, the API is probed on a trial edoobox account (see *Testing against edoobox*).
+Status: **planned** 2026-11-09, design session on #842. Two PRs: the permission-grants prefactor (#843, Approach step 1), then the course feature (step 2). Meine Kurse for participants is the follow-up #844. The edoobox API was probed on the sandbox account on 2026-11-09 (see *edoobox API spike*); the client below follows its findings.
 
 ## Understanding
 Course leaders («Kursleitung») manage their edoobox courses in the checkout, ideally at the kiosk together with the participants. They link each participant to a checkout account (an existing one or one created from the edoobox data), assign badges, record attendance (written back to edoobox), and close the course, which turns the participant's temporary permission into a permanent one or drops it. Course data is read live from edoobox. Only links, permission choices and the close are stored locally.
@@ -46,7 +46,7 @@ Course leaders («Kursleitung») manage their edoobox courses in the checkout, i
 - Kiosk limits stay as they are (2 min idle, 15 min step-up). The teacher taps their badge again.
 - A participant cancelled in edoobox loses the temporary permission at the next daily run. The link stays.
 
-**Out of scope:** «Meine Kurse» for participants (designed, see `15-profile`: «Kurse, die du besucht hast», per course a colour dot, the title, «dates · course leader», a pill with the outcome, a link «edoobox ↗» via `shareurl`, footer «Kurse buchst du auf werkstattwaedi.ch/kurse ↗»). It is the most widely seen page, so it ships in the follow-up #844; admin course view (close/reopen/relink a course); booking through our own accounts (it would make the explicit link unnecessary); writing e-mail corrections back to edoobox; edoobox webhooks (they don't exist).
+**Out of scope:** «Meine Kurse» for participants (designed, see `15-profile`: «Kurse, die du besucht hast», per course a colour dot, the title, «dates · course leader», a pill with the outcome, a link «edoobox ↗» via `shareurl`, footer «Kurse buchst du auf werkstattwaedi.ch/kurse ↗»). It is the most widely seen page, so it ships in the follow-up #844; admin course view (close/reopen/relink a course); booking through our own accounts (it would make the explicit link unnecessary); writing e-mail corrections back to edoobox; edoobox webhooks (they exist, see the spike — a follow-up can replace the daily sync's polling with them).
 
 ## Entwurf
 
@@ -110,15 +110,15 @@ permissions: {
 
 **Step 2: the course feature (#842)**, on top of the prefactor.
 
-**edoobox client** (`functions/src/courses/edoobox/`): `POST /v2/auth` (key/secret → token, cached per instance), header `edid`. Methods:
-- `listLeaderDates(adminId)` (`GET /v2/date?admin=…`, fields offerdata)
-- `getOffer(id)` (incl. `shareurl`)
-- `attendanceView(dateId)` / `GET /v2/attendance/list/table` (participants + attendance)
-- `setAttendance` (`POST`/`PUT /v2/attendance`)
-- `listAdmins()`
-- `createNote` (`POST /v2/note`, pinned booking/offer/user)
+**edoobox client** (`functions/src/courses/edoobox/`): `POST {base}/auth` (key/secret → top-level `access_token` + `data.edid`, cached per instance); then headers `edid`, `grant-type: access_token`, `Authorization: Bearer …`. Write bodies are wrapped in `{"data": {…}}`. List calls take `filter=[{"property","value"[,"expression"]}]`, `limit={"start","reply"}` (default 100), `fields=[…]`. Methods:
+- `listLeaderDates(adminId)` — `GET /date/list?filter=[{"property":"admin","value":adminId}]` (a date's `leader` is a list of admin ids; the plain `?admin=` query is ignored)
+- `getOffers(ids)` — `GET /offer/list` with `fields` incl. `shareurl` (relative: prefix the account's booking-site base)
+- `attendanceTable(offerId, dateId)` — `GET /attendance/list/table?filter=[offer, date]` → `participants` (`participant_*` + `user`), `attendances` (`type` per participant and date), `dates`. Its `first_name`/`last_name` are swapped; take names and e-mail from `GET /user/{id}`
+- `setAttendance` — `POST /attendance {date, type, participant}` creates, `PUT /attendance/{id}` changes. edoobox accepts future dates: our server enforces CRS-4
+- `listAdmins()` — `GET /admin/list`
+- `createNote` — `POST /note {subject, message, todo:false, type:2, pinned:{booking,offer,user}}`
 
-Secrets `EDOOBOX_API_KEY` / `EDOOBOX_API_SECRET`, param `EDOOBOX_ACCOUNT_ID`, office address `COURSE_OFFICE_EMAIL`. Wire them through `scripts/generate-env.ts` and `FUNCTION_SECRET_NAMES` in `scripts/port-block-secrets.ts`, otherwise the emulator hangs. Tests swap the API via `setEdooboxApiForTest` (pattern: `setWalleeApiForTest`).
+Secrets `EDOOBOX_API_KEY` / `EDOOBOX_API_SECRET`, param `EDOOBOX_API_BASE_URL` (staging: the sandbox `https://sandbox.app.edoobox.ch/v2`), office address `COURSE_OFFICE_EMAIL`. No account-id param: the account comes with the key (`edid`). Wire them through `scripts/generate-env.ts` and `FUNCTION_SECRET_NAMES` in `scripts/port-block-secrets.ts`, otherwise the emulator hangs. Tests swap the API via `setEdooboxApiForTest` (pattern: `setWalleeApiForTest`).
 
 **Callables:** new dispatcher `courseCall` (`functions/src/courses/dispatcher.ts`, export in `index.ts`, client via `rpcCallable(functions, "courseCall", …)`):
 - `listMyCourses`, `getCourse(offerId)`: participants + attendance from edoobox, merged with local links/choices + account status (account exists by e-mail via `findUserDocByEmail`, badge present, permission held).
@@ -156,7 +156,17 @@ New mails `course-close-reminder` and `course-close-office` as a Resend contract
 
 **Admin web:** Profil tab of the person page: card «Kursleitung» (dropdown from `listEdooboxLeaders`, «n Kurse in edoobox»). List of the person's course links with «Verknüpfung lösen».
 
-**Testing against edoobox:** staging uses its own edoobox account, never the real one. First a new trial account (10-day free test mode) to experiment with the API end to end: auth, a leader's dates (`GET /v2/date?admin=`), participants, attendance, notes, which actions send mails to participants. If that account can't stay (trial ends), check whether a staging folder in the real account keeps test offers off the public list (offers in Draft are not shown and only bookable by an admin); staging would then still never write to real offers. `EDOOBOX_ACCOUNT_ID` and the key are per environment, so staging simply points at the test account. A smoke-runbook scenario walks the course flow on staging.
+**Testing against edoobox:** staging uses the edoobox **sandbox** account (`https://sandbox.app.edoobox.ch/v2`), production the real one; key, secret and base URL are per environment. Unit and emulator tests use a fake (`setEdooboxApiForTest`), never the sandbox. A smoke-runbook scenario walks the course flow on staging against sandbox courses whose participants have smoke-mailbox addresses; each run uses its own course or bookings. Staging accounts are linked to sandbox leaders (ADM-17). Open: whether the sandbox account can be reset by edoobox — if so, a small script recreates the test course, leader and bookings.
+
+**edoobox API spike (2026-11-09, sandbox, superadmin key):**
+- The reference is the Postman collection behind `https://api.docs.edoobox.com/` (`/api/collections/11330407/UVJbFwd1`); the docs site itself only covers auth.
+- Auth as above; the token outlives the `expire` asked for. The key's rights are per resource (`date`, `book`, `user`, `atte`, `note`, `offe`, `admi`, `wbho`, …): production gets a key of its own with read on dates/offers/bookings/users/admins and write on attendance and notes only.
+- **A leader's dates with the account key work** (`/date/list` filtered by `admin`); no leader context or trainer login needed — the plan's main risk is gone.
+- Participants, attendance and notes behave as listed under the client. Creating a booking, writing attendance and writing a note sent **no mail** to the participant (checked in the smoke mailbox for 2 min).
+- Limits per window, reported on every response (`AccessCount`): 250 reads / 120 writes, 5,000 / 500, 10,000 / 5,000 for windows of 1, 5 and 30 (unit not stated; likely minutes). Far above our use; still debounce attendance clicks.
+- **Webhooks exist**: `POST /webhook {status, url, basicauth, secret, topics}` with topics `<method>_<resource>` (`post_Date`, `put_user`, …). Payload and signing not probed (needs a public receiver).
+- Not yet known: the meaning of attendance `type` 1–4 (1 and 2 written in the sandbox; read them in the edoobox admin UI).
+- Sandbox test data: the example offer «Beispiel Seminar November 2026», its date «Dialogtechnik 1» led by the sandbox admin, participants Luca Meier and Nora Keller (smoke addresses) with attendance 1 / 2, one note on Nora's booking.
 
 **Deploy:** `docs/deploy/YYYY-MM-DD-edoobox-courses.md` (phase `before-functions`): create the edoobox API key in edoobox, set the secrets/params in both projects, publish the mail contract. Update `docs/deployment-checklist.md` for fresh installs.
 
@@ -212,6 +222,5 @@ Spec lines: prefactor `Spec: MAC-1..3 (added), MAC-1 (changed), ADM-16 (added), 
 - **Baselines that change:** the checkout sidebar («Kursleitung» only appears for a linked leader, so existing baselines should stay; check `profile`/`usage`/`membership`), and the admin person Profil tab (`users-screenshots` `person-overview`) because of the new card. Regenerate through the `update_snapshots` dispatch, not locally.
 
 ## Risks / open questions
-- edoobox write limit of 1,000/24 h: attendance clicks + notes are far below it, but don't write attendance per click without a debounce.
-- The edoobox trial account may expire before the feature is done; then the folder approach in the real account (see Testing against edoobox) has to be checked first.
-- Access to a leader's courses: `GET /v2/date?admin=` with our API key (account context) assumed. If edoobox only gives a leader their Termine in the leader context (`/v2/admission/*`, `trainerToken`), the client changes; check this first on the trial account.
+- Attendance `type` values 1–4: confirm which is present/absent before the client maps them.
+- The sandbox account's lifetime (see Testing against edoobox).
