@@ -386,14 +386,31 @@ describe("courses (#842)", () => {
         expect(sent[0].variables.COURSE_LINK).to.equal(`https://checkout.test/account/courses/${OFFER}`);
         await runSyncCourses(now);
         expect(sent).to.have.length(2);
-        // Closed: no more reminders.
+        // A second leader of the same course gets their own reminder.
+        await getFirestore().doc(`users/${OTHER_LEADER}`).update({ edooboxLeaderId: "admin_B" });
+        fake.state.dates[1].leaders.push("admin_B");
+        await runSyncCourses(now);
+        expect(sent.map((m) => m.to)).to.deep.equal(["petra@x.ch", "office@x.ch", "olga@x.ch"]);
         await getFirestore().doc(`courses/${OFFER}`).set({ closedAt: Timestamp.now(), remindersSent: [] }, { merge: true });
         await runSyncCourses(now);
-        expect(sent).to.have.length(2);
+        expect(sent).to.have.length(3);
       } finally {
         setCourseMailerForTest(undefined);
         delete process.env.COURSE_OFFICE_EMAIL;
       }
+    });
+
+    it("keeps an admin's removal of a temporary permission (no re-add)", async () => {
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await link("p_anna", "anna@x.ch");
+      await getFirestore().doc(`users/${ANNA}`).update({ permissions: {} });
+      await runSyncCourses();
+      expect(await grantsOf(ANNA)).to.deep.equal({});
+    });
+
+    it("refuses closing a course whose permission isn't picked", async () => {
+      seedEdoobox(Date.now(), true);
+      await expectCode(() => closeCourseHandler(req({ offerId: OFFER, choices: {}, reasons: {} })), "failed-precondition");
     });
 
     it("moves the windows with a Termin moved in edoobox", async () => {

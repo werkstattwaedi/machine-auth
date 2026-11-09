@@ -43,11 +43,14 @@ export function withTemporaryGrant(
     dates: readonly CourseDate[];
     grantedBy: DocumentReference;
     now: Timestamp;
+    /** Only move the windows of an existing entry (the daily sync): an admin's removal holds. */
+    onlyIfPresent?: boolean;
   }
 ): GrantMap | null {
   const map = toGrantMap(stored);
   const existing = map[input.permission.id];
   if (existing && !isThisCoursesGrant(existing, input.offerId)) return null;
+  if (!existing && input.onlyIfPresent) return null;
   // Already for good from this course (closed with Ja) — not ours to narrow.
   if (existing && !existing.windows) return null;
   const windows = courseWindows(input.dates).map((w) => ({

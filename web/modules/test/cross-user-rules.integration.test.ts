@@ -2007,7 +2007,7 @@ describe("cross-user: usageGroups is sync-only", () => {
   })
 })
 
-// #843, MAC-2: `permissions` is the grant map (who, when, from where). The
+// #843, MAC-4: `permissions` is the grant map (who, when, from where). The
 // rules can't check a map rewritten as a whole, so no client principal
 // writes it — an admin's included; admins go through grantPermission /
 // revokePermission (authCall).

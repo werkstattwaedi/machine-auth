@@ -357,6 +357,9 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
   const reasons = (request.data?.reasons ?? {}) as Record<string, unknown>;
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
+  if (loaded.course.permission === undefined) {
+    throw new HttpsError("failed-precondition", "Wähle zuerst, welche Berechtigung der Kurs gibt.");
+  }
   if (coursePhase(loaded.dates, Date.now()) !== "toClose") {
     throw new HttpsError("failed-precondition", "Der Kurs lässt sich erst ab dem letzten Termin abschliessen.");
   }

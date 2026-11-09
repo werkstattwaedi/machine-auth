@@ -265,7 +265,7 @@ function PermissionPick({ course, onChange, reload }: { course: CourseDetail; on
     <section className="flex flex-col gap-3 rounded-2xl border border-oww-gold-border bg-oww-gold-light p-5 text-oww-gold-text">
       <div>
         <h2 className="font-heading text-lg font-bold">Welche Berechtigung gibt dieser Kurs?</h2>
-        <p className="text-sm">Lege sie fest, bevor du Teilnehmende verknüpfst. Danach ändert sie nur noch das Sekretariat.</p>
+        <p className="text-sm">Lege sie fest, bevor du Teilnehmende verknüpfst. Danach lässt sie sich nicht mehr ändern.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Select value={picked} onValueChange={setPicked}>

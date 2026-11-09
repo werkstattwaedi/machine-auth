@@ -18,8 +18,8 @@ export interface CourseEntity {
   closedBy?: DocumentReference | null;
   /** participantId → Ja/Nein at the close. */
   closeChoices?: Record<string, boolean>;
-  /** Reminder days already sent (1, 3, 7) — CRS-16. */
-  remindersSent?: number[];
+  /** Reminders sent, `<day>:<leader uid>` and `7:office` — CRS-16. */
+  remindersSent?: string[];
 }
 
 /** `courseLinks/{offerId}_{participantId}` — a participant linked to an account (CRS-6/7). */

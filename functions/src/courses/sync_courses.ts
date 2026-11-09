@@ -6,7 +6,7 @@
  * - CRS-11: keeps the temporary permissions in step with edoobox — new
  *   windows for Termine moved there, no permission for a cancelled booking,
  *   and none left over once a course's last window has passed.
- * - CRS-16: reminds the course leader 1, 3 and 7 days after the last Termin
+ * - CRS-16: reminds every course leader 1, 3 and 7 days after the last Termin
  *   of a course that isn't closed; on day 7 the office too.
  *
  * edoobox has webhooks (see the plan); this polls once a day instead, which
@@ -97,6 +97,7 @@ async function syncGrants(db: Firestore, api: EdooboxApi, nowMs: number, report:
                 dates,
                 grantedBy: link.linkedBy,
                 now: Timestamp.fromMillis(nowMs),
+                onlyIfPresent: true,
               })
             : withoutTemporaryGrant(user.get("permissions"), permission.id, offerId);
           if (map) tx.update(link.user, { permissions: map });
@@ -133,10 +134,11 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
         const last = dates[dates.length - 1];
         const days = zurichDayDiff(Date.parse(last.start), nowMs);
         if (days > CLOSE_LISTING_DAYS) continue;
-        const due = REMINDER_DAYS.filter((d) => d <= days && !(course.remindersSent ?? []).includes(d));
         // Only today's reminder — a missed run doesn't send a pile of them.
-        const day = due.includes(days as 1 | 3 | 7) ? days : null;
-        if (day === null) continue;
+        // Kept per leader: a course can have several (CRS-16).
+        const sent = (course.remindersSent ?? []).map(String);
+        const day = (REMINDER_DAYS as readonly number[]).includes(days) ? days : null;
+        if (day === null || sent.includes(`${day}:${leader.id}`)) continue;
         const title = course.title ?? (await api.getOffers([offerId]))[0]?.name ?? "Kurs";
         const lastDate = formatWorkshopDateTime(new Date(last.start), "EEEEEE d.M.");
         await send({
@@ -152,7 +154,8 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
         });
         report.reminders++;
         const office = courseOfficeEmail.value().trim();
-        if (day === 7 && office) {
+        const officeDue = day === 7 && office && !sent.includes("7:office");
+        if (officeDue) {
           await send({
             to: office,
             mail: "course-close-office",
@@ -161,7 +164,10 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
           });
           report.officeNotices++;
         }
-        await courseRef.set({ remindersSent: FieldValue.arrayUnion(day), title }, { merge: true });
+        await courseRef.set(
+          { remindersSent: FieldValue.arrayUnion(`${day}:${leader.id}`, ...(officeDue ? ["7:office"] : [])), title },
+          { merge: true }
+        );
       }
     } catch (err) {
       report.failures++;

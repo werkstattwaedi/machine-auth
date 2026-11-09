@@ -567,7 +567,7 @@
       "closedAt": "timestamp | null", // set by closeCourse (CRS-15)
       "closedBy": "DocumentReference | null",
       "closeChoices": { "<participantId>": "boolean" }, // Ja/Nein at the close
-      "remindersSent": ["number"] // reminder days sent: 1, 3, 7 (CRS-16)
+      "remindersSent": ["string"] // reminders sent: "<day>:<leader uid>" (days 1, 3, 7) and "7:office" (CRS-16)
     }
   },
   "courseLinks": {
