@@ -125,7 +125,7 @@ export async function findUserDocByEmail(
     });
     throw new HttpsError(
       "failed-precondition",
-      "Für diese E-Mail existieren mehrere Konten. Bitte melde dich bei der OWW."
+      "Für diese E-Mail existieren mehrere Konten. Bitte melde dich beim OWW."
     );
   }
   return snap.empty ? null : snap.docs[0];
@@ -288,7 +288,7 @@ function loginConflict(uid: string, reason: string): HttpsError {
   logger.warn("Login blocked by an Auth e-mail conflict", { uid, reason });
   return new HttpsError(
     "failed-precondition",
-    "Die Anmeldung mit dieser E-Mail ist gerade nicht möglich. Bitte melde dich bei der OWW."
+    "Die Anmeldung mit dieser E-Mail ist gerade nicht möglich. Bitte melde dich beim OWW."
   );
 }
 

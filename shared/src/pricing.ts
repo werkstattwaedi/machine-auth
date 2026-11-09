@@ -312,7 +312,7 @@ export const USAGE_TYPE_INFO: Record<UsageType, UsageTypeInfo> = {
   },
   intern: {
     effect: "Nutzungsgebühr, Maschinen und Material werden nicht verrechnet",
-    appliesTo: "Arbeitet an einem Projekt für die OWW.",
+    appliesTo: "Arbeitet an einem Projekt für den OWW.",
     ownerOnly: true,
     aloneOnly: true,
   },

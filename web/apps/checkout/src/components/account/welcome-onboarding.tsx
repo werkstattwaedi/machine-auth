@@ -647,7 +647,8 @@ function StepTerms({
 
       <div className="rounded-lg border border-border bg-[oklch(0.97_0_0)] p-4 text-[13px] leading-relaxed text-muted-foreground">
         Die Nutzungsbestimmungen regeln Sicherheit, Haftung und den Umgang mit
-        Maschinen und Material in der Offenen Werkstatt Wädenswil.
+        Maschinen und Material in den Werkstätten des Vereins Offene Werkstatt
+        Wädenswil.
         <div className="mt-2">
           <a
             href={TERMS_URL}
