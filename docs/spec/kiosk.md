@@ -52,7 +52,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
   | an identified person's or a guest's checkout is committed (CHK-22) or the Wallee terminal approved its payment (KIO-22), or an identified person is on a page outside the checkout steps | the kiosk switches to the new badge without asking |
   | someone is in the account | the tap does nothing |
 
-- **KIO-13** An unregistered badge never switches the kiosk to another person; unless a payment at the Wallee terminal is under way (KIO-24), it is answered like this — ADR-0030, #769, #735, #TBD:
+- **KIO-13** An unregistered badge never switches the kiosk to another person; unless a payment at the Wallee terminal is under way (KIO-24), it is answered like this — ADR-0030, #769, #735, #849:
 
   | Situation at the kiosk | Reaction |
   |---|---|
