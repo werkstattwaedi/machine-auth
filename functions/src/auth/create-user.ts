@@ -94,7 +94,7 @@ export const createUserHandler = async (request: CallableRequest<unknown>) => {
       email,
       firstName: firstName ?? "",
       lastName: lastName ?? "",
-      permissions: [],
+      permissions: {},
       roles: [],
       termsAcceptedAt: null,
       userType: "erwachsen",

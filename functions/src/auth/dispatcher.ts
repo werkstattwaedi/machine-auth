@@ -16,6 +16,7 @@ import {
 } from "../config/tag-secrets";
 import { createUserHandler } from "./create-user";
 import { updateUserEmailHandler } from "./update-user-email";
+import { grantPermissionHandler, revokePermissionHandler } from "./permission-grants";
 import {
   checkAccountExistsHandler,
   checkPhoneAccountExistsHandler,
@@ -48,6 +49,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   createUser: createUserHandler,
   // Admin-only: the login e-mail moves on Auth and the doc together (ADR-0043).
   updateUserEmail: updateUserEmailHandler,
+  grantPermission: grantPermissionHandler,
+  revokePermission: revokePermissionHandler,
   checkAccountExists: checkAccountExistsHandler,
   checkPhoneAccountExists: checkPhoneAccountExistsHandler,
   requestLoginCode: requestLoginCodeHandler,

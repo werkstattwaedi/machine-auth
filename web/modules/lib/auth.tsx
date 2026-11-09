@@ -33,6 +33,7 @@ import { rpcCallable } from "./rpc"
 import { useDb, useFirebaseAuth, useFunctions } from "./firebase-context"
 import { userRef } from "./firestore-helpers"
 import { formatFullName } from "./username-utils"
+import { heldPermissionIds } from "@oww/shared"
 import { usageGroupsOf, type UsageGroup, type UserType } from "./pricing"
 
 export interface BillingAddress {
@@ -366,9 +367,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.email ?? null,
           phone: data.phone ?? null,
           roles,
-          permissions: (data.permissions ?? []).map(
-            (ref: { id: string }) => ref.id
-          ),
+          // Held now: a course's temporary grant counts only during its
+          // Termine (#842); the snapshot is re-read on every change.
+          permissions: heldPermissionIds(data.permissions, Date.now()),
           termsAcceptedAt: data.termsAcceptedAt ?? null,
           userType: data.userType ?? "erwachsen",
           billingAddress: data.billingAddress ?? null,
@@ -683,7 +684,7 @@ async function writeSignupProfile(
             email: user.email,
             created: serverTimestamp(),
             roles: [],
-            permissions: [],
+            permissions: {},
             phone: null,
           }
         : {}),

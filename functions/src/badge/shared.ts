@@ -10,6 +10,7 @@
  *  - Badge item detection and the free-first-badge eligibility rule.
  */
 
+import { heldPermissionIds } from "@oww/shared";
 import { HttpsError } from "firebase-functions/v2/https";
 import type {
   DocumentReference,
@@ -115,7 +116,7 @@ export function isBadgeEligibleFree(
   user: UserEntity,
   hasVerifiedMembership: boolean
 ): boolean {
-  return hasVerifiedMembership || (user.permissions?.length ?? 0) > 0;
+  return hasVerifiedMembership || heldPermissionIds(user.permissions, Date.now()).length > 0;
 }
 
 /** Count a user's active (non-deactivated) tokens from a query snapshot. */

@@ -2,24 +2,32 @@
 // SPDX-License-Identifier: MIT
 
 // Person · Berechtigungen — one card per granted permission with revoke
-// right there, plus a picker to grant. "Zuletzt genutzt" joins the
-// person's machine usages against the machines requiring the permission
-// and deep-links into the Nutzungen ledger.
+// right there, plus a picker to grant. Each card says since when and by
+// whom (#843, ADM-16). "Zuletzt genutzt" joins the person's machine usages
+// against the machines requiring the permission and deep-links into the
+// Nutzungen ledger. Grants go through the grantPermission/revokePermission
+// callables: the rules pin `permissions` for every client.
 
 import { useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { where } from "firebase/firestore"
+import {
+  grantedPermissionIds,
+  permissionGrantOf,
+  type PermissionGrant,
+} from "@oww/shared"
 import { useCollection } from "@modules/lib/firestore"
-import { useDb } from "@modules/lib/firebase-context"
+import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import {
   machinesCollection,
-  permissionRef,
   permissionsCollection,
   usageMachineCollection,
   userRef,
 } from "@modules/lib/firestore-helpers"
 import type { UserDoc } from "@modules/lib/firestore-entities"
-import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
+import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
+import { useLookup } from "@modules/lib/lookup"
+import { rpcCallable } from "@modules/lib/rpc"
 import { formatDate } from "@modules/lib/format"
 import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
@@ -42,18 +50,28 @@ export function PersonPermissionsTab({
   user: UserDoc
 }) {
   const db = useDb()
+  const functions = useFunctions()
+  const { users: userNames } = useLookup()
   const { data: allPermissions } = useCollection(permissionsCollection(db))
   const { data: machines } = useCollection(machinesCollection(db))
   const { data: usages } = useCollection(
     usageMachineCollection(db),
     where("userId", "==", userRef(db, userId)),
   )
-  const { update, loading: saving } = useFirestoreMutation()
+  const grantMutation = useAsyncMutation({
+    context: "admin.permissions.grant",
+    successMessage: "Berechtigung erteilt",
+    errorMessage: "Berechtigung konnte nicht erteilt werden",
+  })
+  const revokeMutation = useAsyncMutation({
+    context: "admin.permissions.revoke",
+    successMessage: "Berechtigung entzogen",
+    errorMessage: "Berechtigung konnte nicht entzogen werden",
+  })
+  const saving = grantMutation.loading || revokeMutation.loading
   const [pickedPermission, setPickedPermission] = useState("")
 
-  const grantedIds = (user.permissions ?? []).map((p) =>
-    typeof p === "string" ? p : p.id,
-  )
+  const grantedIds = grantedPermissionIds(user.permissions)
   const grantable = allPermissions.filter((p) => !grantedIds.includes(p.id))
 
   // Last usage per permission: a usage counts for every permission its
@@ -75,18 +93,32 @@ export function PersonPermissionsTab({
     }
   }
 
-  const setPermissions = async (ids: string[]) => {
-    await update(
-      userRef(db, userId),
-      { permissions: ids.map((id) => permissionRef(db, id)) },
-      { successMessage: "Berechtigungen aktualisiert" },
-    )
-  }
-
   const handleGrant = async () => {
     if (!pickedPermission) return
-    await setPermissions([...grantedIds, pickedPermission])
+    try {
+      await grantMutation.mutate(async () => {
+        await rpcCallable(functions, "authCall", "grantPermission")({
+          userId,
+          permissionId: pickedPermission,
+        })
+      })
+    } catch {
+      return
+    }
     setPickedPermission("")
+  }
+
+  const handleRevoke = async (permissionId: string) => {
+    try {
+      await revokeMutation.mutate(async () => {
+        await rpcCallable(functions, "authCall", "revokePermission")({
+          userId,
+          permissionId,
+        })
+      })
+    } catch {
+      // The hook toasted.
+    }
   }
 
   return (
@@ -123,6 +155,8 @@ export function PersonPermissionsTab({
         <div className="grid gap-3 sm:grid-cols-2">
           {grantedIds.map((permId) => {
             const perm = allPermissions.find((p) => p.id === permId)
+            const grant = permissionGrantOf(user.permissions, permId)
+            const temporary = !!grant?.windows
             const last = lastUsedMs.get(permId)
             return (
               <Card key={permId}>
@@ -132,8 +166,15 @@ export function PersonPermissionsTab({
                       <Cpu className="h-4 w-4 text-cog-teal-dark" />
                       {perm?.name ?? permId}
                     </div>
-                    <Badge variant="secondary">aktiv</Badge>
+                    <Badge variant="secondary">
+                      {temporary ? "vorläufig" : "aktiv"}
+                    </Badge>
                   </div>
+                  {grant && (
+                    <div className="text-sm text-muted-foreground">
+                      {grantLine(grant, userNames)}
+                    </div>
+                  )}
                   <div className="text-sm text-muted-foreground">
                     {last ? (
                       <Link
@@ -153,9 +194,7 @@ export function PersonPermissionsTab({
                     size="sm"
                     className="text-destructive"
                     disabled={saving}
-                    onClick={() =>
-                      setPermissions(grantedIds.filter((id) => id !== permId))
-                    }
+                    onClick={() => handleRevoke(permId)}
                   >
                     Entziehen
                   </Button>
@@ -167,4 +206,21 @@ export function PersonPermissionsTab({
       )}
     </div>
   )
+}
+
+/** «seit 3.11.2026 · von Mike Schneider», from a course: «… · aus einem Kurs». */
+export function grantLine(
+  grant: PermissionGrant,
+  userNames: ReadonlyMap<string, string>,
+): string {
+  const parts = [
+    grant.grantedAt
+      ? `seit ${formatDate(new Date(grant.grantedAt.toMillis()))}`
+      : "seit unbekanntem Datum",
+  ]
+  if (grant.grantedBy) {
+    parts.push(`von ${userNames.get(grant.grantedBy.id) ?? "unbekannt"}`)
+  }
+  if (grant.source === "course") parts.push("aus einem Kurs")
+  return parts.join(" · ")
 }

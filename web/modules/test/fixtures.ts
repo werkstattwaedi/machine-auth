@@ -164,8 +164,17 @@ export class TestFixture {
 
     // Seed users
     for (const u of this.users) {
-      const permissionRefs = (u.permissions ?? []).map((pid) =>
-        db.doc("permission", pid),
+      // Stored as the grant map (#843), each a legacy grant.
+      const permissionRefs = Object.fromEntries(
+        (u.permissions ?? []).map((pid) => [
+          pid,
+          {
+            permission: db.doc("permission", pid),
+            grantedAt: null,
+            grantedBy: null,
+            source: "legacy",
+          },
+        ]),
       )
       const firstName = u.firstName ?? ""
       const lastName = u.lastName ?? ""

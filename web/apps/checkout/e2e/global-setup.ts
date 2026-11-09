@@ -12,7 +12,7 @@ import { writeFileSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { getAdminFirestore, E2E_PORTS } from "./helpers"
-import { FieldValue } from "firebase-admin/firestore"
+import { FieldValue, type Firestore } from "firebase-admin/firestore"
 import { getAuth } from "firebase-admin/auth"
 import { generateValidPICCAndCMAC } from "./sdm-test-helper"
 import type { CatalogItemDoc } from "@modules/lib/firestore-entities"
@@ -47,6 +47,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TERMINAL_KEY = "f5e4b999d5aa629f193a874529c4aa2f"
 const MASTER_KEY = "c025f541727ecd8b6eb92055c88a2a70"
 const SYSTEM_NAME = "Oww8820Maco"
+
+/** A user's permissions as the grant map (#843), each a legacy grant. */
+function legacyGrants(db: Firestore, ids: string[]) {
+  return Object.fromEntries(
+    ids.map((id) => [
+      id,
+      { permission: db.doc(`permission/${id}`), grantedAt: null, grantedBy: null, source: "legacy" },
+    ]),
+  )
+}
+
 export const NFC_TAG_UID = "04c339aa1e1890"
 // Second NFC tag (issue #420 — badge-switch regression). Distinct UID so it
 // diversifies to a different SDM key and identifies a different user.
@@ -358,7 +369,7 @@ export default async function globalSetup() {
     lastName: "Testuser",
     email: AUTH_USER_EMAIL,
     roles: ["vereinsmitglied"],
-    permissions: [db.doc("permission/laser")],
+    permissions: legacyGrants(db, ["laser"]),
     userType: "erwachsen",
     billingAddress: {
       company: "",
@@ -384,7 +395,7 @@ export default async function globalSetup() {
     // and never offered the Sammelrechnung payment tab (issue #414). The
     // membership doc itself is seeded by checkout-nfc-tag.spec.ts (#745).
     activeMembership: db.doc("memberships/e2e-nfc-membership"),
-    permissions: [db.doc("permission/laser")],
+    permissions: legacyGrants(db, ["laser"]),
     userType: "erwachsen",
     billingAddress: {
       company: "",
@@ -409,7 +420,7 @@ export default async function globalSetup() {
     lastName: "Badge",
     email: "badge2@test.com",
     roles: ["vereinsmitglied"],
-    permissions: [db.doc("permission/laser")],
+    permissions: legacyGrants(db, ["laser"]),
     userType: "erwachsen",
     billingAddress: {
       company: "",

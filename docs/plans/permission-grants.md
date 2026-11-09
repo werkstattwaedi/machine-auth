@@ -61,12 +61,12 @@ The map key is the permission id; `permission` keeps the ref (CLAUDE.md: referen
   - Admin `permissions-tab.tsx` and `permissions/$permissionId.tsx` call them through `useAsyncMutation` instead of writing the doc.
   - Rules: `permissions` is pinned for every client, admins included (pattern `usageGroups`); self-create requires `{}`.
   - Account creation (`create-user.ts`, `signup_kiosk.ts`, `accept_invite_new_account.ts`, `scripts/import-members.ts`) writes `{}`.
-- Berechtigungen tab: under each held permission «seit 3.11.2026 · von Mike Schneider»; legacy: «vor November 2026».
+- Berechtigungen tab: under each held permission «seit 3.11.2026 · von Mike Schneider»; without a recorded date: «seit unbekanntem Datum».
 - `firestore/schema.jsonc`, `functions/src/types/firestore_entities.ts`, `web/modules/lib/firestore-entities.ts`, seed data, `web/modules/test/fixtures.ts`, checkout/admin e2e setups and helpers.
-- Migration `scripts/migrate-permission-grants.ts --env <staging|prod> [--dry-run]` (ADC): every users doc whose `permissions` is an array → map with `source: "legacy"`, `grantedAt`/`grantedBy` null; already-maps skipped (idempotent); prints counts only (no names/e-mails). If the audit log holds the grant writes, fill `grantedAt`/`grantedBy` from the latest grant there (checked during implementation; otherwise null).
+- Migration `scripts/migrate-permission-grants.ts --env <staging|prod> [--dry-run]` (ADC): every users doc whose `permissions` is an array → map with `source: "legacy"`, `grantedAt`/`grantedBy` null; already-maps skipped (idempotent); prints counts only (no names/e-mails). `grantedAt`/`grantedBy` come from the audit log (`audit_log`, collection "users": the last write that added the permission, and its `actorUid`); null where the log doesn't reach back.
 
 ### Rollout (overnight)
-Step file `docs/deploy/YYYY-MM-DD-permission-grants.md`, phase `after-deploy`:
+Step file `docs/deploy/2026-11-09-permission-grants.md`, phase `after-deploy`:
 1. Normal deploy (functions → rules → hosting) of the release with both PRs.
 2. `set-min-client-version.ts --env <env>` → every gated client reloads onto the new build; old calls are refused.
 3. Migration `--dry-run`, then for real; check: zero array-shaped `permissions` left.
@@ -86,8 +86,9 @@ Fresh installation: nothing to add to the checklist (accounts start with `{}`; `
 
 ### Spec
 - First commit, as is: MAC-1 (a terminal unlocks only for an account holding every required permission) and MAC-2 (only an admin grants or removes permissions; a grant holds until removed), new file `machine.md`.
-- Change: ADM-16 (added): the Berechtigungen tab shows, for each permission, when and by whom it was granted and whether a course granted it. MAC-2 may get a clause that an admin can grant to anyone, themselves included (spec-expert decides).
-- `Spec: MAC-1..2 (added), ADM-16 (added)`.
+- As is also: ADM-16 (where admins grant and remove permissions).
+- Change: ADM-16 (changed): the Berechtigungen tab shows, for each permission, when and by whom it was granted where that is recorded. "Whether a course granted it" comes with #842.
+- `Spec: MAC-1..2 (added), ADM-16 (added), ADM-16 (changed)`.
 
 ## Out of scope
 - Course entries (`source: "course"`, `windows`) are only typed here; #842 writes them.

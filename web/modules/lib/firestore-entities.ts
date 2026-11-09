@@ -25,6 +25,7 @@ import type {
   ItemType,
   PaidVia,
   PaymentMethod,
+  PermissionGrants,
   PricingModel,
   UsageGroup,
 } from "@oww/shared"
@@ -74,7 +75,15 @@ export interface UserDoc extends AuditFields {
   lastName: string
   /** Optional contact phone — captured for everyone, never required. */
   phone?: string | null
-  permissions: DocumentReference<PermissionDoc>[]
+  /**
+   * Grants keyed by permission id (#843) — read through
+   * `heldPermissionIds` / `grantedPermissionIds` / `permissionGrantOf`
+   * (@oww/shared). Written only by functions. The ref list is the shape from
+   * before scripts/migrate-permission-grants.ts.
+   */
+  permissions:
+    | PermissionGrants<DocumentReference, Timestamp>
+    | DocumentReference<PermissionDoc>[]
   roles: string[]
   termsAcceptedAt?: Timestamp | null
   userType?: "erwachsen" | "kind" | "firma"

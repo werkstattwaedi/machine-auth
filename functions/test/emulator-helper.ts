@@ -97,20 +97,18 @@ function convertReferencesToDocRefs(obj: any, db: admin.firestore.Firestore, key
     // It's a reference path like "/users/abc123" - convert to DocumentReference
     return db.doc(obj);
   } else if (Array.isArray(obj)) {
-    // Special handling for permissions array
+    // A user's permissions, given as ids or paths: stored as the grant map
+    // (#843), each a legacy grant like the migration writes.
     if (key === 'permissions') {
-      return obj.map(item => {
-        if (typeof item === 'string') {
-          // Convert permission ID to DocumentReference
-          if (item.startsWith('/')) {
-            return db.doc(item);
-          } else {
-            // It's just an ID like "laser" - convert to "/permission/laser"
-            return db.doc(`/permission/${item}`);
-          }
-        }
-        return convertReferencesToDocRefs(item, db);
-      });
+      const grants: Record<string, unknown> = {};
+      for (const item of obj) {
+        const ref =
+          typeof item === 'string'
+            ? db.doc(item.startsWith('/') ? item : `/permission/${item}`)
+            : (item as admin.firestore.DocumentReference);
+        grants[ref.id] = { permission: ref, grantedAt: null, grantedBy: null, source: 'legacy' };
+      }
+      return grants;
     }
     // Recursively process array elements
     return obj.map(item => convertReferencesToDocRefs(item, db));

@@ -43,6 +43,8 @@ export const RpcMethod = {
   authCall: [
     "createUser",
     "updateUserEmail",
+    "grantPermission",
+    "revokePermission",
     "checkAccountExists",
     "checkPhoneAccountExists",
     "requestLoginCode",

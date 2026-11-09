@@ -156,7 +156,7 @@ service cloud.firestore {
       // Nutzung and only the Workspace sync writes it (ADR-0053).
       allow create: if isSignedIn() && userId == request.auth.uid &&
                        request.resource.data.roles == [] &&
-                       request.resource.data.permissions == [] &&
+                       request.resource.data.permissions == {} &&
                        request.resource.data.get('email', null) == request.auth.token.get('email', null) &&
                        request.resource.data.get('activeMembership', null) == null &&
                        request.resource.data.get('usageGroups', null) == null &&
@@ -190,24 +190,32 @@ service cloud.firestore {
                resource.data.get('usageGroups', null);
       }
 
+      // `permissions` is the grant map (#843): who granted each permission,
+      // when, from where. The rules can't check a map rewritten as a whole,
+      // so NO client changes it — admins included: they go through the
+      // grantPermission / revokePermission callables (authCall), course
+      // grants through the course callables (#842).
+      function permissionsUnchanged() {
+        return request.resource.data.get('permissions', null) ==
+               resource.data.get('permissions', null);
+      }
+
       // Users can update their own doc but cannot change roles/permissions.
       // A plain tag-tap session cannot update users at all (its
       // request.auth.uid is synthetic, won't match userId, so the predicate
       // fails). An OTP-ELEVATED kiosk session (ADR-0041) may edit the
       // profile it acts on, under the same pins.
       // Firma users must provide a valid billing address.
-      allow update: if emailUnchanged() && usageGroupsUnchanged() && (
+      allow update: if emailUnchanged() && usageGroupsUnchanged() && permissionsUnchanged() && (
                        isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&
                         request.resource.data.roles == resource.data.roles &&
-                        request.resource.data.permissions == resource.data.permissions &&
                         activeMembershipUnchanged() &&
                         isValidUserProfile(request.resource.data)) ||
                        (isElevatedActsAs() &&
                         actsAs() == userId &&
                         request.resource.data.roles == resource.data.roles &&
-                        request.resource.data.permissions == resource.data.permissions &&
                         activeMembershipUnchanged() &&
                         isValidUserProfile(request.resource.data)));
 

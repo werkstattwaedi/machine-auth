@@ -96,7 +96,7 @@ test.describe("Kiosk email-code sign-in", () => {
         lastName: "Wartend",
         email,
         roles: [],
-        permissions: [],
+        permissions: {},
         userType: "erwachsen",
         termsAcceptedAt: null,
         billingAddress: {
