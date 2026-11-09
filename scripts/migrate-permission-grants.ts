@@ -10,7 +10,8 @@
  * write that added the permission, with its `actorUid`) and stay null where
  * the log doesn't reach back (retention trim, imports before the trigger).
  *
- * Idempotent — docs whose `permissions` is already a map are skipped. Writes
+ * Idempotent — docs whose `permissions` is already a map are skipped; a doc
+ * written meanwhile (a callable grant converts it itself) is left alone. Writes
  * leave `modifiedAt`/`modifiedBy` alone (not a user edit); each write also
  * fires `auditUsers` (one audit_log doc). Prints counts and uids only.
  *
@@ -36,7 +37,7 @@ const argv = process.argv.slice(2);
 const PROD_MODE = argv.includes("--prod");
 const DRY_RUN = argv.includes("--dry-run");
 
-const PAGE = 400; // Firestore batch limit is 500
+const PAGE = 400 // users read per page
 
 /** An `audit_log` entry for a users doc, as the audit trigger stores it (refs as paths). */
 export interface UserAuditEntry {
@@ -96,6 +97,7 @@ async function main() {
 
   let scanned = 0
   let migrated = 0
+  let changedMeanwhile = 0
   let grants = 0
   let dated = 0
   let listsLeft = 0
@@ -109,8 +111,6 @@ async function main() {
     last = snap.docs[snap.docs.length - 1]
     scanned += snap.size
 
-    const batch = db.batch()
-    let inBatch = 0
     for (const doc of snap.docs) {
       const stored = doc.get("permissions")
       if (!Array.isArray(stored)) continue
@@ -139,13 +139,23 @@ async function main() {
         }
         grants++
       }
-      migrated++
-      if (!DRY_RUN) {
-        batch.update(doc.ref, { permissions: map })
-        inBatch++
+      if (DRY_RUN) {
+        migrated++
+        continue
+      }
+      // Only if the doc is unchanged since it was read: grantPermission /
+      // revokePermission are live during the step and convert the list
+      // themselves — overwriting their map with one built from the stale
+      // list would lose that grant.
+      try {
+        await doc.ref.update({ permissions: map }, { lastUpdateTime: doc.updateTime })
+        migrated++
+      } catch (err) {
+        if ((err as { code?: number }).code !== 9) throw err // 9 = FAILED_PRECONDITION
+        changedMeanwhile++
+        console.log(`  changed meanwhile, left for a re-run: users/${doc.id}`)
       }
     }
-    if (inBatch) await batch.commit()
     console.log(`  scanned ${scanned}, ${DRY_RUN ? "would migrate" : "migrated"} ${migrated}`)
   }
 
@@ -170,7 +180,8 @@ async function main() {
 
   console.log(
     `\nUsers scanned: ${scanned}; ${DRY_RUN ? "to migrate" : "migrated"}: ${migrated} ` +
-      `(${grants} grants, ${dated} dated from the audit log, ${grants - dated} without date)`,
+      `(${grants} grants, ${dated} dated from the audit log, ${grants - dated} without date)` +
+      (changedMeanwhile ? `; ${changedMeanwhile} changed meanwhile (re-run to pick them up)` : ""),
   )
   if (DRY_RUN) {
     console.log("Dry-run: no writes performed.")

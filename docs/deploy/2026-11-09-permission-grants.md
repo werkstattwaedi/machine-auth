@@ -9,13 +9,22 @@ permission id, recording who granted each permission, when and from where.
 The functions read both the old list of refs and the map, so machine
 check-ins keep working during the step. The rules now refuse any client
 write to the field, admins included: admins grant through the
-`grantPermission` / `revokePermission` callables. Web apps from before this
-release still expect the list and break on a migrated doc, so they are
-forced to reload first (#845).
+`grantPermission` / `revokePermission` callables, which work on migrated
+and unmigrated docs alike. Web apps from before this release still expect
+the list and break on a migrated doc, so they are forced to reload first —
+but only apps that already have the minimum-version gate (#845, APP-2).
+
+**Before you start:** the #845 release must have been live on this
+environment for about a day, so open tabs have picked up the gate. A tab
+still running a build from before #845 is not forced to reload; once its
+doc is migrated its sign-in breaks until someone reloads it by hand (the
+kiosk is safe: it reloads after every session). Check with the human if
+#845 went out the same day.
 
 Needs ADC (`gcloud auth application-default login`), run from the released
-`main` checkout. Best done at night: open apps reload, and admin grants are
-refused in the minutes between the rules deploy and the migration.
+`main` checkout. Best done at night: open apps reload, and between the
+hosting deploy and step 1 an old open tab can't create a new account (the
+rules now want `permissions: {}`, the old build writes a list).
 
 **What:**
 
