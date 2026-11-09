@@ -244,7 +244,9 @@ export function PersonCard({
 
       {readOnly ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* No e-mail address here (#668, CHK-55): at the kiosk a found
+              badge must not reveal the addresses typed in for others. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-sm font-bold">Vorname</Label>
               <p className="text-sm">{person.firstName}</p>
@@ -252,10 +254,6 @@ export function PersonCard({
             <div className="space-y-1">
               <Label className="text-sm font-bold">Nachname</Label>
               <p className="text-sm">{person.lastName}</p>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm font-bold">E-Mail</Label>
-              <p className="text-sm">{person.email}</p>
             </div>
           </div>
           {onSignOut && (

@@ -27,7 +27,7 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 - **ACC-5** At the kiosk, an e-mail or SMS code opens for 15 min what a restricted session reaches only after one (ACC-4); it is entered at sign-in (ACC-1), or asked for when that is wanted without a code. — ADR-0041, #849
 - **ACC-7** The code a restricted session is asked for (ACC-5) goes only to the account's own e-mail address or its verified mobile number; no other address or number can be entered for it. — ADR-0041
 - **ACC-8** When a restricted session is asked for a code (ACC-5), the e-mail address and the mobile number it can go to (ACC-7) are shown only masked: of the e-mail address the first two characters of the name and of the domain plus the top-level domain, of the number the country code, the first two and the last two digits. — ADR-0041
-- **ACC-9** At the kiosk, while no code has been entered in the last 15 min (ACC-5), a restricted session shows the e-mail address of every person with an account on the check-in and in the header menu only masked as in ACC-8; once a code is entered, it shows it in full. — #668
+- **ACC-9** At the kiosk, while no code has been entered in the last 15 min (ACC-5), a restricted session shows the account's e-mail address in the header menu only masked as in ACC-8; once a code is entered, it shows it in full. — #668
 
 ## Nutzungsverlauf
 
@@ -37,7 +37,7 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 
 - [NEEDS CLARIFICATION] A restricted session with an incomplete profile whose account has neither an e-mail address nor a mobile number verified for SMS sign-in can't enter a code (ACC-5), so it can't complete the welcome onboarding at the kiosk (ACC-2, ACC-4). What does it get instead — and the same for a person who cancels the code? — #849
 - [NEEDS CLARIFICATION] A badge tapped on a phone is refused with a generic "could not be read" error; ADR-0022 promised a message that sends the person to the kiosk. Rule or gap?
-- [NEEDS CLARIFICATION] While a restricted session has entered no code (ACC-9), Bezahlen still names the full e-mail address the document went to (CHK-23), so a found badge reveals it after the commit. Mask it there too? — #668
+- [NEEDS CLARIFICATION] While a restricted session has entered no code (ACC-5), Bezahlen still names the full e-mail address the document went to (CHK-23), though the header menu masks it (ACC-9) and the check-in shows none (CHK-55), so a found badge reveals it after the commit. Mask it there too? — #668
 
 ## Retired
 

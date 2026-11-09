@@ -96,7 +96,6 @@ function Harness({
       isAccountLoggedIn={!anonymous}
       signedInUserId={anonymous ? null : "u-self"}
       ownerUserId={anonymous ? null : "u-self"}
-      signedInEmail="max@example.com"
       config={config}
       feePersons={persons.map((p) =>
         waivedIds.includes(p.id) ? { ...p, entryFeeWaivedToday: true } : p,

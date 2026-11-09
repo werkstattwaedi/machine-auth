@@ -40,8 +40,6 @@ interface CheckinOpts {
   kiosk?: boolean
   isAccountLoggedIn?: boolean
   signedInUserId?: string | null
-  signedInEmail?: string | null
-  maskEmails?: boolean
   isMember?: boolean
   personsOverride?: CheckoutPerson[]
   onAdvance?: () => Promise<void>
@@ -58,8 +56,6 @@ function renderCheckin(opts: CheckinOpts = {}) {
     kiosk = false,
     isAccountLoggedIn = false,
     signedInUserId,
-    signedInEmail,
-    maskEmails,
     isMember = false,
     personsOverride,
     onAdvance,
@@ -90,8 +86,6 @@ function renderCheckin(opts: CheckinOpts = {}) {
         kiosk={kiosk}
         isAccountLoggedIn={isAccountLoggedIn}
         signedInUserId={effectiveSignedInUserId}
-        signedInEmail={signedInEmail}
-        maskEmails={maskEmails}
         isMember={isMember}
         onAdvance={onAdvance}
         tagAuthLoading={tagAuthLoading}
@@ -395,12 +389,11 @@ describe("Account/guest switcher", () => {
     expect(screen.queryByTestId("nfc-affordance")).toBeNull()
   })
 
-  it("renders the identity strip with name + email for logged-in users", () => {
+  it("renders the identity strip with the name for logged-in users", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
-      signedInEmail: "max@test.com",
       personsOverride: [{
         id: "p1",
         firstName: "Max",
@@ -417,15 +410,14 @@ describe("Account/guest switcher", () => {
     expect(screen.queryByText("Bereits registriert oder Konto erstellen?")).toBeNull()
     expect(screen.getByTestId("identity-strip")).toBeTruthy()
     expect(screen.getByText("Max Muster")).toBeTruthy()
-    expect(screen.getByText(/max@test\.com/)).toBeTruthy()
+    expect(screen.queryByText(/max@test\.com/)).toBeNull()
   })
 
-  it("appends · Vereinsmitglied when the signed-in user has an active membership", () => {
+  it("shows Vereinsmitglied when the signed-in user has an active membership", () => {
     renderCheckin({
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
-      signedInEmail: "max@test.com",
       isMember: true,
       personsOverride: [{
         id: "p1",
@@ -440,7 +432,7 @@ describe("Account/guest switcher", () => {
       }],
     })
 
-    expect(screen.getByText(/max@test\.com · Vereinsmitglied/)).toBeTruthy()
+    expect(screen.getByText("Vereinsmitglied")).toBeTruthy()
   })
 
   // Issue #710: signing out lives in the header account menu — the strip
@@ -450,7 +442,6 @@ describe("Account/guest switcher", () => {
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
-      signedInEmail: "max@test.com",
       personsOverride: [{
         id: "p1",
         firstName: "Max",
@@ -571,17 +562,14 @@ describe("Identity strip — keyed by userId, not index", () => {
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
-      signedInEmail: "max@example.com",
       isMember: true,
       personsOverride: [familyMember],
     })
 
     const strip = screen.getByTestId("identity-strip")
     expect(strip.textContent).toContain("Lia Pfeffer")
-    expect(strip.textContent).toContain("lia@example.com")
-    // Crucially: the kid's strip must NOT inherit the parent's email,
-    // or membership tag.
-    expect(strip.textContent).not.toContain("max@example.com")
+    expect(strip.textContent).toContain("Kind")
+    // Crucially: the kid's strip must NOT inherit the parent's membership tag.
     expect(strip.textContent).not.toContain("Vereinsmitglied")
   })
 
@@ -592,7 +580,6 @@ describe("Identity strip — keyed by userId, not index", () => {
       isAnonymous: false,
       isAccountLoggedIn: true,
       signedInUserId: "u-self",
-      signedInEmail: "max@example.com",
       isMember: true,
       personsOverride: [familyMember, selfPerson],
     })
@@ -607,14 +594,13 @@ describe("Identity strip — keyed by userId, not index", () => {
     expect(kidStrip.textContent).not.toContain("Vereinsmitglied")
 
     expect(selfStrip.textContent).toContain("Max Muster")
-    expect(selfStrip.textContent).toContain("max@example.com")
     expect(selfStrip.textContent).toContain("Vereinsmitglied")
   })
 })
 
-// Issue #668: an un-elevated kiosk badge session must not reveal the
-// addresses on the card; the step-up (ADR-0041) unmasks them.
-describe("StepCheckin e-mail masking", () => {
+// Issue #668: the card shows nobody's e-mail address. The header menu shows
+// the account's; at the kiosk a found badge must not reveal anyone's.
+describe("Identity strip — no e-mail address", () => {
   const badgeOwner: CheckoutPerson = {
     id: "p1",
     firstName: "Max",
@@ -633,39 +619,47 @@ describe("StepCheckin e-mail masking", () => {
     email: "mia@family.ch",
     userId: "u-family",
   }
-  const badgeSession = {
-    isAnonymous: false,
-    kiosk: true,
-    isAccountLoggedIn: false,
-    personsOverride: [badgeOwner, familyMember],
-  }
-  const stripTexts = () =>
-    screen.getAllByTestId("identity-strip").map((el) => el.textContent ?? "")
 
-  it("masks every strip's e-mail while the badge session is un-elevated", () => {
-    renderCheckin({ ...badgeSession, maskEmails: true })
-
-    const [owner, family] = stripTexts()
-    expect(owner).toContain("ma•••@ex•••.com")
-    expect(owner).not.toContain("max@example.com")
-    expect(family).toContain("mi•••@fa•••.ch")
-    expect(family).not.toContain("mia@family.ch")
+  it("shows names, never an address, at the kiosk", () => {
+    renderCheckin({
+      isAnonymous: false,
+      kiosk: true,
+      personsOverride: [badgeOwner, familyMember],
+    })
+    const texts = screen
+      .getAllByTestId("identity-strip")
+      .map((el) => el.textContent ?? "")
+    expect(texts[0]).toContain("Max Muster")
+    expect(texts[1]).toContain("Mia Muster")
+    expect(texts.join(" ")).not.toContain("@")
   })
 
-  it("shows the full addresses when not masking", () => {
-    renderCheckin(badgeSession)
-
-    const [owner, family] = stripTexts()
-    expect(owner).toContain("max@example.com")
-    expect(family).toContain("mia@family.ch")
+  it("labels the badge owner as member, others by user type", () => {
+    renderCheckin({
+      isAnonymous: false,
+      kiosk: true,
+      signedInUserId: "u-badge",
+      isMember: true,
+      personsOverride: [badgeOwner, familyMember],
+    })
+    const [owner, family] = screen
+      .getAllByTestId("identity-strip")
+      .map((el) => el.textContent ?? "")
+    expect(owner).toContain("Vereinsmitglied")
+    expect(family).toContain("Erwachsen")
+    expect(family).not.toContain("Vereinsmitglied")
   })
 
-  it("unmasks in place once the session is elevated", () => {
-    const { rerenderWith } = renderCheckin({ ...badgeSession, maskEmails: true })
-    expect(stripTexts()[0]).not.toContain("max@example.com")
-
-    rerenderWith({ maskEmails: false })
-
-    expect(stripTexts()[0]).toContain("max@example.com")
+  it("shows no address for the signed-in account either", () => {
+    renderCheckin({
+      isAnonymous: false,
+      isAccountLoggedIn: true,
+      signedInUserId: "u-badge",
+      isMember: true,
+      personsOverride: [badgeOwner],
+    })
+    const strip = screen.getByTestId("identity-strip")
+    expect(strip.textContent).toContain("Vereinsmitglied")
+    expect(strip.textContent).not.toContain("@")
   })
 })

@@ -50,7 +50,6 @@ function renderCheckin(opts: {
       kiosk
       isAccountLoggedIn={false}
       signedInUserId={null}
-      signedInEmail={null}
       isMember={false}
       onAdvance={opts.onAdvance}
       onStartVisit={opts.onStartVisit}

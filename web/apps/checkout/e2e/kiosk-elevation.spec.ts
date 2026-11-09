@@ -170,14 +170,14 @@ test.describe("Kiosk step-up elevation", () => {
   })
 
   // Issue #668: a found badge must not reveal its owner's address — the
-  // card and the header menu show it masked until the step-up.
+  // card shows none, the header menu shows it masked until the step-up.
   test("badge tap shows a masked e-mail until the session is elevated", async ({
     page,
   }) => {
     await tapBadge2(page)
     const strip = page.getByTestId("identity-strip")
-    await expect(strip).toContainText("ba•••@te•••.com")
-    await expect(strip).not.toContainText(BADGE2_EMAIL)
+    await expect(strip).toContainText("Zweit")
+    await expect(strip).not.toContainText("@")
 
     await page.getByTestId("app-menu-trigger").click()
     const menu = page.getByRole("menu")
@@ -198,7 +198,8 @@ test.describe("Kiosk step-up elevation", () => {
       window.history.pushState({}, "", "/checkin?kiosk")
       window.dispatchEvent(new PopStateEvent("popstate"))
     })
-    await expect(strip).toContainText(BADGE2_EMAIL, { timeout: 10_000 })
+    await expect(strip).toContainText("Zweit", { timeout: 10_000 })
+    await expect(strip).not.toContainText("@")
     await page.getByTestId("app-menu-trigger").click()
     await expect(page.getByRole("menu")).toContainText(BADGE2_EMAIL)
   })

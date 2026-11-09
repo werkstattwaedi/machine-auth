@@ -36,7 +36,6 @@ function renderCheckin(isAnonymous: boolean) {
       kiosk={false}
       isAccountLoggedIn={false}
       signedInUserId={null}
-      signedInEmail={null}
       isMember={false}
     />,
   )

@@ -15,7 +15,6 @@ import {
   getKioskTokenUser,
   subscribeKioskSession,
 } from "@modules/lib/token-auth"
-import { useAuth } from "@modules/lib/auth"
 import { useBridge } from "@modules/lib/use-bridge"
 import { StepCheckin } from "@/components/checkout/step-checkin"
 import { useWizardContext } from "@/components/checkout/wizard-context"
@@ -57,7 +56,6 @@ function CheckinRoute() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
   const bridge = useBridge()
-  const { sessionKind, isKioskElevated } = useAuth()
   const search = useSearch({ from: "/_wizard" })
   const rescan = search.rescan === "1"
 
@@ -271,10 +269,6 @@ function CheckinRoute() {
         kiosk={ctx.kiosk}
         isAccountLoggedIn={ctx.isAccountLoggedIn}
         signedInUserId={ctx.identifiedUserDoc?.id ?? null}
-        signedInEmail={ctx.identifiedUserDoc?.email ?? null}
-        // Issue #668: a badge session shows addresses masked until the
-        // step-up elevates it (ADR-0041).
-        maskEmails={sessionKind === "tag" && !isKioskElevated}
         // The identified principal (account OR tag-tap badge user) owns the
         // checkout and always stays on the roster.
         ownerUserId={ctx.identifiedUserRef?.id ?? null}

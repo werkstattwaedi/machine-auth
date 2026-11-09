@@ -10,6 +10,7 @@ methods and documents in [billing.md](billing.md). Terms: see the
 
 - **CHK-1** The check-in starts with a choice: sign in (ACC-1) or continue as a guest. — ADR-0031
 - **CHK-6** An identified person's own details are filled in on the check-in; further persons are added there. — ADR-0031
+- **CHK-55** The check-in shows no person's e-mail address, on any device, apart from the field where one is typed in. — #668
 - **CHK-28** A further person on the check-in is entered as an adult or a child, which sets their standard usage fee; only the first person of a guest check-in can be a company, which also gives its billing address (BIL-14). — ADR-0050, #605
 - **CHK-2** A person who opens the app with an open checkout is taken past the check-in:
 
