@@ -403,6 +403,17 @@ export function machinePricingModel(item: CheckoutItemLocal): PricingModel {
 }
 
 /**
+ * Summary of a lone badge line. The catalog item is usually just called
+ * "Badge", which would repeat the section title ("Badge · Badge"), so the
+ * quantity stands in for it then.
+ */
+export function badgeSummary(item: CheckoutItemLocal): string {
+  const description = item.description?.trim()
+  if (description && description !== "Badge") return description
+  return `${item.quantity} Stk.`
+}
+
+/**
  * Minutes accumulated across the time-priced machine items only — a
  * per-piece machine service has no duration to contribute.
  */
@@ -779,6 +790,10 @@ export function StepCheckout({
   const hasTimedMachine = nfcItems.some(
     (i) => machinePricingModel(i) === "time",
   )
+  // A per-piece service (Sandstrahlen) has no usage time to accumulate.
+  const allMachinesTimed = nfcItems.every(
+    (i) => machinePricingModel(i) === "time",
+  )
 
   return (
     <div className="flex flex-col flex-1 gap-6">
@@ -849,7 +864,7 @@ export function StepCheckout({
             title="Badge"
             summary={
               badgeItems.length === 1
-                ? badgeItems[0].description
+                ? badgeSummary(badgeItems[0])
                 : `${badgeItems.length} Positionen`
             }
             amount={badgeCost}
@@ -958,7 +973,11 @@ export function StepCheckout({
           ) : (
             <>
               <PositionTable
-                firstColLabel="Akkumulierte Nutzungszeit"
+                firstColLabel={
+                  allMachinesTimed
+                    ? "Akkumulierte Nutzungszeit"
+                    : "Maschinen / Werkzeuge"
+                }
                 rows={nfcItems.map(machineRowFromItem)}
               />
               {machinesBlocked ? (

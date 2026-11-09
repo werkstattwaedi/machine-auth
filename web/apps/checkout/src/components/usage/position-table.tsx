@@ -248,7 +248,7 @@ export function formatMenge(item: CheckoutItemLocal): string {
   if (pm === "sla") {
     const ml = item.formInputs?.[0]?.quantity ?? 0
     const layers = item.formInputs?.[1]?.quantity ?? 0
-    return `${ml} ml · ${layers} L`
+    return `${ml} ml · ${layers} Layer`
   }
   if (pm === "time") {
     return `${Math.round(item.quantity * 60)} Min`

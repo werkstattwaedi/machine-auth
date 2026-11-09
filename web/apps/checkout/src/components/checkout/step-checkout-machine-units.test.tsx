@@ -15,6 +15,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 import { useState } from "react"
 import {
   StepCheckout,
+  badgeSummary,
   machineRowFromItem,
   timedMachineMinutes,
 } from "./step-checkout"
@@ -122,6 +123,28 @@ describe("StepCheckout — per-piece machine items (#653)", () => {
     expect(screen.getByText("25.00/h")).toBeTruthy()
     // 2 Stk. must not add 120 min to the header.
     expect(screen.getByText("2 Maschinen · 90 Min total")).toBeTruthy()
+  })
+
+  it("heads a list with a per-piece item as machines, not usage time (#731)", () => {
+    render(<Harness items={[timedMachine, perPieceMachine]} />)
+    expect(screen.getByText("Maschinen / Werkzeuge")).toBeTruthy()
+    expect(screen.queryByText("Akkumulierte Nutzungszeit")).toBeNull()
+  })
+
+  it("keeps the usage-time header when every machine item is timed", () => {
+    render(<Harness items={[timedMachine]} />)
+    expect(screen.getByText("Akkumulierte Nutzungszeit")).toBeTruthy()
+  })
+})
+
+describe("badgeSummary (#731)", () => {
+  const badge = (description: string, quantity = 1) =>
+    ({ ...perPieceMachine, description, quantity }) as CheckoutItemLocal
+  it("shows the quantity instead of repeating the section title", () => {
+    expect(badgeSummary(badge("Badge"))).toBe("1 Stk.")
+  })
+  it("keeps a description that says more than the title", () => {
+    expect(badgeSummary(badge("Ersatz-Badge"))).toBe("Ersatz-Badge")
   })
 })
 

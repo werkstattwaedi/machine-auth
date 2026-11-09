@@ -288,7 +288,7 @@ export async function buildInvoicePdf(
     if (isRenewal) {
       const intro =
         "Schon wieder ist ein Jahr vorbei! Mit dieser Rechnung verlängerst du " +
-        "deine Mitgliedschaft bei der Offenen Werkstatt Wädenswil um ein " +
+        "deine Mitgliedschaft beim Verein Offene Werkstatt Wädenswil um ein " +
         "weiteres Jahr. Als Mitglied profitierst du weiterhin von " +
         "vergünstigten Preisen bei der Nutzung der Maschinen.";
       doc.fontSize(10).font("Helvetica");

@@ -715,7 +715,7 @@ const SINGLE_BENEFITS: string[] = [
 const FAMILY_BENEFITS: string[] = [
   MEMBER_DISCOUNT_BENEFIT,
   "Ein Stimmrecht an der jährlichen Mitgliederversammlung",
-  "Gültig für alle im selben Haushalt lebende Personen",
+  "Gültig für alle im selben Haushalt lebenden Personen",
 ]
 
 export function NoMembership({
@@ -925,10 +925,12 @@ function FamilySection({
 
   // Confirmation is handled by <ConfirmDialog>; `pendingRemoval` holds the
   // target. `self` distinguishes the owner removing a member from a member
-  // leaving (different copy + success message).
+  // leaving (different copy + success message). `name` is null when the
+  // member's doc couldn't be loaded.
   const [pendingRemoval, setPendingRemoval] = React.useState<{
     uid: string
     self: boolean
+    name: string | null
   } | null>(null)
 
   const confirmRemoval = async () => {
@@ -970,9 +972,9 @@ function FamilySection({
                 isOwner
                   ? uid === ownerId
                     ? null
-                    : () => setPendingRemoval({ uid, self: false })
+                    : (name) => setPendingRemoval({ uid, self: false, name })
                   : uid === currentUserId
-                    ? () => setPendingRemoval({ uid, self: true })
+                    ? (name) => setPendingRemoval({ uid, self: true, name })
                     : null
               }
               removeLabel={!isOwner && uid === currentUserId ? "Verlassen" : "Entfernen"}
@@ -1081,7 +1083,7 @@ function FamilySection({
       description={
         pendingRemoval?.self
           ? "Du verlierst den vergünstigten Mitglieder-Tarif. Um wieder beizutreten, musst du erneut von der Familie eingeladen werden."
-          : "Diese Person wird aus der Familie entfernt und verliert den Mitglieder-Tarif."
+          : `${pendingRemoval?.name ?? "Diese Person"} wird aus der Familie entfernt und verliert den Mitglieder-Tarif.`
       }
       confirmLabel={pendingRemoval?.self ? "Verlassen" : "Entfernen"}
       destructive
@@ -1109,7 +1111,8 @@ export function MemberRow({
 }: {
   userId: string
   isOwner: boolean
-  onRemove: (() => void) | null
+  /** Called with the member's display name, or null when it couldn't load. */
+  onRemove: ((name: string | null) => void) | null
   removeLabel?: string
   removing: boolean
 }) {
@@ -1158,7 +1161,7 @@ export function MemberRow({
         <div />
         <div>
           {onRemove && (
-            <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
+            <Button variant="ghost" size="sm" onClick={() => onRemove(null)} disabled={removing}>
               <X />
               {removeLabel}
             </Button>
@@ -1192,7 +1195,7 @@ export function MemberRow({
       </div>
       <div>
         {onRemove && (
-          <Button variant="ghost" size="sm" onClick={onRemove} disabled={removing}>
+          <Button variant="ghost" size="sm" onClick={() => onRemove(name)} disabled={removing}>
             <X />
             {removeLabel}
           </Button>
