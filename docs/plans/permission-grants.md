@@ -88,7 +88,7 @@ Fresh installation: nothing to add to the checklist (accounts start with `{}`; `
 - First commit, as is: MAC-1 (a terminal unlocks only for an account holding every required permission) and MAC-2 (only an admin grants or removes permissions; a grant holds until removed), new file `machine.md`.
 - As is also: ADM-16 (where admins grant and remove permissions).
 - Change: ADM-16 (changed): the Berechtigungen tab shows, for each permission, when and by whom it was granted where that is recorded. "Whether a course granted it" comes with #842.
-- `Spec: MAC-1..2 (added), ADM-16 (added), ADM-16 (changed)`.
+- `Spec: MAC-1..3 (added), MAC-1 (changed), ADM-16 (added), ADM-16 (changed)`. MAC-3: the terminal's 4 h auth cache, accepted 2026-11-09.
 
 ## Out of scope
 - Course entries (`source: "course"`, `windows`) are only typed here; #842 writes them.

@@ -106,7 +106,7 @@ permissions: {
 - The Berechtigungen tab shows per permission «seit 3.11.2026 · von Mike Schneider» (legacy entries: «vor Nov. 2026»).
 - Account-creation paths (`create-user.ts`, `signup_kiosk.ts`, `accept_invite_new_account.ts`, `scripts/import-members.ts`) write `{}`; seed data, `web/modules/test/fixtures.ts` and the e2e setups follow; `firestore/schema.jsonc` + both entity types.
 - Migration `scripts/migrate-permission-grants.ts` (`--dry-run` first): each ref → `{ permission, source: "legacy", grantedAt: null, grantedBy: null }`; idempotent (skips maps). Order: functions that read both shapes → migration → rules + hosting. Deploy step `docs/deploy/YYYY-MM-DD-permission-grants.md` (phase `after-functions`), checklist unchanged (a fresh install starts with `{}`). Optional: fill `grantedAt` for legacy entries from the audit trail, if it holds the grant writes; otherwise leave null.
-- Spec (prefactor PR): first commit MAC-1..2 as is (below); then ADM-16 (added). `Spec: MAC-1..2 (added), ADM-16 (added)`.
+- Spec (prefactor PR): first commit MAC-1..2 as is (below); then ADM-16 (added), and MAC-3 (added) with MAC-1 (changed) for the terminal's 4 h re-entry (decided 2026-11-09). `Spec: MAC-1..3 (added), MAC-1 (changed), ADM-16 (added)`.
 
 **Step 2: the course feature (#842)**, on top of the prefactor.
 
@@ -171,11 +171,14 @@ New files `docs/spec/machine.md` (prefix `MAC`) and `docs/spec/courses.md` (pref
 
 **Change in the prefactor:**
 - **ADM-16 (added)** The Berechtigungen tab of a person's page shows, for each permission they hold, when and by whom it was granted and whether it came from a course. — #842
+- **MAC-1 (changed)** A machine terminal unlocks a machine only for a badge whose account holds every permission the machine requires, an admin's account included, except a badge it lets in again under MAC-3; a machine that requires none asks for none. — #154, #843
+- **MAC-3 (added)** For up to 4 h after the server let a badge in at a machine terminal, that terminal lets the same badge in again without asking the server, so a permission the account stops holding in that time (MAC-2) still unlocks the machine there. — #843
 
 **Change in #842:**
-- **MAC-1 (changed)** A machine terminal unlocks a machine only for a badge whose account holds every permission the machine requires — for good (MAC-3) or temporarily from a course (CRS-11) — an admin's account included; a machine that requires none asks for none. — #154, #842
-- **MAC-2 (retired)** — #842 (course leaders now grant too; replaced by MAC-3)
-- **MAC-3 (added)** A person's permission is granted for good by an admin, to anyone including themselves, or by the close of a course (CRS-14); it is removed only by an admin and holds until removed. — #842
+- **MAC-1 (changed)** A machine terminal unlocks a machine only for a badge whose account holds every permission the machine requires — for good (MAC-4) or temporarily from a course (CRS-11) — an admin's account included, except a badge it lets in again under MAC-3; a machine that requires none asks for none. — #154, #842, #843
+- **MAC-2 (retired)** — #842 (course leaders now grant too; replaced by MAC-4)
+- **MAC-3 (changed)** For up to 4 h after the server let a badge in at a machine terminal, that terminal lets the same badge in again without asking the server, so a permission the account stops holding in that time — removed (MAC-4) or a temporary one past its window (CRS-11) — still unlocks the machine there. — #843
+- **MAC-4 (added)** A person's permission is granted for good by an admin, to anyone including themselves, or by the close of a course (CRS-14); it is removed only by an admin and holds until removed. — #842
 - **CRS-1** Only an account linked to an edoobox leader (ADM-17) sees Kursleitung in the account and can read or act on courses there; the server refuses everyone else. — #842
 - **CRS-2** Kursleitung lists the courses the course leader leads in edoobox that are upcoming, running, or past their last Termin and not yet closed; a closed course is not listed. — #842
 - **CRS-3** A course page shows the course — Termine, participants, attendance — as it is in edoobox when the page opens; besides edoobox, only a participant's link to an account, the permission choices and the close are kept. — #842
@@ -189,7 +192,7 @@ New files `docs/spec/machine.md` (prefix `MAC`) and `docs/spec/courses.md` (pref
 - **CRS-11** While a participant's choice is Vorläufig or Ja and they are booked on the course, they hold the course's permission temporarily, from the start of each Termin until 1 h after its end and at no other time, whether or not the course is ever closed; a change to Nein ends it at once. — #842
 - **CRS-12** From the start of the last Termin the course leader can close the course, choosing Ja or Nein for each participant; missed Termine and "already holds the permission" are shown beside each one, and the choice starts as: no linked account → Nein, can't be changed; already holds the permission, or choice Vorläufig or Ja → Ja; choice Nein → Nein. — #842
 - **CRS-13** A Nein at the close carries a reason, prefilled by the case (no account, absent from every Termin, absent from some), which is saved as a note on the participant's booking in edoobox. — #842
-- **CRS-14** The close grants each participant with Ja the permission for good (MAC-3) and never removes a permission a participant held before the course. — #842
+- **CRS-14** The close grants each participant with Ja the permission for good (MAC-4) and never removes a permission a participant held before the course. — #842
 - **CRS-15** After the close, the course leader can no longer change anything on the course; changes go through an admin. — #842
 - **CRS-16** While a course is not closed after its last Termin, its course leader is e-mailed a reminder 1, 3 and 7 days after that Termin, and on the 7th day the office is e-mailed too. — #842
 - **ADM-17 (added)** An admin links a person to an edoobox leader, or removes the link, on the Profil tab of the person's page in the admin app; an edoobox leader is linked to at most one person. — #842
@@ -198,7 +201,7 @@ New files `docs/spec/machine.md` (prefix `MAC`) and `docs/spec/courses.md` (pref
 - **KIO-13 (changed)** new row: `| someone is in the account | nothing, unless a badge assignment waits for it (CRS-9) |`
 - Glossary: «Account» gains Kursleitung. New entries: Course (*Kurs*), Termin, Course leader (*Kursleitung*), Participant, Permission (*Berechtigung*), Temporary permission, Closed course.
 
-Spec lines: prefactor `Spec: MAC-1..2 (added), ADM-16 (added)`; #842 `Spec: MAC-1 (changed), MAC-2 (retired), MAC-3 (added), CRS-1..16 (added), ADM-17..18 (added), KIO-6 (changed), KIO-13 (changed)`. CRS-17 (Meine Kurse) comes with the follow-up.
+Spec lines: prefactor `Spec: MAC-1..3 (added), MAC-1 (changed), ADM-16 (added)`; #842 `Spec: MAC-1 (changed), MAC-2 (retired), MAC-3 (changed), MAC-4 (added), CRS-1..16 (added), ADM-17..18 (added), KIO-6 (changed), KIO-13 (changed)`. CRS-17 (Meine Kurse) comes with the follow-up.
 
 ## Regression testing
 - **Prefactor:** `heldPermissionIds` unit tests (no windows, inside/outside a window, legacy); `grantPermission`/`revokePermission` (admin only, self-grant allowed, stamps); rules: `permissions` not client-writable, admins included, self-create `{}`; migration dry run + idempotence; check-in and badge price rule unchanged with migrated data. Baseline that changes: admin Berechtigungen tab (grant line).
