@@ -154,7 +154,7 @@ test.describe("Membership page screenshots", () => {
     const uid = process.env.E2E_AUTH_USER_UID!
     await seedMembershipState(uid, { kind: "cancelled" })
     await gotoMembership(page)
-    await expect(page.getByText("Gekündigt")).toBeVisible()
+    await expect(page.getByText("Beendet")).toBeVisible()
     await expect(
       page.getByRole("button", { name: "Verlängern" }),
     ).toHaveCount(0)

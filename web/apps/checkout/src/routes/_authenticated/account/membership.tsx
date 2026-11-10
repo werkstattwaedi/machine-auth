@@ -542,7 +542,7 @@ export function StatusHero({
             <Badge variant="destructive">Abgelaufen</Badge>
           )}
           {status === "cancelled" && (
-            <Badge variant="outline">Gekündigt</Badge>
+            <Badge variant="outline">Beendet</Badge>
           )}
         </div>
 
