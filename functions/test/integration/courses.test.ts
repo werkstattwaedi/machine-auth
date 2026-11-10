@@ -368,6 +368,22 @@ describe("courses (#842)", () => {
       );
       expect((await getFirestore().doc("tokens/04cccccccccccc").get()).exists).to.equal(false);
     });
+    it("refuses a badge that is on someone's open checkout (MEM-37)", async () => {
+      const db = getFirestore();
+      const tokenId = "04aabbccddeeff";
+      await db.doc("checkouts/co-buyer").set({ status: "open", created: Timestamp.now() });
+      await db.doc("checkouts/co-buyer/items/i1").set({ tokenId, catalogId: null, quantity: 1 });
+      const badgeVoucher = mintBadgeVoucher({ tokenId, sdmCounter: 7 }, MASTER_KEY);
+      await expectCode(
+        () => assignCourseBadgeHandler(req({ offerId: OFFER, participantId: "p_anna", badgeVoucher })),
+        "failed-precondition"
+      );
+      // Once that checkout is closed, the badge is free to assign.
+      await db.doc("checkouts/co-buyer").update({ status: "closed" });
+      await assignCourseBadgeHandler(req({ offerId: OFFER, participantId: "p_anna", badgeVoucher }));
+      expect((await db.doc(`tokens/${tokenId}`).get()).exists).to.equal(true);
+    });
+
     it("refuses a forged voucher and an unlinked participant", async () => {
       await expectCode(
         () => assignCourseBadgeHandler(req({ offerId: OFFER, participantId: "p_anna", badgeVoucher: "04aaaaaaaaaaaa.3.9999999999999.x" })),

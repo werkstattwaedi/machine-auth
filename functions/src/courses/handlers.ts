@@ -336,6 +336,17 @@ export const assignCourseBadgeHandler = async (
     if (token.exists) {
       throw new HttpsError("already-exists", "Dieser Badge ist schon registriert.");
     }
+    // A badge someone is buying (open or awaiting payment) is theirs once
+    // their checkout closes; a second checkout refuses it too (MEM-37).
+    const pending = await tx.get(leader.db.collectionGroup("items").where("tokenId", "==", voucher.tokenId));
+    for (const item of pending.docs) {
+      const checkout = item.ref.parent.parent;
+      if (!checkout) continue;
+      const status = (await tx.get(checkout)).get("status");
+      if (status === "open" || status === "awaiting_payment") {
+        throw new HttpsError("failed-precondition", "Dieser Badge ist in einem offenen Checkout.");
+      }
+    }
     // A course hands out a person's first badge (CRS-9); one more for an
     // account that has one is the office's job — and keeps a mislinked
     // account from getting a stranger's badge.
