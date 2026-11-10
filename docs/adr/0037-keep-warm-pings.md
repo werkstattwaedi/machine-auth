@@ -56,7 +56,8 @@ therefore the only free-tier keep-alive mechanism.
    pings `authCall` on load and every 10 minutes. A badge tap goes
    straight to `authCall` (`verifyTagCheckout` / `exchangeKioskSession`),
    but the per-mount prewarms of item 2 only fire once a session has
-   started, so an idle kiosk's first tap paid a cold start — prod logs
+   started, so an idle kiosk's first tap paid a cold start. It is the one
+   fixed schedule because nothing precedes that tap to ping on — prod logs
    showed ~8 `authcall` cold starts a day against ~1 a day for the
    heartbeat-warmed `api`. Around the clock this is ~4.3k no-op calls a
    month; it stops when the kiosk is off. `minInstances: 1` was weighed
