@@ -34,6 +34,8 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  query,
+  where,
 } from "firebase/firestore"
 import { FieldValue } from "firebase-admin/firestore"
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing"
@@ -2065,9 +2067,8 @@ describe("cross-user: permissions are function-only", () => {
 describe("cross-user: courses (#842)", () => {
   async function seedLink() {
     await seedUser("alice")
-    await getAdminFirestore().doc("courseLinks/o1_p1").set({
+    await getAdminFirestore().doc("courses/o1/links/p1").set({
       offerId: "o1",
-      participantId: "p1",
       user: getAdminFirestore().doc("users/alice"),
       choice: "temp",
     })
@@ -2076,10 +2077,14 @@ describe("cross-user: courses (#842)", () => {
 
   it("lets only an admin read course links and courses", async () => {
     await seedLink()
-    await assertSucceeds(getDoc(doc(adminDb(), "courseLinks", "o1_p1")))
+    await assertSucceeds(getDoc(doc(adminDb(), "courses", "o1", "links", "p1")))
+    await assertSucceeds(getDocs(query(collectionGroup(adminDb(), "links"), where("user", "==", doc(adminDb(), "users", "alice")))))
     await assertSucceeds(getDoc(doc(adminDb(), "courses", "o1")))
-    await assertCrossUserDenied("courseLinks read by the linked user", "firestore.rules courseLinks (admin read)", () =>
-      getDoc(doc(authedDb("alice"), "courseLinks", "o1_p1")),
+    await assertCrossUserDenied("course link read by the linked user", "firestore.rules courses/links (admin read)", () =>
+      getDoc(doc(authedDb("alice"), "courses", "o1", "links", "p1")),
+    )
+    await assertCrossUserDenied("course links read across courses by the linked user", "firestore.rules links group (admin read)", () =>
+      getDocs(query(collectionGroup(authedDb("alice"), "links"), where("user", "==", doc(authedDb("alice"), "users", "alice")))),
     )
     await assertCrossUserDenied("courses read by a member", "firestore.rules courses (admin read)", () =>
       getDoc(doc(authedDb("bob"), "courses", "o1")),
@@ -2088,8 +2093,8 @@ describe("cross-user: courses (#842)", () => {
 
   it("denies every client writing course links or courses, admins included", async () => {
     await seedLink()
-    await assertCrossUserDenied("courseLinks written by an admin", "firestore.rules courseLinks (no client writes)", () =>
-      setDoc(doc(adminDb(), "courseLinks", "o1_p2"), { offerId: "o1" }),
+    await assertCrossUserDenied("course link written by an admin", "firestore.rules courses/links (no client writes)", () =>
+      setDoc(doc(adminDb(), "courses", "o1", "links", "p2"), { offerId: "o1" }),
     )
     await assertCrossUserDenied("courses written by an admin", "firestore.rules courses (no client writes)", () =>
       setDoc(doc(adminDb(), "courses", "o1"), { closedAt: null }),

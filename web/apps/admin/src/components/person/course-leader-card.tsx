@@ -13,7 +13,7 @@ import { where } from "firebase/firestore"
 import type { EdooboxLeader, ListEdooboxLeadersResult } from "@oww/shared"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
 import { useCollection } from "@modules/lib/firestore"
-import { courseLinksCollection, userRef } from "@modules/lib/firestore-helpers"
+import { courseLinksGroup, userRef } from "@modules/lib/firestore-helpers"
 import type { UserDoc } from "@modules/lib/firestore-entities"
 import { rpcCallable } from "@modules/lib/rpc"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
@@ -42,7 +42,7 @@ export function CourseLeaderCard({ userId, user }: { userId: string; user: UserD
   const [unlink, setUnlink] = useState<{ offerId: string; participantId: string; title: string } | null>(null)
   const save = useAsyncMutation({ context: "admin.setEdooboxLeader", successMessage: "Gespeichert" })
   const remove = useAsyncMutation({ context: "admin.unlinkCourseParticipant", successMessage: "Verknüpfung gelöst" })
-  const { data: links } = useCollection(courseLinksCollection(db), where("user", "==", userRef(db, userId)))
+  const { data: links } = useCollection(courseLinksGroup(db), where("user", "==", userRef(db, userId)))
 
   useEffect(() => {
     rpcCallable<object, ListEdooboxLeadersResult>(functions, "courseCall", "listEdooboxLeaders")({})
@@ -121,7 +121,7 @@ export function CourseLeaderCard({ userId, user }: { userId: string; user: UserD
                     {l.offerTitle}
                     <span className="text-muted-foreground"> · als {l.participantName}</span>
                   </span>
-                  <Button variant="outline" size="sm" onClick={() => setUnlink({ offerId: l.offerId, participantId: l.participantId, title: l.offerTitle })}>
+                  <Button variant="outline" size="sm" onClick={() => setUnlink({ offerId: l.offerId, participantId: l.id, title: l.offerTitle })}>
                     Verknüpfung lösen
                   </Button>
                 </li>

@@ -14,6 +14,7 @@ import {
   type DocumentReference,
   type DocumentSnapshot,
   type Firestore,
+  type Transaction,
 } from "firebase-admin/firestore";
 import {
   WORKSHOP_IDS,
@@ -35,8 +36,14 @@ import {
   type EdooboxApi,
   type EdooboxDate,
 } from "./edoobox";
-import { holdsForGoodElsewhere } from "./grants";
-import { courseLinkId, type CourseEntity, type CourseLinkEntity } from "./types";
+import { forEachPermission, holdsForGoodElsewhere, withoutTemporaryGrant } from "./grants";
+import {
+  courseLinksOf,
+  storedLink,
+  type CourseEntity,
+  type CourseLinkEntity,
+  type StoredCourseLink,
+} from "./types";
 
 /**
  * A course past its last Termin stays on Kursleitung this long while it
@@ -164,7 +171,7 @@ export async function listMyCourses(leader: Leader, nowMs = Date.now()): Promise
 export interface LoadedCourse {
   detail: CourseDetail;
   course: CourseEntity;
-  links: Map<string, CourseLinkEntity>;
+  links: Map<string, StoredCourseLink>;
   dates: CourseDate[];
   statuses: Map<number, AttendanceStatus>;
   /** participantId → edoobox attendance record id, per dateId. */
@@ -181,7 +188,7 @@ export async function loadCourse(leader: Leader, offerId: string, nowMs = Date.n
     api.listBookings(offerId),
     api.attendanceStatuses(),
     leader.db.collection("courses").doc(offerId).get(),
-    leader.db.collection("courseLinks").where("offerId", "==", offerId).get(),
+    courseLinksOf(leader.db, offerId).get(),
   ]);
   const offer = offers[0];
   if (!offer) throw new HttpsError("not-found", "Kurs nicht gefunden.");
@@ -208,9 +215,9 @@ export async function loadCourse(leader: Leader, offerId: string, nowMs = Date.n
   }
 
   const course = (courseSnap.data() ?? {}) as CourseEntity;
-  const links = new Map(linkSnap.docs.map((d) => [d.get("participantId") as string, d.data() as CourseLinkEntity]));
-  const permissionRef = course.permission ?? null;
-  const permissionSnap = permissionRef ? await permissionRef.get() : null;
+  const links = new Map(linkSnap.docs.map((d) => [d.id, storedLink(d)]));
+  const permissionRefs = course.permissions ?? [];
+  const permissionSnaps = permissionRefs.length ? await leader.db.getAll(...permissionRefs) : [];
 
   // Linked accounts: their badge and whether they hold the permission already.
   const linkedUserSnaps = new Map<string, DocumentSnapshot>();
@@ -245,9 +252,9 @@ export async function loadCourse(leader: Leader, offerId: string, nowMs = Date.n
               userId: link.user.id,
               choice: link.choice,
               hasBadge: badgeHolders.has(link.user.id),
-              alreadyHeld: permissionRef
-                ? holdsForGoodElsewhere(userSnap?.get("permissions"), permissionRef.id, offerId)
-                : false,
+              alreadyHeld:
+                permissionRefs.length > 0 &&
+                permissionRefs.every((ref) => holdsForGoodElsewhere(userSnap?.get("permissions"), ref.id, offerId)),
             }
           : null,
         accountExists: link ? true : email ? !!(await findUserDocByEmail(leader.db, normalizeEmail(email))) : false,
@@ -263,10 +270,11 @@ export async function loadCourse(leader: Leader, offerId: string, nowMs = Date.n
     dates,
     participantCount: out.length,
     phase: coursePhase(dates, nowMs),
-    permission: permissionRef && permissionSnap?.exists
-      ? { id: permissionRef.id, name: String(permissionSnap.get("name") ?? permissionRef.id) }
-      : null,
-    permissionChosen: course.permission !== undefined,
+    // A permission deleted since the pick is left out of the names.
+    permissions: permissionSnaps
+      .filter((s) => s.exists)
+      .map((s) => ({ id: s.id, name: String(s.get("name") ?? s.id) })),
+    permissionChosen: course.permissions !== undefined,
     permissionLocked: links.size > 0,
     offeredStatuses,
     allStatuses: statuses,
@@ -288,4 +296,30 @@ export function requireOpen(loaded: LoadedCourse): void {
   }
 }
 
-export { courseLinkId };
+
+
+/**
+ * Removes a participant's link and that course's temporary permissions;
+ * a permission the close granted for good stays (ADM-18, CRS-18). False
+ * when the link is already gone.
+ */
+export async function removeCourseLink(
+  db: Firestore,
+  tx: Transaction,
+  linkRef: DocumentReference
+): Promise<boolean> {
+  const linkSnap = await tx.get(linkRef);
+  if (!linkSnap.exists) return false;
+  const offerId = linkRef.parent.parent!.id;
+  const link = linkSnap.data() as CourseLinkEntity;
+  const [course, user] = await Promise.all([tx.get(db.collection("courses").doc(offerId)), tx.get(link.user)]);
+  const permissions = (course.data() as CourseEntity | undefined)?.permissions ?? [];
+  if (user.exists) {
+    const map = forEachPermission(user.get("permissions"), permissions, (stored, permission) =>
+      withoutTemporaryGrant(stored, permission.id, offerId)
+    );
+    if (map) tx.update(link.user, { permissions: map });
+  }
+  tx.delete(linkRef);
+  return true;
+}

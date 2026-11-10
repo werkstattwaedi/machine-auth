@@ -140,7 +140,7 @@ Each course-leader callable checks: caller (or kiosk `actsAs` with step-up, `req
 
 **Data** (`firestore/schema.jsonc`):
 - `users.edooboxLeaderId` (admin-written via callable; rules pin it for clients).
-- `courseLinks/{offerId}_{participantId}` {user, offerId, participantId, choice: no|temp|yes, linkedBy, linkedAt}: doc id = uniqueness per participant; per-course uniqueness of the account in a transaction (query offerId + user). Admin-readable, otherwise function-only (the owner read comes with Meine Kurse).
+- `courses/{offerId}/links/{participantId}` {user, offerId, edooboxUserId, choice: no|temp|yes, linkedBy, linkedAt}: doc id = uniqueness per participant; per-course uniqueness of the account in a transaction (query on user). Read across courses as the collection group `links`. Admin-readable, otherwise function-only (the owner read comes with Meine Kurse). *(Review, 2026-11-10: was top-level `courseLinks`; a course now grants a list of permissions.)*
 - `courseCloses/{offerId}` {closedBy, closedAt, choices, remindersSent}.
 - Temporary permissions are entries in `users.permissions` (prefactor) with `source: "course"`, `course.offerId` and `windows`. No separate field.
 

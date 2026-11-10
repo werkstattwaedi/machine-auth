@@ -27,6 +27,7 @@ import { serializeValue } from "../audit/audit-trigger";
 import { resolveSubject, type Subject } from "./subject";
 import { SUBJECT_DATA_MAP } from "./subject_data_map";
 import { logOperationInfo } from "../operations_log";
+import { allCourseLinks } from "../courses/types";
 import type {
   CheckoutEntity,
   CheckoutPersonEntity,
@@ -236,7 +237,7 @@ export async function buildPrivacyReport(
     ? await subject.userRef.collection("savedPersons").get()
     : null;
   const courseLinks = subject.userRef
-    ? await deps.db.collection("courseLinks").where("user", "==", subject.userRef).get()
+    ? await allCourseLinks(deps.db).where("user", "==", subject.userRef).get()
     : null;
 
   return {

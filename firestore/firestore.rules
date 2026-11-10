@@ -480,7 +480,9 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
-    match /courseLinks/{linkId} {
+    // courses/{offerId}/links/{participantId}, also read across courses
+    // (a person's links, ADM-18) — hence the recursive match.
+    match /{path=**}/links/{participantId} {
       allow read: if isAdmin();
       allow write: if false;
     }

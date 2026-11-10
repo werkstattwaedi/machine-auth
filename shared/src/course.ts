@@ -79,7 +79,7 @@ export interface CourseParticipantLink {
   choice: CourseChoice
   /** The linked account has an active badge. */
   hasBadge: boolean
-  /** Holds the course's permission for good, not from this course ("Schon berechtigt"). */
+  /** Holds every permission of the course for good, not from this course ("Schon berechtigt"). */
   alreadyHeld: boolean
 }
 
@@ -113,9 +113,9 @@ export interface CourseSummary {
 }
 
 export interface CourseDetail extends CourseSummary {
-  /** null until the course leader picked one; see `permissionChosen`. */
-  permission: CoursePermissionRef | null
-  /** false until the course leader picked a permission or «Keine» (CRS-17). */
+  /** What the course grants, possibly none; empty until picked — see `permissionChosen`. */
+  permissions: CoursePermissionRef[]
+  /** false until the course leader picked permissions or «Keine» (CRS-17). */
   permissionChosen: boolean
   /** The pick is fixed once a participant is linked. */
   permissionLocked: boolean
@@ -181,8 +181,8 @@ export interface GetCourseInput {
 
 export interface SetCoursePermissionTypeInput {
   offerId: string
-  /** null = the course grants no permission. */
-  permissionId: string | null
+  /** [] = the course grants no permission. */
+  permissionIds: string[]
 }
 
 export interface SetAttendanceInput {
@@ -260,4 +260,11 @@ export interface SetEdooboxLeaderInput {
 export interface UnlinkCourseParticipantInput {
   offerId: string
   participantId: string
+}
+
+/** «Laser Cutter» · «Laser Cutter» und «Gravur» · «A», «B» und «C». */
+export function formatPermissionNames(permissions: ReadonlyArray<Pick<CoursePermissionRef, "name">>): string {
+  const names = permissions.map((p) => `«${p.name}»`)
+  if (names.length <= 1) return names.join("")
+  return `${names.slice(0, -1).join(", ")} und ${names[names.length - 1]}`
 }

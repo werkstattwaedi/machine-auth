@@ -89,6 +89,7 @@ async function seedUsers() {
   await db.doc(`users/${OTHER_LEADER}`).set({ ...base, email: "olga@x.ch", firstName: "Olga", lastName: "O", edooboxLeaderId: "admin_other" });
   await db.doc(`users/${ANNA}`).set({ ...base, email: "anna@x.ch", firstName: "Anna", lastName: "Brunner" });
   await db.doc("permission/laser").set({ name: "Lasercutter" });
+  await db.doc("permission/cnc").set({ name: "CNC Fräsen" });
 }
 
 async function grantsOf(uid: string) {
@@ -142,21 +143,69 @@ describe("courses (#842)", () => {
     it("starts unpicked, takes «Keine» or a permission, and is fixed after the first link", async () => {
       let c = await getCourseHandler(req({ offerId: OFFER }));
       expect(c.permissionChosen).to.equal(false);
-      c = await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: null }));
-      expect(c).to.include({ permissionChosen: true, permission: null });
-      c = await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
-      expect(c.permission).to.deep.equal({ id: "laser", name: "Lasercutter" });
+      c = await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: [] }));
+      expect(c.permissionChosen).to.equal(true);
+      expect(c.permissions).to.deep.equal([]);
+      c = await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
+      expect(c.permissions).to.deep.equal([{ id: "laser", name: "Lasercutter" }]);
       await link("p_anna", "anna@x.ch");
       await expectCode(
-        () => setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: null })),
+        () => setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: [] })),
         "failed-precondition"
       );
+      // Changeable again once every link is removed (an admin's unlink).
+      await unlinkCourseParticipantHandler(adminReq({ offerId: OFFER, participantId: "p_anna" }));
+      c = await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: [] }));
+      expect(c.permissions).to.deep.equal([]);
+    });
+
+    it("refuses an unknown permission", async () => {
+      await expectCode(
+        () => setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser", "nope"] })),
+        "not-found"
+      );
+    });
+
+    it("grants several permissions: each temporary, then each for good at the close", async () => {
+      seedEdoobox(Date.now(), true);
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser", "cnc"] }));
+      await link("p_anna", "anna@x.ch");
+      const temp = await grantsOf(ANNA);
+      expect(Object.keys(temp).sort()).to.deep.equal(["cnc", "laser"]);
+      expect(temp.cnc.windows).to.have.length(2);
+      const result = await closeCourseHandler(req({ offerId: OFFER, choices: { p_anna: true }, reasons: {} }));
+      expect(result.granted).to.equal(1);
+      const done = await grantsOf(ANNA);
+      expect(done.laser.windows).to.equal(undefined);
+      expect(done.cnc.windows).to.equal(undefined);
+    });
+
+    it("is «Schon berechtigt» only when holding every permission of the course", async () => {
+      const db = getFirestore();
+      const adminGrant = (id: string) => ({
+        permission: db.doc(`permission/${id}`),
+        grantedAt: Timestamp.now(),
+        grantedBy: db.doc("users/the-admin"),
+        source: "admin",
+      });
+      await db.doc(`users/${ANNA}`).update({ permissions: { laser: adminGrant("laser") } });
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser", "cnc"] }));
+      await link("p_anna", "anna@x.ch");
+      let anna = (await getCourseHandler(req({ offerId: OFFER }))).participants.find((p) => p.participantId === "p_anna");
+      expect(anna?.link?.alreadyHeld).to.equal(false);
+      // Only the missing one is given, the admin's grant stays.
+      const grants = await grantsOf(ANNA);
+      expect(grants.laser.source).to.equal("admin");
+      expect(grants.cnc.source).to.equal("course");
+      await db.doc(`users/${ANNA}`).update({ permissions: { laser: adminGrant("laser"), cnc: adminGrant("cnc") } });
+      anna = (await getCourseHandler(req({ offerId: OFFER }))).participants.find((p) => p.participantId === "p_anna");
+      expect(anna?.link?.alreadyHeld).to.equal(true);
     });
   });
 
   describe("linking (CRS-6, CRS-7)", () => {
     beforeEach(async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
     });
 
     it("links an existing account, Vorläufig, with this course's windows (CRS-10, CRS-11)", async () => {
@@ -225,7 +274,7 @@ describe("courses (#842)", () => {
 
   describe("choice (CRS-10, CRS-11)", () => {
     beforeEach(async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
     });
     it("Nein ends the temporary permission, Ja brings it back", async () => {
@@ -234,6 +283,36 @@ describe("courses (#842)", () => {
       await setParticipantChoiceHandler(req({ offerId: OFFER, participantId: "p_anna", choice: "yes" }));
       expect((await grantsOf(ANNA)).laser.windows).to.have.length(2);
     });
+    it("refuses a choice for a participant whose booking was cancelled (CRS-19)", async () => {
+      fake.state.bookings[0].cancelled = true;
+      await expectCode(
+        () => setParticipantChoiceHandler(req({ offerId: OFFER, participantId: "p_anna", choice: "temp" })),
+        "not-found"
+      );
+    });
+
+    it("takes over another course's lapsed temporary permission (CRS-11)", async () => {
+      const db = getFirestore();
+      const past = Date.now() - 10 * 24 * HOUR;
+      await db.doc(`users/${ANNA}`).update({
+        permissions: {
+          laser: {
+            permission: db.doc("permission/laser"),
+            grantedAt: Timestamp.fromMillis(past),
+            grantedBy: db.doc(`users/${LEADER}`),
+            source: "course",
+            course: { offerId: "offer_old" },
+            windows: [{ from: Timestamp.fromMillis(past), until: Timestamp.fromMillis(past + 3 * HOUR) }],
+          },
+        },
+      });
+      await setParticipantChoiceHandler(req({ offerId: OFFER, participantId: "p_anna", choice: "no" }));
+      await setParticipantChoiceHandler(req({ offerId: OFFER, participantId: "p_anna", choice: "temp" }));
+      const laser = (await grantsOf(ANNA)).laser;
+      expect(laser.course.offerId).to.equal(OFFER);
+      expect(laser.windows).to.have.length(2);
+    });
+
     it("Nein leaves an admin's grant alone", async () => {
       await getFirestore().doc(`users/${ANNA}`).update({
         "permissions.laser": { permission: getFirestore().doc("permission/laser"), grantedAt: null, grantedBy: null, source: "admin" },
@@ -268,7 +347,7 @@ describe("courses (#842)", () => {
 
   describe("badge (CRS-9)", () => {
     beforeEach(async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: null }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: [] }));
       await link("p_anna", "anna@x.ch");
     });
     it("registers a tapped, unregistered badge to the linked account; refuses a registered one", async () => {
@@ -304,7 +383,7 @@ describe("courses (#842)", () => {
 
   describe("close (CRS-12..15)", () => {
     it("can't close before the last Termin has started", async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await expectCode(() => closeCourseHandler(req({ offerId: OFFER, choices: {}, reasons: {} })), "failed-precondition");
     });
 
@@ -312,7 +391,7 @@ describe("courses (#842)", () => {
       seedEdoobox(Date.now(), true);
       // A fresh address: the Auth emulator keeps accounts across tests.
       fake.state.users[1].email = "luca.close@x.ch";
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       const { userId: luca } = await link("p_luca", "luca.close@x.ch", true);
       const result = await closeCourseHandler(
@@ -335,7 +414,7 @@ describe("courses (#842)", () => {
 
     it("ends the temporary permission of a link whose booking was cancelled, and gives it no Ja", async () => {
       seedEdoobox(Date.now(), true);
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       fake.state.bookings[0].cancelled = true;
       const result = await closeCourseHandler(req({ offerId: OFFER, choices: { p_anna: true }, reasons: {} }));
@@ -345,7 +424,7 @@ describe("courses (#842)", () => {
 
     it("counts only who gets the permission from this close", async () => {
       seedEdoobox(Date.now(), true);
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       const db = getFirestore();
       const adminGrant = {
@@ -362,7 +441,7 @@ describe("courses (#842)", () => {
 
     it("keeps the close when edoobox refuses a note", async () => {
       seedEdoobox(Date.now(), true);
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: null }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: [] }));
       fake.createNote = async () => {
         throw new Error("down");
       };
@@ -382,17 +461,17 @@ describe("courses (#842)", () => {
       await expectCode(() => setEdooboxLeaderHandler(req({ userId: ANNA, adminId: "x" })), "permission-denied");
     });
     it("unlinks a participant and drops that course's temporary permission", async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       await unlinkCourseParticipantHandler(adminReq({ offerId: OFFER, participantId: "p_anna" }));
       expect(await grantsOf(ANNA)).to.deep.equal({});
-      expect((await getFirestore().doc(`courseLinks/${OFFER}_p_anna`).get()).exists).to.equal(false);
+      expect((await getFirestore().doc(`courses/${OFFER}/links/p_anna`).get()).exists).to.equal(false);
     });
   });
 
   describe("daily sync (CRS-11, CRS-16)", () => {
     it("drops the temporary permission of a cancelled booking", async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       fake.state.bookings[0].cancelled = true;
       const report = await runSyncCourses();
@@ -460,7 +539,7 @@ describe("courses (#842)", () => {
     });
 
     it("keeps an admin's removal of a temporary permission (no re-add)", async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       await getFirestore().doc(`users/${ANNA}`).update({ permissions: {} });
       await runSyncCourses();
@@ -472,8 +551,59 @@ describe("courses (#842)", () => {
       await expectCode(() => closeCourseHandler(req({ offerId: OFFER, choices: {}, reasons: {} })), "failed-precondition");
     });
 
+    it("ends the temporary permission of a booking moved to the waiting list (CRS-19)", async () => {
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
+      await link("p_anna", "anna@x.ch");
+      fake.state.bookings[0].waitingList = true;
+      await runSyncCourses();
+      expect(await grantsOf(ANNA)).to.deep.equal({});
+    });
+
+    it("keeps a lapsed temporary permission, so a make-up Termin reaches it (CRS-11)", async () => {
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
+      await link("p_anna", "anna@x.ch");
+      // A day after the last window: the entry stays, holding nothing.
+      const later = Date.now() + 3 * 24 * HOUR;
+      await runSyncCourses(later);
+      expect((await grantsOf(ANNA)).laser.windows).to.have.length(2);
+      // A Termin added in edoobox afterwards gets its window.
+      const makeUp = later + 48 * HOUR;
+      fake.state.dates.push({
+        id: "d3",
+        offerId: OFFER,
+        start: new Date(makeUp).toISOString(),
+        end: new Date(makeUp + 3 * HOUR).toISOString(),
+        leaders: [ADMIN_ID],
+      });
+      await runSyncCourses(later + HOUR);
+      const windows = (await grantsOf(ANNA)).laser.windows;
+      expect(windows).to.have.length(3);
+      expect(windows[2].from.toMillis()).to.equal(makeUp);
+    });
+
+    it("reminds a leader of an earlier Termin by the course's last Termin (CRS-16)", async () => {
+      const sent: string[] = [];
+      setCourseMailerForTest((async (m: any) => {
+        sent.push(m.to);
+      }) as any);
+      try {
+        const now = Date.now();
+        // Leader A led Termin 1 three weeks ago; Termin 2, led by someone else, was 3 days ago.
+        fake.state.dates[0].start = new Date(now - 21 * 24 * HOUR).toISOString();
+        fake.state.dates[0].end = new Date(now - 21 * 24 * HOUR + 3 * HOUR).toISOString();
+        fake.state.dates[1].start = new Date(now - 3 * 24 * HOUR).toISOString();
+        fake.state.dates[1].end = new Date(now - 3 * 24 * HOUR + 3 * HOUR).toISOString();
+        fake.state.dates[1].leaders = ["admin_someone_else"];
+        const report = await runSyncCourses(now);
+        expect(report.reminders).to.equal(1);
+        expect(sent).to.deep.equal(["petra@x.ch"]);
+      } finally {
+        setCourseMailerForTest(undefined);
+      }
+    });
+
     it("moves the windows with a Termin moved in edoobox", async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
       const moved = Date.now() + 48 * HOUR;
       fake.state.dates[1].start = new Date(moved).toISOString();
@@ -486,10 +616,10 @@ describe("courses (#842)", () => {
   describe("link cleanup (CRS-18)", () => {
     const emptyReport = () => ({ offers: 0, grantsChanged: 0, reminders: 0, officeNotices: 0, linksPruned: 0, failures: 0 });
     const linkExists = async (participantId: string) =>
-      (await getFirestore().doc(`courseLinks/${OFFER}_${participantId}`).get()).exists;
+      (await getFirestore().doc(`courses/${OFFER}/links/${participantId}`).get()).exists;
 
     beforeEach(async () => {
-      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionIds: ["laser"] }));
       await link("p_anna", "anna@x.ch");
     });
 

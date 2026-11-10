@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, ChevronLeft, ChevronRight, Lock, Pencil } from "lucide-react"
-import type { CheckParticipantEmailResult, CourseChoice, CourseDetail, CourseParticipant } from "@oww/shared"
+import { formatPermissionNames, type CheckParticipantEmailResult, type CourseChoice, type CourseDetail, type CourseParticipant } from "@oww/shared"
 import { useAuth } from "@modules/lib/auth"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { rpcCallable } from "@modules/lib/rpc"
@@ -238,6 +238,9 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
   const { userDoc } = useAuth()
   const link = p.link!
   const own = link.userId === userDoc?.id
+  const permLabel = course.permissions.length
+    ? `${course.permissions.length === 1 ? "Berechtigung" : "Berechtigungen"} ${formatPermissionNames(course.permissions)}`
+    : null
   const [choice, setChoice] = useState<CourseChoice>(link.choice)
   // Follow the server after a reload (another device, or the sync).
   const [serverChoice, setServerChoice] = useState(link.choice)
@@ -285,10 +288,10 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
               <span className="text-sm font-semibold text-oww-gold-text">Am Kiosk zuweisen</span>
             ))}
         </div>
-        {course.permission && (
+        {permLabel && (
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-semibold">Berechtigung «{course.permission.name}»</h3>
+              <h3 className="font-semibold">{permLabel}</h3>
               {link.alreadyHeld && (
                 <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                   Schon berechtigt
@@ -299,7 +302,7 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
               <p className="text-sm text-muted-foreground">Für dein eigenes Konto vergibst du keine Berechtigung.</p>
             ) : link.alreadyHeld ? null : (
               <SegmentedChoice
-                label={`Berechtigung «${course.permission.name}»`}
+                label={permLabel}
                 options={CHOICES}
                 value={choice}
                 disabled={closed || save.loading}

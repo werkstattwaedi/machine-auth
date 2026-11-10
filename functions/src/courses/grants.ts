@@ -49,7 +49,11 @@ export function withTemporaryGrant(
 ): GrantMap | null {
   const map = toGrantMap(stored);
   const existing = map[input.permission.id];
-  if (existing && !isThisCoursesGrant(existing, input.offerId)) return null;
+  // Another course's temporary grant whose last window has passed holds
+  // nothing any more (it stays until that course closes, CRS-11): this
+  // course takes the entry over. Anything else that's not ours stays.
+  const takeOver = !!existing && isLapsedCourseGrant(existing, input.offerId, input.now);
+  if (existing && !isThisCoursesGrant(existing, input.offerId) && !takeOver) return null;
   if (!existing && input.onlyIfPresent) return null;
   // Already for good from this course (closed with Ja) — not ours to narrow.
   if (existing && !existing.windows) return null;
@@ -57,16 +61,23 @@ export function withTemporaryGrant(
     from: Timestamp.fromMillis(w.fromMs),
     until: Timestamp.fromMillis(w.untilMs),
   }));
-  if (existing && sameWindows(existing.windows ?? [], windows)) return null;
+  if (existing && !takeOver && sameWindows(existing.windows ?? [], windows)) return null;
+  const own = existing && !takeOver ? existing : undefined;
   map[input.permission.id] = {
     permission: input.permission,
-    grantedAt: existing?.grantedAt ?? input.now,
-    grantedBy: existing?.grantedBy ?? input.grantedBy,
+    grantedAt: own?.grantedAt ?? input.now,
+    grantedBy: own?.grantedBy ?? input.grantedBy,
     source: "course",
     course: { offerId: input.offerId },
     windows,
   };
   return map;
+}
+
+/** Another course's temporary entry, every window of which has ended. */
+function isLapsedCourseGrant(grant: AdminPermissionGrant, offerId: string, now: Timestamp): boolean {
+  if (grant.source !== "course" || !grant.windows || isThisCoursesGrant(grant, offerId)) return false;
+  return grant.windows.every((w) => w.until.toMillis() <= now.toMillis());
 }
 
 /** Nein (CRS-10/14), an unlink, a cancelled booking: drop this course's temporary entry. */
@@ -121,4 +132,25 @@ function sameWindows(
     a.length === b.length &&
     a.every((w, i) => w.from.toMillis() === b[i].from.toMillis() && w.until.toMillis() === b[i].until.toMillis())
   );
+}
+
+/**
+ * Applies one of the above to each of a course's permissions in turn
+ * (CRS-17: a course can grant several). Null when nothing changed.
+ */
+export function forEachPermission(
+  stored: StoredPermissions,
+  permissions: readonly DocumentReference[],
+  step: (stored: StoredPermissions, permission: DocumentReference) => GrantMap | null
+): GrantMap | null {
+  let current: StoredPermissions = stored;
+  let changed = false;
+  for (const permission of permissions) {
+    const next = step(current, permission);
+    if (next) {
+      current = next;
+      changed = true;
+    }
+  }
+  return changed ? (current as GrantMap) : null;
 }

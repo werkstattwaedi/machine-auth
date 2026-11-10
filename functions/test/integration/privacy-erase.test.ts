@@ -234,6 +234,17 @@ describe("privacy erase (integration)", function () {
       resolvedAt: null,
       ttlAt: ts("2025-01-01T00:00:00Z"),
     });
+    // Erika linked as a participant of an edoobox course (#842).
+    await db.doc("courses/offer_1/links/p_1").set({
+      offerId: "offer_1",
+      edooboxUserId: "eu_1",
+      user: u1,
+      choice: "temp",
+      linkedBy: db.doc("users/leader"),
+      linkedAt: ts("2026-10-01T09:00:00Z"),
+      offerTitle: "Kurs",
+      participantName: "Erika Muster",
+    });
     // A companion Erika saved for the next check-in (issue #605).
     await db.doc("users/u1/savedPersons/sp1").set({
       firstName: "Kim",
@@ -298,6 +309,7 @@ describe("privacy erase (integration)", function () {
     // Identity + owned data gone.
     expect((await db.doc("users/u1").get()).exists).to.equal(false);
     expect((await db.doc("users/u1/savedPersons/sp1").get()).exists).to.equal(false);
+    expect((await db.doc("courses/offer_1/links/p_1").get()).exists).to.equal(false);
     expect((await db.doc("tokens/aabbccdd").get()).exists).to.equal(false);
     expect((await db.doc("checkouts/co-own").get()).exists).to.equal(false);
     expect((await db.doc("checkouts/co-own/items/i1").get()).exists).to.equal(false);
@@ -541,6 +553,7 @@ describe("privacy erase (integration)", function () {
     expect(outcome.counts.tokens).to.equal(1);
     expect(outcome.counts.users).to.equal(1);
     expect(outcome.counts["users/savedPersons"]).to.equal(1);
+    expect(outcome.counts["courses/links"]).to.equal(1);
     expect(outcome.actions.length).to.be.greaterThan(5);
     expect((await db.doc("users/u1").get()).exists).to.equal(true);
     expect((await db.doc("erasures/u1").get()).exists).to.equal(false);

@@ -11,7 +11,7 @@
 import { useRef, useState } from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, ChevronRight, Clock, Lock } from "lucide-react"
-import { dateHasStarted, type CourseDetail } from "@oww/shared"
+import { dateHasStarted, formatPermissionNames, type CourseDetail } from "@oww/shared"
 import { useAuth } from "@modules/lib/auth"
 import { useCollection } from "@modules/lib/firestore"
 import { permissionsCollection } from "@modules/lib/firestore-helpers"
@@ -21,13 +21,8 @@ import { useBridge } from "@modules/lib/use-bridge"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { Button } from "@modules/components/ui/button"
 import { Skeleton } from "@modules/components/ui/skeleton"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@modules/components/ui/select"
+import { Checkbox } from "@modules/components/ui/checkbox"
+import { Label } from "@modules/components/ui/label"
 import { cn } from "@modules/lib/utils"
 import { AttendanceCell } from "@/components/courses/attendance-cell"
 import { ZugangStatus, zugangState } from "@/components/courses/zugang-status"
@@ -76,7 +71,7 @@ export function courseSubtitle(course: CourseDetail): string {
   const days = course.dates.map((d) => formatCourseDay(d.start)).join(" · ")
   const first = course.dates[0]
   const time = first ? ` · ${formatCourseTime(first.start, first.end)}` : ""
-  const grants = course.permission ? ` · gibt «${course.permission.name}»` : ""
+  const grants = course.permissions.length ? ` · gibt ${formatPermissionNames(course.permissions)}` : ""
   return `${days}${time}${grants}`
 }
 
@@ -203,7 +198,7 @@ function CourseView({
               <tbody>
                 {course.participants.map((p) => {
                   const name = `${p.firstName} ${p.lastName}`.trim()
-                  const z = zugangState(p, { hasPermission: !!course.permission, kiosk, closed, leaderUserId: userDoc?.id })
+                  const z = zugangState(p, { hasPermission: course.permissions.length > 0, kiosk, closed, leaderUserId: userDoc?.id })
                   const open = () =>
                     !closed && void navigate({ to: "/account/courses/$offerId/$participantId", params: { offerId: course.offerId, participantId: p.participantId } })
                   return (
@@ -257,29 +252,31 @@ function CourseView({
   )
 }
 
-const NONE = "__none__"
+function grantsLine(course: CourseDetail): string {
+  return course.permissions.length ? `Gibt ${formatPermissionNames(course.permissions)}.` : "Gibt keine Berechtigung."
+}
 
-/** CRS-17: what the course grants — picked once, fixed once someone is linked. */
+/** CRS-17: what the course grants — none, one or several; fixed while someone is linked. */
 function PermissionPick({ course, onChange, reload }: { course: CourseDetail; onChange: (c: CourseDetail) => void; reload: () => Promise<void> }) {
   const db = useDb()
   const functions = useFunctions()
   const { data: permissions } = useCollection(permissionsCollection(db))
   const [editing, setEditing] = useState(false)
-  const [picked, setPicked] = useState<string>(course.permission?.id ?? (course.permissionChosen ? NONE : ""))
-  const save = useAsyncMutation({ context: "courses.setPermissionType", successMessage: "Gespeichert" })
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(course.permissions.map((p) => p.id)))
+  const save = useAsyncMutation({ context: "courses.setPermissionType", successMessage: "Gespeichert", serverMessageCodes: COURSE_MESSAGE_CODES })
 
   if (course.permissionChosen && !editing) {
     if (course.permissionLocked) {
       return (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Lock className="size-4" aria-hidden="true" />
-          {course.permission ? `Gibt «${course.permission.name}».` : "Gibt keine Berechtigung."} Festgelegt, seit jemand verknüpft ist.
+          {grantsLine(course)} Festgelegt, solange jemand verknüpft ist.
         </p>
       )
     }
     return (
       <p className="text-sm text-muted-foreground">
-        {course.permission ? `Gibt «${course.permission.name}».` : "Gibt keine Berechtigung."}{" "}
+        {grantsLine(course)}{" "}
         <button type="button" className="font-semibold text-primary underline-offset-2 hover:underline" onClick={() => setEditing(true)}>
           Ändern
         </button>
@@ -287,12 +284,19 @@ function PermissionPick({ course, onChange, reload }: { course: CourseDetail; on
     )
   }
 
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(picked)
+    if (on) next.add(id)
+    else next.delete(id)
+    setPicked(next)
+  }
+
   const submit = async () => {
     try {
       await save.mutate(async () => {
         const { data } = await rpcCallable<unknown, CourseDetail>(functions, "courseCall", "setCoursePermissionType")({
           offerId: course.offerId,
-          permissionId: picked === NONE ? null : picked,
+          permissionIds: [...picked],
         })
         onChange(data)
       })
@@ -305,25 +309,23 @@ function PermissionPick({ course, onChange, reload }: { course: CourseDetail; on
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-oww-gold-border bg-oww-gold-light p-5 text-oww-gold-text">
       <div>
-        <h2 className="font-heading text-lg font-bold">Welche Berechtigung gibt dieser Kurs?</h2>
-        <p className="text-sm">Lege sie fest, bevor du Teilnehmende verknüpfst. Danach lässt sie sich nicht mehr ändern.</p>
+        <h2 className="font-heading text-lg font-bold">Welche Berechtigungen gibt dieser Kurs?</h2>
+        <p className="text-sm">Lege sie fest, bevor du Teilnehmende verknüpfst. Danach lassen sie sich nicht mehr ändern.</p>
       </div>
+      <fieldset className="grid gap-2 sm:grid-cols-2">
+        <legend className="sr-only">Berechtigungen</legend>
+        {permissions.map((p) => (
+          <div key={p.id} className="flex items-center gap-2 rounded-lg bg-card px-3 py-2 text-foreground">
+            <Checkbox id={`perm-${p.id}`} checked={picked.has(p.id)} onCheckedChange={(v) => toggle(p.id, v === true)} />
+            <Label htmlFor={`perm-${p.id}`} className="flex-1 cursor-pointer font-normal">
+              {p.name || p.id}
+            </Label>
+          </div>
+        ))}
+      </fieldset>
       <div className="flex flex-wrap gap-2">
-        <Select value={picked} onValueChange={setPicked}>
-          <SelectTrigger className="w-64 bg-card text-foreground" aria-label="Berechtigung">
-            <SelectValue placeholder="Berechtigung wählen …" />
-          </SelectTrigger>
-          <SelectContent>
-            {permissions.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name || p.id}
-              </SelectItem>
-            ))}
-            <SelectItem value={NONE}>Keine</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button onClick={() => void submit()} disabled={!picked || save.loading}>
-          Speichern
+        <Button onClick={() => void submit()} disabled={save.loading}>
+          {picked.size ? "Speichern" : "Ohne Berechtigung speichern"}
         </Button>
         {editing && (
           <Button variant="ghost" onClick={() => setEditing(false)}>

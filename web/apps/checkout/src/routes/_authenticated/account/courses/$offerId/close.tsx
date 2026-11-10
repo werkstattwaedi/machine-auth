@@ -16,6 +16,7 @@ import {
   attendanceSummary,
   closePreset,
   defaultCloseReason,
+  formatPermissionNames,
   type CloseCourseResult,
   type CourseDetail,
   type CourseParticipant,
@@ -71,7 +72,8 @@ function CloseForm({ course }: { course: CourseDetail }) {
   const functions = useFunctions()
   const { userDoc } = useAuth()
   const statuses = useMemo(() => new Map(course.allStatuses.map((s) => [s.status, s])), [course.allStatuses])
-  const perm = course.permission
+  // «Laser Cutter» or «A» und «B»; null when the course grants none.
+  const perm = course.permissions.length ? formatPermissionNames(course.permissions) : null
   const [choices, setChoices] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(course.participants.map((p) => [p.participantId, closePreset(p, userDoc?.id)]))
   )
@@ -106,7 +108,7 @@ function CloseForm({ course }: { course: CourseDetail }) {
     <>
       <header className="flex flex-col gap-1">
         <h1 className="font-heading text-3xl font-bold leading-tight">Kurs abschliessen</h1>
-        <p className="text-sm text-muted-foreground">{perm ? `Wer «${perm.name}» behält` : "Dieser Kurs gibt keine Berechtigung."}</p>
+        <p className="text-sm text-muted-foreground">{perm ? `Wer ${perm} behält` : "Dieser Kurs gibt keine Berechtigung."}</p>
       </header>
       <section className="divide-y divide-border rounded-2xl border border-border bg-card shadow-xs">
         {course.participants.map((p) => {
@@ -153,7 +155,7 @@ function CloseForm({ course }: { course: CourseDetail }) {
         })}
       </section>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-sm text-muted-foreground">{perm ? `${granted} erhalten «${perm.name}»` : ""}</span>
+        <span className="text-sm text-muted-foreground">{perm ? `${granted} erhalten ${perm}` : ""}</span>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => void navigate({ to: "/account/courses/$offerId", params: { offerId: course.offerId } })}>
             Abbrechen

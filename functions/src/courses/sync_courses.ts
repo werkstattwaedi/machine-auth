@@ -18,15 +18,15 @@ import * as logger from "firebase-functions/logger";
 import { defineString } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue, Timestamp, getFirestore, type Firestore } from "firebase-admin/firestore";
-import { COURSE_WINDOW_TAIL_MS, type CourseDate } from "@oww/shared";
+import type { CourseDate } from "@oww/shared";
 import { formatFullName } from "../util/username-utils";
 import { resolveCheckoutDomain } from "../util/checkout-domain";
 import { formatWorkshopDateTime, getWorkshopTimezone } from "../util/workshop_timezone";
 import { resendApiKey, sendTemplate } from "../util/resend_template";
 import { EDOOBOX_SECRETS, edooboxApi, isEdooboxConfigured, type EdooboxApi } from "./edoobox";
-import { withTemporaryGrant, withoutTemporaryGrant } from "./grants";
-import { CLOSE_LISTING_DAYS } from "./course_service";
-import type { CourseEntity, CourseLinkEntity } from "./types";
+import { forEachPermission, withTemporaryGrant, withoutTemporaryGrant } from "./grants";
+import { CLOSE_LISTING_DAYS, removeCourseLink } from "./course_service";
+import { allCourseLinks, storedLink, type CourseEntity, type StoredCourseLink } from "./types";
 
 /** Where the day-7 notice goes (CRS-16); empty skips it. */
 const courseOfficeEmail = defineString("COURSE_OFFICE_EMAIL", { default: "" });
@@ -67,42 +67,47 @@ function toCourseDates(api: Awaited<ReturnType<EdooboxApi["listOfferDates"]>>): 
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
-/** CRS-11: rewrite or drop the temporary permissions of every open course with links. */
+/**
+ * CRS-11: move the temporary permissions of every open course with links to
+ * its Termine, and drop them for a booking no longer active. One whose last
+ * window has passed stays: it holds nothing outside its windows, and a
+ * Termin added later (a make-up date) must reach it. The close ends it.
+ */
 async function syncGrants(db: Firestore, api: EdooboxApi, nowMs: number, report: CourseSyncReport): Promise<void> {
   // Nein links hold no temporary permission; skip them.
-  const links = await db.collection("courseLinks").where("choice", "in", ["temp", "yes"]).get();
-  const byOffer = new Map<string, CourseLinkEntity[]>();
+  const links = await allCourseLinks(db).where("choice", "in", ["temp", "yes"]).get();
+  const byOffer = new Map<string, StoredCourseLink[]>();
   for (const d of links.docs) {
-    const l = d.data() as CourseLinkEntity;
+    const l = storedLink(d);
     byOffer.set(l.offerId, [...(byOffer.get(l.offerId) ?? []), l]);
   }
   for (const [offerId, offerLinks] of byOffer) {
     try {
       const course = ((await db.collection("courses").doc(offerId).get()).data() ?? {}) as CourseEntity;
-      const permission = course.permission ?? null;
-      if (course.closedAt || !permission) continue;
+      const permissions = course.permissions ?? [];
+      if (course.closedAt || !permissions.length) continue;
       report.offers++;
       const [dates, bookings] = await Promise.all([api.listOfferDates(offerId).then(toCourseDates), api.listBookings(offerId)]);
       const booked = new Set(
         bookings.filter((b) => !b.cancelled && !b.waitingList).flatMap((b) => b.userIds)
       );
-      const lastUntil = dates.length ? Date.parse(dates[dates.length - 1].end) + COURSE_WINDOW_TAIL_MS : 0;
       for (const link of offerLinks) {
-        if (link.choice === "no") continue;
-        const keep = booked.has(link.edooboxUserId) && nowMs < lastUntil;
+        const keep = booked.has(link.edooboxUserId);
         const changed = await db.runTransaction(async (tx) => {
           const user = await tx.get(link.user);
           if (!user.exists) return false;
-          const map = keep
-            ? withTemporaryGrant(user.get("permissions"), {
-                permission,
-                offerId,
-                dates,
-                grantedBy: link.linkedBy,
-                now: Timestamp.fromMillis(nowMs),
-                onlyIfPresent: true,
-              })
-            : withoutTemporaryGrant(user.get("permissions"), permission.id, offerId);
+          const map = forEachPermission(user.get("permissions"), permissions, (stored, permission) =>
+            keep
+              ? withTemporaryGrant(stored, {
+                  permission,
+                  offerId,
+                  dates,
+                  grantedBy: link.linkedBy,
+                  now: Timestamp.fromMillis(nowMs),
+                  onlyIfPresent: true,
+                })
+              : withoutTemporaryGrant(stored, permission.id, offerId)
+          );
           if (map) tx.update(link.user, { permissions: map });
           return !!map;
         });
@@ -128,9 +133,10 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
     let offerIds: string[];
     try {
       const leaderDates = await api.listLeaderDates(leader.get("edooboxLeaderId"));
-      // Reminders end on day 7: only offers with a Termin of this leader in
-      // the last ~8 days can be due, so old courses cost no reads.
-      const recent = nowMs - 8 * 86400_000;
+      // The course's last Termin decides, which another leader may lead
+      // (CRS-16): look at every course with a Termin of this leader in the
+      // listing window (CRS-2), as Kursleitung does.
+      const recent = nowMs - CLOSE_LISTING_DAYS * 86400_000;
       offerIds = [...new Set(leaderDates.filter((d) => Date.parse(d.end) >= recent).map((d) => d.offerId))];
     } catch (err) {
       report.failures++;
@@ -211,10 +217,10 @@ async function remindForOffer(
  * Weekly: edoobox deletes rarely, and every course ever linked costs a read.
  */
 export async function pruneCourseLinks(db: Firestore, api: EdooboxApi, report: CourseSyncReport): Promise<void> {
-  const links = await db.collection("courseLinks").get();
+  const links = await allCourseLinks(db).get();
   const byOffer = new Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>();
   for (const d of links.docs) {
-    const offerId = d.get("offerId") as string;
+    const offerId = d.ref.parent.parent!.id;
     byOffer.set(offerId, [...(byOffer.get(offerId) ?? []), d]);
   }
   for (const [offerId, offerLinks] of byOffer) {
@@ -226,21 +232,8 @@ export async function pruneCourseLinks(db: Firestore, api: EdooboxApi, report: C
         : new Set<string>();
       const gone = offerLinks.filter((d) => !booked.has(d.get("edooboxUserId") as string));
       if (!gone.length) continue;
-      const permission = ((await db.collection("courses").doc(offerId).get()).data() as CourseEntity | undefined)
-        ?.permission ?? null;
       for (const linkSnap of gone) {
-        await db.runTransaction(async (tx) => {
-          const fresh = await tx.get(linkSnap.ref);
-          if (!fresh.exists) return;
-          const link = fresh.data() as CourseLinkEntity;
-          const user = await tx.get(link.user);
-          if (permission && user.exists) {
-            const map = withoutTemporaryGrant(user.get("permissions"), permission.id, offerId);
-            if (map) tx.update(link.user, { permissions: map });
-          }
-          tx.delete(linkSnap.ref);
-        });
-        report.linksPruned++;
+        if (await db.runTransaction((tx) => removeCourseLink(db, tx, linkSnap.ref))) report.linksPruned++;
       }
       logger.info("syncCourses: links pruned", { offerId, count: gone.length, offerGone: !exists });
     } catch (err) {

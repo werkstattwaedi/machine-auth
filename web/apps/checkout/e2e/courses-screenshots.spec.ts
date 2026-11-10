@@ -86,12 +86,11 @@ async function seed(): Promise<{ leaderUid: string; annaUid: string }> {
   }
   await db.doc("testing_edoobox/state").set(state)
   const laser = db.doc("permission/laser")
-  await db.doc(`courses/${RUNNING}`).set({ permission: laser, title: "Einführung Lasercutter" })
-  await db.doc(`courses/${TO_CLOSE}`).set({ permission: laser, title: "Einführung CNC-Fräse" })
+  await db.doc(`courses/${RUNNING}`).set({ permissions: [laser], title: "Einführung Lasercutter" })
+  await db.doc(`courses/${TO_CLOSE}`).set({ permissions: [laser], title: "Einführung CNC-Fräse" })
   for (const offerId of [RUNNING, TO_CLOSE]) {
-    await db.doc(`courseLinks/${offerId}_p_${offerId}_eu_anna`).set({
+    await db.doc(`courses/${offerId}/links/p_${offerId}_eu_anna`).set({
       offerId,
-      participantId: `p_${offerId}_eu_anna`,
       edooboxUserId: "eu_anna",
       user: db.doc(`users/${annaUid}`),
       choice: "temp",

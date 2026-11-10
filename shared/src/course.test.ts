@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest"
 import {
+  formatPermissionNames,
   attendanceCount,
   attendanceSummary,
   closePreset,
@@ -76,5 +77,14 @@ describe("close presets and reasons (CRS-12, CRS-13)", () => {
   })
   it("summarises attended and missed Termine", () => {
     expect(attendanceSummary({ attendance: { d1: 1, d2: 3 } }, [d1, d2], STATUSES)).toEqual({ attended: 1, missed: 1 })
+  })
+})
+
+describe("formatPermissionNames", () => {
+  it("joins one, two and three names the German way", () => {
+    expect(formatPermissionNames([])).toBe("")
+    expect(formatPermissionNames([{ name: "Laser" }])).toBe("«Laser»")
+    expect(formatPermissionNames([{ name: "A" }, { name: "B" }])).toBe("«A» und «B»")
+    expect(formatPermissionNames([{ name: "A" }, { name: "B" }, { name: "C" }])).toBe("«A», «B» und «C»")
   })
 })

@@ -22,6 +22,7 @@ import {
   type CloseCourseResult,
   type CourseChoice,
   type CourseDetail,
+  formatPermissionNames,
   type GetCourseInput,
   type LinkParticipantInput,
   type ListMyCoursesResult,
@@ -52,10 +53,24 @@ import {
   type Leader,
   type LoadedCourse,
 } from "./course_service";
-import { withPermanentGrant, withTemporaryGrant, withoutTemporaryGrant } from "./grants";
-import { courseLinkId, type CourseLinkEntity } from "./types";
+import { forEachPermission, withPermanentGrant, withTemporaryGrant, withoutTemporaryGrant } from "./grants";
+import { courseLinkRef, courseLinksOf, storedLink, type CourseLinkEntity, type StoredCourseLink } from "./types";
 
 const CHOICES: readonly CourseChoice[] = ["no", "temp", "yes"];
+
+function pickFirst(): HttpsError {
+  return new HttpsError("failed-precondition", "Wähle zuerst, welche Berechtigungen der Kurs gibt.");
+}
+
+/** Same permissions, any order; `undefined` (not picked) only equals itself. */
+function samePermissions(
+  a: ReadonlyArray<DocumentReference> | undefined,
+  b: ReadonlyArray<DocumentReference> | undefined
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  const ids = (l: ReadonlyArray<DocumentReference>) => [...new Set(l.map((r) => r.id))].sort().join("|");
+  return ids(a) === ids(b);
+}
 
 function courseClosed(): HttpsError {
   return new HttpsError("failed-precondition", "Der Kurs ist abgeschlossen. Änderungen macht das Sekretariat.");
@@ -91,31 +106,38 @@ export const getCourseHandler = async (request: CallableRequest<GetCourseInput>)
   return (await load(leader, offerId)).detail;
 };
 
-/** CRS-17: the leader picks once what the course grants; fixed once someone is linked. */
+/** CRS-17: the leader picks what the course grants — none, one or several; fixed while someone is linked. */
 export const setCoursePermissionTypeHandler = async (
   request: CallableRequest<SetCoursePermissionTypeInput>
 ): Promise<CourseDetail> => {
   const leader = await requireLeader(request);
   const offerId = requireString(request.data?.offerId, "offerId");
-  const permissionId = request.data?.permissionId ?? null;
-  if (permissionId !== null && typeof permissionId !== "string") {
-    throw new HttpsError("invalid-argument", "permissionId must be a string or null");
+  const raw = request.data?.permissionIds;
+  if (!Array.isArray(raw) || raw.some((id) => typeof id !== "string" || !id)) {
+    throw new HttpsError("invalid-argument", "permissionIds must be a list of ids");
   }
+  const permissionIds = [...new Set(raw as string[])];
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
-  const permissionRef = permissionId ? leader.db.collection("permission").doc(permissionId) : null;
-  if (permissionRef && !(await permissionRef.get()).exists) {
-    throw new HttpsError("not-found", "Berechtigung nicht gefunden.");
+  const permissionRefs = permissionIds.map((id) => leader.db.collection("permission").doc(id));
+  if (permissionRefs.length) {
+    const snaps = await leader.db.getAll(...permissionRefs);
+    if (snaps.some((s) => !s.exists)) throw new HttpsError("not-found", "Berechtigung nicht gefunden.");
   }
   const courseRef = leader.db.collection("courses").doc(offerId);
   await leader.db.runTransaction(async (tx) => {
-    const links = await tx.get(leader.db.collection("courseLinks").where("offerId", "==", offerId).limit(1));
+    const links = await tx.get(courseLinksOf(leader.db, offerId).limit(1));
     if (!links.empty) {
-      throw new HttpsError("failed-precondition", "Die Berechtigung ist festgelegt, sobald jemand verknüpft ist.");
+      throw new HttpsError("failed-precondition", "Die Berechtigungen sind festgelegt, solange jemand verknüpft ist.");
     }
     tx.set(
       courseRef,
-      { permission: permissionRef, permissionSetBy: leader.userRef, permissionSetAt: FieldValue.serverTimestamp(), title: loaded.detail.title },
+      {
+        permissions: permissionRefs,
+        permissionSetBy: leader.userRef,
+        permissionSetAt: FieldValue.serverTimestamp(),
+        title: loaded.detail.title,
+      },
       { merge: true }
     );
   });
@@ -182,9 +204,7 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
   // The pick is fixed by the first link (CRS-17), so it must come first.
-  if (loaded.course.permission === undefined) {
-    throw new HttpsError("failed-precondition", "Wähle zuerst, welche Berechtigung der Kurs gibt.");
-  }
+  if (loaded.course.permissions === undefined) throw pickFirst();
   const p = participantOf(loaded, participantId);
   if (p.link) throw new HttpsError("already-exists", "Diese Person ist schon verknüpft.");
   const db = leader.db;
@@ -200,23 +220,22 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
   const isSelf = target.id === leader.userRef.id;
   // Linking yourself never grants you anything (CRS-8): your choice is Nein.
   const choice: CourseChoice = isSelf ? "no" : "temp";
-  const permission = loaded.course.permission ?? null;
+  const permissions = loaded.course.permissions;
   const now = Timestamp.now();
 
   await db.runTransaction(async (tx) => {
-    const linkRef = db.collection("courseLinks").doc(courseLinkId(offerId, participantId));
+    const linkRef = courseLinkRef(db, offerId, participantId);
     const [linkSnap, sameAccount, userSnap, courseSnap] = await Promise.all([
       tx.get(linkRef),
-      tx.get(db.collection("courseLinks").where("offerId", "==", offerId).where("user", "==", target).limit(1)),
+      tx.get(courseLinksOf(db, offerId).where("user", "==", target).limit(1)),
       tx.get(target),
       tx.get(db.collection("courses").doc(offerId)),
     ]);
     // A close may have committed since the course was read (CRS-15).
     if (courseSnap.get("closedAt")) throw courseClosed();
     // The pick may have changed since the course was read (CRS-17).
-    const current = courseSnap.get("permission") ?? null;
-    if ((current?.id ?? null) !== (permission?.id ?? null)) {
-      throw new HttpsError("aborted", "Die Berechtigung des Kurses wurde eben geändert. Bitte nochmals versuchen.");
+    if (!samePermissions(courseSnap.get("permissions"), permissions)) {
+      throw new HttpsError("aborted", "Die Berechtigungen des Kurses wurden eben geändert. Bitte nochmals versuchen.");
     }
     if (linkSnap.exists) throw new HttpsError("already-exists", "Diese Person ist schon verknüpft.");
     if (!sameAccount.empty) {
@@ -224,7 +243,6 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
     }
     const link: CourseLinkEntity = {
       offerId,
-      participantId,
       edooboxUserId: p.edooboxUserId,
       user: target,
       choice,
@@ -236,14 +254,10 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
     tx.create(linkRef, link);
     // Keep the title for mails and the admin's lists.
     tx.set(db.collection("courses").doc(offerId), { title: loaded.detail.title }, { merge: true });
-    if (permission && choice !== "no") {
-      const map = withTemporaryGrant(userSnap.get("permissions"), {
-        permission,
-        offerId,
-        dates: loaded.dates,
-        grantedBy: leader.userRef,
-        now,
-      });
+    if (choice !== "no") {
+      const map = forEachPermission(userSnap.get("permissions"), permissions, (stored, permission) =>
+        withTemporaryGrant(stored, { permission, offerId, dates: loaded.dates, grantedBy: leader.userRef, now })
+      );
       if (map) tx.update(target, { permissions: map });
     }
   });
@@ -287,7 +301,9 @@ async function createAccount(
 }
 
 /** Only a participant's linked account, never the leader's own (CRS-8). */
-function linkedTarget(loaded: LoadedCourse, leader: Leader, participantId: string): CourseLinkEntity {
+function linkedTarget(loaded: LoadedCourse, leader: Leader, participantId: string): StoredCourseLink {
+  // Only an active booking (CRS-19): the page shows no one else either.
+  participantOf(loaded, participantId);
   const link = loaded.links.get(participantId);
   if (!link) throw new HttpsError("failed-precondition", "Diese Person ist noch nicht verknüpft.");
   if (link.user.id === leader.userRef.id) {
@@ -350,9 +366,9 @@ export const setParticipantChoiceHandler = async (
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
   const link = linkedTarget(loaded, leader, participantId);
-  const permission = loaded.course.permission ?? null;
+  const permissions = loaded.course.permissions ?? [];
   const db = leader.db;
-  const linkRef = db.collection("courseLinks").doc(courseLinkId(offerId, participantId));
+  const linkRef = courseLinkRef(db, offerId, participantId);
   await db.runTransaction(async (tx) => {
     // Re-read what the course page was built from: an admin may have removed
     // the link, a close committed, or the account been erased since.
@@ -367,17 +383,12 @@ export const setParticipantChoiceHandler = async (
     }
     if (!userSnap.exists) throw new HttpsError("failed-precondition", "Das verknüpfte Konto gibt es nicht mehr.");
     tx.update(linkRef, { choice });
-    if (!permission) return;
-    const map =
+    const now = Timestamp.now();
+    const map = forEachPermission(userSnap.get("permissions"), permissions, (stored, permission) =>
       choice === "no"
-        ? withoutTemporaryGrant(userSnap.get("permissions"), permission.id, offerId)
-        : withTemporaryGrant(userSnap.get("permissions"), {
-            permission,
-            offerId,
-            dates: loaded.dates,
-            grantedBy: leader.userRef,
-            now: Timestamp.now(),
-          });
+        ? withoutTemporaryGrant(stored, permission.id, offerId)
+        : withTemporaryGrant(stored, { permission, offerId, dates: loaded.dates, grantedBy: leader.userRef, now })
+    );
     if (map) tx.update(link.user, { permissions: map });
   });
   return { ok: true };
@@ -395,13 +406,11 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
   const reasons = (request.data?.reasons ?? {}) as Record<string, unknown>;
   const loaded = await load(leader, offerId);
   requireOpen(loaded);
-  if (loaded.course.permission === undefined) {
-    throw new HttpsError("failed-precondition", "Wähle zuerst, welche Berechtigung der Kurs gibt.");
-  }
+  if (loaded.course.permissions === undefined) throw pickFirst();
   if (coursePhase(loaded.dates, Date.now()) !== "toClose") {
     throw new HttpsError("failed-precondition", "Der Kurs lässt sich erst ab dem letzten Termin abschliessen.");
   }
-  const permission = loaded.course.permission ?? null;
+  const permissions = loaded.course.permissions;
   const db = leader.db;
   const now = Timestamp.now();
   // Ja only for a booked participant the leader saw on the close page.
@@ -416,8 +425,7 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
     }
     // The stored links, not the page's: a link made meanwhile, or one whose
     // booking was cancelled, must lose its temporary permission too.
-    const linkSnaps = (await tx.get(db.collection("courseLinks").where("offerId", "==", offerId))).docs;
-    const links = linkSnaps.map((d) => d.data() as CourseLinkEntity);
+    const links = (await tx.get(courseLinksOf(db, offerId))).docs.map(storedLink);
     // Reset per attempt: Firestore may run this transaction more than once.
     granted = 0;
     for (const p of loaded.detail.participants) decided[p.participantId] = false;
@@ -426,20 +434,19 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
       decided[l.participantId] = !isSelf && bookedIds.has(l.participantId) && choices[l.participantId] === true;
     }
     const userSnaps = links.length ? await tx.getAll(...links.map((l) => l.user)) : [];
-    if (permission) {
-      links.forEach((l, i) => {
-        // A deleted account (erasure) has nothing left to grant or end.
-        if (!userSnaps[i].exists) return;
-        const stored = userSnaps[i].get("permissions");
-        const yes = decided[l.participantId];
-        const map = yes
+    links.forEach((l, i) => {
+      // A deleted account (erasure) has nothing left to grant or end.
+      if (!userSnaps[i].exists) return;
+      const yes = decided[l.participantId];
+      const map = forEachPermission(userSnaps[i].get("permissions"), permissions, (stored, permission) =>
+        yes
           ? withPermanentGrant(stored, { permission, offerId, grantedBy: leader.userRef, now })
-          : withoutTemporaryGrant(stored, permission.id, offerId);
-        // Counts who gets it from this close, not who held it already.
-        if (yes && map) granted++;
-        if (map) tx.update(userSnaps[i].ref, { permissions: map });
-      });
-    }
+          : withoutTemporaryGrant(stored, permission.id, offerId)
+      );
+      // Counts who gets something from this close, not who held it all already.
+      if (yes && map) granted++;
+      if (map) tx.update(userSnaps[i].ref, { permissions: map });
+    });
     tx.set(
       courseRef,
       { closedAt: now, closedBy: leader.userRef, closeChoices: decided, title: loaded.detail.title },
@@ -449,8 +456,9 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
 
   let notesFailed = 0;
   const api = edooboxApi();
-  const subject = permission
-    ? `Kurs abgeschlossen: keine Berechtigung «${loaded.detail.permission?.name ?? permission.id}»`
+  const names = loaded.detail.permissions.length ? loaded.detail.permissions : permissions.map((r) => ({ name: r.id }));
+  const subject = names.length
+    ? `Kurs abgeschlossen: ${names.length === 1 ? "keine Berechtigung" : "keine Berechtigungen"} ${formatPermissionNames(names)}`
     : "Kurs abgeschlossen";
   // In parallel: one slow note each must not add up past the callable's
   // deadline, after the close has committed.

@@ -171,7 +171,7 @@ still passes a different wrong promise.
 **Things**
 - **Badge** — a person's NFC tag.
 - **Course** (*Kurs*) — an offer booked in edoobox, held on one or more
-  Termine, whose participants can earn a permission.
+  Termine.
 - **Termin** — one date of a course, with a start and an end time.
 - **Präsenzstatus** — what edoobox records about a participant at one
   Termin: one of the statuses set up in the edoobox account, each with a

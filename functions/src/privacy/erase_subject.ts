@@ -63,6 +63,7 @@ import type {
   MembershipEntity,
 } from "../types/firestore_entities";
 import type { BillEntity } from "../invoice/types";
+import { allCourseLinks } from "../courses/types";
 
 const IN_CHUNK = 30; // Firestore `in` operator limit
 const BATCH_LIMIT = 400;
@@ -349,7 +350,7 @@ export async function eraseSubject(
     : [];
   // The subject's links to edoobox course participants (#842).
   const courseLinks = subject.userRef
-    ? (await deps.db.collection("courseLinks").where("user", "==", subject.userRef).get()).docs
+    ? (await allCourseLinks(deps.db).where("user", "==", subject.userRef).get()).docs
     : [];
   const loginCodes = subject.email
     ? (
@@ -483,7 +484,7 @@ export async function eraseSubject(
     savedPersons.length,
     `delete ${savedPersons.length} saved person(s)`
   );
-  record(state, "courseLinks", courseLinks.length, `delete ${courseLinks.length} course link(s)`);
+  record(state, "courses/links", courseLinks.length, `delete ${courseLinks.length} course link(s)`);
   record(state, "users", subject.userDocExists ? 1 : 0, "delete users doc");
   record(
     state,

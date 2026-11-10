@@ -15,9 +15,8 @@ import type {
   UnlinkCourseParticipantInput,
 } from "@oww/shared";
 import { edooboxApi } from "./edoobox";
-import { edooboxUnavailable, requireAdmin, requireString } from "./course_service";
-import { withoutTemporaryGrant } from "./grants";
-import { courseLinkId, type CourseEntity, type CourseLinkEntity } from "./types";
+import { edooboxUnavailable, removeCourseLink, requireAdmin, requireString } from "./course_service";
+import { courseLinkRef } from "./types";
 
 export const listEdooboxLeadersHandler = async (
   request: CallableRequest<unknown>
@@ -98,18 +97,10 @@ export const unlinkCourseParticipantHandler = async (
   const { db, adminUid } = requireAdmin(request);
   const offerId = requireString(request.data?.offerId, "offerId");
   const participantId = requireString(request.data?.participantId, "participantId");
-  const linkRef = db.collection("courseLinks").doc(courseLinkId(offerId, participantId));
   await db.runTransaction(async (tx) => {
-    const linkSnap = await tx.get(linkRef);
-    if (!linkSnap.exists) throw new HttpsError("not-found", "Diese Verknüpfung gibt es nicht.");
-    const link = linkSnap.data() as CourseLinkEntity;
-    const [course, user] = await Promise.all([tx.get(db.collection("courses").doc(offerId)), tx.get(link.user)]);
-    const permission = (course.data() as CourseEntity | undefined)?.permission ?? null;
-    if (permission && user.exists) {
-      const map = withoutTemporaryGrant(user.get("permissions"), permission.id, offerId);
-      if (map) tx.update(link.user, { permissions: map });
+    if (!(await removeCourseLink(db, tx, courseLinkRef(db, offerId, participantId)))) {
+      throw new HttpsError("not-found", "Diese Verknüpfung gibt es nicht.");
     }
-    tx.delete(linkRef);
   });
   logger.info("courseCall: participant unlinked", { offerId, participantId, by: adminUid });
   return { ok: true };

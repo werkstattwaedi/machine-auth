@@ -560,27 +560,29 @@
   // edoobox and is read live.
   "courses": {
     "{offerId}": { // edoobox offer id
-      "permission": "DocumentReference | null", // /permission/{id} the course grants; null = none; absent = not picked yet (CRS-17)
+      "permissions": ["DocumentReference"], // /permission/{id} the course grants; [] = none; absent = not picked yet (CRS-17)
       "permissionSetBy": "DocumentReference", // /users/{uid} of the course leader who picked it
       "permissionSetAt": "timestamp",
       "title": "string", // course title at the last write, for admin lists and mails
       "closedAt": "timestamp | null", // set by closeCourse (CRS-15)
       "closedBy": "DocumentReference | null",
       "closeChoices": { "<participantId>": "boolean" }, // Ja/Nein at the close
-      "remindersSent": ["string"] // reminders sent: "<day>:<leader uid>" (days 1, 3, 7) and "7:office" (CRS-16)
-    }
-  },
-  "courseLinks": {
-    "{offerId}_{participantId}": { // doc id = one link per participant (CRS-7)
-      "offerId": "string",
-      "participantId": "string", // edoobox participant id
-      "edooboxUserId": "string",
-      "user": "DocumentReference", // /users/{uid} the participant is linked to
-      "choice": "no | temp | yes", // permission choice (CRS-10)
-      "linkedBy": "DocumentReference", // /users/{uid} of the course leader
-      "linkedAt": "timestamp",
-      "offerTitle": "string",
-      "participantName": "string"
+      "remindersSent": ["string"], // reminders sent: "<day>:<leader uid>" (days 1, 3, 7) and "7:office" (CRS-16)
+      "links": {
+        // One link per participant (CRS-7); read across courses as the
+        // collection group "links". Removed when edoobox no longer has the
+        // course or booking (CRS-18).
+        "{participantId}": { // edoobox participant id: this person's place on this course (attendance hangs off it)
+          "offerId": "string", // = the parent course, for collection-group readers
+          "edooboxUserId": "string", // the person in edoobox (bookings, name, e-mail hang off it)
+          "user": "DocumentReference", // /users/{uid} the participant is linked to
+          "choice": "no | temp | yes", // permission choice (CRS-10)
+          "linkedBy": "DocumentReference", // /users/{uid} of the course leader
+          "linkedAt": "timestamp",
+          "offerTitle": "string", // copies at linking, for the admin's list (CRS-3)
+          "participantName": "string"
+        }
+      }
     }
   },
   "testing_edoobox": {

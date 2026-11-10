@@ -653,12 +653,12 @@ export type ConfigDoc =
   | Record<string, unknown>
 
 /**
- * Doc at `courseLinks/{offerId}_{participantId}` (#842): an edoobox course
- * participant linked to an account. Function-written; admins read (ADM-18).
+ * Doc at `courses/{offerId}/links/{participantId}` (#842): an edoobox course
+ * participant linked to an account; the doc id is edoobox's participant id.
+ * Function-written; admins read (ADM-18).
  */
 export interface CourseLinkDoc {
   offerId: string
-  participantId: string
   edooboxUserId: string
   user: DocumentReference<UserDoc>
   choice: "no" | "temp" | "yes"

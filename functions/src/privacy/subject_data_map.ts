@@ -68,14 +68,14 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
       "Closed checkouts keep only the savedPersonId link.",
   },
   {
-    collection: "courseLinks",
+    collection: "courses/links",
     piiFields: ["user", "edooboxUserId", "participantName", "linkedBy"],
     legalBasis: "Contract (course participation — edoobox booking linked to the account, #842)",
     retention:
       "While edoobox keeps the offer and the participant's booking (weekly check in syncCourses, CRS-18), or until erasure request",
     erasure: "delete",
     notes:
-      "Deleted where user == subject. The participant's data itself stays in " +
+      "Deleted where user == subject (collectionGroup). The participant's data itself stays in " +
       "edoobox (their own processor). linkedBy on other people's links points " +
       "at the course leader and is left as a dangling identifier.",
   },
