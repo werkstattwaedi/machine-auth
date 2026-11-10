@@ -302,11 +302,10 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               key={person.id}
               person={person}
               index={i}
-              // No e-mail address on the card (#668): the header menu shows
-              // the account's, and at the kiosk a badge alone must not
-              // reveal anyone's.
-              // The identified owner (account or badge) carries the membership
-              // label; everyone else their user type.
+              // No e-mail line (#668, CHK-55): the header menu shows the
+              // account's, and at the kiosk a badge alone must not reveal
+              // anyone's. The identified owner (account or badge) carries the
+              // membership label instead; everyone else their user type.
               suffix={
                 isSignedInUser || isOwnerLine
                   ? isMember
