@@ -104,6 +104,8 @@ export interface UserDoc extends AuditFields {
    * historic `billingAddress` key so existing reads keep working.
    */
   billingAddress?: BillingAddressDoc | null
+  /** edoobox admin id: a course leader (#842); written only by setEdooboxLeader. */
+  edooboxLeaderId?: string
 }
 
 // ── users/{uid}/savedPersons ─────────────────────────────────────────────
@@ -649,3 +651,19 @@ export type ConfigDoc =
   | PricingConfigDoc
   | CatalogReferencesDoc
   | Record<string, unknown>
+
+/**
+ * Doc at `courses/{offerId}/links/{participantId}` (#842): an edoobox course
+ * participant linked to an account; the doc id is edoobox's participant id.
+ * Function-written; admins read (ADM-18).
+ */
+export interface CourseLinkDoc {
+  offerId: string
+  edooboxUserId: string
+  user: DocumentReference<UserDoc>
+  choice: "no" | "temp" | "yes"
+  linkedBy: DocumentReference<UserDoc>
+  linkedAt: Timestamp
+  offerTitle: string
+  participantName: string
+}

@@ -33,6 +33,8 @@ export interface AuthenticatedLayoutNavItem {
    * The admin sidebar has no primary action and leaves this unset.
    */
   primary?: boolean
+  /** Draws a divider above the item (e.g. «Kursleitung», #842). */
+  separatorBefore?: boolean
 }
 
 export type AuthenticatedLayoutGate =
@@ -295,11 +297,14 @@ export function AuthenticatedLayout({
           <nav className="w-60 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-4 text-sidebar-foreground">
             <div className="flex flex-col gap-0.5">
               {headerAction && <div className="mb-3">{headerAction}</div>}
-              {navItems.map(({ to, label, icon: Icon, primary }) => (
-                <Link key={to} to={to} className={navLinkClass(primary)}>
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </Link>
+              {navItems.map(({ to, label, icon: Icon, primary, separatorBefore }) => (
+                <div key={to} className="contents">
+                  {separatorBefore && <div className="my-2 border-t border-sidebar-border" role="separator" />}
+                  <Link to={to} className={navLinkClass(primary)}>
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </Link>
+                </div>
               ))}
             </div>
           </nav>

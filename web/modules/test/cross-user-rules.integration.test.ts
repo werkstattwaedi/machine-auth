@@ -34,6 +34,8 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  query,
+  where,
 } from "firebase/firestore"
 import { FieldValue } from "firebase-admin/firestore"
 import { assertSucceeds, assertFails } from "@firebase/rules-unit-testing"
@@ -2031,7 +2033,7 @@ describe("cross-user: usageGroups is sync-only", () => {
   })
 })
 
-// #843, MAC-2: `permissions` is the grant map (who, when, from where). The
+// #843, MAC-4: `permissions` is the grant map (who, when, from where). The
 // rules can't check a map rewritten as a whole, so no client principal
 // writes it — an admin's included; admins go through grantPermission /
 // revokePermission (authCall).
@@ -2080,6 +2082,57 @@ describe("cross-user: permissions are function-only", () => {
     })
     await assertSucceeds(updateDoc(doc(authedDb("alice"), "users", "alice"), { firstName: "Alicia" }))
     await assertSucceeds(updateDoc(doc(adminDb(), "users", "alice"), { lastName: "Admin" }))
+  })
+})
+
+// #842: course data is function-written; admins read it (ADM-18). The
+// edoobox leader link makes an account a course leader (CRS-1) and is
+// written only by setEdooboxLeader — no client, admins included.
+describe("cross-user: courses (#842)", () => {
+  async function seedLink() {
+    await seedUser("alice")
+    await getAdminFirestore().doc("courses/o1/links/p1").set({
+      offerId: "o1",
+      user: getAdminFirestore().doc("users/alice"),
+      choice: "temp",
+    })
+    await getAdminFirestore().doc("courses/o1").set({ title: "Kurs" })
+  }
+
+  it("lets only an admin read course links and courses", async () => {
+    await seedLink()
+    await assertSucceeds(getDoc(doc(adminDb(), "courses", "o1", "links", "p1")))
+    await assertSucceeds(getDocs(query(collectionGroup(adminDb(), "links"), where("user", "==", doc(adminDb(), "users", "alice")))))
+    await assertSucceeds(getDoc(doc(adminDb(), "courses", "o1")))
+    await assertCrossUserDenied("course link read by the linked user", "firestore.rules courses/links (admin read)", () =>
+      getDoc(doc(authedDb("alice"), "courses", "o1", "links", "p1")),
+    )
+    await assertCrossUserDenied("course links read across courses by the linked user", "firestore.rules links group (admin read)", () =>
+      getDocs(query(collectionGroup(authedDb("alice"), "links"), where("user", "==", doc(authedDb("alice"), "users", "alice")))),
+    )
+    await assertCrossUserDenied("courses read by a member", "firestore.rules courses (admin read)", () =>
+      getDoc(doc(authedDb("bob"), "courses", "o1")),
+    )
+  })
+
+  it("denies every client writing course links or courses, admins included", async () => {
+    await seedLink()
+    await assertCrossUserDenied("course link written by an admin", "firestore.rules courses/links (no client writes)", () =>
+      setDoc(doc(adminDb(), "courses", "o1", "links", "p2"), { offerId: "o1" }),
+    )
+    await assertCrossUserDenied("courses written by an admin", "firestore.rules courses (no client writes)", () =>
+      setDoc(doc(adminDb(), "courses", "o1"), { closedAt: null }),
+    )
+  })
+
+  it("denies the owner and an admin setting edooboxLeaderId", async () => {
+    await seedUser("mallory")
+    await assertCrossUserDenied("users/{userId} owner makes themselves a course leader", "firestore.rules users update (edooboxLeaderUnchanged)", () =>
+      updateDoc(doc(authedDb("mallory"), "users", "mallory"), { edooboxLeaderId: "admin_x" }),
+    )
+    await assertCrossUserDenied("users/{userId} admin writes edooboxLeaderId", "firestore.rules users update (edooboxLeaderUnchanged)", () =>
+      updateDoc(doc(adminDb(), "users", "mallory"), { edooboxLeaderId: "admin_x" }),
+    )
   })
 })
 

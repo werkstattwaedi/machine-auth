@@ -6,6 +6,7 @@ import { where } from "firebase/firestore"
 import {
   AlertTriangle,
   BadgeCheck,
+  GraduationCap,
   History,
   Plus,
   ShoppingCart,
@@ -47,12 +48,21 @@ const menuItems: AppMenuEntry[] = [
   { to: "/account/membership", label: "Mitgliedschaft", icon: BadgeCheck },
 ]
 
+// Course leaders (#842, CRS-1) get «Kursleitung» below a divider.
+const courseLeaderItem: AuthenticatedLayoutNavItem = {
+  to: "/account/courses",
+  label: "Kursleitung",
+  icon: GraduationCap,
+  separatorBefore: true,
+}
+
 function CheckoutAuthenticatedLayout() {
   const bridge = useBridge()
-  const { signOut } = useAuth()
+  const { signOut, userDoc } = useAuth()
+  const items = userDoc?.edooboxLeaderId ? [...navItems, courseLeaderItem] : navItems
   return (
     <AuthenticatedLayout
-      navItems={navItems}
+      navItems={items}
       gate={{ kind: "member", completeProfilePath: "/account/complete-profile" }}
       headerAction={<VisitCta />}
       menuItems={menuItems}

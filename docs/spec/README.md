@@ -29,6 +29,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 | `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |
 | `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, permissions |
+| `CRS` | [courses.md](courses.md) | edoobox courses: course leaders, participants, attendance, temporary and granted permissions |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
 where they read best, not in id order (MEM-35 follows MEM-25) — search for
@@ -138,6 +139,11 @@ still passes a different wrong promise.
 - **Guest** — a person using the app without signing in or tapping a badge.
 - **Identified person** — a person who signed in or tapped their badge.
 - **Volunteer** — a person whose account is in the *Freiwilligengruppe*.
+- **edoobox leader** — a person listed in edoobox as one who can lead a
+  course's Termine.
+- **Course leader** — a person whose account is linked to an edoobox
+  leader.
+- **Participant** — a person booked on a course in edoobox.
 
 **Places**
 - **Own device** — the checkout app on the person's phone or computer.
@@ -152,7 +158,11 @@ still passes a different wrong promise.
   app: who is there, what was used or bought, the summary, paying.
 - **Start screen** — the check-in while nobody is identified yet.
 - **Account** (*Konto*) — the signed-in person's own pages: Profil,
-  Nutzungsverlauf and Mitgliedschaft (the membership page).
+  Nutzungsverlauf, Mitgliedschaft (the membership page) and, for a course
+  leader, Kursleitung.
+- **Kursleitung** — the course leader's pages in the account: the list of
+  their courses, a course page per course, a page per participant, and the
+  close of a course.
 - **Anleitung** — the guide to the checkout app, a page on the workshop's
   website.
 - **Sync report** — the admin page with the outcome of the Workspace group
@@ -160,8 +170,17 @@ still passes a different wrong promise.
 
 **Things**
 - **Badge** — a person's NFC tag.
+- **Course** (*Kurs*) — an offer booked in edoobox, held on one or more
+  Termine.
+- **Termin** — one date of a course, with a start and an end time.
+- **Präsenzstatus** — what edoobox records about a participant at one
+  Termin: one of the statuses set up in the edoobox account, each with a
+  name, a symbol, a colour and an *Anwesenheit* percentage.
+- **Closed course** — a course its course leader has closed.
 - **Permission** (*Berechtigung*) — a named qualification, such as for the
   laser cutter, that a machine can require and a person's account can hold.
+- **Temporary permission** — a permission a person holds only in set time
+  windows, from a course.
 - **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
   it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was

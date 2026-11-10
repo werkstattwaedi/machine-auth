@@ -39,7 +39,7 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
 
 ## Second badge
 
-- **KIO-6** A registered badge tapped while someone is at the kiosk, unless a payment at the Wallee terminal is under way (KIO-24) — #463, #468, #689, #732, #750, #752, #769, ADR-0030, #735:
+- **KIO-6** A registered badge tapped while someone is at the kiosk, unless a payment at the Wallee terminal is under way (KIO-24) — #463, #468, #689, #732, #750, #752, #769, ADR-0030, #735, #842:
 
   | Situation at the kiosk | Reaction |
   |---|---|
@@ -50,16 +50,17 @@ RaiseNow or at the Wallee terminal, and when the kiosk resets. The check-in itse
   | an identified person is on the check-in, no visit started, no countdown running | asked "Benutzer wechseln?" and told that no visit was started and that what is on the screen is lost |
   | an identified person is on the check-in with a started visit, or on Kosten, Check Out or Bezahlen before the commit (CHK-22) | asked "Benutzer wechseln?" and told that the open checkout is kept and continues on their next badge tap (KIO-1) |
   | an identified person's or a guest's checkout is committed (CHK-22) or the Wallee terminal approved its payment (KIO-22), or an identified person is on a page outside the checkout steps | the kiosk switches to the new badge without asking |
-  | someone is in the account | the tap does nothing |
+  | someone is in the account | the tap does nothing, unless a badge assignment waits for it (CRS-9) |
 
-- **KIO-13** An unregistered badge never switches the kiosk to another person; unless a payment at the Wallee terminal is under way (KIO-24), it is answered like this — ADR-0030, #769, #735, #849:
+- **KIO-13** An unregistered badge never switches the kiosk to another person; unless a payment at the Wallee terminal is under way (KIO-24), it is answered like this — ADR-0030, #769, #735, #849, #842:
 
   | Situation at the kiosk | Reaction |
   |---|---|
   | the start screen, or a guest who has entered nothing | the person is told to sign in first; once signed in, they are offered to buy the badge (MEM-38) |
-  | an identified person is at the kiosk | they are offered to buy the badge (MEM-38) |
+  | an identified person is at the kiosk, outside the account | they are offered to buy the badge (MEM-38) |
   | a guest has entered persons or items, before the commit (CHK-22) | the guest is told to finish the checkout and sign in first |
   | a guest's checkout is committed (CHK-22) or the Wallee terminal approved its payment (KIO-22) | the kiosk returns to the start screen, which reacts as in the first row |
+  | someone is in the account | nothing, unless a badge assignment waits for it (CRS-9) |
 
 ## Paying
 

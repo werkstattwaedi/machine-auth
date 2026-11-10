@@ -97,6 +97,8 @@ export interface UserDoc {
   activeMembership: string | null
   /** Workspace groups (ADR-0053), unknown values dropped. */
   usageGroups?: UsageGroup[]
+  /** edoobox admin id when the account is a course leader (#842, CRS-1). */
+  edooboxLeaderId?: string | null
 }
 
 /**
@@ -354,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           billingAddress: data.billingAddress ?? null,
           activeMembership: data.activeMembership?.id ?? null,
           usageGroups: usageGroupsOf(data.usageGroups),
+          edooboxLeaderId: typeof data.edooboxLeaderId === "string" ? data.edooboxLeaderId : null,
         })
 
         // If user doc says admin but token doesn't have the claim,

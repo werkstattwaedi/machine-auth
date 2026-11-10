@@ -17,7 +17,12 @@ What the team sees and does in the admin app. Terms: see the
 
 ## Permissions
 
-- **ADM-16** In the admin app, an admin grants or removes a person's permissions (MAC-2) on the Berechtigungen tab of the person's page, which lists the permissions they hold, each with when and by whom it was granted where that is recorded, and sets the permissions a machine requires (MAC-1) on the machine's settings tab. — ADR-0033, #843
+- **ADM-16** In the admin app, an admin grants or removes a person's permissions (MAC-4) on the Berechtigungen tab of the person's page, which lists the permissions they hold, each with when and by whom it was granted where that is recorded, and sets the permissions a machine requires (MAC-1) on the machine's settings tab. — ADR-0033, #843
+
+## Courses
+
+- **ADM-17** On the Profil tab of a person's page in the admin app, an admin links the person to an edoobox leader, making them a course leader (CRS-1), or removes that link; an edoobox leader is linked to at most one person. — #842
+- **ADM-18** A person's page in the admin app lists the courses on which the person is linked as a participant (CRS-7), and an admin removes such a link there, which removes the participant's permission choice and ends their temporary permissions from that course (CRS-11) but leaves the permissions its close granted for good (CRS-14). — #842
 
 ## Material labels
 

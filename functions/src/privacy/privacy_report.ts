@@ -27,6 +27,7 @@ import { serializeValue } from "../audit/audit-trigger";
 import { resolveSubject, type Subject } from "./subject";
 import { SUBJECT_DATA_MAP } from "./subject_data_map";
 import { logOperationInfo } from "../operations_log";
+import { allCourseLinks } from "../courses/types";
 import type {
   CheckoutEntity,
   CheckoutPersonEntity,
@@ -235,6 +236,9 @@ export async function buildPrivacyReport(
   const savedPersons = subject.userRef
     ? await subject.userRef.collection("savedPersons").get()
     : null;
+  const courseLinks = subject.userRef
+    ? await allCourseLinks(deps.db).where("user", "==", subject.userRef).get()
+    : null;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -263,6 +267,7 @@ export async function buildPrivacyReport(
         : null,
     tokens: serializeDocs(tokens?.docs ?? []),
     savedPersons: serializeDocs(savedPersons?.docs ?? []),
+    courseLinks: serializeDocs(courseLinks?.docs ?? []),
     checkouts: checkoutsWithItems,
     personsAppearances: appearances,
     bills: serializeDocs(bills?.docs ?? []),

@@ -70,6 +70,17 @@ export const EMAIL_CONTRACT = {
     dims: {},
     variables: ["GREETING"],
   },
+  // A course leader's course is past its last Termin and not closed yet
+  // (#842, CRS-16): days 1, 3 and 7.
+  "course-close-reminder": {
+    dims: {},
+    variables: ["LEADER_NAME", "COURSE_TITLE", "LAST_DATE", "COURSE_LINK"],
+  },
+  // Day 7 of an unclosed course, to the office (COURSE_OFFICE_EMAIL).
+  "course-close-office": {
+    dims: {},
+    variables: ["LEADER_NAME", "COURSE_TITLE", "LAST_DATE"],
+  },
   // Payable QR-bill invoice for a single checkout.
   "bill-invoice": {
     dims: { kind: CHECKOUT_KINDS },

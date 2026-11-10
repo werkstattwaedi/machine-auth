@@ -186,6 +186,7 @@ service cloud.firestore {
                        request.resource.data.get('email', null) == request.auth.token.get('email', null) &&
                        request.resource.data.get('activeMembership', null) == null &&
                        request.resource.data.get('usageGroups', null) == null &&
+                       request.resource.data.get('edooboxLeaderId', null) == null &&
                        isValidUserProfile(request.resource.data);
 
       // `email` is the login lookup key and Firebase Auth follows it
@@ -226,13 +227,21 @@ service cloud.firestore {
                resource.data.get('permissions', null);
       }
 
+      // `edooboxLeaderId` makes the account a course leader (#842, ADM-17,
+      // CRS-1). Only the setEdooboxLeader callable writes it — no client,
+      // admins included.
+      function edooboxLeaderUnchanged() {
+        return request.resource.data.get('edooboxLeaderId', null) ==
+               resource.data.get('edooboxLeaderId', null);
+      }
+
       // Users can update their own doc but cannot change roles/permissions.
       // A plain tag-tap session cannot update users at all (its
       // request.auth.uid is synthetic, won't match userId, so the predicate
       // fails). An OTP-ELEVATED kiosk session (ADR-0041) may edit the
       // profile it acts on, under the same pins.
       // Firma users must provide a valid billing address.
-      allow update: if emailUnchanged() && usageGroupsUnchanged() && permissionsUnchanged() && (
+      allow update: if emailUnchanged() && usageGroupsUnchanged() && permissionsUnchanged() && edooboxLeaderUnchanged() && (
                        isAdmin() ||
                        (isSignedIn() &&
                         userId == request.auth.uid &&
@@ -498,6 +507,21 @@ service cloud.firestore {
               isAnonParentCreator()) &&
              parentIsOpen());
       }
+    }
+
+    // edoobox courses (#842): what the checkout keeps of a course and the
+    // participants' links to accounts. Written only by the courseCall
+    // callables and the daily sync (Admin SDK); admins read them (ADM-18).
+    // A participant's own read comes with Meine Kurse (#844).
+    match /courses/{offerId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // courses/{offerId}/links/{participantId}, also read across courses
+    // (a person's links, ADM-18) — hence the recursive match.
+    match /{path=**}/links/{participantId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Config collection (pricing, etc.)
