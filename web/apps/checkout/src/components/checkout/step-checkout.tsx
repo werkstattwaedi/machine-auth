@@ -207,6 +207,11 @@ interface StepCheckoutProps {
    */
   persons: PricedPerson[]
   /**
+   * How the payer's e-mail address may be shown here — masked in a kiosk
+   * badge session without a code (ACC-10, #668). Defaults to in full.
+   */
+  shownEmail?: (email: string) => string
+  /**
    * The visit's usage type, derived from the persons' own (issue #605). It
    * decides machine time and material; each person's usage fee follows
    * their own type.
@@ -434,6 +439,7 @@ export function machineRowFromItem(item: CheckoutItemLocal): PositionRow {
 
 export function StepCheckout({
   persons,
+  shownEmail = (email) => email,
   visitUsageType: usageType,
   ownerUserId = null,
   tip,
@@ -699,7 +705,7 @@ export function StepCheckout({
   const free = total === 0
   const choices: PaymentChoice[] = free ? ["free"] : paymentMethods
   const copy = {
-    email: primary?.email ?? "",
+    email: shownEmail(primary?.email ?? ""),
     monthlyDate: firstOfNextMonth(),
   }
 
