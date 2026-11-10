@@ -51,6 +51,17 @@ therefore the only free-tier keep-alive mechanism.
    status heartbeat (`POST /api/device-status`, around the clock) hits the
    same `api` function and keeps it warm, so `warm.py` and
    `WARM_SCHEDULE` are gone. `/api/ping` stays for manual checks.
+4. **Kiosk** (*added 2026-11*): while the checkout app runs in the kiosk
+   bridge, `KioskKeepWarm` (`web/apps/checkout/src/components/kiosk-keep-warm.tsx`)
+   pings `authCall` on load and every 10 minutes. A badge tap goes
+   straight to `authCall` (`verifyTagCheckout` / `exchangeKioskSession`),
+   but the per-mount prewarms of item 2 only fire once a session has
+   started, so an idle kiosk's first tap paid a cold start — prod logs
+   showed ~8 `authcall` cold starts a day against ~1 a day for the
+   heartbeat-warmed `api`. Around the clock this is ~4.3k no-op calls a
+   month; it stops when the kiosk is off. `minInstances: 1` was weighed
+   again and still rejected on cost (one idle 1 vCPU / 512 MiB instance,
+   roughly USD 10–15/month).
 
 ## Consequences
 
