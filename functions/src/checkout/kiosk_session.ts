@@ -24,7 +24,7 @@ import { kioskBearer } from "../config/tag-secrets";
 import { parseIntParamOrDie } from "../auth/login-code/helpers";
 import { resolveVerifiedMembership } from "../membership/verified_membership";
 import type { UserEntity } from "../types/firestore_entities";
-import { usageGroupsOf, type UsageGroup } from "@oww/shared";
+import { isProfileComplete, usageGroupsOf, type UsageGroup } from "@oww/shared";
 
 /**
  * How long an OTP-elevated kiosk session may reach the member area
@@ -72,6 +72,12 @@ export interface KioskUserPayload {
    * token claim so the client needn't decode the token.
    */
   elevatedUntil: number | null;
+  /**
+   * Whether the profile is complete (ACC-2) — else the kiosk runs the
+   * welcome onboarding first, and no auto-start countdown (KIO-10). Carried
+   * here because a badge tap alone may not read the users doc (#854).
+   */
+  profileComplete: boolean;
 }
 
 /**
@@ -239,5 +245,6 @@ export async function buildKioskUserPayload(
     activeMembership: membership !== null,
     usageGroups: usageGroupsOf(userData?.usageGroups),
     elevatedUntil,
+    profileComplete: userData ? isProfileComplete(userData) : false,
   };
 }

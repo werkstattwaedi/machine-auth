@@ -61,6 +61,7 @@ interface VerifyKioskElevationResponse {
   activeMembership?: boolean
   usageGroups?: string[]
   elevatedUntil?: number | null
+  profileComplete?: boolean
 }
 
 const CLAIMS_TIMEOUT_MS = 8_000
@@ -261,6 +262,7 @@ export function KioskElevationProvider({ children }: { children: ReactNode }) {
         activeMembership: data.activeMembership,
         usageGroups: data.usageGroups,
         elevatedUntil: data.elevatedUntil ?? null,
+        profileComplete: data.profileComplete,
       }
       await establishKioskSession(auth, data.customToken, tokenUser)
     }

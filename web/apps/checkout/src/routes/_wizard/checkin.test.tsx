@@ -54,24 +54,19 @@ vi.mock("@modules/lib/use-bridge", () => ({
   useBridge: () => mockBridge,
 }))
 
-vi.mock("@modules/lib/firebase-context", () => ({ useDb: () => ({}) }))
-vi.mock("@modules/lib/firestore-helpers", () => ({
-  userRef: (_db: unknown, id: string) => ({ id, path: `users/${id}` }),
-}))
-// The badge user's profile, read to keep the countdown away from the
-// welcome onboarding.
+// The kiosk session payload: its `profileComplete` keeps the countdown away
+// from the welcome onboarding (#854 — no users-doc read).
 const COMPLETE_PROFILE = {
-  id: "u1",
+  tokenId: "04aa",
+  userId: "u1",
   firstName: "Andrea",
   lastName: "Muster",
-  termsAcceptedAt: new Date(),
+  profileComplete: true,
 }
 const mockProfile: { current: unknown } = { current: COMPLETE_PROFILE }
-vi.mock("@modules/lib/firestore", () => ({
-  useDocument: (ref: unknown) => ({
-    data: ref ? mockProfile.current : null,
-    loading: false,
-  }),
+vi.mock("@modules/lib/token-auth", () => ({
+  subscribeKioskSession: () => () => {},
+  getKioskTokenUser: () => mockProfile.current,
 }))
 
 // The embedded account sign-in needs the full Auth/Firebase provider stack
@@ -240,7 +235,7 @@ describe("CheckinRoute — kiosk auto-start gating (issue #732)", () => {
 
   it("no countdown while the welcome onboarding has to run", () => {
     mockBridge.available = true
-    mockProfile.current = { id: "u1", firstName: "Andrea", lastName: "Muster" }
+    mockProfile.current = { ...COMPLETE_PROFILE, profileComplete: false }
     renderCheckin(badgeKiosk)
     expect(startButton().dataset.countdown).toBeUndefined()
   })

@@ -10,7 +10,11 @@ import { describe, it, expect } from "vitest"
 import type { DocumentReference, Timestamp } from "firebase/firestore"
 import type { CheckoutDoc, UserDoc } from "@modules/lib/firestore-entities"
 import type { PricingConfig } from "@modules/lib/workshop-config"
-import { withSameDayWaiver } from "./same-day-waiver"
+import {
+  sameDayCheckoutFromWire,
+  toSameDayCheckout,
+  withSameDayWaiver,
+} from "./same-day-waiver"
 import { computeCheckoutCosts } from "./step-checkout"
 import type { CheckoutPerson } from "./use-checkout-state"
 
@@ -78,7 +82,7 @@ function closed(overrides: Partial<CheckoutDoc> = {}): CheckoutDoc & { id: strin
 
 describe("withSameDayWaiver", () => {
   it("marks the owner and a companion by name already on a visit opened today", () => {
-    const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [closed()], "co-open")
+    const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [closed()].map(toSameDayCheckout), "co-open")
     expect(out.map((p) => p.entryFeeWaivedToday ?? false)).toEqual([true, true])
   })
 
@@ -90,20 +94,20 @@ describe("withSameDayWaiver", () => {
         { name: "Max Muster", email: "", userType: "erwachsen", userRef: ref(OWNER), usageType: "hangenmoos" },
       ],
     })
-    const out = withSameDayWaiver([owner], OWNER, openedAt, [hangenmoos], "co-open")
+    const out = withSameDayWaiver([owner], OWNER, openedAt, [hangenmoos].map(toSameDayCheckout), "co-open")
     expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
   it("leaves a companion with another person type unmarked", () => {
     const adultNoah = { ...kid, userType: "erwachsen" as const }
-    const out = withSameDayWaiver([adultNoah], OWNER, openedAt, [closed()], "co-open")
+    const out = withSameDayWaiver([adultNoah], OWNER, openedAt, [closed()].map(toSameDayCheckout), "co-open")
     expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
   it("ignores visits opened on another business day and cancelled ones", () => {
     const yesterday = closed({ created: ts("2026-06-05T13:00:00Z") })
     const cancelled = closed({ status: "cancelled" })
-    const out = withSameDayWaiver([owner], OWNER, openedAt, [yesterday, cancelled], "co-open")
+    const out = withSameDayWaiver([owner], OWNER, openedAt, [yesterday, cancelled].map(toSameDayCheckout), "co-open")
     expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
@@ -124,19 +128,39 @@ describe("withSameDayWaiver", () => {
         },
       },
     })
-    const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [awaiting], "co-open")
+    const out = withSameDayWaiver([owner, kid], OWNER, openedAt, [awaiting].map(toSameDayCheckout), "co-open")
     expect(out.map((p) => p.entryFeeWaivedToday ?? false)).toEqual([true, true])
   })
 
   it("never marks anyone on a guest check-in", () => {
-    const out = withSameDayWaiver([kid], null, openedAt, [closed()], null)
+    const out = withSameDayWaiver([kid], null, openedAt, [closed()].map(toSameDayCheckout), null)
     expect(out[0].entryFeeWaivedToday).toBeUndefined()
   })
 
   it("feeds the summary so the shown usage fee is what the server bills", () => {
     const newcomer = person({ id: "p-new", firstName: "Lea", lastName: "Neu", userType: "kind", isPreFilled: false })
-    const persons = withSameDayWaiver([owner, kid, newcomer], OWNER, openedAt, [closed()], "co-open")
+    const persons = withSameDayWaiver([owner, kid, newcomer], OWNER, openedAt, [closed()].map(toSameDayCheckout), "co-open")
     const costs = computeCheckoutCosts({ persons, usageType: "regular", items: [], config })
     expect(costs.personFeesNet).toBe(7.5) // only Lea pays
+  })
+
+  // A kiosk badge session gets the day's visits from getSameDayVisits (#854)
+  // — e.g. last Monday's, for a checkout forgotten open since then.
+  it("counts a visit from getSameDayVisits like one read from Firestore", () => {
+    const doc = closed()
+    const wire = {
+      id: "co-wire",
+      status: "closed",
+      usageType: "regular",
+      created: openedAt.getTime() - 3600_000,
+      closedAt: openedAt.getTime() - 1800_000,
+      persons: [
+        { name: "Owner Person", userType: "erwachsen", userRef: { id: OWNER }, usageType: null },
+      ],
+    }
+    const viaWire = withSameDayWaiver([owner], OWNER, openedAt, [sameDayCheckoutFromWire(wire)], "co-open")
+    const viaDoc = withSameDayWaiver([owner], OWNER, openedAt, [doc].map(toSameDayCheckout), "co-open")
+    expect(viaWire[0].entryFeeWaivedToday).toBe(true)
+    expect(viaDoc[0].entryFeeWaivedToday).toBe(true)
   })
 })

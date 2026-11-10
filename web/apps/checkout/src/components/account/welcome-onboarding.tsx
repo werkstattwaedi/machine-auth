@@ -228,9 +228,12 @@ export interface WelcomeOnboardingViewProps {
   /** Step-4 content override — the kiosk swaps the member-area links for
    *  the instructions-email offer. Default: resource links (+ family note). */
   resourcesStep?: React.ReactNode
-  /** Runs on leaving step 1, before the profile form shows the stored data.
-   *  Return false to stay on step 1 — the kiosk's step-up (ADR-0041). */
-  beforeProfile?: () => Promise<boolean>
+  /** Runs on leaving step 1 and supplies the profile form's stored data:
+   *  the kiosk asks for its code first (ADR-0041) and only then reads the
+   *  users doc (#854), so `prefill` carries just the session's name until
+   *  then. Return null to stay on step 1. Applied once — walking back and
+   *  forth keeps the edits. */
+  beforeProfile?: () => Promise<ProfileFields | null>
   onDone: () => void
 }
 
@@ -255,6 +258,7 @@ export function WelcomeOnboardingView({
 }: WelcomeOnboardingViewProps) {
   const [step, setStep] = useState(1)
   const [fields, setFields] = useState<ProfileFields>(prefill)
+  const [profileLoaded, setProfileLoaded] = useState(!beforeProfile)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [tosAccepted, setTosAccepted] = useState(false)
   const [tosError, setTosError] = useState(false)
@@ -301,7 +305,7 @@ export function WelcomeOnboardingView({
     }
 
     const address = {
-      company: isFirma ? fields.company.trim() : (prefill.company ?? ""),
+      company: isFirma ? fields.company.trim() : fields.company,
       street: fields.street.trim(),
       zip: fields.zip.trim(),
       city: fields.city.trim(),
@@ -326,8 +330,12 @@ export function WelcomeOnboardingView({
 
   const goNext = async () => {
     if (saving) return
-    if (step === 1 && beforeProfile) {
-      if (await beforeProfile()) setStep(2)
+    if (step === 1 && beforeProfile && !profileLoaded) {
+      const stored = await beforeProfile()
+      if (!stored) return
+      setFields(stored)
+      setProfileLoaded(true)
+      setStep(2)
       return
     }
     if (step === 2) {

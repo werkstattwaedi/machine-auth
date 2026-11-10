@@ -5,12 +5,15 @@
  * Kiosk flavor of the "Willkommen" onboarding (issue #595, ADR-0022
  * amendment). An unclaimed/imported member who signs in at the kiosk (email
  * code or badge tap) runs the same 4-step wizard as on their own device —
- * mounted by _wizard.tsx whenever the established kiosk session's user doc
- * is incomplete.
+ * mounted by _wizard.tsx for every kiosk session; it shows itself when the
+ * session payload says the profile is incomplete (ACC-2).
  *
  * Differences from the own-device wrapper (welcome-onboarding.tsx):
- *  - the user doc is read directly via the actsAs read rule (tag sessions
- *    have no auth-context userDoc subscription);
+ *  - whether to run comes from the session payload (`profileComplete`), and
+ *    the users doc is read only after the code on leaving step 1 (ADR-0041,
+ *    #854): whoever holds someone else's badge must neither see the stored
+ *    profile nor set it, nor accept the terms in their name. The callable
+ *    refuses a badge tap alone too; code sign-ins skip the step;
  *  - persistence goes through the `completeOnboardingKiosk` callable —
  *    Firestore rules deliberately reject users-doc writes from synthetic
  *    kiosk principals;
@@ -18,26 +21,23 @@
  *    issue #358);
  *  - step 4 swaps the member-area links for the account-instructions email
  *    offer: family members, Belege & Co. live in the member area, which the
- *    kiosk cannot open;
- *  - a session signed in by badge tap alone steps up with a code on leaving
- *    step 1 (ADR-0041): whoever holds someone else's badge must neither see
- *    the stored profile nor set it, nor accept the terms in their name. The
- *    callable refuses such a session too; code sign-ins skip the step.
+ *    kiosk cannot open.
  */
 
 import { useState } from "react"
+import { getDoc } from "firebase/firestore"
 import { Loader2, Mail, MailCheck } from "lucide-react"
-import { isProfileComplete, useAuth } from "@modules/lib/auth"
 import { useDb, useFunctions } from "@modules/lib/firebase-context"
-import { useDocument } from "@modules/lib/firestore"
 import { userRef } from "@modules/lib/firestore-helpers"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { rpcCallable } from "@modules/lib/rpc"
+import type { TokenUser } from "@modules/lib/token-auth"
 import { Button } from "@modules/components/ui/button"
 import { useKioskElevation } from "@/components/checkout/kiosk-elevation-dialog"
 import {
   WelcomeOnboardingView,
   type OnboardingProfileUpdate,
+  type ProfileFields,
 } from "./welcome-onboarding"
 
 interface CompleteOnboardingKioskInput {
@@ -45,26 +45,30 @@ interface CompleteOnboardingKioskInput {
   termsAccepted?: boolean
 }
 
-export function KioskWelcomeOnboarding({ userId }: { userId: string }) {
+export function KioskWelcomeOnboarding({ tokenUser }: { tokenUser: TokenUser }) {
   const db = useDb()
   const functions = useFunctions()
-  const { data: userDoc } = useDocument(userRef(db, userId))
   const { mutate, loading: saving } = useAsyncMutation({
     context: "checkout.kioskOnboarding",
   })
-  const { isKioskElevated } = useAuth()
+  // The hook owns the toast (ADR-0025): a failed read leaves the person on
+  // step 1 with a message instead of a silent dead button.
+  const { mutate: load, loading: loadingProfile } = useAsyncMutation<
+    ProfileFields | null
+  >({
+    context: "checkout.kioskOnboardingProfile",
+    errorMessage: "Dein Profil konnte nicht geladen werden. Bitte versuche es nochmals.",
+  })
   const { ensureElevated } = useKioskElevation()
 
-  // Latch on first doc load (mirrors the own-device wrapper): accepting
-  // terms in step 3 completes the profile, and the dialog must survive
-  // through step 4. `done` dismisses for the rest of this kiosk session.
-  const [needed, setNeeded] = useState<boolean | null>(null)
+  // Latched at mount (the component is keyed per user): accepting terms in
+  // step 3 completes the profile, and the dialog must survive through step
+  // 4. Only an explicit `false` runs it — a session minted before the
+  // payload carried the flag skips the onboarding rather than misfire.
+  const [needed] = useState(tokenUser.profileComplete === false)
   const [done, setDone] = useState(false)
-  if (userDoc && needed === null) {
-    setNeeded(!isProfileComplete(userDoc))
-  }
 
-  if (!userDoc || needed !== true || done) return null
+  if (!needed || done) return null
 
   const call = rpcCallable<
     CompleteOnboardingKioskInput,
@@ -97,36 +101,55 @@ export function KioskWelcomeOnboarding({ userId }: { userId: string }) {
     return true
   }
 
+  // Step up (a no-op for a code sign-in), then read the stored profile for
+  // step 2 — only the elevated session may (#854).
+  const loadStoredProfile = async (): Promise<ProfileFields | null> => {
+    const elevated = await new Promise<boolean>((resolve) =>
+      ensureElevated(
+        () => resolve(true),
+        () => resolve(false),
+      ),
+    )
+    if (!elevated) return null
+    try {
+      return await load(async () => {
+        const user = (await getDoc(userRef(db, tokenUser.userId))).data()
+        return {
+          firstName: user?.firstName ?? tokenUser.firstName ?? "",
+          lastName: user?.lastName ?? tokenUser.lastName ?? "",
+          company: user?.billingAddress?.company ?? "",
+          street: user?.billingAddress?.street ?? "",
+          zip: user?.billingAddress?.zip ?? "",
+          city: user?.billingAddress?.city ?? "",
+          phone: user?.phone ?? "",
+        }
+      })
+    } catch {
+      return null
+    }
+  }
+
+  const email = tokenUser.email ?? ""
   return (
     <WelcomeOnboardingView
       prefill={{
-        firstName: userDoc.firstName ?? "",
-        lastName: userDoc.lastName ?? "",
-        company: userDoc.billingAddress?.company ?? "",
-        street: userDoc.billingAddress?.street ?? "",
-        zip: userDoc.billingAddress?.zip ?? "",
-        city: userDoc.billingAddress?.city ?? "",
-        phone: userDoc.phone ?? "",
+        firstName: tokenUser.firstName ?? "",
+        lastName: tokenUser.lastName ?? "",
+        company: "",
+        street: "",
+        zip: "",
+        city: "",
+        phone: "",
       }}
-      email={userDoc.email ?? ""}
-      isFirma={userDoc.userType === "firma"}
+      email={email}
+      isFirma={tokenUser.userType === "firma"}
       isFamilie={false}
       membership={null}
-      saving={saving}
+      saving={saving || loadingProfile}
       persistProfile={persistProfile}
       persistTerms={persistTerms}
-      resourcesStep={<StepResourcesKiosk email={userDoc.email ?? ""} />}
-      beforeProfile={
-        isKioskElevated
-          ? undefined
-          : () =>
-              new Promise<boolean>((resolve) =>
-                ensureElevated(
-                  () => resolve(true),
-                  () => resolve(false),
-                ),
-              )
-      }
+      resourcesStep={<StepResourcesKiosk email={email} />}
+      beforeProfile={loadStoredProfile}
       onDone={() => setDone(true)}
     />
   )

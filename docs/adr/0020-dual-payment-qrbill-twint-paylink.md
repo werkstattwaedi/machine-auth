@@ -25,7 +25,7 @@ The payment result page offers two options via radio-button selection:
 
 ### Server assembles all payment data
 
-The `getPaymentQrData` callable returns:
+The `getPaymentQrData` callable (since removed, #856: `closeCheckoutAndGetPayment` returns the same payment data, built by `buildPaymentData`) returns:
 - `qrBillPayload` — complete SPC-format string for the QR code
 - `paylinkUrl` — assembled from `RAISENOW_PAYLINK_SOLUTION_ID` config + pre-filled URL parameters
 - Structured creditor fields (IBAN, name, street, location) for the QR bill display

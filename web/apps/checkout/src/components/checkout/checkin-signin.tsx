@@ -119,6 +119,7 @@ interface VerifyLoginCodeKioskResponse {
   usageGroups?: string[]
   /** Code sign-ins are OTP-elevated at mint (ADR-0041). */
   elevatedUntil?: number | null
+  profileComplete?: boolean
 }
 
 interface SignupKioskResponse extends VerifyLoginCodeKioskResponse {
@@ -313,6 +314,7 @@ export function CheckinSignin({
       activeMembership: data.activeMembership,
       usageGroups: data.usageGroups,
       elevatedUntil: data.elevatedUntil ?? null,
+      profileComplete: data.profileComplete,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)
     // The identified session flips `isAnonymous` in the wizard, which
@@ -349,6 +351,7 @@ export function CheckinSignin({
       activeMembership: data.activeMembership,
       usageGroups: data.usageGroups,
       elevatedUntil: data.elevatedUntil ?? null,
+      profileComplete: data.profileComplete,
     }
     await establishKioskSession(auth, data.customToken, tokenUser)
     return data

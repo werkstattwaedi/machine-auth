@@ -289,3 +289,9 @@ tap still yields the checkout-only session it does today.
 - Full session: everything the own-device login can do, including
   accepting and rejecting incoming family invites (`callerEmail` resolves
   the address from the user doc for synthetic tokens).
+
+## Amendment (2026-11, #854): the rules hold a badge tap to the visit
+
+The step-up gated the member area in the UI, but the Firestore rules and two callables still let a plain badge session read all of its member's data — reachable from code running in the kiosk webview with nothing but a found badge. A plain `actsAs` session now reads only the visit at hand (`isKioskVisitCheckout` / `mayReadMemberCheckout` in `firestore.rules`): its member's checkouts that are open, awaiting payment or closed in the last two days, their items, the machine time linked to them, and the saved persons. The users doc, family co-members' docs, memberships, bills, older checkouts and other usage need `isElevatedActsAs()`; `getInvoiceDownloadUrl` needs elevation for kiosk callers, and the unused `getPaymentQrData` callable is gone.
+
+What the kiosk needed from the users doc now comes in the session payload: `profileComplete` (shared `isProfileComplete`) decides the welcome onboarding and the auto-start countdown, and the onboarding reads the stored profile only after the code. The same-day fee preview (CHK-39) needs the visits of the open checkout's business day, which for a checkout left open since an earlier day lie outside the two-day window: a badge session asks the `getSameDayVisits` callable (billingCall) for exactly those, reduced to what `sameDayCoveredPersons` compares, instead of querying. The usage rule follows `checkoutItemRef` to its checkout. Regression net: `web/modules/test/kiosk-session-rules.integration.test.ts`.

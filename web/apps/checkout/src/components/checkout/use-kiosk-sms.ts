@@ -36,6 +36,7 @@ export interface ExchangeKioskSessionResponse {
   activeMembership?: boolean
   usageGroups?: string[]
   elevatedUntil?: number | null
+  profileComplete?: boolean
 }
 
 /** Firebase's phone-auth error codes, mapped to the German copy. */
@@ -135,6 +136,7 @@ export function useKioskSms() {
           activeMembership: data.activeMembership,
           usageGroups: data.usageGroups,
           elevatedUntil: data.elevatedUntil ?? null,
+          profileComplete: data.profileComplete,
         }
         await establishKioskSession(auth, data.customToken, tokenUser)
         return tokenUser

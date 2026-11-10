@@ -1,14 +1,20 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { QrCode } from "lucide-react"
 import { toast } from "sonner"
-import { isProfileComplete } from "@modules/lib/auth"
-import { useDb } from "@modules/lib/firebase-context"
-import { useDocument } from "@modules/lib/firestore"
-import { userRef } from "@modules/lib/firestore-helpers"
+import {
+  getKioskTokenUser,
+  subscribeKioskSession,
+} from "@modules/lib/token-auth"
 import { useBridge } from "@modules/lib/use-bridge"
 import { StepCheckin } from "@/components/checkout/step-checkin"
 import { useWizardContext } from "@/components/checkout/wizard-context"
@@ -49,7 +55,6 @@ type CountdownState = "undecided" | "running" | "off"
 function CheckinRoute() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
-  const db = useDb()
   const bridge = useBridge()
   const search = useSearch({ from: "/_wizard" })
   const rescan = search.rescan === "1"
@@ -77,23 +82,26 @@ function CheckinRoute() {
   // with an open checkout (TagVisitRedirect or "Material erfassen" own that)
   // and not while the welcome onboarding has to run first.
   const candidate = bridge.available && ctx.kiosk && ctx.identifiedByBadge
-  const badgeUserId = candidate ? (ctx.identifiedUserRef?.id ?? null) : null
-  const profileRef = useMemo(
-    () => (badgeUserId ? userRef(db, badgeUserId) : null),
-    [db, badgeUserId],
+  // Profile completeness from the session payload: a badge tap alone may
+  // not read the users doc (#854).
+  const kioskTokenUser = useSyncExternalStore(
+    subscribeKioskSession,
+    getKioskTokenUser,
   )
-  const { data: profileDoc } = useDocument(profileRef)
+  // A session minted before the payload carried the flag counts as "no
+  // countdown" (like the onboarding skipping it) rather than undecided.
+  const profileComplete = candidate && kioskTokenUser
+    ? kioskTokenUser.profileComplete === true
+    : null
   const [countdown, setCountdown] = useState<CountdownState>("undecided")
   if (
     countdown === "undecided" &&
     candidate &&
     !ctx.openCheckoutLoading &&
     !ctx.tagAuthLoading &&
-    profileDoc
+    profileComplete !== null
   ) {
-    setCountdown(
-      !ctx.openCheckout && isProfileComplete(profileDoc) ? "running" : "off",
-    )
+    setCountdown(!ctx.openCheckout && profileComplete ? "running" : "off")
   }
 
   // A touch while the decision is still loading counts too: the person is

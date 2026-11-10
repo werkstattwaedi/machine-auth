@@ -2,21 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Callable function: returns the Swiss QR Bill payload string and, when
- * the RaiseNow integration is enabled, its PayLink URL for a bill. The
- * client renders the QR bill as a QR code and links to the PayLink for
- * TWINT payments.
+ * The payment data of a bill: the Swiss QR Bill payload and, when the
+ * RaiseNow integration is enabled, its PayLink URL. The close callable
+ * returns it with the closed checkout; the client renders the QR bill and
+ * links to the PayLink. (The standalone `getPaymentQrData` callable that
+ * also served it had no caller left and went with #854.)
  */
 
-import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
-import { getFirestore } from "firebase-admin/firestore";
 import { generateScorReference } from "./scor_reference";
 import { isPaymentMethodEnabled } from "../payments/config";
 import type { PaymentMethod } from "../types/firestore_entities";
 import { buildRaisenowPaylinkUrl } from "../payments/raisenow";
 import type { BillEntity } from "./types";
-import type { CheckoutEntity } from "../types/firestore_entities";
 
 // Payment config from environment params
 const paymentIban = defineString("PAYMENT_IBAN");
@@ -30,31 +28,6 @@ const paymentRecipientPostalCode = defineString("PAYMENT_RECIPIENT_POSTAL_CODE")
 const paymentRecipientCity = defineString("PAYMENT_RECIPIENT_CITY");
 const paymentRecipientCountry = defineString("PAYMENT_RECIPIENT_COUNTRY");
 const paymentCurrency = defineString("PAYMENT_CURRENCY");
-
-interface GetPaymentQrDataRequest {
-  billId: string;
-}
-
-/**
- * The user the caller is authorized to act as. Mirrors the helper in
- * `acknowledge_bill.ts` / `close_checkout_and_get_payment.ts`: real logins
- * return `request.auth.uid`; kiosk tag-tap sessions return the `actsAs`
- * claim.
- */
-function effectiveUid(request: CallableRequest<unknown>): string | null {
-  const claims = request.auth?.token as { actsAs?: unknown } | undefined;
-  if (typeof claims?.actsAs === "string" && claims.actsAs.length > 0) {
-    return claims.actsAs;
-  }
-  return request.auth?.uid ?? null;
-}
-
-function isAnonymousCaller(request: CallableRequest<unknown>): boolean {
-  const provider = (request.auth?.token as
-    | { firebase?: { sign_in_provider?: string } }
-    | undefined)?.firebase?.sign_in_provider;
-  return provider === "anonymous";
-}
 
 export interface PaymentData {
   // Doc id of the underlying bill — lets the client wire follow-up
@@ -188,83 +161,3 @@ export function buildPaymentData(
     currency: paymentCurrency.value() || "CHF",
   };
 }
-
-export const getPaymentQrDataHandler = async (
-  request: CallableRequest<GetPaymentQrDataRequest>
-) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Authentication required");
-  }
-
-  const { billId } = request.data as GetPaymentQrDataRequest;
-  if (!billId || typeof billId !== "string") {
-    throw new HttpsError("invalid-argument", "billId is required");
-  }
-
-  const db = getFirestore();
-  const billDoc = await db.collection("bills").doc(billId).get();
-  if (!billDoc.exists) {
-    throw new HttpsError("not-found", `Bill ${billId} not found`);
-  }
-
-  const bill = billDoc.data() as BillEntity;
-
-  // Load the linked checkout up front: it carries both the payer info and the
-  // `firebaseUid` used to scope anonymous access to the creating session.
-  let checkoutData: CheckoutEntity | null = null;
-  if (bill.checkouts.length > 0) {
-    const checkoutDoc = await bill.checkouts[0].get();
-    if (checkoutDoc.exists) {
-      checkoutData = checkoutDoc.data() as CheckoutEntity;
-    }
-  }
-
-  // Authorisation: this endpoint returns the payer's name, email, amount and
-  // SCOR reference, so it must enforce the same owner-or-admin check every
-  // sibling bill endpoint does. Previously it had none — any leaked billId
-  // exposed payer PII to any caller (IDOR).
-  //  - real / tag-tap principal that owns the bill, OR
-  //  - the anonymous session that CREATED a null-userId (walk-in) bill —
-  //    scoped via the linked checkout's `firebaseUid` (stamped == the
-  //    creator's uid, issue #318). Mirrors the P0-2 anon checkout-read
-  //    scoping so one anon session cannot read another walk-in's payer PII,
-  //    OR
-  //  - admin.
-  const isAdmin = request.auth.token.admin === true;
-  const callerUid = effectiveUid(request);
-  const isOwner =
-    callerUid !== null &&
-    bill.userId !== null &&
-    bill.userId.id === callerUid;
-  const isAnonOwner =
-    !isOwner &&
-    !isAdmin &&
-    bill.userId === null &&
-    isAnonymousCaller(request) &&
-    callerUid !== null &&
-    checkoutData?.firebaseUid === callerUid;
-
-  if (!isAdmin && !isOwner && !isAnonOwner) {
-    throw new HttpsError("permission-denied", "Access denied");
-  }
-
-  // A cancelled bill (ADR-0042) must not hand out a payable QR reference.
-  if (bill.cancelledAt) {
-    throw new HttpsError("failed-precondition", "Diese Rechnung wurde storniert.");
-  }
-
-
-  // Payer info from the linked checkout's primary person.
-  let payer: PaymentPayer | null = null;
-  const person = checkoutData?.persons[0];
-  if (person) {
-    payer = { name: person.name, email: person.email };
-  }
-
-  return buildPaymentData(
-    bill,
-    payer,
-    billId,
-    bill.checkouts[0]?.id ?? null,
-  );
-};
