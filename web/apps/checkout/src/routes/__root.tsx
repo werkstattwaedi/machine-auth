@@ -12,6 +12,7 @@ import { BridgeNfcRouter } from "@/components/bridge-nfc-router"
 import { KioskElevationProvider } from "@/components/checkout/kiosk-elevation-dialog"
 import { KioskAccountIdleWatcher } from "@/components/account/kiosk-account-idle-watcher"
 import { KioskStatusReporter } from "@/components/kiosk-status-reporter"
+import { KioskKeepWarm } from "@/components/kiosk-keep-warm"
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -28,6 +29,7 @@ function RootLayout() {
           <BridgeNfcRouter />
           <KioskAccountIdleWatcher />
           <KioskStatusReporter />
+          <KioskKeepWarm />
           <Outlet />
           <Toaster />
           <ClientVersionGate />
