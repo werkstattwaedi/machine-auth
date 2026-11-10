@@ -79,7 +79,7 @@ test.describe("Membership page screenshots", () => {
     // "ausstehend" also appears in the "… · 1 ausstehend" count; pin to the badge.
     await expect(page.getByText("Ausstehend", { exact: true })).toBeVisible()
     await expect(
-      page.getByRole("button", { name: "Mitglied hinzufügen" }),
+      page.getByRole("button", { name: "Familienmitglied hinzufügen" }),
     ).toBeVisible()
     await expect(page).toHaveScreenshot("membership-active-family-owner.png")
   })
@@ -96,7 +96,7 @@ test.describe("Membership page screenshots", () => {
       page.getByRole("button", { name: "Verlassen" }),
     ).toBeVisible()
     await expect(
-      page.getByRole("button", { name: "Mitglied hinzufügen" }),
+      page.getByRole("button", { name: "Familienmitglied hinzufügen" }),
     ).toHaveCount(0)
     await expect(page).toHaveScreenshot("membership-active-family-member.png")
 
