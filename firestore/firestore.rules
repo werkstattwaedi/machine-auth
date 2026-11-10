@@ -31,6 +31,33 @@ service cloud.firestore {
         request.auth.token.get('elevatedUntil', 0) > request.time.toMillis();
     }
 
+    // What an un-elevated kiosk session (a badge tap alone, ADR-0041) may
+    // read of its owner's checkouts (#854): the visit at hand — open, or
+    // awaiting payment — and the ones closed in the last two days, which
+    // the same-day fee (ADR-0050) and the terminal watcher read. Anything
+    // older is history and needs the step-up. A query must bound
+    // `closedAt` inside the window or it is refused as a whole; the
+    // same-day fee preview asks `getSameDayVisits` instead (#854).
+    function isKioskVisitCheckout(data) {
+      return data.status in ['open', 'awaiting_payment'] ||
+        (data.status == 'closed' &&
+         data.closedAt > request.time - duration.value(2, 'd'));
+    }
+
+    // Read access to a checkout of a member, by its data: the member's own
+    // login, an elevated kiosk session acting for them, or an un-elevated
+    // one for the visit at hand only.
+    function mayReadMemberCheckout(data) {
+      return isSignedIn() && data.userId != null && (
+        data.userId == /databases/$(database)/documents/users/$(request.auth.uid) ||
+        (isElevatedActsAs() &&
+         data.userId == /databases/$(database)/documents/users/$(actsAs())) ||
+        (actsAs() != '' &&
+         data.userId == /databases/$(database)/documents/users/$(actsAs()) &&
+         isKioskVisitCheckout(data))
+      );
+    }
+
     // True for sessions created by Firebase Anonymous Auth
     // (signInAnonymously). The truly-anonymous checkout path uses these
     // — each session has a fresh UID, so rules can scope writes per
@@ -98,16 +125,15 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeMembership;
     }
 
-    // Same family-roster join as `shareActiveMembership`, but for a
-    // kiosk tag-tap session: it reads the membership of the `actsAs()`
+    // Same family-roster join as `shareActiveMembership`, but for an
+    // ELEVATED kiosk session: it reads the membership of the `actsAs()`
     // user (the real principal the synthetic UID acts on) instead of
-    // `request.auth.uid` (which has no user doc). Lets a tag-tapped
-    // user resolve their own family co-members' docs for the checkout
-    // roster picker (issue #422) — exactly the same docs the logged-in
-    // owner already sees. The synthetic session still cannot reach any
-    // doc outside the tag owner's own active membership.
+    // `request.auth.uid` (which has no user doc) — the account's
+    // membership page at the kiosk. A badge tap alone gets no co-member
+    // docs (#854); the check-in's family quick-add (#422) that once needed
+    // them went with ADR-0048.
     function shareActiveMembershipActingAs(targetUserId) {
-      return actsAs() != '' &&
+      return isElevatedActsAs() &&
         get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership != null &&
         get(/databases/$(database)/documents/users/$(targetUserId)).data.activeMembership ==
         get(/databases/$(database)/documents/users/$(actsAs())).data.activeMembership;
@@ -115,15 +141,15 @@ service cloud.firestore {
 
     // Users collection (doc ID = Firebase Auth UID)
     match /users/{userId} {
-      // Read: admin, the user themselves, a kiosk session acting on their
-      // behalf (so the kiosk can pre-fill the form), or a family co-member
-      // (so the checkout roster can show display names). The co-member
-      // branch is honoured for both a real login (shareActiveMembership)
-      // and a tag-tap session acting on the owner's behalf
-      // (shareActiveMembershipActingAs) — issue #422.
+      // Read: admin, the user themselves, an ELEVATED kiosk session acting
+      // on their behalf, or a family co-member (the account's membership
+      // page shows their names) — for a kiosk session again only elevated
+      // (shareActiveMembershipActingAs). A badge tap alone reads no users
+      // doc (#854): what the kiosk needs of it comes in the session payload
+      // (kiosk_session.ts buildKioskUserPayload).
       allow read: if isAdmin() ||
                      (isSignedIn() && userId == request.auth.uid) ||
-                     (actsAs() != '' && actsAs() == userId) ||
+                     (isElevatedActsAs() && actsAs() == userId) ||
                      shareActiveMembership(userId) ||
                      shareActiveMembershipActingAs(userId);
 
@@ -292,8 +318,17 @@ service cloud.firestore {
       allow read: if isAdmin() ||
                      (isSignedIn() && resource.data.userId ==
                        /databases/$(database)/documents/users/$(request.auth.uid)) ||
+                     (isElevatedActsAs() && resource.data.userId ==
+                       /databases/$(database)/documents/users/$(actsAs())) ||
+                     // A badge tap alone (#854): only the machine time on
+                     // the visit at hand (CHK-44), i.e. linked to an item of
+                     // a checkout it may read. `checkoutItemRef` is
+                     // checkouts/{id}/items/{itemId}; segment 4 of the full
+                     // path is the checkout id.
                      (actsAs() != '' && resource.data.userId ==
-                       /databases/$(database)/documents/users/$(actsAs()));
+                       /databases/$(database)/documents/users/$(actsAs()) &&
+                      resource.data.checkoutItemRef != null &&
+                      isKioskVisitCheckout(get(/databases/$(database)/documents/checkouts/$(resource.data.checkoutItemRef[4])).data));
       allow write: if isAdmin();
     }
 
@@ -326,8 +361,10 @@ service cloud.firestore {
       // creating session. NB: for a `list` query the rule can only be
       // satisfied when the query itself filters on firebaseUid — which the
       // open-checkout lookup already does.
+      // A kiosk badge session reads only the visit at hand (#854,
+      // mayReadMemberCheckout).
       allow read: if isAdmin() ||
-                     isCheckoutPrincipalFor(resource.data.userId) ||
+                     mayReadMemberCheckout(resource.data) ||
                      (resource.data.userId == null && isAnonymousAuth() &&
                       resource.data.get('firebaseUid', null) == request.auth.uid);
 
@@ -422,7 +459,7 @@ service cloud.firestore {
         }
 
         allow read: if isAdmin() ||
-                       isCheckoutPrincipalFor(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data.userId) ||
+                       mayReadMemberCheckout(get(/databases/$(database)/documents/checkouts/$(checkoutId)).data) ||
                        isAnonParentCreator();
 
         // Create / update / delete: the principal of an open checkout, or the
@@ -483,12 +520,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Bills (server-side only writes, owner + admin reads)
+    // Bills (server-side only writes, owner + admin reads; a kiosk session
+    // only elevated — the kiosk never shows a bill to a badge tap, #854)
     match /bills/{billId} {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.userId ==
           /databases/$(database)/documents/users/$(request.auth.uid)) ||
-        (actsAs() != '' && resource.data.userId ==
+        (isElevatedActsAs() && resource.data.userId ==
           /databases/$(database)/documents/users/$(actsAs()));
       allow write: if false;
     }
@@ -509,17 +547,15 @@ service cloud.firestore {
     // direct client writes are denied. Reads are scoped to current members and
     // the owner so the family roster UI can populate.
     match /memberships/{membershipId} {
-      // Read: admin, any user listed in `members[]`, or a kiosk tag-tap
-      // session whose `actsAs()` principal is listed in `members[]`
-      // (issue #422 — so a tapped family member can resolve their own
-      // roster for the checkout quick-add). The tag branch is scoped to
-      // the tag owner's own membership; a synthetic session still cannot
-      // read a membership it doesn't belong to, and writes stay
-      // callable-only for everyone.
+      // Read: admin, any user listed in `members[]`, or an ELEVATED kiosk
+      // session whose `actsAs()` principal is listed in `members[]` (the
+      // account's membership page at the kiosk). A badge tap alone reads
+      // no membership (#854): the kiosk payload carries `activeMembership`.
+      // Writes stay callable-only for everyone.
       allow read: if isAdmin() ||
         (isSignedIn() &&
          /databases/$(database)/documents/users/$(request.auth.uid) in resource.data.members) ||
-        (actsAs() != '' &&
+        (isElevatedActsAs() &&
          /databases/$(database)/documents/users/$(actsAs()) in resource.data.members);
 
       // No client writes — callables only.

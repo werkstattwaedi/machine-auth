@@ -129,11 +129,12 @@ async function seedBillWithCheckout(
 function buildRequest(
   uid: string | null,
   data: Record<string, unknown>,
-  opts: { anonymous?: boolean; actsAs?: string } = {},
+  opts: { anonymous?: boolean; actsAs?: string; elevated?: boolean } = {},
 ): CallableRequest<unknown> {
   const token = {
     ...(opts.anonymous ? { firebase: { sign_in_provider: "anonymous" } } : {}),
     ...(opts.actsAs ? { actsAs: opts.actsAs } : {}),
+    ...(opts.elevated ? { elevatedUntil: Date.now() + 15 * 60_000 } : {}),
   };
   const auth = uid != null ? { uid, token } : undefined;
   return { data, auth } as unknown as CallableRequest<unknown>;
@@ -216,17 +217,31 @@ describe("invoice PDF storage (Integration, real Storage)", () => {
   });
 
   // The kiosk hides the download (BIL-15); the server serves the owner's
-  // badge session all the same.
-  it("getInvoiceDownloadUrl serves a kiosk session acting as the owner", async function () {
+  // kiosk session only after the step-up (#854) — a bill is history.
+  it("getInvoiceDownloadUrl serves an elevated kiosk session acting as the owner, not a badge tap alone", async function () {
     this.timeout(15000);
     const billId = "bill-kiosk";
     await seedBillWithCheckout(billId);
     await tryGeneratePdf(billId);
 
     const { url } = await getInvoiceDownloadUrlHandler(
-      buildRequest("kiosk-session-uid", { billId }, { actsAs: USER_ID }),
+      buildRequest(
+        "kiosk-session-uid",
+        { billId },
+        { actsAs: USER_ID, elevated: true },
+      ),
     );
     expect(url).to.be.a("string");
+
+    try {
+      await getInvoiceDownloadUrlHandler(
+        buildRequest("kiosk-session-uid", { billId }, { actsAs: USER_ID }),
+      );
+      throw new Error("expected permission-denied");
+    } catch (err) {
+      expect(err).to.be.instanceOf(HttpsError);
+      expect((err as HttpsError).code).to.equal("permission-denied");
+    }
   });
 
   // Issue #750: a guest bill has no account holder; the anonymous session

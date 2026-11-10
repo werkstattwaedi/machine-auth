@@ -44,6 +44,12 @@ export interface TokenUser {
    * client-side).
    */
   elevatedUntil?: number | null
+  /**
+   * Whether the profile is complete (ACC-2), server-derived: else the
+   * welcome onboarding runs first. A badge tap alone may not read the users
+   * doc (#854), so the kiosk takes this from the session payload.
+   */
+  profileComplete?: boolean
 }
 
 /**
@@ -82,6 +88,7 @@ type VerifyTagResponse =
       activeMembership?: boolean
       usageGroups?: string[]
       elevatedUntil?: number | null
+      profileComplete?: boolean
     }
   | {
       registered: false
@@ -241,6 +248,7 @@ export function useTokenAuth(
           activeMembership: data.activeMembership,
           usageGroups: data.usageGroups,
           elevatedUntil: data.elevatedUntil ?? null,
+          profileComplete: data.profileComplete,
         })
       } catch (err) {
         if (cancelled) return

@@ -3,15 +3,15 @@
 
 /**
  * `billingCall` — grouped callable for the invoice/checkout/payment domain
- * (#277). Routes getInvoiceDownloadUrl / getPaymentQrData /
+ * (#277). Routes getInvoiceDownloadUrl /
  * closeCheckoutAndGetPayment and the admin billing tools.
  */
 
 import { onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { dispatchRpc, type RpcHandler } from "../rpc/dispatch";
+import { getSameDayVisitsHandler } from "./same_day_visits";
 import { getInvoiceDownloadUrlHandler } from "./get_invoice_download_url";
-import { getPaymentQrDataHandler } from "./get_payment_qr_data";
 import { closeCheckoutAndGetPaymentHandler } from "./close_checkout_and_get_payment";
 import { prepareTerminalPaymentHandler, reportTerminalApprovalHandler } from "./terminal_payment";
 import { adminMarkBillsPaidHandler } from "./mark_bills_paid";
@@ -26,7 +26,6 @@ const resendApiKey = defineSecret("RESEND_API_KEY");
 
 const HANDLERS: Record<string, RpcHandler> = {
   getInvoiceDownloadUrl: getInvoiceDownloadUrlHandler,
-  getPaymentQrData: getPaymentQrDataHandler,
   closeCheckoutAndGetPayment: closeCheckoutAndGetPaymentHandler,
   // Prices a Wallee terminal attempt; reads params only, no Wallee secret.
   prepareTerminalPayment: prepareTerminalPaymentHandler,
@@ -36,6 +35,8 @@ const HANDLERS: Record<string, RpcHandler> = {
   correctCheckouts: correctCheckoutsHandler,
 
   addBadgeToCheckout: addBadgeToCheckoutHandler,
+  // Same-day waiver preview for a kiosk badge session (#854).
+  getSameDayVisits: getSameDayVisitsHandler,
 };
 
 export const billingCall = onCall(

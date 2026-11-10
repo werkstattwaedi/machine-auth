@@ -29,7 +29,7 @@ import {
   type DocumentReference,
 } from "firebase/firestore"
 import { rpcCallable, prewarm } from "@modules/lib/rpc"
-import { businessDayStart } from "@oww/shared"
+import { businessDayStart, type SameDayCheckout } from "@oww/shared"
 import {
   userRef,
   savedPersonRef,
@@ -81,7 +81,13 @@ import { registerKioskSessionGuard } from "./kiosk-session-guard"
 import type { PaymentMethod } from "@oww/shared"
 import type { PaymentChoice, PaymentData } from "./payment-methods"
 import { computeCheckoutCosts } from "./step-checkout"
-import { withSameDayWaiver, type PricedPerson } from "./same-day-waiver"
+import {
+  sameDayCheckoutFromWire,
+  toSameDayCheckout,
+  withSameDayWaiver,
+  type PricedPerson,
+  type SameDayVisitWire,
+} from "./same-day-waiver"
 import { runStartOver } from "./start-over"
 import { flushTerminalReport } from "./pending-terminal-report"
 import {
@@ -346,7 +352,13 @@ export function WizardProvider({
   const functions = useFunctions()
   const navigate = useNavigate()
   const auth = useFirebaseAuth()
-  const { user, userDoc, signOut, signInAnonymouslyIfNeeded } = useAuth()
+  const {
+    user,
+    userDoc,
+    signOut,
+    signInAnonymouslyIfNeeded,
+    isKioskElevated,
+  } = useAuth()
   const {
     tokenUser,
     isTagAuth,
@@ -358,7 +370,7 @@ export function WizardProvider({
   const bridge = useBridge()
 
   // The wizard's exit path hits billingCall (closeCheckoutAndGetPayment /
-  // getPaymentQrData); warm it while the visitor is still adding items
+  // prepareTerminalPayment); warm it while the visitor is still adding items
   // (ADR-0037).
   useEffect(() => {
     prewarm(functions, "billingCall")
@@ -543,9 +555,14 @@ export function WizardProvider({
   // Same-day usage-fee waiver preview (issue #268, ADR-0050): the owner's
   // visits closed since the start of this visit's opening business day —
   // an earlier visit opened that day can't have closed before it. Same
-  // index as the account usage page (userId, status, closedAt desc). The
-  // rules let both a signed-in member and a badge (`actsAs`) session list
-  // their own checkouts.
+  // index as the account usage page (userId, status, closedAt desc).
+  //
+  // A plain badge session can't run these queries: the rules hold it to the
+  // visit at hand (#854), and a checkout left open since an earlier day
+  // (forgotten last Monday, closed at the kiosk today) needs that day's
+  // visits. It asks `getSameDayVisits` for exactly those instead. A code
+  // sign-in is elevated and reads them like a member's login.
+  const plainBadge = isTagAuth && !isKioskElevated
   const openedAtMs = openCheckout?.created?.toMillis?.() ?? null
   const [fallbackOpenedAt] = useState(() => Date.now())
   const openedAt = useMemo(
@@ -553,9 +570,10 @@ export function WizardProvider({
     [openedAtMs, fallbackOpenedAt],
   )
   const openingDayStartMs = businessDayStart(openedAt).getTime()
+  const readsSameDay = !!identifiedUserRef && !plainBadge
   const { data: closedToday } = useCollection(
-    identifiedUserRef ? checkoutsCollection(db) : null,
-    ...(identifiedUserRef
+    readsSameDay ? checkoutsCollection(db) : null,
+    ...(readsSameDay && identifiedUserRef
       ? [
           where("userId", "==", identifiedUserRef),
           where("status", "==", "closed"),
@@ -567,24 +585,63 @@ export function WizardProvider({
   // Visits awaiting payment (#812) count too; they have no closedAt to
   // range on, and there are rarely more than one.
   const { data: awaitingPayment } = useCollection(
-    identifiedUserRef ? checkoutsCollection(db) : null,
-    ...(identifiedUserRef
+    readsSameDay ? checkoutsCollection(db) : null,
+    ...(readsSameDay && identifiedUserRef
       ? [
           where("userId", "==", identifiedUserRef),
           where("status", "==", "awaiting_payment"),
         ]
       : []),
   )
+  // Asked once per open checkout — before its create has landed, for today
+  // (the server would not find it yet). Tagged with what it was asked for,
+  // so a stale answer never prices another checkout.
+  const badgeVisitsKey =
+    plainBadge && ownerId
+      ? `${ownerId}:${checkoutCreateInFlight ? "" : (checkoutId ?? "")}`
+      : null
+  const [badgeVisits, setBadgeVisits] = useState<{
+    key: string
+    visits: SameDayCheckout[]
+  } | null>(null)
+  useEffect(() => {
+    if (!badgeVisitsKey) return
+    const askedCheckoutId = badgeVisitsKey.split(":")[1] || null
+    let cancelled = false
+    const getVisits = rpcCallable<
+      { checkoutId: string | null },
+      { visits: SameDayVisitWire[] }
+    >(functions, "billingCall", "getSameDayVisits")
+    getVisits({ checkoutId: askedCheckoutId }).then(
+      ({ data }) => {
+        if (cancelled) return
+        setBadgeVisits({
+          key: badgeVisitsKey,
+          visits: data.visits.map(sameDayCheckoutFromWire),
+        })
+      },
+      (err) => {
+        // Only the preview: the close waives on the server regardless.
+        console.error("getSameDayVisits failed:", err)
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [badgeVisitsKey, functions])
+  const earlierVisits = useMemo<SameDayCheckout[]>(
+    () =>
+      plainBadge
+        ? badgeVisits && badgeVisits.key === badgeVisitsKey
+          ? badgeVisits.visits
+          : []
+        : [...closedToday, ...awaitingPayment].map(toSameDayCheckout),
+    [plainBadge, badgeVisits, badgeVisitsKey, closedToday, awaitingPayment],
+  )
   const feePersons = useMemo(
     () =>
-      withSameDayWaiver(
-        persons,
-        ownerId,
-        openedAt,
-        [...closedToday, ...awaitingPayment],
-        checkoutId,
-      ),
-    [persons, ownerId, openedAt, closedToday, awaitingPayment, checkoutId],
+      withSameDayWaiver(persons, ownerId, openedAt, earlierVisits, checkoutId),
+    [persons, ownerId, openedAt, earlierVisits, checkoutId],
   )
 
   // Saved persons of the identified principal (account login or badge tap).

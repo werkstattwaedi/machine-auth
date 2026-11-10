@@ -103,9 +103,9 @@ function WizardLayout() {
 
   // Kiosk flavor (issue #595): an unclaimed member's badge tap or email-code
   // sign-in establishes the actsAs session first; the wizard then runs the
-  // same onboarding with callable-based persistence. The component reads the
-  // user doc itself (tag sessions have no auth-context userDoc) and renders
-  // null once the profile is complete.
+  // same onboarding with callable-based persistence. The component decides
+  // from the session payload (`profileComplete`, #854) and renders null once
+  // the profile is complete.
   const kioskTokenUser = useSyncExternalStore(
     subscribeKioskSession,
     getKioskTokenUser,
@@ -172,7 +172,7 @@ function WizardLayout() {
       {sessionKind === "tag" && kioskTokenUser && (
         <KioskWelcomeOnboarding
           key={kioskTokenUser.userId}
-          userId={kioskTokenUser.userId}
+          tokenUser={kioskTokenUser}
         />
       )}
     </WizardProvider>

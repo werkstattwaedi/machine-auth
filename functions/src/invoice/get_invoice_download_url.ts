@@ -9,6 +9,7 @@ import { downloadUrlFor } from "../util/storage_download";
 import { billDocumentOf } from "@oww/shared";
 import { billFileName, formatBillReference, type BillEntity } from "./types";
 import type { CheckoutEntity } from "../types/firestore_entities";
+import { isElevatedNow } from "../checkout/kiosk_session";
 
 /**
  * Build the options passed to `file.getSignedUrl(...)` for a bill download.
@@ -76,9 +77,10 @@ export const getInvoiceDownloadUrlHandler = async (
 
   // Authorisation:
   //  - the account holder: for real logins request.auth.uid equals the
-  //    user doc id; for kiosk tag-tap sessions the uid is synthetic and the
-  //    actsAs claim names the real user — match against either. The kiosk
-  //    never offers the download (BIL-15); that is the client's call, OR
+  //    user doc id; for kiosk sessions the uid is synthetic and the actsAs
+  //    claim names the real user — honoured only while ELEVATED (#854,
+  //    ADR-0041): a bill is account history, which a badge tap alone does
+  //    not reach. The kiosk never offers the download anyway (BIL-15), OR
   //  - for a guest bill (no account holder), the anonymous session that
   //    created its checkout (`firebaseUid`, issue #318). Signing the guest
   //    out ends that session, so a guest can fetch the PDF only during the
@@ -95,7 +97,9 @@ export const getInvoiceDownloadUrlHandler = async (
   const isOwner =
     bill.userId != null &&
     (bill.userId.id === request.auth.uid ||
-      (actsAs !== null && bill.userId.id === actsAs));
+      (actsAs !== null &&
+        bill.userId.id === actsAs &&
+        isElevatedNow(request.auth.token as Record<string, unknown>)));
   const isAnonCreator =
     bill.userId == null &&
     claims.firebase?.sign_in_provider === "anonymous" &&

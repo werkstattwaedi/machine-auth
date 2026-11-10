@@ -100,31 +100,10 @@ export interface UserDoc {
 }
 
 /**
- * Profile is complete when name and terms are filled. The postal address is
- * captured later (membership signup or profile edit) and is only *required*
- * for companies (`firma`), which always invoice and therefore need an address
- * + company name up front.
+ * Profile completeness (ACC-2) — one definition in `@oww/shared`, which the
+ * kiosk session payload uses too (#854).
  */
-export function isProfileComplete(
-  // Structural subset so both UserDoc flavors qualify — this context's
-  // resolved doc and the raw firestore-entities doc (the kiosk onboarding
-  // reads the latter directly; tag sessions have no auth-context doc).
-  userDoc: Pick<
-    UserDoc,
-    "firstName" | "lastName" | "userType" | "billingAddress"
-  > & { termsAcceptedAt?: unknown },
-): boolean {
-  if (!userDoc.firstName || !userDoc.lastName || !userDoc.termsAcceptedAt) {
-    return false
-  }
-  if (userDoc.userType === "firma") {
-    const addr = userDoc.billingAddress
-    if (!addr || !addr.street || !addr.zip || !addr.city || !addr.company) {
-      return false
-    }
-  }
-  return true
-}
+export { isProfileComplete } from "@oww/shared"
 
 /**
  * Provenance of the current Firebase Auth session.

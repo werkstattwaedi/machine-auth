@@ -3,11 +3,13 @@
 
 /**
  * Check Out preview of the same-day usage-fee waiver (issue #268,
- * ADR-0050): the wizard reads the owner's closed checkouts (and those
- * awaiting payment, #812) and asks the shared rule which persons are
- * already covered today, so the summary
- * shows the total the server will bill. The server decides again on
- * close — this only previews it.
+ * ADR-0050): the wizard gets the owner's earlier visits of the opening
+ * business day — closed or awaiting payment (#812) — and asks the shared
+ * rule which persons are already covered, so the summary shows the total
+ * the server will bill. A member's login reads them from Firestore; a kiosk
+ * badge session, which the rules hold to the visit at hand (#854), gets
+ * them from `getSameDayVisits`. The server decides again on close — this
+ * only previews it.
  */
 
 import {
@@ -27,7 +29,38 @@ export const WAIVED_TODAY_LABEL = "heute bereits abgerechnet"
 /** A roster person as the summary prices them. */
 export type PricedPerson = CheckoutPerson & { entryFeeWaivedToday?: boolean }
 
-function toSameDayCheckout(c: CheckoutDoc & { id: string }): SameDayCheckout {
+/** A visit as `getSameDayVisits` returns it (dates as epoch ms). */
+export interface SameDayVisitWire {
+  id: string
+  status: string | null
+  usageType: string | null
+  created: number | null
+  closedAt: number | null
+  persons: {
+    name: string | null
+    userType: string
+    userRef: { id: string } | null
+    usageType: string | null
+  }[]
+}
+
+export function sameDayCheckoutFromWire(v: SameDayVisitWire): SameDayCheckout {
+  return {
+    id: v.id,
+    status: v.status,
+    usageType: v.usageType as UsageType | null,
+    created: v.created != null ? new Date(v.created) : null,
+    closedAt: v.closedAt != null ? new Date(v.closedAt) : null,
+    persons: v.persons.map((p) => ({
+      ...p,
+      usageType: p.usageType as UsageType | null,
+    })),
+  }
+}
+
+export function toSameDayCheckout(
+  c: CheckoutDoc & { id: string },
+): SameDayCheckout {
   // Awaiting payment (#812): the terminal charged what the approved attempt
   // priced, and the approval report stands in for the close.
   const approved = c.status === "awaiting_payment" && c.terminalApproval
@@ -49,14 +82,14 @@ function toSameDayCheckout(c: CheckoutDoc & { id: string }): SameDayCheckout {
 /**
  * `persons` with `entryFeeWaivedToday` set as the server would set it on
  * close. `openedAt` is the open checkout's `created` (now when it has none
- * yet); `closedCheckouts` the owner's closed checkouts and those awaiting
- * payment (#812).
+ * yet); `earlierCheckouts` the owner's closed checkouts and those awaiting
+ * payment (#812), at least those of the opening business day.
  */
 export function withSameDayWaiver(
   persons: CheckoutPerson[],
   ownerId: string | null,
   openedAt: Date,
-  closedCheckouts: readonly (CheckoutDoc & { id: string })[],
+  earlierCheckouts: readonly SameDayCheckout[],
   currentCheckoutId: string | null,
 ): PricedPerson[] {
   const covered = sameDayCoveredPersons({
@@ -69,7 +102,7 @@ export function withSameDayWaiver(
     })),
     ownerId,
     openedAt,
-    earlierCheckouts: closedCheckouts.map(toSameDayCheckout),
+    earlierCheckouts,
     currentCheckoutId,
   })
   return persons.map((p, i) =>

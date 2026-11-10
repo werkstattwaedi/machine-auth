@@ -507,9 +507,14 @@ describe("cross-user: users", () => {
     await assertSucceeds(getDoc(doc(authedDb("alice"), "users", "alice")))
   })
 
-  it("allows tag-tap-as-alice reading alice's user doc (kiosk pre-fill)", async () => {
+  // #854: a badge tap alone reads no users doc (the kiosk payload carries
+  // what the visit needs); the step-up opens it.
+  it("allows an elevated tag session as alice reading alice's user doc, not a plain one", async () => {
     await seedUser("alice")
-    await assertSucceeds(getDoc(doc(tagSessionDb("alice"), "users", "alice")))
+    await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("alice"), "users", "alice")),
+    )
+    await assertFails(getDoc(doc(tagSessionDb("alice"), "users", "alice")))
   })
 
   it("allows admin reading any user doc", async () => {
@@ -1276,9 +1281,12 @@ describe("cross-user: bills", () => {
     await assertSucceeds(getDoc(doc(authedDb("alice"), "bills", "b1")))
   })
 
-  it("allows tag-tap-as-alice reading alice's bill", async () => {
+  it("allows an elevated tag session as alice reading alice's bill, not a plain one (#854)", async () => {
     await seedBill("b1", "alice")
-    await assertSucceeds(getDoc(doc(tagSessionDb("alice"), "bills", "b1")))
+    await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("alice"), "bills", "b1")),
+    )
+    await assertFails(getDoc(doc(tagSessionDb("alice"), "bills", "b1")))
   })
 
   it("allows admin reading any bill", async () => {
@@ -1341,9 +1349,14 @@ describe("cross-user: usage_machine", () => {
     )
   })
 
-  it("allows tag-tap-as-alice reading alice's usage", async () => {
+  // #854: a plain badge session reads only machine time on the visit at
+  // hand (kiosk-session-rules.integration.test.ts); this one is unlinked.
+  it("allows an elevated tag session as alice reading alice's usage, not a plain one", async () => {
     await seedUsageMachine("u1", "alice")
     await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("alice"), "usage_machine", "u1")),
+    )
+    await assertFails(
       getDoc(doc(tagSessionDb("alice"), "usage_machine", "u1")),
     )
   })
@@ -1455,17 +1468,25 @@ describe("cross-user: memberships", () => {
   // "tag sessions excluded" exclusion — but only for the tag owner's own
   // membership; the boundary negative immediately below proves an
   // unrelated membership is still denied.
-  it("allows tag-tap-as-alice reading alice's own membership (issue #422)", async () => {
+  // #854: the kiosk reads memberships only on the account's membership
+  // page, behind the step-up; a badge tap alone reads none.
+  it("allows an elevated tag session as alice reading alice's own membership, not a plain one", async () => {
     await seedUser("alice")
     await seedMembership("m1", "alice", "family", ["alice"])
-    await assertSucceeds(getDoc(doc(tagSessionDb("alice"), "memberships", "m1")))
+    await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("alice"), "memberships", "m1")),
+    )
+    await assertFails(getDoc(doc(tagSessionDb("alice"), "memberships", "m1")))
   })
 
-  it("allows tag-tap-as-bob (family co-member) reading the shared membership (issue #422)", async () => {
+  it("allows an elevated tag session as bob (family co-member) reading the shared membership", async () => {
     await seedUser("alice")
     await seedUser("bob")
     await seedMembership("m1", "alice", "family", ["alice", "bob"])
-    await assertSucceeds(getDoc(doc(tagSessionDb("bob"), "memberships", "m1")))
+    await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("bob"), "memberships", "m1")),
+    )
+    await assertFails(getDoc(doc(tagSessionDb("bob"), "memberships", "m1")))
   })
 
   it("denies tag-tap-as-bob reading alice's UNRELATED membership (boundary intact, #422)", async () => {
@@ -1477,7 +1498,7 @@ describe("cross-user: memberships", () => {
     await assertCrossUserDenied(
       "memberships/{id} read leaked across tag-tap actsAs to unrelated membership",
       "firestore.rules: memberships read (actsAs in members)",
-      () => getDoc(doc(tagSessionDb("bob"), "memberships", "m1")),
+      () => getDoc(doc(elevatedTagSessionDb("bob"), "memberships", "m1")),
     )
   })
 
@@ -1803,11 +1824,14 @@ describe("cross-user: family-roster join on users", () => {
   // Issue #422: the same family-roster join is honoured for a kiosk
   // tag-tap session via shareActiveMembershipActingAs — so a tapped user
   // can resolve their co-members' display names for the quick-add chips.
-  it("allows tag-tap-as-bob reading a family co-member's user doc (issue #422)", async () => {
+  it("allows an elevated tag session as bob reading a family co-member's user doc, not a plain one (#854)", async () => {
     await seedUser("alice")
     await seedUser("bob")
     await seedMembership("m1", "alice", "family", ["alice", "bob"])
-    await assertSucceeds(getDoc(doc(tagSessionDb("bob"), "users", "alice")))
+    await assertSucceeds(
+      getDoc(doc(elevatedTagSessionDb("bob"), "users", "alice")),
+    )
+    await assertFails(getDoc(doc(tagSessionDb("bob"), "users", "alice")))
   })
 
   it("denies tag-tap-as-bob reading a non-co-member's user doc (boundary intact, #422)", async () => {
@@ -1818,7 +1842,7 @@ describe("cross-user: family-roster join on users", () => {
     await assertCrossUserDenied(
       "users/{id} read via family-roster denied for unrelated tag-tap session",
       "firestore.rules: shareActiveMembershipActingAs join",
-      () => getDoc(doc(tagSessionDb("bob"), "users", "alice")),
+      () => getDoc(doc(elevatedTagSessionDb("bob"), "users", "alice")),
     )
   })
 

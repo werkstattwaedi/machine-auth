@@ -78,12 +78,12 @@ export const RpcMethod = {
   ],
   billingCall: [
     "getInvoiceDownloadUrl",
-    "getPaymentQrData",
     "closeCheckoutAndGetPayment",
     "prepareTerminalPayment",
     "reportTerminalApproval",
     "adminMarkBillsPaid",
     "correctCheckouts",
+    "getSameDayVisits",
   ],
 
   catalogCall: [
