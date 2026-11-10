@@ -53,7 +53,9 @@ function Harness({
   onCommit = async () => {},
   onBack = () => {},
   onChoice = () => {},
+  shownEmail,
 }: {
+  shownEmail?: (email: string) => string
   fee?: number
   methods?: PaymentMethod[]
   onCommit?: (choice: PaymentChoice) => Promise<void>
@@ -80,6 +82,7 @@ function Harness({
       submitError={null}
       items={[] as CheckoutItemLocal[]}
       config={config(fee)}
+      shownEmail={shownEmail}
     />
   )
 }
@@ -95,6 +98,17 @@ describe("StepCheckout — payment choice (#750, #833)", () => {
     expect(screen.getByTestId("payment-option-raisenow")).toBeTruthy()
     expect(screen.queryByTestId("payment-frame")).toBeNull()
     expect(screen.queryByRole("button", { name: /Weiter/ })).toBeNull()
+  })
+
+  it("names the payer's address the way the session may see it (ACC-10)", () => {
+    render(<Harness shownEmail={(e) => `masked(${e})`} />)
+    fireEvent.click(screen.getByTestId("payment-option-rechnung"))
+    expect(screen.getByTestId("payment-frame").textContent).toContain(
+      "masked(max@example.com)",
+    )
+    expect(screen.getByTestId("payment-frame").textContent).not.toContain(
+      " max@example.com",
+    )
   })
 
   it("choosing a method shows step 4 in place; its button commits that method", () => {

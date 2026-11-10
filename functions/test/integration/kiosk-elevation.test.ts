@@ -29,8 +29,6 @@ import {
   handleGetKioskElevationOptions,
   handleRequestKioskElevation,
   handleVerifyKioskElevation,
-  maskEmail,
-  maskPhone,
 } from "../../src/checkout/kiosk_elevation";
 import { handleVerifyLoginCodeKiosk } from "../../src/checkout/verify_login_code_kiosk";
 import { handleExchangeKioskSession } from "../../src/checkout/exchange_kiosk_session";
@@ -142,14 +140,6 @@ describe("Kiosk step-up elevation (Integration)", () => {
     const auth = getAuth();
     const users = await auth.listUsers();
     await Promise.all(users.users.map((u) => auth.deleteUser(u.uid)));
-  });
-
-  describe("masking", () => {
-    it("masks e-mail and phone for the interstitial", () => {
-      expect(maskEmail("michschn@gmail.com")).to.equal("mi•••@gm•••.com");
-      expect(maskEmail("ab@c.ch")).to.equal("ab•••@c•••.ch");
-      expect(maskPhone("+41791234528")).to.equal("+41 79 ••• •• 28");
-    });
   });
 
   describe("mint paths", () => {

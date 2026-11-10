@@ -51,6 +51,7 @@ vi.mock("@modules/lib/use-bridge", () => ({
 type StepProps = {
   paymentMethods: string[]
   onCommit: (choice: string) => Promise<void>
+  shownEmail?: (email: string) => string
 }
 let stepProps: StepProps | null = null
 vi.mock("@/components/checkout/step-checkout", () => ({
@@ -59,16 +60,25 @@ vi.mock("@/components/checkout/step-checkout", () => ({
     return <div data-testid="step-checkout" />
   },
 }))
+// A badge session without a code masks the addresses (ACC-10); the mask
+// itself is `maskEmail`'s, tested in @oww/shared.
+let maskShown = false
+vi.mock("@/components/checkout/use-shown-email", () => ({
+  useShownEmail: () => (email: string) => (maskShown ? `masked(${email})` : email),
+}))
 vi.mock("@/components/checkout/payment-confirmation", () => ({
   PaymentConfirmation: ({
     choice,
+    copy,
     onQrOpenChange,
   }: {
     choice: string
+    copy: { email: string }
     onQrOpenChange: (open: boolean) => void
   }) => (
     <div>
       <div data-testid="confirmation">{choice}</div>
+      <div data-testid="confirmation-email">{copy.email}</div>
       <button onClick={() => onQrOpenChange(true)}>qr-open</button>
       <button onClick={() => onQrOpenChange(false)}>qr-close</button>
     </div>
@@ -217,6 +227,37 @@ describe("Check Out route — commit (#750)", () => {
     await stepProps!.onCommit("raisenow")
     expect(open).toHaveBeenCalledOnce()
     expect(open.mock.calls[0][0]).toBe(PAYMENT.paylinkUrl)
+  })
+
+  it("a badge session without a code sees the payer's address masked (ACC-10)", async () => {
+    maskShown = true
+    try {
+      mockUseWizardContext.mockReturnValue(
+        ctx({
+          paymentChoice: "rechnung",
+          paymentData: { ...PAYMENT, paymentMethod: "rechnung" },
+        }),
+      )
+      await act(async () => {
+        renderRoute()
+      })
+      expect(screen.getByTestId("confirmation-email").textContent).toBe(
+        `masked(${PAYMENT.payerEmail})`,
+      )
+    } finally {
+      maskShown = false
+    }
+  })
+
+  it("hands StepCheckout the same masking for the address before the commit", () => {
+    maskShown = true
+    try {
+      mockUseWizardContext.mockReturnValue(ctx())
+      renderRoute()
+      expect(stepProps!.shownEmail!("a@b.ch")).toBe("masked(a@b.ch)")
+    } finally {
+      maskShown = false
+    }
   })
 
   it("once committed, shows the confirmation of the method the server names", async () => {

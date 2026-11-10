@@ -43,10 +43,6 @@ interface StepCheckinProps {
    *  instead of array index — the signed-in user can be removed and
    *  re-added in any order. */
   signedInUserId?: string | null
-  /** Email of the signed-in user — surfaced in the compact identity
-   *  strip so the page doesn't redundantly show the editable
-   *  PersonCard fields for the user themselves. */
-  signedInEmail?: string | null
   /** True when the signed-in user has an active membership; toggles the
    *  "Vereinsmitglied" suffix on the identity strip. */
   isMember?: boolean
@@ -128,7 +124,7 @@ const FOOTER_PRIMARY =
 const FOOTER_SECONDARY =
   "inline-flex h-[42px] items-center gap-2 rounded-md border border-cog-teal bg-white px-5 text-[15px] font-semibold text-cog-teal-dark transition-colors hover:bg-cog-teal-light disabled:opacity-60 disabled:cursor-not-allowed"
 
-export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, signedInEmail, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, ownerUsageGroups = [], config = null, feePersons = [], savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
+export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAccountLoggedIn, signedInUserId, isMember, onAdvance, onStartVisit, visitStarted, autoStartMs, onCountdownCancel, tagAuthLoading, tagAuthError, picc, ownerUserId, ownerUsageGroups = [], config = null, feePersons = [], savedPersons = [], onDeleteSavedPerson }: StepCheckinProps) {
   // touched: personId → field → true
   const [touched, setTouched] = useState<Record<string, Record<string, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -306,19 +302,16 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
               key={person.id}
               person={person}
               index={i}
-              email={
-                isSaved
-                  ? null
-                  : isSignedInUser
-                    ? (signedInEmail ?? person.email)
-                    : person.email
-              }
+              // No e-mail line (#668, CHK-55): the header menu shows the
+              // account's, and at the kiosk a badge alone must not reveal
+              // anyone's. The identified owner (account or badge) carries the
+              // membership label instead; everyone else their user type.
               suffix={
-                isSaved
-                  ? USER_TYPE_LABELS[person.userType]
-                  : isSignedInUser && isMember
+                isSignedInUser || isOwnerLine
+                  ? isMember
                     ? "Vereinsmitglied"
                     : null
+                  : USER_TYPE_LABELS[person.userType]
               }
               usage={
                 <PersonUsageColumns
@@ -629,21 +622,18 @@ export function StepCheckin({ persons, personsDispatch, isAnonymous, kiosk, isAc
 function IdentityStrip({
   person,
   index,
-  email,
   suffix,
   usage,
   onRemove,
 }: {
   person: CheckoutPerson
   index: number
-  email: string | null
   suffix: string | null
   /** The Nutzungsart + fee columns (issue #605). */
   usage: React.ReactNode
   onRemove?: () => void
 }) {
   const name = `${person.firstName} ${person.lastName}`.trim() || "—"
-  const subtitleParts = [email, suffix].filter(Boolean) as string[]
   return (
     <div
       data-testid="identity-strip"
@@ -657,9 +647,9 @@ function IdentityStrip({
         <div className="truncate font-heading text-lg font-bold text-foreground">
           {name}
         </div>
-        {subtitleParts.length > 0 && (
+        {suffix && (
           <div className="mt-0.5 text-sm text-muted-foreground sm:truncate">
-            {subtitleParts.join(" · ")}
+            {suffix}
           </div>
         )}
       </div>

@@ -269,7 +269,6 @@ function CheckinRoute() {
         kiosk={ctx.kiosk}
         isAccountLoggedIn={ctx.isAccountLoggedIn}
         signedInUserId={ctx.identifiedUserDoc?.id ?? null}
-        signedInEmail={ctx.identifiedUserDoc?.email ?? null}
         // The identified principal (account OR tag-tap badge user) owns the
         // checkout and always stays on the roster.
         ownerUserId={ctx.identifiedUserRef?.id ?? null}

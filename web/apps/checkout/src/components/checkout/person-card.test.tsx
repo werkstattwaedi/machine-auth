@@ -73,6 +73,19 @@ describe("PersonCard billing address", () => {
     expect(screen.queryByDisplayValue("8000")).toBeNull()
     expect(screen.queryByDisplayValue("Zürich")).toBeNull()
   })
+
+  it("shows no e-mail address when read-only (#668, CHK-55)", () => {
+    render(
+      <PersonCard
+        person={makePerson({ isPreFilled: true })}
+        index={0}
+        showTerms={false}
+        dispatch={noop}
+      />,
+    )
+    expect(screen.getByText("Max")).toBeTruthy()
+    expect(screen.queryByText("max@example.com")).toBeNull()
+  })
 })
 
 // Issue #663: every input must carry an accessible name that includes the

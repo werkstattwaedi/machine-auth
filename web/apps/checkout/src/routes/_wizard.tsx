@@ -10,6 +10,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router"
 import { z } from "zod/v4/mini"
+import { useShownEmail } from "@/components/checkout/use-shown-email"
 import { signOut } from "firebase/auth"
 import { useAuth, isProfileComplete } from "@modules/lib/auth"
 import { useFirebaseAuth } from "@modules/lib/firebase-context"
@@ -62,6 +63,7 @@ export const Route = createFileRoute("/_wizard")({
 function WizardLayout() {
   const auth = useFirebaseAuth()
   const { user, userDoc, loading, userDocLoading, sessionKind } = useAuth()
+  const shownEmail = useShownEmail()
   const { picc, cmac, kiosk } = Route.useSearch()
   const isKiosk = kiosk !== undefined
   const { data: pricingConfig, loading: loadingConfig, configError } =
@@ -144,9 +146,12 @@ function WizardLayout() {
       ? `${kioskTokenUser.firstName ?? ""} ${kioskTokenUser.lastName ?? ""}`.trim() || null
       : null)
   const headerUserId = userDoc?.id ?? kioskTokenUser?.userId
+  // Issue #668: a badge session without a code shows the address masked,
+  // as the step-up dialog does — a found badge must not reveal it (ACC-9).
+  const kioskEmail = kioskTokenUser?.email || null
   const headerEmail =
     sessionKind === "tag"
-      ? kioskTokenUser?.email ?? null
+      ? kioskEmail && shownEmail(kioskEmail)
       : user?.email ?? userDoc?.email ?? null
 
   return (

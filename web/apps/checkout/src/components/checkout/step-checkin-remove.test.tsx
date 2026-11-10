@@ -58,7 +58,6 @@ function renderCheckin(persons: CheckoutPerson[]) {
       kiosk={false}
       isAccountLoggedIn={true}
       signedInUserId="u-self"
-      signedInEmail="max@example.com"
       isMember={false}
     />,
   )

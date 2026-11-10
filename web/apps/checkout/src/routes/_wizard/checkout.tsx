@@ -19,6 +19,7 @@ import { PaymentConfirmation } from "@/components/checkout/payment-confirmation"
 import { AmberBox } from "@/components/checkout/terminal-payment-panel"
 import { CheckoutFinishBar } from "@/components/checkout/checkout-finish-bar"
 import { useIsPhone } from "@/components/checkout/use-is-phone"
+import { useShownEmail } from "@/components/checkout/use-shown-email"
 import {
   firstOfNextMonth,
   paymentSlots,
@@ -38,11 +39,14 @@ export const Route = createFileRoute("/_wizard/checkout")({
 // open checkout exists, except right after this session committed one.
 function CheckoutRoute() {
   const ctx = useWizardContext()
+  // Bezahlen names where the document goes; a badge session without a code
+  // sees that address masked (ACC-10, #668).
+  const shownEmail = useShownEmail()
   if (ctx.terminal?.phase === "approved") {
     return (
       <TerminalDone
         amount={ctx.terminal.amount ?? 0}
-        email={ctx.terminal.payerEmail}
+        email={shownEmail(ctx.terminal.payerEmail)}
         reportFailed={ctx.terminal.reportFailed === true}
       />
     )
@@ -56,6 +60,7 @@ function CheckoutRoute() {
 function CheckoutOpen() {
   const navigate = useNavigate()
   const ctx = useWizardContext()
+  const shownEmail = useShownEmail()
   const bridge = useBridge()
   // Set by /visit's "Zum Checkout" (see checkout-history-state.ts). Any
   // other arrival opens the Vereinsmitgliedschaft section (with its address
@@ -127,6 +132,7 @@ function CheckoutOpen() {
       config={ctx.pricingConfig}
       membershipCatalogId={ctx.membershipCatalogId}
       badgeCatalogId={ctx.badgeCatalogId}
+      shownEmail={shownEmail}
       onPrimaryBillingChange={(updates) => {
         const primary = ctx.persons[0]
         if (primary) {
@@ -161,6 +167,7 @@ function CheckoutDone({
   const navigate = useNavigate()
   const bridge = useBridge()
   const isPhone = useIsPhone()
+  const shownEmail = useShownEmail()
   const [qrOpen, setQrOpen] = useState(false)
   // Unfolding the QR slip stops the kiosk countdown for good: someone is
   // scanning it, and folding it again must not restart the clock.
@@ -201,7 +208,7 @@ function CheckoutDone({
         choice={committed}
         amount={amount}
         paymentData={paymentData}
-        copy={{ email: paymentData.payerEmail, monthlyDate: firstOfNextMonth() }}
+        copy={{ email: shownEmail(paymentData.payerEmail), monthlyDate: firstOfNextMonth() }}
         ownDevice={!ctx.kiosk}
         isPhone={isPhone}
         qrOpen={qrOpen}
