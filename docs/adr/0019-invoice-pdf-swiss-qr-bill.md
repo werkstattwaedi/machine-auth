@@ -64,7 +64,7 @@ Uploaded to `invoices/{billId}.pdf` in the default bucket. Payment recipient det
 
 ### Client-side QR bill display
 
-A `getPaymentQrData` callable returns the SPC-format QR payload, creditor details (IBAN, name, address), SCOR reference, payer name, and amount. The checkout app renders these in a QR bill-style layout with a Swiss cross overlay. See ADR-0020 for the dual payment UX decision.
+A `getPaymentQrData` callable (since removed, #856: the close callable returns the same data via `buildPaymentData`) returns the SPC-format QR payload, creditor details (IBAN, name, address), SCOR reference, payer name, and amount. The checkout app renders these in a QR bill-style layout with a Swiss cross overlay. See ADR-0020 for the dual payment UX decision.
 
 ## Consequences
 

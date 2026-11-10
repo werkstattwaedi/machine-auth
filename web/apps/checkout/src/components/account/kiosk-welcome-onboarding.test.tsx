@@ -96,6 +96,20 @@ describe("KioskWelcomeOnboarding", () => {
     expect(getDoc).not.toHaveBeenCalled()
   })
 
+  it("stays on the welcome step when reading the profile fails", async () => {
+    getDoc.mockRejectedValue(new Error("permission-denied"))
+    const user = userEvent.setup()
+    render(<KioskWelcomeOnboarding tokenUser={TOKEN_USER} />)
+
+    await user.click(screen.getByTestId("welcome-next"))
+    const [onElevated] = ensureElevated.mock.calls[0]
+    onElevated()
+
+    await waitFor(() => expect(getDoc).toHaveBeenCalled())
+    expect(screen.getByText(/Schritt 1 von 4 ·/)).toBeInTheDocument()
+    expect(screen.queryByTestId("welcome-firstname")).toBeNull()
+  })
+
   it("renders nothing when the payload says the profile is complete", () => {
     render(
       <KioskWelcomeOnboarding

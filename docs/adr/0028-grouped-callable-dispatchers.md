@@ -50,7 +50,7 @@ functions, one per domain:
 |---|---|
 | `authCall` | createUser, requestLoginCode, verifyLoginCode, verifyMagicLink, resolveTag, verifyTagCheckout |
 | `membershipCall` | purchase/invite/inviteInfo/listMyInvites/accept/acceptNewAccount/reject/revoke/remove(+self-leave)/cancel/cancelAutoRenew + the two admin ops |
-| `billingCall` | getInvoiceDownloadUrl, getPaymentQrData, closeCheckoutAndGetPayment, acknowledgeBill (removed 2026-10, #757) |
+| `billingCall` | getInvoiceDownloadUrl, closeCheckoutAndGetPayment, getSameDayVisits (#856), getPaymentQrData (removed 2026-11, #856), acknowledgeBill (removed 2026-10, #757) |
 | `catalogCall` | upsertCatalogItem, getPriceListPdfUrl |
 
 The wire contract is a `{ method, payload }` envelope. `dispatchRpc`

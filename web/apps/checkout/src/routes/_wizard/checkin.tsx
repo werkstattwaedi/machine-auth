@@ -88,8 +88,10 @@ function CheckinRoute() {
     subscribeKioskSession,
     getKioskTokenUser,
   )
-  const profileComplete = candidate
-    ? (kioskTokenUser?.profileComplete ?? null)
+  // A session minted before the payload carried the flag counts as "no
+  // countdown" (like the onboarding skipping it) rather than undecided.
+  const profileComplete = candidate && kioskTokenUser
+    ? kioskTokenUser.profileComplete === true
     : null
   const [countdown, setCountdown] = useState<CountdownState>("undecided")
   if (

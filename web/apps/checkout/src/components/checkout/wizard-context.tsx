@@ -594,29 +594,28 @@ export function WizardProvider({
       : []),
   )
   // Asked once per open checkout — before its create has landed, for today
-  // (the server would not find it yet). Tagged with what it was asked for,
-  // so a stale answer never prices another checkout.
-  const badgeVisitsKey =
-    plainBadge && ownerId
-      ? `${ownerId}:${checkoutCreateInFlight ? "" : (checkoutId ?? "")}`
-      : null
+  // (the server would not find it yet). The answer is tagged with what it
+  // was asked for, so a stale one never prices another checkout.
+  const badgeVisitsOwner = plainBadge ? ownerId : null
+  const badgeVisitsCheckoutId = checkoutCreateInFlight ? null : checkoutId
   const [badgeVisits, setBadgeVisits] = useState<{
-    key: string
+    ownerId: string
+    checkoutId: string | null
     visits: SameDayCheckout[]
   } | null>(null)
   useEffect(() => {
-    if (!badgeVisitsKey) return
-    const askedCheckoutId = badgeVisitsKey.split(":")[1] || null
+    if (!badgeVisitsOwner) return
     let cancelled = false
     const getVisits = rpcCallable<
       { checkoutId: string | null },
       { visits: SameDayVisitWire[] }
     >(functions, "billingCall", "getSameDayVisits")
-    getVisits({ checkoutId: askedCheckoutId }).then(
+    getVisits({ checkoutId: badgeVisitsCheckoutId }).then(
       ({ data }) => {
         if (cancelled) return
         setBadgeVisits({
-          key: badgeVisitsKey,
+          ownerId: badgeVisitsOwner,
+          checkoutId: badgeVisitsCheckoutId,
           visits: data.visits.map(sameDayCheckoutFromWire),
         })
       },
@@ -628,15 +627,24 @@ export function WizardProvider({
     return () => {
       cancelled = true
     }
-  }, [badgeVisitsKey, functions])
+  }, [badgeVisitsOwner, badgeVisitsCheckoutId, functions])
   const earlierVisits = useMemo<SameDayCheckout[]>(
     () =>
       plainBadge
-        ? badgeVisits && badgeVisits.key === badgeVisitsKey
+        ? badgeVisits &&
+          badgeVisits.ownerId === badgeVisitsOwner &&
+          badgeVisits.checkoutId === badgeVisitsCheckoutId
           ? badgeVisits.visits
           : []
         : [...closedToday, ...awaitingPayment].map(toSameDayCheckout),
-    [plainBadge, badgeVisits, badgeVisitsKey, closedToday, awaitingPayment],
+    [
+      plainBadge,
+      badgeVisits,
+      badgeVisitsOwner,
+      badgeVisitsCheckoutId,
+      closedToday,
+      awaitingPayment,
+    ],
   )
   const feePersons = useMemo(
     () =>

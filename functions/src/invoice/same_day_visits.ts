@@ -94,8 +94,14 @@ export async function handleGetSameDayVisits(
     }
     const snap = await db.collection("checkouts").doc(checkoutId).get();
     const checkout = snap.data() as CheckoutEntity | undefined;
-    // Same answer for a missing and a foreign checkout: no existence oracle.
-    if (!checkout || checkout.userId?.id !== ownerId) {
+    // Same answer for a missing, a foreign and a no-longer-open checkout:
+    // no existence oracle, and only the visit at hand — a closed checkout's
+    // id would otherwise open that day's history to a badge tap alone.
+    if (
+      !checkout ||
+      checkout.userId?.id !== ownerId ||
+      checkout.status !== "open"
+    ) {
       throw new HttpsError("permission-denied", "Access denied");
     }
     openedAt = checkout.created?.toDate?.() ?? openedAt;

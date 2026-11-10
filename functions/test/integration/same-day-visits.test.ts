@@ -140,12 +140,19 @@ describe("getSameDayVisits (Integration)", () => {
     expect(visits.map((v) => v.id)).to.deep.equal(["co-today"]);
   });
 
-  it("refuses someone else's checkout and a missing one alike", async () => {
+  it("refuses someone else's checkout, a missing one and a closed one alike", async () => {
     await seedCheckout("co-bob", getFirestore().doc("users/bob"), {
       status: "open",
       created: Timestamp.now(),
     });
-    for (const checkoutId of ["co-bob", "co-missing"]) {
+    // The owner's own closed checkout: its id must not open that day's
+    // history to a badge tap alone (#856 review).
+    await seedCheckout("co-old", getFirestore().doc("users/alice"), {
+      status: "closed",
+      created: at(LAST_MONDAY, 0),
+      closedAt: at(LAST_MONDAY, 2),
+    });
+    for (const checkoutId of ["co-bob", "co-missing", "co-old"]) {
       try {
         await handleGetSameDayVisits(badgeRequest("alice", { checkoutId }));
         throw new Error("expected permission-denied");

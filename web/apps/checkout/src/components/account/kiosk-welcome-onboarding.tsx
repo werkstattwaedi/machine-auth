@@ -51,6 +51,14 @@ export function KioskWelcomeOnboarding({ tokenUser }: { tokenUser: TokenUser }) 
   const { mutate, loading: saving } = useAsyncMutation({
     context: "checkout.kioskOnboarding",
   })
+  // The hook owns the toast (ADR-0025): a failed read leaves the person on
+  // step 1 with a message instead of a silent dead button.
+  const { mutate: load, loading: loadingProfile } = useAsyncMutation<
+    ProfileFields | null
+  >({
+    context: "checkout.kioskOnboardingProfile",
+    errorMessage: "Dein Profil konnte nicht geladen werden. Bitte versuche es nochmals.",
+  })
   const { ensureElevated } = useKioskElevation()
 
   // Latched at mount (the component is keyed per user): accepting terms in
@@ -103,15 +111,21 @@ export function KioskWelcomeOnboarding({ tokenUser }: { tokenUser: TokenUser }) 
       ),
     )
     if (!elevated) return null
-    const user = (await getDoc(userRef(db, tokenUser.userId))).data()
-    return {
-      firstName: user?.firstName ?? tokenUser.firstName ?? "",
-      lastName: user?.lastName ?? tokenUser.lastName ?? "",
-      company: user?.billingAddress?.company ?? "",
-      street: user?.billingAddress?.street ?? "",
-      zip: user?.billingAddress?.zip ?? "",
-      city: user?.billingAddress?.city ?? "",
-      phone: user?.phone ?? "",
+    try {
+      return await load(async () => {
+        const user = (await getDoc(userRef(db, tokenUser.userId))).data()
+        return {
+          firstName: user?.firstName ?? tokenUser.firstName ?? "",
+          lastName: user?.lastName ?? tokenUser.lastName ?? "",
+          company: user?.billingAddress?.company ?? "",
+          street: user?.billingAddress?.street ?? "",
+          zip: user?.billingAddress?.zip ?? "",
+          city: user?.billingAddress?.city ?? "",
+          phone: user?.phone ?? "",
+        }
+      })
+    } catch {
+      return null
     }
   }
 
@@ -131,7 +145,7 @@ export function KioskWelcomeOnboarding({ tokenUser }: { tokenUser: TokenUser }) 
       isFirma={tokenUser.userType === "firma"}
       isFamilie={false}
       membership={null}
-      saving={saving}
+      saving={saving || loadingProfile}
       persistProfile={persistProfile}
       persistTerms={persistTerms}
       resourcesStep={<StepResourcesKiosk email={email} />}
