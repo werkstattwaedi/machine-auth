@@ -22,8 +22,9 @@ an admin links course leaders and participants is in [admin.md](admin.md)
 
 - **CRS-5** For each participant the course page shows whether they have a linked account, a badge and, on a course that gives a permission (CRS-17), that permission, and names the next step: linking an account, else assigning a badge if they have none — except for the course leader's own account (CRS-8) and for a participant whose permission choice is Nein (CRS-10) who doesn't already hold the permission. — #842
 - **CRS-6** A participant without a linked account shows their edoobox e-mail, which the course leader can correct for the match only (edoobox keeps its address), and whether an account with that e-mail exists; the course leader links that account if it does, or else creates one from the participant's edoobox name and that e-mail, links it and e-mails the participant how to use it, without the participant tapping a badge. — #842
-- **CRS-7** A participant's link to an account is removed only by an admin (ADM-18); the server refuses linking a participant who is already linked, and linking one account to two participants of the same course. — #842
+- **CRS-7** A participant's link to an account is removed only by an admin (ADM-18) or because edoobox no longer has its course or booking (CRS-18); the server refuses linking a participant who is already linked, and linking one account to two participants of the same course. — #842
 - **CRS-9** At the kiosk, assigning a badge waits for a tap and registers an unregistered badge to the participant's linked account, free and without a checkout, and refuses a registered badge and an account that already has a badge that isn't deactivated; on an own device the course leader is told to assign it at the kiosk, and nothing is assigned. — #842
+- **CRS-18** A participant's link to an account is kept only while edoobox still has the course and a booking of the participant on it, a cancelled one included; every Sunday morning the links whose course or booking edoobox reports gone are removed — none when edoobox can't be reached — which ends the participant's temporary permission from that course (CRS-11) but leaves a permission its close granted for good (CRS-14), and the course's pick and close (CRS-3) stay. — #842
 
 ## Permission
 
@@ -40,11 +41,11 @@ an admin links course leaders and participants is in [admin.md](admin.md)
 
   | When | Temporary permission |
   |---|---|
-  | the participant is linked, or their choice changes to Vorläufig or Ja | given at once, for the Termine as edoobox has them then — unless they hold the permission temporarily from another course at that moment: then this course gives none, even once the other course's has lapsed, until their choice next changes to Vorläufig or Ja |
-  | their choice changes to Nein | ended at once |
+  | the participant is linked, or the course leader sets their choice to Vorläufig or Ja, even to the one it already is | given at once, for the Termine as edoobox has them then — unless they hold the permission temporarily from another course at that moment: then this course gives none, even once the other course's has lapsed, until their choice is next set to Vorläufig or Ja |
+  | their choice is set to Nein | ended at once |
   | a Termin is added, moved or removed in edoobox | its windows follow the next morning |
   | their booking is cancelled in edoobox | ended the next morning |
-  | an admin removed it (ADM-16), or it ended for a cancelled booking | stays ended until their choice next changes to Vorläufig or Ja |
+  | an admin removed it (ADM-16), or it ended for a cancelled booking | stays ended, also when the booking is restored in edoobox, until their choice is next set to Vorläufig or Ja |
 
 ## Closing a course
 
@@ -59,7 +60,7 @@ an admin links course leaders and participants is in [admin.md](admin.md)
   | permission choice Nein | Nein |
 
 - **CRS-13** A Nein at the close takes a reason, prefilled by the first case that applies — no linked account, attended no Termin, missed at least one (CRS-12) — and otherwise empty; a reason given is written to edoobox as a note on the participant's booking, and a note that can't be written leaves the close in place and the course leader is told. — #842
-- **CRS-14** The close grants each participant with Ja the permission for good (MAC-4) and ends the temporary permission of each with Nein (CRS-11), but never removes a permission a participant holds from an admin or from another course. — #842
+- **CRS-14** The close grants each participant with Ja the permission for good (MAC-4) and ends the course's temporary permission (CRS-11) of every other account linked to the course — one with Nein, one whose booking was cancelled, one linked while the close was open — but never removes a permission a participant holds from an admin or from another course. — #842
 - **CRS-15** Once a course is closed, its course page says when it was closed and is read-only, without next steps (CRS-5), and the server refuses the course leader every further change to it. — #842
 - **CRS-16** While a course is not closed after its last Termin, each course leader who leads at least one of its Termine is e-mailed a reminder 1, 3 and 7 days after the last Termin, and on the 7th day the office is e-mailed once for the course. — #842
 

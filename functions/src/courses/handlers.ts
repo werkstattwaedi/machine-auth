@@ -10,7 +10,7 @@
 
 import * as logger from "firebase-functions/logger";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import {
   coursePhase,
   dateHasStarted,
@@ -56,6 +56,10 @@ import { withPermanentGrant, withTemporaryGrant, withoutTemporaryGrant } from ".
 import { courseLinkId, type CourseLinkEntity } from "./types";
 
 const CHOICES: readonly CourseChoice[] = ["no", "temp", "yes"];
+
+function courseClosed(): HttpsError {
+  return new HttpsError("failed-precondition", "Der Kurs ist abgeschlossen. Änderungen macht das Sekretariat.");
+}
 
 /** Runs `fn`; edoobox failures become the «nicht erreichbar» error. */
 async function withEdoobox<T>(fn: () => Promise<T>): Promise<T> {
@@ -207,6 +211,8 @@ export const linkParticipantHandler = async (request: CallableRequest<LinkPartic
       tx.get(target),
       tx.get(db.collection("courses").doc(offerId)),
     ]);
+    // A close may have committed since the course was read (CRS-15).
+    if (courseSnap.get("closedAt")) throw courseClosed();
     // The pick may have changed since the course was read (CRS-17).
     const current = courseSnap.get("permission") ?? null;
     if ((current?.id ?? null) !== (permission?.id ?? null)) {
@@ -346,9 +352,21 @@ export const setParticipantChoiceHandler = async (
   const link = linkedTarget(loaded, leader, participantId);
   const permission = loaded.course.permission ?? null;
   const db = leader.db;
+  const linkRef = db.collection("courseLinks").doc(courseLinkId(offerId, participantId));
   await db.runTransaction(async (tx) => {
-    const userSnap = await tx.get(link.user);
-    tx.update(db.collection("courseLinks").doc(courseLinkId(offerId, participantId)), { choice });
+    // Re-read what the course page was built from: an admin may have removed
+    // the link, a close committed, or the account been erased since.
+    const [linkSnap, courseSnap, userSnap] = await Promise.all([
+      tx.get(linkRef),
+      tx.get(db.collection("courses").doc(offerId)),
+      tx.get(link.user),
+    ]);
+    if (courseSnap.get("closedAt")) throw courseClosed();
+    if (!linkSnap.exists || (linkSnap.get("user") as DocumentReference).id !== link.user.id) {
+      throw new HttpsError("failed-precondition", "Diese Person ist nicht mehr verknüpft. Bitte Seite neu laden.");
+    }
+    if (!userSnap.exists) throw new HttpsError("failed-precondition", "Das verknüpfte Konto gibt es nicht mehr.");
+    tx.update(linkRef, { choice });
     if (!permission) return;
     const map =
       choice === "no"
@@ -386,11 +404,9 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
   const permission = loaded.course.permission ?? null;
   const db = leader.db;
   const now = Timestamp.now();
+  // Ja only for a booked participant the leader saw on the close page.
+  const bookedIds = new Set(loaded.detail.participants.map((p) => p.participantId));
   const decided: Record<string, boolean> = {};
-  for (const p of loaded.detail.participants) {
-    const isSelf = p.link?.userId === leader.userRef.id;
-    decided[p.participantId] = !!p.link && !isSelf && choices[p.participantId] === true;
-  }
 
   let granted = 0;
   await db.runTransaction(async (tx) => {
@@ -398,17 +414,29 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
     if ((await tx.get(courseRef)).get("closedAt")) {
       throw new HttpsError("failed-precondition", "Der Kurs ist schon abgeschlossen.");
     }
-    const linked = loaded.detail.participants.filter((p) => p.link);
-    const userSnaps = linked.length ? await tx.getAll(...linked.map((p) => db.collection("users").doc(p.link!.userId))) : [];
+    // The stored links, not the page's: a link made meanwhile, or one whose
+    // booking was cancelled, must lose its temporary permission too.
+    const linkSnaps = (await tx.get(db.collection("courseLinks").where("offerId", "==", offerId))).docs;
+    const links = linkSnaps.map((d) => d.data() as CourseLinkEntity);
+    // Reset per attempt: Firestore may run this transaction more than once.
+    granted = 0;
+    for (const p of loaded.detail.participants) decided[p.participantId] = false;
+    for (const l of links) {
+      const isSelf = l.user.id === leader.userRef.id;
+      decided[l.participantId] = !isSelf && bookedIds.has(l.participantId) && choices[l.participantId] === true;
+    }
+    const userSnaps = links.length ? await tx.getAll(...links.map((l) => l.user)) : [];
     if (permission) {
-      linked.forEach((p, i) => {
+      links.forEach((l, i) => {
         // A deleted account (erasure) has nothing left to grant or end.
         if (!userSnaps[i].exists) return;
         const stored = userSnaps[i].get("permissions");
-        const map = decided[p.participantId]
+        const yes = decided[l.participantId];
+        const map = yes
           ? withPermanentGrant(stored, { permission, offerId, grantedBy: leader.userRef, now })
           : withoutTemporaryGrant(stored, permission.id, offerId);
-        if (decided[p.participantId]) granted++;
+        // Counts who gets it from this close, not who held it already.
+        if (yes && map) granted++;
         if (map) tx.update(userSnaps[i].ref, { permissions: map });
       });
     }
@@ -424,22 +452,26 @@ export const closeCourseHandler = async (request: CallableRequest<CloseCourseInp
   const subject = permission
     ? `Kurs abgeschlossen: keine Berechtigung «${loaded.detail.permission?.name ?? permission.id}»`
     : "Kurs abgeschlossen";
-  for (const p of loaded.detail.participants) {
-    const reason = typeof reasons[p.participantId] === "string" ? String(reasons[p.participantId]).trim() : "";
-    if (decided[p.participantId] || !reason) continue;
-    try {
-      await api.createNote({
-        subject,
-        message: reason.slice(0, 1000),
-        bookingId: p.bookingId,
-        offerId,
-        userId: p.edooboxUserId,
-      });
-    } catch (err) {
-      notesFailed++;
-      logger.warn("courseCall: close note not written", { offerId, participantId: p.participantId, err: String(err) });
-    }
-  }
+  // In parallel: one slow note each must not add up past the callable's
+  // deadline, after the close has committed.
+  await Promise.all(
+    loaded.detail.participants.map(async (p) => {
+      const reason = typeof reasons[p.participantId] === "string" ? String(reasons[p.participantId]).trim() : "";
+      if (decided[p.participantId] || !reason) return;
+      try {
+        await api.createNote({
+          subject,
+          message: reason.slice(0, 1000),
+          bookingId: p.bookingId,
+          offerId,
+          userId: p.edooboxUserId,
+        });
+      } catch (err) {
+        notesFailed++;
+        logger.warn("courseCall: close note not written", { offerId, participantId: p.participantId, err: String(err) });
+      }
+    })
+  );
   logger.info("courseCall: course closed", { offerId, granted, notesFailed });
   return { granted, notesFailed };
 };

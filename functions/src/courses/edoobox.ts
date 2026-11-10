@@ -114,6 +114,8 @@ export interface EdooboxApi {
   listLeaderDates(adminId: string): Promise<EdooboxDate[]>;
   listOfferDates(offerId: string): Promise<EdooboxDate[]>;
   getOffers(offerIds: string[]): Promise<EdooboxOffer[]>;
+  /** Whether the offer still exists in edoobox (deleted, or auto-deleted after its retention). */
+  offerExists(offerId: string): Promise<boolean>;
   /** Participants and recorded attendance of one offer, over all its dates. */
   attendanceTable(offerId: string, dateIds: string[]): Promise<{
     participants: EdooboxParticipant[];
@@ -248,8 +250,9 @@ class HttpEdooboxApi implements EdooboxApi {
       const body = await this.call("GET", path, query);
       const page = rows(body.data);
       out.push(...page);
-      const total = Number(body?.limit?.total ?? page.length);
-      if (page.length < PAGE || out.length >= total) return out;
+      // Without a total, only a short page ends the list.
+      const total = body?.limit?.total;
+      if (page.length < PAGE || (total !== undefined && out.length >= Number(total))) return out;
     }
   }
 
@@ -309,6 +312,12 @@ class HttpEdooboxApi implements EdooboxApi {
           typeof t === "string" ? tagNames.get(t) ?? t : String((t as Json)?.name ?? "")
         ),
       }));
+  }
+
+  async offerExists(offerId: string): Promise<boolean> {
+    // A deleted offer answers 200 with empty data, not 404 (sandbox, 2026-11).
+    const body = await this.call("GET", `/offer/${encodeURIComponent(offerId)}`);
+    return rows(body.data).length > 0;
   }
 
   async attendanceTable(offerId: string, dateIds: string[]) {

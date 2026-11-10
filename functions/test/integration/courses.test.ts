@@ -22,7 +22,7 @@ import {
   setParticipantChoiceHandler,
 } from "../../src/courses/handlers";
 import { setEdooboxLeaderHandler, unlinkCourseParticipantHandler } from "../../src/courses/admin_handlers";
-import { runSyncCourses, setCourseMailerForTest } from "../../src/courses/sync_courses";
+import { pruneCourseLinks, runSyncCourses, setCourseMailerForTest } from "../../src/courses/sync_courses";
 import { mintBadgeVoucher } from "../../src/badge/voucher";
 
 const MASTER_KEY = "fedcba9876543210fedcba9876543210";
@@ -333,6 +333,33 @@ describe("courses (#842)", () => {
       await expectCode(() => closeCourseHandler(req({ offerId: OFFER, choices: {}, reasons: {} })), "failed-precondition");
     });
 
+    it("ends the temporary permission of a link whose booking was cancelled, and gives it no Ja", async () => {
+      seedEdoobox(Date.now(), true);
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await link("p_anna", "anna@x.ch");
+      fake.state.bookings[0].cancelled = true;
+      const result = await closeCourseHandler(req({ offerId: OFFER, choices: { p_anna: true }, reasons: {} }));
+      expect(result.granted).to.equal(0);
+      expect(await grantsOf(ANNA)).to.deep.equal({});
+    });
+
+    it("counts only who gets the permission from this close", async () => {
+      seedEdoobox(Date.now(), true);
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await link("p_anna", "anna@x.ch");
+      const db = getFirestore();
+      const adminGrant = {
+        permission: db.doc("permission/laser"),
+        grantedAt: Timestamp.now(),
+        grantedBy: db.doc("users/the-admin"),
+        source: "admin",
+      };
+      await db.doc(`users/${ANNA}`).update({ permissions: { laser: adminGrant } });
+      const result = await closeCourseHandler(req({ offerId: OFFER, choices: { p_anna: true }, reasons: {} }));
+      expect(result.granted).to.equal(0);
+      expect((await grantsOf(ANNA)).laser.source).to.equal("admin");
+    });
+
     it("keeps the close when edoobox refuses a note", async () => {
       seedEdoobox(Date.now(), true);
       await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: null }));
@@ -407,6 +434,31 @@ describe("courses (#842)", () => {
       }
     });
 
+    it("retries only the office notice when it failed (CRS-16)", async () => {
+      process.env.COURSE_OFFICE_EMAIL = "office@x.ch";
+      const sent: string[] = [];
+      let officeDown = true;
+      setCourseMailerForTest((async (m: any) => {
+        if (m.to === "office@x.ch" && officeDown) throw new Error("resend down");
+        sent.push(m.to);
+      }) as any);
+      try {
+        const now = Date.now();
+        fake.state.dates[1].start = new Date(now - 7 * 24 * HOUR).toISOString();
+        fake.state.dates[1].end = new Date(now - 7 * 24 * HOUR + 3 * HOUR).toISOString();
+        fake.state.dates[0].start = new Date(now - 14 * 24 * HOUR).toISOString();
+        const first = await runSyncCourses(now);
+        expect(first.failures).to.equal(1);
+        expect(sent).to.deep.equal(["petra@x.ch"]);
+        officeDown = false;
+        await runSyncCourses(now);
+        expect(sent).to.deep.equal(["petra@x.ch", "office@x.ch"]);
+      } finally {
+        setCourseMailerForTest(undefined);
+        delete process.env.COURSE_OFFICE_EMAIL;
+      }
+    });
+
     it("keeps an admin's removal of a temporary permission (no re-add)", async () => {
       await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
       await link("p_anna", "anna@x.ch");
@@ -429,6 +481,52 @@ describe("courses (#842)", () => {
       await runSyncCourses();
       const windows = (await grantsOf(ANNA)).laser.windows;
       expect(windows[1].from.toMillis()).to.equal(moved);
+    });
+  });
+  describe("link cleanup (CRS-18)", () => {
+    const emptyReport = () => ({ offers: 0, grantsChanged: 0, reminders: 0, officeNotices: 0, linksPruned: 0, failures: 0 });
+    const linkExists = async (participantId: string) =>
+      (await getFirestore().doc(`courseLinks/${OFFER}_${participantId}`).get()).exists;
+
+    beforeEach(async () => {
+      await setCoursePermissionTypeHandler(req({ offerId: OFFER, permissionId: "laser" }));
+      await link("p_anna", "anna@x.ch");
+    });
+
+    it("keeps a link while edoobox has the booking, a cancelled one too", async () => {
+      fake.state.bookings[0].cancelled = true;
+      const report = emptyReport();
+      await pruneCourseLinks(getFirestore(), fake, report);
+      expect(report.linksPruned).to.equal(0);
+      expect(await linkExists("p_anna")).to.equal(true);
+    });
+
+    it("removes a link whose booking edoobox deleted, with its temporary permission", async () => {
+      fake.state.bookings = fake.state.bookings.filter((b) => b.bookingId !== "b1");
+      const report = emptyReport();
+      await pruneCourseLinks(getFirestore(), fake, report);
+      expect(report.linksPruned).to.equal(1);
+      expect(await linkExists("p_anna")).to.equal(false);
+      expect(await grantsOf(ANNA)).to.deep.equal({});
+    });
+
+    it("removes the links of a deleted offer, keeping a permission granted for good", async () => {
+      seedEdoobox(Date.now(), true);
+      await closeCourseHandler(req({ offerId: OFFER, choices: { p_anna: true }, reasons: {} }));
+      fake.state.offers = [];
+      const report = emptyReport();
+      await pruneCourseLinks(getFirestore(), fake, report);
+      expect(await linkExists("p_anna")).to.equal(false);
+      expect((await grantsOf(ANNA)).laser.windows).to.equal(undefined);
+      expect((await getFirestore().doc(`courses/${OFFER}`).get()).exists).to.equal(true);
+    });
+
+    it("removes nothing while edoobox is unreachable", async () => {
+      fake.failing = true;
+      const report = emptyReport();
+      await pruneCourseLinks(getFirestore(), fake, report);
+      expect(report.failures).to.equal(1);
+      expect(await linkExists("p_anna")).to.equal(true);
     });
   });
 });

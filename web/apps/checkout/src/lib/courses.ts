@@ -31,6 +31,14 @@ function useCourseQuery<I, T>(method: string, input: I | null): CourseQuery<T> {
   const key = JSON.stringify(input)
   const seq = useRef(0)
 
+  // Another course on the same mounted route: never show the previous one.
+  const [shownKey, setShownKey] = useState(key)
+  if (shownKey !== key) {
+    setShownKey(key)
+    setData(null)
+    setError(null)
+  }
+
   const reload = useCallback(async () => {
     if (key === "null") return
     const mine = ++seq.current
@@ -53,7 +61,15 @@ function useCourseQuery<I, T>(method: string, input: I | null): CourseQuery<T> {
     void reload()
   }, [reload])
 
-  return { data, loading, error, reload, set: setData }
+  // A server answer outranks any read still in flight, which started earlier.
+  const set = useCallback((next: T) => {
+    seq.current++
+    setData(next)
+    setError(null)
+    setLoading(false)
+  }, [])
+
+  return { data, loading, error, reload, set }
 }
 
 export function useMyCourses(): CourseQuery<ListMyCoursesResult> {

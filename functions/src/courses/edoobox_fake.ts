@@ -87,6 +87,11 @@ export class InMemoryEdoobox implements EdooboxApi {
     return this.state.offers.filter((o) => offerIds.includes(o.id));
   }
 
+  async offerExists(offerId: string) {
+    this.check();
+    return this.state.offers.some((o) => o.id === offerId);
+  }
+
   async attendanceTable(offerId: string, dateIds: string[]) {
     this.check();
     return {
@@ -154,6 +159,7 @@ export function firestoreFakeEdoobox(): EdooboxApi {
     listLeaderDates: (a) => run((api) => api.listLeaderDates(a)),
     listOfferDates: (o) => run((api) => api.listOfferDates(o)),
     getOffers: (o) => run((api) => api.getOffers(o)),
+    offerExists: (o) => run((api) => api.offerExists(o)),
     attendanceTable: (o, d) => run((api) => api.attendanceTable(o, d)),
     getUsers: (u) => run((api) => api.getUsers(u)),
     listBookings: (o) => run((api) => api.listBookings(o)),

@@ -8,6 +8,7 @@
  *   and none left over once a course's last window has passed.
  * - CRS-16: reminds every course leader 1, 3 and 7 days after the last Termin
  *   of a course that isn't closed; on day 7 the office too.
+ * - CRS-18: on Sundays, removes the links whose data edoobox no longer has.
  *
  * edoobox has webhooks (see the plan); this polls once a day instead, which
  * the spec accepts ("takes effect the next morning").
@@ -44,6 +45,7 @@ export interface CourseSyncReport {
   grantsChanged: number;
   reminders: number;
   officeNotices: number;
+  linksPruned: number;
   failures: number;
 }
 
@@ -123,70 +125,144 @@ async function sendReminders(db: Firestore, api: EdooboxApi, nowMs: number, repo
       { firstName: leader.get("firstName"), lastName: leader.get("lastName") },
       email
     );
+    let offerIds: string[];
     try {
       const leaderDates = await api.listLeaderDates(leader.get("edooboxLeaderId"));
       // Reminders end on day 7: only offers with a Termin of this leader in
       // the last ~8 days can be due, so old courses cost no reads.
       const recent = nowMs - 8 * 86400_000;
-      const offerIds = [...new Set(leaderDates.filter((d) => Date.parse(d.end) >= recent).map((d) => d.offerId))];
-      for (const offerId of offerIds) {
-        const courseRef = db.collection("courses").doc(offerId);
-        const course = ((await courseRef.get()).data() ?? {}) as CourseEntity;
-        if (course.closedAt) continue;
-        const dates = toCourseDates(await api.listOfferDates(offerId));
-        if (!dates.length) continue;
-        const last = dates[dates.length - 1];
-        const days = zurichDayDiff(Date.parse(last.start), nowMs);
-        if (days > CLOSE_LISTING_DAYS) continue;
-        // Only today's reminder — a missed run doesn't send a pile of them.
-        // Kept per leader: a course can have several (CRS-16).
-        const sent = (course.remindersSent ?? []).map(String);
-        const day = (REMINDER_DAYS as readonly number[]).includes(days) ? days : null;
-        if (day === null || sent.includes(`${day}:${leader.id}`)) continue;
-        const title = course.title ?? (await api.getOffers([offerId]))[0]?.name ?? "Kurs";
-        const lastDate = formatWorkshopDateTime(new Date(last.start), "EEEEEE d.M.");
-        await send({
-          to: email,
-          mail: "course-close-reminder",
-          dims: {},
-          variables: {
-            LEADER_NAME: leaderName,
-            COURSE_TITLE: title,
-            LAST_DATE: lastDate,
-            COURSE_LINK: `https://${resolveCheckoutDomain()}/account/courses/${offerId}`,
-          },
-        });
-        report.reminders++;
-        // Record the leader's mail before the office's, so a failure there
-        // doesn't send the leader the same reminder again on a re-run.
-        await courseRef.set({ remindersSent: FieldValue.arrayUnion(`${day}:${leader.id}`), title }, { merge: true });
-        const office = courseOfficeEmail.value().trim();
-        const officeDue = day === 7 && office && !sent.includes("7:office");
-        if (officeDue) {
-          await send({
-            to: office,
-            mail: "course-close-office",
-            dims: {},
-            variables: { LEADER_NAME: leaderName, COURSE_TITLE: title, LAST_DATE: lastDate },
-          });
-          report.officeNotices++;
-          await courseRef.set({ remindersSent: FieldValue.arrayUnion("7:office") }, { merge: true });
-        }
-      }
+      offerIds = [...new Set(leaderDates.filter((d) => Date.parse(d.end) >= recent).map((d) => d.offerId))];
     } catch (err) {
       report.failures++;
       logger.warn("syncCourses: reminders not sent", { leader: leader.id, err: String(err) });
+      continue;
+    }
+    // One course failing doesn't cost the leader's other reminders today.
+    for (const offerId of offerIds) {
+      try {
+        await remindForOffer(db, api, nowMs, report, { id: leader.id, email, name: leaderName }, offerId);
+      } catch (err) {
+        report.failures++;
+        logger.warn("syncCourses: reminder not sent", { leader: leader.id, offerId, err: String(err) });
+      }
     }
   }
 }
 
+async function remindForOffer(
+  db: Firestore,
+  api: EdooboxApi,
+  nowMs: number,
+  report: CourseSyncReport,
+  leader: { id: string; email: string; name: string },
+  offerId: string
+): Promise<void> {
+  const courseRef = db.collection("courses").doc(offerId);
+  const course = ((await courseRef.get()).data() ?? {}) as CourseEntity;
+  if (course.closedAt) return;
+  const dates = toCourseDates(await api.listOfferDates(offerId));
+  if (!dates.length) return;
+  const last = dates[dates.length - 1];
+  const days = zurichDayDiff(Date.parse(last.start), nowMs);
+  if (days > CLOSE_LISTING_DAYS) return;
+  // Only today's reminder — a missed run doesn't send a pile of them.
+  // Kept per leader: a course can have several (CRS-16).
+  const day = (REMINDER_DAYS as readonly number[]).includes(days) ? days : null;
+  if (day === null) return;
+  const sent = (course.remindersSent ?? []).map(String);
+  const office = courseOfficeEmail.value().trim();
+  // Each recorded on its own, so a re-run sends exactly what failed.
+  const leaderDue = !sent.includes(`${day}:${leader.id}`);
+  const officeDue = day === 7 && !!office && !sent.includes("7:office");
+  if (!leaderDue && !officeDue) return;
+  const title = course.title ?? (await api.getOffers([offerId]))[0]?.name ?? "Kurs";
+  const lastDate = formatWorkshopDateTime(new Date(last.start), "EEEEEE d.M.");
+  if (leaderDue) {
+    await send({
+      to: leader.email,
+      mail: "course-close-reminder",
+      dims: {},
+      variables: {
+        LEADER_NAME: leader.name,
+        COURSE_TITLE: title,
+        LAST_DATE: lastDate,
+        COURSE_LINK: `https://${resolveCheckoutDomain()}/account/courses/${offerId}`,
+      },
+    });
+    report.reminders++;
+    await courseRef.set({ remindersSent: FieldValue.arrayUnion(`${day}:${leader.id}`), title }, { merge: true });
+  }
+  if (officeDue) {
+    await send({
+      to: office,
+      mail: "course-close-office",
+      dims: {},
+      variables: { LEADER_NAME: leader.name, COURSE_TITLE: title, LAST_DATE: lastDate },
+    });
+    report.officeNotices++;
+    await courseRef.set({ remindersSent: FieldValue.arrayUnion("7:office"), title }, { merge: true });
+  }
+}
+
+/**
+ * CRS-18: a link lives as long as edoobox keeps its data — the offer, and a
+ * booking (cancelled ones too) of the participant. Gone there, the link and
+ * its course's temporary permission go; a permission granted for good stays.
+ * Weekly: edoobox deletes rarely, and every course ever linked costs a read.
+ */
+export async function pruneCourseLinks(db: Firestore, api: EdooboxApi, report: CourseSyncReport): Promise<void> {
+  const links = await db.collection("courseLinks").get();
+  const byOffer = new Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>();
+  for (const d of links.docs) {
+    const offerId = d.get("offerId") as string;
+    byOffer.set(offerId, [...(byOffer.get(offerId) ?? []), d]);
+  }
+  for (const [offerId, offerLinks] of byOffer) {
+    try {
+      // Only a successful answer that the data is gone deletes; a failure skips.
+      const exists = await api.offerExists(offerId);
+      const booked = exists
+        ? new Set((await api.listBookings(offerId)).flatMap((b) => b.userIds))
+        : new Set<string>();
+      const gone = offerLinks.filter((d) => !booked.has(d.get("edooboxUserId") as string));
+      if (!gone.length) continue;
+      const permission = ((await db.collection("courses").doc(offerId).get()).data() as CourseEntity | undefined)
+        ?.permission ?? null;
+      for (const linkSnap of gone) {
+        await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(linkSnap.ref);
+          if (!fresh.exists) return;
+          const link = fresh.data() as CourseLinkEntity;
+          const user = await tx.get(link.user);
+          if (permission && user.exists) {
+            const map = withoutTemporaryGrant(user.get("permissions"), permission.id, offerId);
+            if (map) tx.update(link.user, { permissions: map });
+          }
+          tx.delete(linkSnap.ref);
+        });
+        report.linksPruned++;
+      }
+      logger.info("syncCourses: links pruned", { offerId, count: gone.length, offerGone: !exists });
+    } catch (err) {
+      report.failures++;
+      logger.warn("syncCourses: links not pruned", { offerId, err: String(err) });
+    }
+  }
+}
+
+/** Sunday in the workshop's time zone. */
+function isPruneDay(nowMs: number): boolean {
+  return new Intl.DateTimeFormat("en-US", { timeZone: getWorkshopTimezone(), weekday: "short" }).format(new Date(nowMs)) === "Sun";
+}
+
 export async function runSyncCourses(nowMs = Date.now()): Promise<CourseSyncReport> {
-  const report: CourseSyncReport = { offers: 0, grantsChanged: 0, reminders: 0, officeNotices: 0, failures: 0 };
+  const report: CourseSyncReport = { offers: 0, grantsChanged: 0, reminders: 0, officeNotices: 0, linksPruned: 0, failures: 0 };
   if (!isEdooboxConfigured()) return report;
   const db = getFirestore();
   const api = edooboxApi();
   await syncGrants(db, api, nowMs, report);
   await sendReminders(db, api, nowMs, report);
+  if (isPruneDay(nowMs)) await pruneCourseLinks(db, api, report);
   logger.info("syncCourses done", { ...report });
   return report;
 }

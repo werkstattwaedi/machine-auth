@@ -117,9 +117,9 @@ function ParticipantView({
         </div>
       </div>
       {p.link ? (
-        <LinkedView course={course} participant={p} reload={reload} closed={closed} />
+        <LinkedView key={p.participantId} course={course} participant={p} reload={reload} closed={closed} />
       ) : (
-        <LinkCard course={course} participant={p} reload={reload} closed={closed} />
+        <LinkCard key={p.participantId} course={course} participant={p} reload={reload} closed={closed} />
       )}
     </>
   )
@@ -132,7 +132,8 @@ function LinkCard({ course, participant: p, reload, closed }: { course: CourseDe
   const [email, setEmail] = useState(p.email)
   const [draft, setDraft] = useState(p.email)
   const [editing, setEditing] = useState(false)
-  const [exists, setExists] = useState(p.accountExists)
+  // null while unknown: the e-mail's check failed or is still running.
+  const [exists, setExists] = useState<boolean | null>(p.accountExists)
   const check = useAsyncMutation({ context: "courses.checkParticipantEmail", serverMessageCodes: COURSE_MESSAGE_CODES })
   const link = useAsyncMutation({ context: "courses.linkParticipant", serverMessageCodes: COURSE_MESSAGE_CODES })
 
@@ -143,6 +144,7 @@ function LinkCard({ course, participant: p, reload, closed }: { course: CourseDe
       return
     }
     let stale = false
+    setExists(null)
     void check
       .mutate(async () => {
         const { data } = await rpcCallable<unknown, CheckParticipantEmailResult>(functions, "courseCall", "checkParticipantEmail")({
@@ -205,14 +207,14 @@ function LinkCard({ course, participant: p, reload, closed }: { course: CourseDe
       )}
       {!editing && !closed && (
         <>
-          <p className="text-sm text-muted-foreground">{check.loading ? "Konto wird gesucht …" : exists ? "Konto vorhanden" : "Noch kein Konto"}</p>
+          <p className="text-sm text-muted-foreground">{check.loading ? "Konto wird gesucht …" : exists === null ? "Konto konnte nicht gesucht werden" : exists ? "Konto vorhanden" : "Noch kein Konto"}</p>
           {!course.permissionChosen ? (
             <p className="rounded-lg bg-oww-gold-light p-3 text-sm text-oww-gold-text">
               Lege auf der Kursseite zuerst fest, welche Berechtigung der Kurs gibt.
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              <Button className="w-fit" disabled={link.loading || check.loading} onClick={() => void doLink(!exists)}>
+              <Button className="w-fit" disabled={link.loading || check.loading || exists === null} onClick={() => void doLink(!exists)}>
                 {exists ? "Mit diesem Konto verknüpfen" : "Konto anlegen und verknüpfen"}
               </Button>
               <p className="text-xs text-muted-foreground">Die Verknüpfung kann danach nur das Sekretariat ändern.</p>
@@ -237,6 +239,12 @@ function LinkedView({ course, participant: p, reload, closed }: { course: Course
   const link = p.link!
   const own = link.userId === userDoc?.id
   const [choice, setChoice] = useState<CourseChoice>(link.choice)
+  // Follow the server after a reload (another device, or the sync).
+  const [serverChoice, setServerChoice] = useState(link.choice)
+  if (serverChoice !== link.choice) {
+    setServerChoice(link.choice)
+    setChoice(link.choice)
+  }
   const [badgeOpen, setBadgeOpen] = useState(false)
   const save = useAsyncMutation({ context: "courses.setParticipantChoice", successMessage: "Gespeichert", serverMessageCodes: COURSE_MESSAGE_CODES })
 

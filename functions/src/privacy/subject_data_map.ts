@@ -71,7 +71,8 @@ export const SUBJECT_DATA_MAP: SubjectDataEntry[] = [
     collection: "courseLinks",
     piiFields: ["user", "edooboxUserId", "participantName", "linkedBy"],
     legalBasis: "Contract (course participation — edoobox booking linked to the account, #842)",
-    retention: "Until erasure request",
+    retention:
+      "While edoobox keeps the offer and the participant's booking (weekly check in syncCourses, CRS-18), or until erasure request",
     erasure: "delete",
     notes:
       "Deleted where user == subject. The participant's data itself stays in " +
