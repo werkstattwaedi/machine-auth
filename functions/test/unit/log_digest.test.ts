@@ -166,6 +166,25 @@ describe("logDigest — rendering", () => {
     expect(mail.html).to.contain("&lt;script&gt;");
   });
 
+  it("folds refused requests into one line counted by status", () => {
+    const refused = (status: number): RawLogEntry =>
+      entry({
+        message: "",
+        httpRequest: { method: "POST", status, url: "/" },
+      });
+    const mail = renderDigest(
+      summarizeLogEntries([refused(429), refused(400), refused(429), entry()]),
+      opts,
+    );
+    expect(mail.subject).to.contain("1 Warnungen/Fehler in 1 Gruppen");
+    for (const body of [mail.text, mail.html]) {
+      expect(body).to.contain(
+        "3 abgelehnte Anfragen (400 ×1, 429 ×2), nicht aufgeführt.",
+      );
+      expect(body).to.not.contain("POST 429");
+    }
+  });
+
   it("lists the real warnings and folds the deploy probe into one line", () => {
     // Issue #671: the probe used to fill the mail with ~20 groups.
     const burst = probeBurst();

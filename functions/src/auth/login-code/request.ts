@@ -58,7 +58,7 @@ export async function handleRequestLoginCode(
   }
   const email = normalizeEmail(input.email);
   if (!isPlausibleEmail(email)) {
-    throw new HttpsError("invalid-argument", "invalid email");
+    throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
   }
 
   const origin = isAllowedOrigin(requestOrigin) ? requestOrigin! : null;

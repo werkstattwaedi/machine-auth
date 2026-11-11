@@ -1,14 +1,12 @@
 // Copyright Offene Werkstatt Wädenswil
 // SPDX-License-Identifier: MIT
 
+import { isValidEmailAddress } from "@oww/shared"
 import type { CheckoutPerson } from "./use-checkout-state"
 import type { CheckoutItemLocal } from "@/components/usage/inline-rows"
 
-const EMAIL_RE =
-  /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
-
 export function isValidEmail(email: string): boolean {
-  return EMAIL_RE.test(email)
+  return isValidEmailAddress(email)
 }
 
 /**

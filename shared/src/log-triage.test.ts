@@ -434,22 +434,57 @@ describe("summarizeLogEntries — post-deploy probe", () => {
     expect(summary.total).toBe(1)
   })
 
-  it("groups a non-GET request-only 4xx under its request line", () => {
+  it("counts a non-GET request-only 4xx by status instead of grouping it", () => {
+    const post = (status: number) =>
+      entry({
+        service: "authcall",
+        message: "",
+        httpRequest: { method: "POST", status, url: "/" },
+      })
+    const summary = summarizeLogEntries([
+      post(429),
+      post(429),
+      post(403),
+      entry({ message: "verifyTagCheckout rejected" }),
+    ])
+    expect(summary.groups.map((g) => g.message)).toEqual([
+      "verifyTagCheckout rejected",
+    ])
+    expect(summary.total).toBe(1)
+    expect(summary.refused).toEqual({
+      count: 3,
+      byStatus: { "403": 1, "429": 2 },
+    })
+    expect(summary.dropped).toBe(0)
+  })
+
+  it("groups a request-only 5xx under its request line", () => {
     const post = (url: string) =>
       entry({
         service: "api",
         message: "",
-        httpRequest: { method: "POST", status: 401, url },
+        httpRequest: { method: "POST", status: 503, url },
       })
     const summary = summarizeLogEntries([
       post("https://api-abc123-oa.a.run.app/ping?key=1"),
       post("/ping"),
     ])
     expect(summary.groups).toHaveLength(1)
-    expect(summary.groups[0].message).toBe("POST 401 /ping")
+    expect(summary.groups[0].message).toBe("POST 503 /ping")
     expect(summary.groups[0].count).toBe(2)
-    expect(summary.dropped).toBe(0)
-    expect(summary.excluded).toBeUndefined()
+    expect(summary.refused).toBeUndefined()
+  })
+
+  it("keeps a 4xx that carries its own message listed", () => {
+    const summary = summarizeLogEntries([
+      entry({
+        message:
+          "The request was not authenticated. Either allow unauthenticated invocations or set the proper Authorization header.",
+        httpRequest: { method: "POST", status: 403, url: "/" },
+      }),
+    ])
+    expect(summary.groups).toHaveLength(1)
+    expect(summary.refused).toBeUndefined()
   })
 
   it("lists a probe whose timestamp cannot be placed in a burst", () => {
