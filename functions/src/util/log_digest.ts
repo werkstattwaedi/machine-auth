@@ -33,6 +33,7 @@ import {
   type ExcludedLogEntries,
   type LogSummary,
   type RawLogEntry,
+  type RefusedRequests,
 } from "@oww/shared";
 import { resendApiKey, resendFromEmail } from "./resend_template";
 
@@ -78,6 +79,20 @@ function renderExcluded(excluded: ExcludedLogEntries): string {
   );
 }
 
+/**
+ * The one line that stands in for the refused-request rows: counts per
+ * status only, enough to notice a surge without listing every wrong code.
+ */
+function renderRefused(refused: RefusedRequests): string {
+  const byStatus = Object.entries(refused.byStatus)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([status, count]) => `${status} ×${count}`)
+    .join(", ");
+  return (
+    `${refused.count} abgelehnte Anfragen (${byStatus}), nicht aufgeführt.`
+  );
+}
+
 export interface DigestMail {
   subject: string;
   text: string;
@@ -94,9 +109,10 @@ export function renderDigest(
   opts: { projectId: string; since: Date; until: Date },
 ): DigestMail {
   const { projectId, since, until } = opts;
-  const excludedNote = summary.excluded
-    ? renderExcluded(summary.excluded)
-    : undefined;
+  const footer = [
+    ...(summary.refused ? [renderRefused(summary.refused)] : []),
+    ...(summary.excluded ? [renderExcluded(summary.excluded)] : []),
+  ];
   const window = `${since.toISOString()} → ${until.toISOString()}`;
   const subject =
     `[${projectId}] ${summary.total} Warnungen/Fehler ` +
@@ -129,7 +145,7 @@ export function renderDigest(
     for (const sample of group.samples) lines.push(`  - ${sample}`);
     lines.push("");
   }
-  if (excludedNote) lines.push(excludedNote);
+  lines.push(...footer);
 
   const rows = summary.groups
     .map(
@@ -164,7 +180,7 @@ export function renderDigest(
     `<th align="left">Zuletzt</th></tr>` +
     rows +
     `</table>` +
-    (excludedNote ? `<p>${escapeHtml(excludedNote)}</p>` : "") +
+    footer.map((note) => `<p>${escapeHtml(note)}</p>`).join("") +
     `</div>`;
 
   return { subject, text: lines.join("\n"), html };
@@ -297,6 +313,7 @@ export async function runLogDigest(
     logger.info("logDigest: nothing to report", {
       since: since.toISOString(),
       excluded: summary.excluded?.count ?? 0,
+      refused: summary.refused?.count ?? 0,
     });
     return summary;
   }
@@ -318,6 +335,7 @@ export async function runLogDigest(
     groups: summary.groups.length,
     truncated: summary.truncated,
     excluded: summary.excluded?.count ?? 0,
+    refused: summary.refused?.count ?? 0,
   });
   return summary;
 }

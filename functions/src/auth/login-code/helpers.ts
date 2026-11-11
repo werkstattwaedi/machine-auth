@@ -11,6 +11,7 @@ import { getAuth } from "firebase-admin/auth";
 import * as logger from "firebase-functions/logger";
 import { defineString } from "firebase-functions/params";
 import { HttpsError } from "firebase-functions/v2/https";
+import { isValidEmailAddress } from "@oww/shared";
 import {
   defaultIdentityDeps,
   normalizeEmail,
@@ -43,9 +44,13 @@ export function isEmulator(): boolean {
 // call sites keep their import.
 export { normalizeEmail };
 
-/** Sanity-only check — server doesn't do deep validation, provider does. */
+/**
+ * Whether we can mail `email` (normalised). Must refuse whatever Resend
+ * refuses: a looser check let a typo through to the send, which then failed
+ * as an internal error (a paging ERROR the visitor could trigger at will).
+ */
 export function isPlausibleEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return isValidEmailAddress(email);
 }
 
 /** 32 random bytes as base64url — doubles as the magic-link token. */

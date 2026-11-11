@@ -69,13 +69,13 @@ import {
   DialogTitle,
 } from "@modules/components/ui/dialog"
 import { Button } from "@modules/components/ui/button"
+import { isValidEmailAddress } from "@oww/shared"
 import { CodeEntryDialog, messageFromError } from "./code-entry-dialog"
 import { useKioskSms } from "./use-kiosk-sms"
 
 /** Channel the typed identifier routes to. `sms` needs the smsEnabled flag. */
 export type LoginChannel = "email" | "sms"
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** Loose phone shape (design handoff): starts with + or a digit, then
  *  digits/whitespace/separators, at least 4 digits overall. */
 const PHONE_RE = /^[+0-9][0-9\s/().-]*$/
@@ -91,7 +91,7 @@ export function detectChannel(
   smsEnabled: boolean,
 ): LoginChannel | null {
   const v = value.trim()
-  if (EMAIL_RE.test(v)) return "email"
+  if (isValidEmailAddress(v)) return "email"
   if (smsEnabled && PHONE_RE.test(v) && v.replace(/\D/g, "").length >= 4) {
     return "sms"
   }

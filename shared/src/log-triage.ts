@@ -48,6 +48,16 @@ export interface ExcludedLogEntries {
   reason: "probe"
 }
 
+/**
+ * Request-log rows of answered 4xx requests, counted instead of grouped.
+ * Keyed by status so a surge (say, every kiosk suddenly getting 401) still
+ * shows in the footer.
+ */
+export interface RefusedRequests {
+  count: number
+  byStatus: Record<string, number>
+}
+
 export interface LogGroup {
   /** Stable id for (severity, message). Used to dedup against issues. */
   fingerprint: string
@@ -69,6 +79,8 @@ export interface LogSummary {
   dropped: number
   /** Probe entries folded out of `groups`; absent when nothing was. */
   excluded?: ExcludedLogEntries
+  /** Refused-request rows folded out of `groups`; absent when none were. */
+  refused?: RefusedRequests
   /** True when the query hit its cap and older entries were cut. */
   truncated: boolean
 }
@@ -228,8 +240,31 @@ export function isProbeEntry(entry: RawLogEntry): boolean {
 }
 
 /**
- * Stand-in message for a request-log row without a payload, so a 4xx that
- * nothing else explains still shows up as a group: `POST 401 /ping`. Path
+ * True for Cloud Run's access-log row of a request our code (or the
+ * callable library) answered with a 4xx. The row carries no message of its
+ * own: it only restates a refusal that was decided deliberately — a wrong
+ * code, the login throttle, a badge tapped outside the kiosk — and, where
+ * it matters, logged with its reason by the code that refused. Listed as
+ * groups they were most of the digest (prod, November 2026). A refusal Cloud
+ * Run makes itself (IAM, no instance) carries a message and stays listed;
+ * so does every 5xx. GETs are left to `isProbeEntry`: our clients POST, so
+ * a GET is the post-deploy sweep or a scanner, and a flood of those must
+ * still list as it did.
+ */
+export function isRefusedRequestEntry(entry: RawLogEntry): boolean {
+  const status = entry.httpRequest?.status
+  return (
+    entry.httpRequest?.method !== "GET" &&
+    isRequestOnly(entry, groupingKeyForMessage(entry.message)) &&
+    status !== undefined &&
+    status >= 400 &&
+    status < 500
+  )
+}
+
+/**
+ * Stand-in message for a request-log row without a payload, so a 5xx that
+ * nothing else explains still shows up as a group: `POST 503 /ping`. Path
  * only — hosts and query strings differ per request and would scatter it.
  */
 function requestLine(request: LogHttpRequest): string {
@@ -297,8 +332,10 @@ function foldProbeBursts(
  * reported as `excluded` — unless they exceed the burst thresholds, in
  * which case they are listed like everything else.
  *
- * A request-log row without a payload groups under a synthetic request
- * line. Entries with neither message nor request are dropped, not grouped:
+ * Request-log rows of a refused request (`isRefusedRequestEntry`) are
+ * counted by status as `refused`, not grouped. Any other request-log row
+ * without a payload groups under a synthetic request line. Entries with
+ * neither message nor request are dropped, not grouped:
  * they say nothing. The count is reported as `dropped` rather than
  * silently swallowed.
  */
@@ -322,7 +359,15 @@ export function summarizeLogEntries(
   }
   const excluded = foldProbeBursts(probes, opts)
 
+  let refused: RefusedRequests | undefined
   for (const entry of excluded ? others : entries) {
+    if (isRefusedRequestEntry(entry)) {
+      refused ??= { count: 0, byStatus: {} }
+      const status = String(entry.httpRequest?.status)
+      refused.count += 1
+      refused.byStatus[status] = (refused.byStatus[status] ?? 0) + 1
+      continue
+    }
     const message = listedMessage(entry)
     if (message.length === 0) {
       dropped += 1
@@ -374,5 +419,6 @@ export function summarizeLogEntries(
     dropped,
     truncated,
     ...(excluded ? { excluded } : {}),
+    ...(refused ? { refused } : {}),
   }
 }

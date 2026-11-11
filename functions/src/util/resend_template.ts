@@ -127,7 +127,26 @@ export async function sendTemplate<M extends MailName>(
     template,
   });
   if (error) {
+    // A recipient Resend refuses is the address's fault, not ours — and a
+    // visitor can type one — so it must not page (server-log-severity rule).
+    // Everything else Resend refuses (template, variables, key) is our bug.
+    if (isRecipientRejection(error)) {
+      logger.warn("Resend refused the recipient", { error, template: template.id });
+      throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
+    }
     logger.error("Resend send failed", { error, template: template.id });
     throw new HttpsError("internal", "Email send failed");
   }
+}
+
+/**
+ * Resend reports a malformed `to` as a 422 `validation_error` whose message
+ * names the field ("Invalid `to` field. …"); the name alone also covers our
+ * own template/variable mistakes, so the field is what tells them apart.
+ */
+export function isRecipientRejection(error: {
+  name?: string;
+  message?: string;
+}): boolean {
+  return error.name === "validation_error" && /`to`/.test(error.message ?? "");
 }
