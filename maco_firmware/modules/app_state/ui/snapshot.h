@@ -54,13 +54,19 @@ struct SessionSnapshotUi {
 //
 // Mirrors maco::firebase::RejectionReason (firebase/types.h), the proto
 // RejectionReason (proto/firebase_rpc/auth.proto) and the TypeScript enum
-// (shared/src/rejection.ts). Values MUST stay aligned across all four.
+// (shared/src/rejection.ts). Values MUST stay aligned across all four —
+// except kConnectionFailed, see below.
 enum class RejectionReason : uint8_t {
   kUnspecified = 0,
   kMissingPermission = 1,
   kStaleCheckout = 2,
   kTokenUnknown = 3,
   kTokenDeactivated = 4,
+  // Terminal-local: the check-in never got an answer from the cloud (gateway
+  // unreachable, timeout, server error). The server never sends it, so it sits
+  // far outside the proto range to stay clear of future proto values. A retry
+  // usually works, so the screen must not suggest a missing permission.
+  kConnectionFailed = 0xFF,
 };
 
 // Tag verification snapshot - the portion owned by TagVerifier.

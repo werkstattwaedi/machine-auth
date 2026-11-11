@@ -409,11 +409,18 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
   }
 
   if (!checkin_result.ok()) {
-    // FirebaseClient returns InvalidArgument when machine_id is empty (i.e.,
-    // no machine configured on this terminal); fail closed in that case.
     PW_LOG_ERROR("TerminalCheckin failed: %d",
                  static_cast<int>(checkin_result.status().code()));
-    NotifyUnauthorized();
+    // FirebaseClient returns InvalidArgument when machine_id is empty (i.e.,
+    // no machine configured on this terminal): a setup problem, so fail closed
+    // with the generic denial. Every other failure means the cloud never
+    // answered — say so, so a member who holds the permission retries instead
+    // of concluding they lack it. Nothing is cached, so the next tap asks again.
+    if (checkin_result.status().IsInvalidArgument()) {
+      NotifyUnauthorized();
+    } else {
+      NotifyUnauthorized(RejectionReason::kConnectionFailed);
+    }
     co_return pw::OkStatus();
   }
 
@@ -487,7 +494,13 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     }
     PW_LOG_WARN("Cloud key auth failed: %d",
                 static_cast<int>(cloud_auth_result.status().code()));
-    NotifyUnauthorized();
+    // The check-in already let this badge in; if the cloud then went silent,
+    // it is the same connection problem as a failed check-in, not a refusal.
+    if (cloud_key_provider.cloud_call_failed()) {
+      NotifyUnauthorized(RejectionReason::kConnectionFailed);
+    } else {
+      NotifyUnauthorized();
+    }
     co_return pw::OkStatus();
   }
 

@@ -277,6 +277,27 @@ TEST_F(MainScreenTest, DeniedMissingPermissionHasOwnCopyAndInfo) {
   EXPECT_EQ(screen_->GetButtonConfig().cancel.label, "Zurück");
 }
 
+// A failed check-in (cloud never answered) must read as a connection problem,
+// not as a missing permission — a member who holds it should just retry.
+TEST_F(MainScreenTest, DeniedConnectionFailedAsksToRetry) {
+  app_state::AppStateSnapshot snapshot;
+  snapshot.verification.state =
+      app_state::TagVerificationState::kUnauthorized;
+  snapshot.verification.rejection_reason =
+      app_state::RejectionReason::kConnectionFailed;
+  screen_->OnUpdate(snapshot);
+  RenderFrame();
+
+  EXPECT_TRUE(harness_.CompareToGolden(
+      "maco_firmware/modules/terminal_ui/testdata/main_denied_connection.png",
+      "/tmp/main_denied_connection_diff.png"));
+
+  // No action URL, so no Info/QR.
+  auto config = screen_->GetButtonConfig();
+  EXPECT_EQ(config.ok.label, "OK");
+  EXPECT_TRUE(config.cancel.label.empty());
+}
+
 // A cause with no action URL (token deactivated) shows its own heading + body
 // but offers no Info/QR button, and ESC must not open one.
 TEST_F(MainScreenTest, DeniedWithoutActionUrlHasNoInfoButton) {

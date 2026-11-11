@@ -273,6 +273,8 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_RpcFailure) {
   ASSERT_TRUE(result.has_value());
   EXPECT_FALSE(result->ok());
   EXPECT_EQ(result->status(), pw::Status::Unavailable());
+  // No answer from the cloud — distinguishable from a refusal.
+  EXPECT_TRUE(provider.cloud_call_failed());
 }
 
 // ============================================================================
@@ -396,6 +398,8 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Rejected) {
   ASSERT_TRUE(verify_result.has_value());
   EXPECT_FALSE(verify_result->ok());
   EXPECT_EQ(verify_result->status(), pw::Status::Unauthenticated());
+  // The cloud answered (with a refusal), so this is not a connection failure.
+  EXPECT_FALSE(provider.cloud_call_failed());
 
   // Verify auth_id is cleared on rejection
   EXPECT_FALSE(provider.auth_id().has_value());

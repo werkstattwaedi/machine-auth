@@ -51,6 +51,7 @@ CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext cx,
   if (!result.ok()) {
     PW_LOG_ERROR("AuthenticateTag RPC failed: %d",
                  static_cast<int>(result.status().code()));
+    cloud_call_failed_ = true;
     co_return result.status();
   }
 
@@ -102,6 +103,7 @@ CloudKeyProvider::VerifyAndComputeSessionKeys(
   if (!result.ok()) {
     PW_LOG_ERROR("CompleteTagAuth RPC failed: %d",
                  static_cast<int>(result.status().code()));
+    cloud_call_failed_ = true;
     CancelAuthentication();
     co_return result.status();
   }
