@@ -196,7 +196,7 @@ function MembershipPage() {
   const handleCancelAutoRenew = async (membershipId: string) => {
     if (
       !confirm(
-        "Automatische Verlängerung beenden? Deine Mitgliedschaft bleibt bis zum Ablaufdatum aktiv, wird danach aber nicht mehr automatisch verlängert.",
+        "Mitgliedschaft kündigen? Sie bleibt bis zum Ablaufdatum aktiv und wird danach nicht mehr verlängert.",
       )
     )
       return
@@ -542,7 +542,7 @@ export function StatusHero({
             <Badge variant="destructive">Abgelaufen</Badge>
           )}
           {status === "cancelled" && (
-            <Badge variant="outline">Gekündigt</Badge>
+            <Badge variant="outline">Beendet</Badge>
           )}
         </div>
 
@@ -564,7 +564,7 @@ export function StatusHero({
             {status === "active" && type === "family" && isOwner && (
               <>
                 Du bist <strong className="text-foreground">Inhaber:in</strong>{" "}
-                der Familie.
+                der Familienmitgliedschaft.
               </>
             )}
             {status === "active" && type === "family" && !isOwner && (
@@ -606,6 +606,12 @@ export function StatusHero({
                       Die Familienmitgliedschaft wird automatisch verlängert.
                       Die Rechnung erhält die Inhaber:in der Familie.
                     </>
+                  ) : type === "family" ? (
+                    <>
+                      Eure Familienmitgliedschaft wird automatisch verlängert.
+                      Rund 30 Tage vor Ablauf erhältst du eine Rechnung per
+                      E-Mail.
+                    </>
                   ) : (
                     <>
                       Deine Mitgliedschaft wird automatisch verlängert. Rund 30
@@ -619,14 +625,16 @@ export function StatusHero({
                     onClick={onCancelAutoRenew}
                     disabled={loading}
                   >
-                    Automatische Verlängerung beenden
+                    Mitgliedschaft kündigen
                   </Button>
                 )}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Die automatische Verlängerung ist beendet. Deine Mitgliedschaft
-                bleibt bis zum {validUntil} aktiv und läuft danach aus.
+                {type === "family"
+                  ? "Die Familienmitgliedschaft ist gekündigt."
+                  : "Deine Mitgliedschaft ist gekündigt."}{" "}
+                Sie bleibt bis zum {validUntil} aktiv und läuft danach aus.
               </p>
             )}
           </div>
@@ -1022,20 +1030,20 @@ function FamilySection({
               <span className="inline-flex size-6 items-center justify-center rounded-full bg-cog-teal text-white">
                 <Plus className="size-4" />
               </span>
-              Mitglied hinzufügen
+              Familienmitglied hinzufügen
             </button>
           )}
 
           {addMode === "invite" && (
             <div>
               <h3 className="font-heading text-lg font-bold">
-                Mitglied einladen
+                Familienmitglied einladen
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Die Person erhält einen Link per E-Mail und meldet sich mit
                 eigenem Konto an. Wer dich nur begleitet, braucht keine
-                Mitgliedschaft — erfasse diese Person beim Check-in einfach
-                als weitere Person.
+                Mitgliedschaft — erfasse diese Person beim Check-in dann
+                einfach als weitere Person.
               </p>
               <form onSubmit={handleInvite} className="mt-4 flex items-end gap-2">
                 <div className="flex-1">
