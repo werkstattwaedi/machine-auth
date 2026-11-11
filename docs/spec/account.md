@@ -13,9 +13,10 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
   | e-mail code | yes | yes | an account; a new e-mail address can create one |
   | SMS code | yes | yes | a mobile number verified on the profile; a phone number alone creates no account |
   | Google | yes | no | — |
-  | badge tap | no | yes | a registered badge (unregistered: KIO-13) |
+  | badge tap | no (ACC-11) | yes | a registered badge (unregistered: KIO-13) |
 
 - **ACC-3** The link in the e-mail-code mail signs in the device that opens it. — ADR-0021
+- **ACC-11** A badge tap on an own device signs nobody in and is never checked with the server, so a registered, an unregistered and a deactivated badge are answered alike: it opens the checkout app's sign-in page, which tells the person that their device read the badge, that the badge is used at the kiosk and the machine terminals, and that on their device they sign in instead (ACC-1); a person already signed in there is not told and continues as on opening the app (CHK-2). — ADR-0022, #602
 
 ## First sign-in
 
@@ -37,7 +38,6 @@ kiosk, and the Nutzungsverlauf. Terms: see the [glossary](README.md#glossary).
 ## Open questions
 
 - [NEEDS CLARIFICATION] A restricted session with an incomplete profile whose account has neither an e-mail address nor a mobile number verified for SMS sign-in can't enter a code (ACC-5), so it can't complete the welcome onboarding at the kiosk (ACC-2, ACC-4). What does it get instead — and the same for a person who cancels the code? — #849
-- [NEEDS CLARIFICATION] A badge tapped on a phone is refused with a generic "could not be read" error; ADR-0022 promised a message that sends the person to the kiosk. Rule or gap?
 
 ## Retired
 

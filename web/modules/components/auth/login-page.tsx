@@ -16,10 +16,10 @@
 // Admin (signupEnabled = false) keeps the plain e-mail → code flow: admin
 // accounts are admin-created, so there is no existence check and no sign-up.
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Info, Loader2 } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
 import { useFunctions } from "@modules/lib/firebase-context"
 import { prewarm } from "@modules/lib/rpc"
@@ -50,6 +50,12 @@ export interface LoginPageProps {
   redirect?: string
   /** When set (magic-link new account), open directly in the sign-up stage. */
   signup?: boolean
+  /**
+   * Why the visitor landed on the sign-in page (e.g. a badge tapped on a
+   * phone). Shown on the e-mail stage in place of the generic heading hint,
+   * under a plain "Anmelden" heading.
+   */
+  notice?: ReactNode
 }
 
 type Stage =
@@ -69,6 +75,7 @@ export function LoginPage({
   googleButtonPosition = "bottom",
   redirect: redirectTo,
   signup: signupFlag,
+  notice,
 }: LoginPageProps) {
   const {
     user,
@@ -409,7 +416,7 @@ export function LoginPage({
       ? "Konto erstellen"
       : stage.kind === "signin-code"
         ? "Anmelden"
-        : signupEnabled
+        : signupEnabled && !notice
           ? "Anmelden oder Konto erstellen"
           : "Anmelden"
 
@@ -421,7 +428,7 @@ export function LoginPage({
       ? stage.via === "code"
         ? "Für diese E-Mail-Adresse gibt es noch kein Konto."
         : "Noch ein paar Angaben, dann ist dein Konto bereit."
-      : stage.kind === "email" && signupEnabled
+      : stage.kind === "email" && signupEnabled && !notice
         ? "Melde dich mit deiner E-Mail-Adresse an oder erstelle ein neues Konto."
         : null
 
@@ -453,6 +460,15 @@ export function LoginPage({
           <p className="text-sm text-muted-foreground">
             {headingHint}
           </p>
+        )}
+        {notice && stage.kind === "email" && (
+          <div
+            role="note"
+            className="mt-4 flex items-start gap-3 rounded-md bg-oww-gold-light p-3 text-sm text-oww-gold-text-muted"
+          >
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div>{notice}</div>
+          </div>
         )}
 
         <div className="w-full mt-8">
