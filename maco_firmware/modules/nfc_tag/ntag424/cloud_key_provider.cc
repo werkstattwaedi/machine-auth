@@ -41,8 +41,10 @@ CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext cx,
     co_return pw::Status::InvalidArgument();
   }
 
-  // Clear any previous authentication state
+  // Clear any previous authentication state, including a failure flag from an
+  // earlier attempt should this provider ever be reused.
   CancelAuthentication();
+  cloud_call_failed_ = false;
 
   // Forward to cloud
   auto result = co_await firebase_client_.AuthenticateTag(

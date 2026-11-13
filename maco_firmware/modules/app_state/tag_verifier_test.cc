@@ -499,6 +499,24 @@ TEST_F(TagVerifierTest, CheckinRpcFailure) {
   EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kConnectionFailed);
 }
 
+// A terminal with no machine configured is a setup problem, not a connection
+// problem: it keeps the generic denial (the check-in is never sent).
+TEST_F(TagVerifierTest, NoMachineConfiguredStaysGenericDenial) {
+  machine_id_ = maco::FirebaseId::Empty();  // the verifier holds a reference
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kUnspecified);
+}
+
 // The check-in lets the badge in but has no recent authentication, so the
 // terminal authenticates the badge with the cloud — and that call gets no
 // answer. Same connection notice as a failed check-in, not a refusal.

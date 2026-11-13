@@ -419,6 +419,10 @@ pw::async2::Coro<pw::Status> TagVerifier::AuthorizeTag(
     if (checkin_result.status().IsInvalidArgument()) {
       NotifyUnauthorized();
     } else {
+      // Deliberately broad: a gateway HTTP error (incl. a server crash) or an
+      // unreadable reply also lands here. Real refusals always arrive as a
+      // CheckinRejected answer, so none is mislabelled; for everything else a
+      // retry is the right advice.
       NotifyUnauthorized(RejectionReason::kConnectionFailed);
     }
     co_return pw::OkStatus();
