@@ -61,6 +61,32 @@ nfc::Ntag424TagMock::Config MakeConfig(
   return config;
 }
 
+// Helper to encode an Authorized TerminalCheckinResponse without an existing
+// auth, which sends the verifier into the cloud key authentication.
+pw::Result<size_t> EncodeAuthorizedWithoutAuth(const char* user_id,
+                                               const char* user_label,
+                                               pw::ByteSpan buffer) {
+  maco_proto_firebase_rpc_TerminalCheckinResponse response =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_init_zero;
+
+  response.which_result =
+      maco_proto_firebase_rpc_TerminalCheckinResponse_authorized_tag;
+  response.result.authorized.has_user_id = true;
+  std::strncpy(response.result.authorized.user_id.value, user_id,
+               sizeof(response.result.authorized.user_id.value) - 1);
+  std::strncpy(response.result.authorized.user_label, user_label,
+               sizeof(response.result.authorized.user_label) - 1);
+
+  pb_ostream_t stream = pb_ostream_from_buffer(
+      reinterpret_cast<pb_byte_t*>(buffer.data()), buffer.size());
+  if (!pb_encode(&stream,
+                 maco_proto_firebase_rpc_TerminalCheckinResponse_fields,
+                 &response)) {
+    return pw::Status::Internal();
+  }
+  return stream.bytes_written;
+}
+
 // Helper to encode an Authorized TerminalCheckinResponse with existing auth
 pw::Result<size_t> EncodeAuthorizedWithAuth(const char* user_id,
                                             const char* user_label,
@@ -207,6 +233,16 @@ class TagVerifierTest : public ::testing::Test {
     std::array<std::byte, 256> payload_buffer;
     auto encode_result =
         EncodeAuthorizedWithAuth(user_id, user_label, auth_id, payload_buffer);
+    ASSERT_TRUE(encode_result.ok());
+    SendForwardResponse(
+        pw::ConstByteSpan(payload_buffer.data(), *encode_result));
+  }
+
+  void SendCheckinAuthorizedWithoutAuth(const char* user_id,
+                                        const char* user_label) {
+    std::array<std::byte, 256> payload_buffer;
+    auto encode_result =
+        EncodeAuthorizedWithoutAuth(user_id, user_label, payload_buffer);
     ASSERT_TRUE(encode_result.ok());
     SendForwardResponse(
         pw::ConstByteSpan(payload_buffer.data(), *encode_result));
@@ -457,7 +493,55 @@ TEST_F(TagVerifierTest, CheckinRpcFailure) {
   SendRpcError(pw::Status::Unavailable());
   dispatcher_.RunUntilStalled();
 
-  EXPECT_EQ(GetSnapshot().state, TagVerificationState::kUnauthorized);
+  // The cloud never answered: a connection notice, not a permission denial.
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kConnectionFailed);
+}
+
+// A terminal with no machine configured is a setup problem, not a connection
+// problem: it keeps the generic denial (the check-in is never sent).
+TEST_F(TagVerifierTest, NoMachineConfiguredStaysGenericDenial) {
+  machine_id_ = maco::FirebaseId::Empty();  // the verifier holds a reference
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kUnspecified);
+}
+
+// The check-in lets the badge in but has no recent authentication, so the
+// terminal authenticates the badge with the cloud — and that call gets no
+// answer. Same connection notice as a failed check-in, not a refusal.
+TEST_F(TagVerifierTest, CloudKeyAuthRpcFailureIsConnectionFailed) {
+  auto config = MakeConfig(kRealUid, kTerminalKey);
+
+  pw::random::XorShiftStarRng64 tag_rng{0xABCDEF01};
+  auto tag = std::make_shared<nfc::Ntag424TagMock>(
+      kAntiCollisionUid, kNtag424Sak, config, tag_rng);
+
+  reader_.SimulateTagArrival(std::static_pointer_cast<nfc::MockTag>(tag));
+  dispatcher_.RunUntilStalled();
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
+
+  SendCheckinAuthorizedWithoutAuth("user123", "Fresh User");
+  dispatcher_.RunUntilStalled();
+  ASSERT_EQ(GetSnapshot().state, TagVerificationState::kAuthorizing);
+
+  // The AuthenticateTag call is now in flight; it fails at the RPC level.
+  SendRpcError(pw::Status::Unavailable());
+  dispatcher_.RunUntilStalled();
+
+  auto snapshot = GetSnapshot();
+  EXPECT_EQ(snapshot.state, TagVerificationState::kUnauthorized);
+  EXPECT_EQ(snapshot.rejection_reason, RejectionReason::kConnectionFailed);
 }
 
 // ============================================================================

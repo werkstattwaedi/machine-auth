@@ -273,6 +273,8 @@ TEST_F(CloudKeyProviderTest, CreateNtagChallenge_RpcFailure) {
   ASSERT_TRUE(result.has_value());
   EXPECT_FALSE(result->ok());
   EXPECT_EQ(result->status(), pw::Status::Unavailable());
+  // No answer from the cloud — distinguishable from a refusal.
+  EXPECT_TRUE(provider.cloud_call_failed());
 }
 
 // ============================================================================
@@ -396,8 +398,59 @@ TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_Rejected) {
   ASSERT_TRUE(verify_result.has_value());
   EXPECT_FALSE(verify_result->ok());
   EXPECT_EQ(verify_result->status(), pw::Status::Unauthenticated());
+  // The cloud answered (with a refusal), so this is not a connection failure.
+  EXPECT_FALSE(provider.cloud_call_failed());
 
   // Verify auth_id is cleared on rejection
+  EXPECT_FALSE(provider.auth_id().has_value());
+}
+
+TEST_F(CloudKeyProviderTest, VerifyAndComputeSessionKeys_RpcFailure) {
+  auto firebase_client = CreateFirebaseClient();
+  auto tag_uid = CreateTagUid();
+  CloudKeyProvider provider(firebase_client, tag_uid, /*key_number=*/0);
+
+  std::optional<pw::Result<std::array<std::byte, 32>>> challenge_result;
+  std::optional<pw::Result<SessionKeys>> verify_result;
+
+  pw::async2::CoroContext coro_cx(test_allocator_);
+  auto test_coro =
+      [&](pw::async2::CoroContext cx) -> pw::async2::Coro<pw::Status> {
+    challenge_result = co_await provider.CreateNtagChallenge(cx, kEncryptedRndB);
+    if (!challenge_result->ok()) {
+      co_return challenge_result->status();
+    }
+    verify_result =
+        co_await provider.VerifyAndComputeSessionKeys(cx, kEncryptedPart3);
+    co_return pw::OkStatus();
+  };
+
+  auto coro = test_coro(coro_cx);
+  maco::async_util::StatusCoroTask task(std::move(coro),
+                                  [](pw::Status) { /* Error handler */ });
+
+  dispatcher_.Post(task);
+  dispatcher_.RunUntilStalled();
+
+  // Respond to AuthenticateTag
+  std::array<std::byte, 256> payload_buffer;
+  auto encode_result =
+      EncodeAuthenticateTagResponse("auth123", kCloudChallenge, payload_buffer);
+  ASSERT_TRUE(encode_result.ok());
+  SendForwardResponse(
+      pw::ConstByteSpan(payload_buffer.data(), *encode_result));
+
+  dispatcher_.RunUntilStalled();
+
+  // CompleteTagAuth gets no answer.
+  SendRpcError(pw::Status::Unavailable());
+
+  ASSERT_TRUE(RunUntilComplete(task));
+
+  ASSERT_TRUE(verify_result.has_value());
+  EXPECT_FALSE(verify_result->ok());
+  EXPECT_EQ(verify_result->status(), pw::Status::Unavailable());
+  EXPECT_TRUE(provider.cloud_call_failed());
   EXPECT_FALSE(provider.auth_id().has_value());
 }
 

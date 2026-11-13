@@ -41,8 +41,10 @@ CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext cx,
     co_return pw::Status::InvalidArgument();
   }
 
-  // Clear any previous authentication state
+  // Clear any previous authentication state, including a failure flag from an
+  // earlier attempt should this provider ever be reused.
   CancelAuthentication();
+  cloud_call_failed_ = false;
 
   // Forward to cloud
   auto result = co_await firebase_client_.AuthenticateTag(
@@ -51,6 +53,7 @@ CloudKeyProvider::CreateNtagChallenge(pw::async2::CoroContext cx,
   if (!result.ok()) {
     PW_LOG_ERROR("AuthenticateTag RPC failed: %d",
                  static_cast<int>(result.status().code()));
+    cloud_call_failed_ = true;
     co_return result.status();
   }
 
@@ -102,6 +105,7 @@ CloudKeyProvider::VerifyAndComputeSessionKeys(
   if (!result.ok()) {
     PW_LOG_ERROR("CompleteTagAuth RPC failed: %d",
                  static_cast<int>(result.status().code()));
+    cloud_call_failed_ = true;
     CancelAuthentication();
     co_return result.status();
   }

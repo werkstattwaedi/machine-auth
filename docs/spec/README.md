@@ -28,7 +28,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 | `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |
-| `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, permissions |
+| `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, what it tells a person it refuses, permissions |
 | `CRS` | [courses.md](courses.md) | edoobox courses: course leaders, participants, attendance, temporary and granted permissions |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit

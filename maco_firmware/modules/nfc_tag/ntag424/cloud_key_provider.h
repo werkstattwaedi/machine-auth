@@ -91,6 +91,12 @@ class CloudKeyProvider : public Ntag424KeyProvider {
     return stored_auth_id_;
   }
 
+  /// True when a cloud call itself failed (no answer: gateway unreachable,
+  /// timeout, server error) as opposed to the cloud rejecting the tag. Lets
+  /// the caller tell a connection problem from a refusal, which the status
+  /// returned through Ntag424Tag::Authenticate cannot.
+  bool cloud_call_failed() const { return cloud_call_failed_; }
+
  private:
   /// Convert key_number (0-4) to Key enum (APPLICATION=1, TERMINAL=2, ...).
   static firebase::Key KeyNumberToEnum(uint8_t key_number);
@@ -99,6 +105,7 @@ class CloudKeyProvider : public Ntag424KeyProvider {
   TagUid tag_uid_;
   uint8_t key_number_;
   std::optional<FirebaseId> stored_auth_id_;
+  bool cloud_call_failed_ = false;
 };
 
 }  // namespace maco::nfc

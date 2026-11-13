@@ -67,6 +67,9 @@ DenialCopy CopyForReason(app_state::RejectionReason reason) {
       return {"Badge unbekannt", "Dieser Badge ist nicht registriert."};
     case app_state::RejectionReason::kTokenDeactivated:
       return {"Badge deaktiviert", "Dieser Badge wurde deaktiviert."};
+    case app_state::RejectionReason::kConnectionFailed:
+      // Terminal-local (no web counterpart): the check-in got no answer.
+      return {"Keine Verbindung", "Versuche es in einem Moment nochmals."};
     case app_state::RejectionReason::kUnspecified:
       break;
   }
