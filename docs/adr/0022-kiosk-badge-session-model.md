@@ -99,7 +99,7 @@ The transaction serializes concurrent calls with the same picc, so two parallel 
 **This is intentionally not real attestation.** Anyone with local admin on the kiosk Windows box can extract the secret. Its actual value:
 - **Audit:** every accepted call is logged with `kioskId`.
 - **Revocation:** rotate the secret if leaked.
-- **Default rejection of phone taps:** a phone-opened SDM URL carries no bearer; the call is rejected with `permission-denied`. Phones used to mint sessions; now they can't.
+- **Default rejection of phone taps:** a phone-opened SDM URL carries no bearer; the call is rejected with `permission-denied`. Phones used to mint sessions; now they can't. Since #602 the web app doesn't even make the call: a tap link without the kiosk flag goes straight to the sign-in page, with a hint that badges work at the kiosk and the machines (ACC-11).
 
 For real kiosk attestation we'd need TPM-anchored mTLS, a YubiKey/FIDO2 hardware key, or routing the call through the gateway (which already holds `GATEWAY_API_KEY` and lives on a more controlled machine). The plan tracks this as Phase F, deferred. The structural defense in §1 means a leaked Bearer doesn't grant anything more than a captured URL would — a narrow checkout-only session.
 

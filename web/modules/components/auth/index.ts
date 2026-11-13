@@ -29,6 +29,9 @@ export const loginSearchSchema = z.object({
   // Open directly in the sign-up stage — set by the magic-link verify page
   // when a redeemed link belongs to a not-yet-completed account.
   signup: z.optional(z.string()),
+  // Why the visitor landed here — `badge` when a badge was tapped on an own
+  // device (#602); the app's route turns it into a hint.
+  from: z.optional(z.string()),
 })
 
 /** Search schema for /login/verify (magic-link redemption). */

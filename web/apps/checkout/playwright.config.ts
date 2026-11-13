@@ -84,6 +84,9 @@ export default defineConfig({
       // SMS login codes (ADR-0031): E2E always exercises the flag-on flow
       // against the Auth emulator, regardless of the local .env.development.
       VITE_SMS_LOGIN_ENABLED: "true",
+      // The app's own host, so a badge tap outside the kiosk (#602) stays
+      // in the app instead of moving to the dev server's domain.
+      VITE_CHECKOUT_DOMAIN: `localhost:${E2E_PORTS.vite}`,
     },
   },
 })

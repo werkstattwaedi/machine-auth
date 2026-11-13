@@ -16,6 +16,7 @@ import { useDb } from "@modules/lib/firebase-context"
 import { where } from "firebase/firestore"
 import { isCheckoutStale } from "@modules/lib/session-day"
 import { dispatchSearch } from "@/lib/dispatch-search"
+import { isOwnDeviceTap, ownDeviceTapLoginUrl } from "@/lib/badge-tap"
 
 const indexSearchSchema = z.object({
   picc: z.optional(z.string()),
@@ -52,10 +53,23 @@ function RootDispatcher() {
     userDocLoading,
     sessionKind,
   } = useAuth()
+  // A badge read by a phone goes to the sign-in page, never to the
+  // kiosk-only tag verification (#602).
+  const ownDeviceTap = isOwnDeviceTap({ picc, cmac, kiosk })
   const { tokenUser, loading: tokenLoading } = useTokenAuth(
-    picc ?? null,
-    cmac ?? null,
+    ownDeviceTap ? null : (picc ?? null),
+    ownDeviceTap ? null : (cmac ?? null),
   )
+
+  useEffect(() => {
+    if (!ownDeviceTap) return
+    const url = ownDeviceTapLoginUrl(
+      window.location,
+      import.meta.env.VITE_CHECKOUT_DOMAIN,
+    )
+    if (url) window.location.replace(url)
+    else navigate({ to: "/login", search: { from: "badge" }, replace: true })
+  }, [ownDeviceTap, navigate])
 
   // Classify the principal by sessionKind so a still-loading userDoc on
   // a real login doesn't get misread as anonymous. Without this the
@@ -113,6 +127,7 @@ function RootDispatcher() {
   const dispatchedRef = useRef(false)
 
   useEffect(() => {
+    if (ownDeviceTap) return
     if (dispatchedRef.current) return
     if (principalLoading) return
 
@@ -146,6 +161,7 @@ function RootDispatcher() {
     }
     navigate({ to: "/visit", search })
   }, [
+    ownDeviceTap,
     principalLoading,
     loadingCheckout,
     openCheckouts,
