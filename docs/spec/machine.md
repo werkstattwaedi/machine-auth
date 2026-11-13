@@ -27,7 +27,7 @@ price of a badge is MEM-14. Terms: see the [glossary](README.md#glossary).
 
 - **MAC-7** When the badge leaves the reader before the machine terminal has finished checking it, the machine stays locked and the terminal asks the person to hold the badge on longer. — #536
 - **MAC-8** A refusal (MAC-6) or the request to hold the badge longer (MAC-7) stays on the machine terminal's screen until the person presses OK, taps a badge again, or 20 s have passed with the badge off the reader and the QR code (MAC-6) closed. — #580
-- **MAC-9** When a machine terminal gets no answer from the server while it checks a badge, the machine stays locked and the terminal tells the person that it has no connection and to try again in a moment, without "Info" (MAC-6), the notice staying on the screen as a refusal does (MAC-8). — #TBD
+- **MAC-9** When a machine terminal gets no answer from the server while it checks a badge, the machine stays locked and the terminal tells the person that it has no connection and to try again in a moment, without "Info" (MAC-6), the notice staying on the screen as a refusal does (MAC-8). — #865
 
 ## Open questions
 
