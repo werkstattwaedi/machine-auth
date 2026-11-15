@@ -900,6 +900,8 @@ function FamilySection({
     context: "checkout.inviteFamily",
     successMessage: "Einladung gesendet",
     errorMessage: "Einladung fehlgeschlagen",
+    // The server's refusal of an address says why; the generic text doesn't.
+    serverMessageCodes: ["functions/invalid-argument"],
   })
   const revokeMutation = useAsyncMutation({
     context: "checkout.revokeFamilyInvite",
