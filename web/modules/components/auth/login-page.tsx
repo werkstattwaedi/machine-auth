@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useNavigate } from "@tanstack/react-router"
+import { isValidEmailAddress } from "@oww/shared"
 import { toast } from "sonner"
 import { Info, Loader2 } from "lucide-react"
 import { useAuth } from "@modules/lib/auth"
@@ -190,7 +191,9 @@ export function LoginPage({
     e.preventDefault()
     // Own validation (form is noValidate): the native bubble is styled by
     // the browser and speaks the browser's language, not the product's.
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    // The shared check is the server's: an address it refuses would come back
+    // from checkAccountExists as an error toast instead of this inline hint.
+    if (!isValidEmailAddress(email.trim())) {
       setEmailError("Bitte gib eine gültige E-Mail-Adresse ein.")
       return
     }

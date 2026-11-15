@@ -35,7 +35,11 @@ import {
   INVITE_TTL_MS,
   membershipRef,
 } from "./shared";
-import { isAllowedOrigin, isEmulator } from "../auth/login-code/helpers";
+import {
+  isAllowedOrigin,
+  isEmulator,
+  isPlausibleEmail,
+} from "../auth/login-code/helpers";
 import { sendTemplate } from "../util/resend_template";
 import { formatFullName } from "../util/username-utils";
 
@@ -73,6 +77,11 @@ export async function handleInviteFamilyMember(
     throw new HttpsError("invalid-argument", "email is required");
   }
   const normalizedEmail = email.trim().toLowerCase();
+  // Refused up front: an address the mail provider won't take would still
+  // create the invite and leave the owner believing it was sent.
+  if (!isPlausibleEmail(normalizedEmail)) {
+    throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
+  }
 
   const origin = isAllowedOrigin(caller.requestOrigin)
     ? caller.requestOrigin!
@@ -169,13 +178,19 @@ export async function handleInviteFamilyMember(
       // would trip the "Einladung fehlgeschlagen" toast in the UI, falsely
       // implying nothing was created — but the invite *is* in the
       // sub-collection and the owner can revoke or (future) "Erneut senden"
-      // it. The send-failure log line is the canary for ops.
-      logger.error("Failed to send invite email — invite was created", {
-        err,
-        membershipId,
-        inviteId: inviteRef.id,
-        email: normalizedEmail,
-      });
+      // it. The send-failure log line is the canary for ops — except a
+      // refused recipient, which sendTemplate has already logged as a
+      // warning: the owner typed it, so it must not page.
+      const refusedRecipient =
+        err instanceof HttpsError && err.code === "invalid-argument";
+      if (!refusedRecipient) {
+        logger.error("Failed to send invite email — invite was created", {
+          err,
+          membershipId,
+          inviteId: inviteRef.id,
+          email: normalizedEmail,
+        });
+      }
     }
   }
 

@@ -18,6 +18,7 @@ import { rpcCallable, reportRpcError } from "@modules/lib/rpc"
 import { where } from "firebase/firestore"
 import * as React from "react"
 import { z } from "zod"
+import { isValidEmailAddress } from "@oww/shared"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 
 import { useAuth } from "@modules/lib/auth"
@@ -43,6 +44,7 @@ import { Badge } from "@modules/components/ui/badge"
 import { Button } from "@modules/components/ui/button"
 import { Card, CardContent } from "@modules/components/ui/card"
 import { ConfirmDialog } from "@modules/components/confirm-dialog"
+import { ErrorBadge } from "@modules/components/profile-form"
 import { Input } from "@modules/components/ui/input"
 import { Skeleton } from "@modules/components/ui/skeleton"
 import { Label } from "@modules/components/ui/label"
@@ -193,13 +195,10 @@ function MembershipPage() {
   // Issue #323: renewals are now auto-invoiced ~30 days before validUntil
   // by the renewalInvoicer cron — the member can opt out of the next
   // invoice (membership stays active until validUntil).
+  const [confirmCancelAutoRenew, setConfirmCancelAutoRenew] =
+    React.useState(false)
   const handleCancelAutoRenew = async (membershipId: string) => {
-    if (
-      !confirm(
-        "Mitgliedschaft kündigen? Sie bleibt bis zum Ablaufdatum aktiv und wird danach nicht mehr verlängert.",
-      )
-    )
-      return
+    setConfirmCancelAutoRenew(false)
     try {
       await cancelAutoRenew.mutate(async () => {
         const fn = rpcCallable<{ membershipId: string }, { ok: true }>(
@@ -253,8 +252,21 @@ function MembershipPage() {
           // auto-invoiced — the only action offered is opting out.
           onRenew={() => startPurchase(membership.type, false)}
           onCancelAutoRenew={
-            isOwner ? () => handleCancelAutoRenew(membership.id) : null
+            isOwner ? () => setConfirmCancelAutoRenew(true) : null
           }
+        />
+      )}
+
+      {membership && (
+        <ConfirmDialog
+          open={confirmCancelAutoRenew}
+          onOpenChange={setConfirmCancelAutoRenew}
+          title="Mitgliedschaft kündigen?"
+          description={`Sie bleibt bis zum ${formatDate(membership.validUntil)} aktiv und wird danach nicht mehr verlängert.`}
+          confirmLabel="Kündigen"
+          destructive
+          confirmDisabled={cancelAutoRenew.loading}
+          onConfirm={() => void handleCancelAutoRenew(membership.id)}
         />
       )}
 
@@ -880,6 +892,9 @@ function FamilySection({
 
   const [addMode, setAddMode] = React.useState<AddMode>("closed")
   const [inviteEmail, setInviteEmail] = React.useState("")
+  const [inviteEmailError, setInviteEmailError] = React.useState<string | null>(
+    null,
+  )
 
   const inviteMutation = useAsyncMutation({
     context: "checkout.inviteFamily",
@@ -903,11 +918,17 @@ function FamilySection({
   const resetAdd = () => {
     setAddMode("closed")
     setInviteEmail("")
+    setInviteEmailError(null)
   }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!inviteEmail.includes("@")) return
+    // The server's check: an address the mail provider refuses would
+    // otherwise come back as "Einladung fehlgeschlagen" with no hint why.
+    if (!isValidEmailAddress(inviteEmail.trim())) {
+      setInviteEmailError("Bitte gib eine gültige E-Mail-Adresse ein.")
+      return
+    }
     await inviteMutation.mutate(async () => {
       const fn = rpcCallable<
         { membershipId: string; email: string },
@@ -1045,7 +1066,11 @@ function FamilySection({
                 Mitgliedschaft — erfasse diese Person beim Check-in dann
                 einfach als weitere Person.
               </p>
-              <form onSubmit={handleInvite} className="mt-4 flex items-end gap-2">
+              <form
+                noValidate
+                onSubmit={handleInvite}
+                className="mt-4 flex items-end gap-2"
+              >
                 <div className="flex-1">
                   <Label htmlFor="invite-email" className="text-sm font-bold">
                     E-Mail-Adresse
@@ -1056,7 +1081,11 @@ function FamilySection({
                     autoFocus
                     placeholder="name@beispiel.ch"
                     value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
+                    onChange={(e) => {
+                      setInviteEmail(e.target.value)
+                      if (inviteEmailError) setInviteEmailError(null)
+                    }}
+                    aria-invalid={!!inviteEmailError}
                     className="mt-1"
                   />
                 </div>
@@ -1068,6 +1097,7 @@ function FamilySection({
                   Einladen
                 </Button>
               </form>
+              {inviteEmailError && <ErrorBadge message={inviteEmailError} />}
               <button
                 type="button"
                 onClick={resetAdd}

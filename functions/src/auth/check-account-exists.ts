@@ -58,7 +58,7 @@ export async function handleCheckAccountExists(
   }
   const email = normalizeEmail(input.email);
   if (!isPlausibleEmail(email)) {
-    throw new HttpsError("invalid-argument", "invalid email");
+    throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
   }
   if (!isAllowedOrigin(requestOrigin)) {
     throw new HttpsError("failed-precondition", "unknown request origin");
