@@ -246,6 +246,42 @@ installers share `appId` + `productName`, so they are one installation and
 exclude each other; an unpackaged `npm run start:kiosk` uses a separate
 `userData` and can still be started next to an installed build.
 
+### Browser on the terminal PC (`oww-kiosk://`)
+
+Visitors still open `checkout.werkstattwaedi.ch` in the terminal PC's
+browser, which runs the ordinary web checkout on a shared machine. To stop
+that, the browser there is marked as "the kiosk PC". A marked browser does
+not render the web checkout. It shows a "Self-Checkout öffnen" page that
+launches `oww-kiosk://open` (`web/apps/checkout/src/components/kiosk-pc-gate.tsx`).
+
+The installed kiosk registers `oww-kiosk://` for the current user on every
+start (packaged builds only). Launching it starts the kiosk, or surfaces the
+running one through the single-instance lock above.
+
+One-time setup on the terminal PC (Edge):
+
+1. Start the new kiosk build once, so the protocol is registered.
+2. In Edge, open `https://checkout.werkstattwaedi.ch/?kiosk-pc=1`. This sets
+   the marker (`localStorage["oww.kioskPc"]`). The marker is lost when site
+   data is cleared, so make the same URL Edge's startup page: *Settings →
+   Start, home, and new tab page → Open these pages*. It is re-armed on every
+   browser start. The arming visit itself does not launch the kiosk.
+3. Optional, to skip Edge's "Open OWW Self Checkout?" prompt: set the policy
+   `HKLM\SOFTWARE\Policies\Microsoft\Edge\AutoLaunchProtocolsFromOrigins`
+   (REG_SZ) to
+   `[{"protocol":"oww-kiosk","allowed_origins":["https://checkout.werkstattwaedi.ch"]}]`.
+   Otherwise tick "Always allow" in the prompt once. Check `edge://policy`.
+4. Optional: `HKLM\SOFTWARE\Policies\Microsoft\Edge\InPrivateModeAvailability`
+   (DWORD) `1` disables InPrivate windows, which have no marker.
+
+A marked browser also signs out any login left over from the web checkout,
+and the parameter is removed from the address bar once applied (only `1` and
+`0` count). It is not a secret, since anyone at the terminal can read it in
+the startup settings; removing it only keeps it from being copied along with
+a link. To unmark a browser, open `?kiosk-pc=0`. The gate never applies inside the
+kiosk app itself: there the bridge is present, and its webview has its own
+storage partition that is wiped at every start.
+
 ## File Layout
 
 ```
