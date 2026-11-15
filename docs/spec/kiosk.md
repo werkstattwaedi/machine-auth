@@ -117,10 +117,10 @@ checkout app does in the browser of the kiosk's computer. The check-in itself fo
 
 ## The kiosk computer's browser
 
-- **KIO-30** Opening any address of the checkout app with `?kiosk-pc=1` marks that browser as the kiosk computer's browser and `?kiosk-pc=0` unmarks it; any other value changes nothing, and the parameter is gone from the address bar once applied. — #TBD
-- **KIO-31** In a marked browser (KIO-30), outside the kiosk app, the checkout app shows no checkout and no account but tells the person to use the kiosk app, with a button that opens it; on every page load except the one that marked the browser, it opens the kiosk app at once. — #TBD
-- **KIO-32** Whoever is signed in to the checkout app in a marked browser (KIO-30) is signed out. — #TBD
-- **KIO-33** Opening the kiosk app from the browser (KIO-31) starts the kiosk (KIO-29) or, when it already runs, brings its window to the front. — #TBD
+- **KIO-30** Opening any address of the checkout app with `?kiosk-pc=1` marks that browser as the kiosk computer's browser and `?kiosk-pc=0` unmarks it; any other value changes nothing, and the parameter is gone from the address bar once applied. — #870
+- **KIO-31** In a marked browser (KIO-30), outside the kiosk app, the checkout app shows no checkout and no account but tells the person to use the kiosk app, with a button that opens it; on every page load except the one that marked the browser, it opens the kiosk app at once. — #870
+- **KIO-32** Whoever is signed in to the checkout app in a marked browser (KIO-30) is signed out. — #870
+- **KIO-33** Opening the kiosk app from the browser (KIO-31) starts the kiosk (KIO-29) or, when it already runs, brings its window to the front. — #870
 
 ## Open questions
 
