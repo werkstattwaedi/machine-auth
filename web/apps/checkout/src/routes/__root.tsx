@@ -13,6 +13,7 @@ import { KioskElevationProvider } from "@/components/checkout/kiosk-elevation-di
 import { KioskAccountIdleWatcher } from "@/components/account/kiosk-account-idle-watcher"
 import { KioskStatusReporter } from "@/components/kiosk-status-reporter"
 import { KioskKeepWarm } from "@/components/kiosk-keep-warm"
+import { KioskPcGate } from "@/components/kiosk-pc-gate"
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -30,7 +31,11 @@ function RootLayout() {
           <KioskAccountIdleWatcher />
           <KioskStatusReporter />
           <KioskKeepWarm />
-          <Outlet />
+          {/* Shared terminal PC browser: hand over to the kiosk app instead
+              of running the web checkout there. */}
+          <KioskPcGate>
+            <Outlet />
+          </KioskPcGate>
           <Toaster />
           <ClientVersionGate />
           <MarkerIO app="checkout" />
