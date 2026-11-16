@@ -161,6 +161,29 @@ describe("Family invite (Integration)", () => {
     );
   });
 
+  it("refuses an address the mail provider would refuse, creating no invite", async () => {
+    const { membershipId } = await seedFamilyMembership({
+      uid: "owner-bad-email",
+      email: "owner-bad@example.com",
+    });
+
+    await expectHttpsError(
+      () =>
+        handleInviteFamilyMember(
+          { membershipId, email: "two..dots@example.com" },
+          ownerCaller("owner-bad-email"),
+        ),
+      "invalid-argument",
+    );
+
+    const invites = await getFirestore()
+      .collection("memberships")
+      .doc(membershipId)
+      .collection("invites")
+      .get();
+    expect(invites.empty).to.be.true;
+  });
+
   it("rejects when the request origin is not allowlisted", async () => {
     const { membershipId } = await seedFamilyMembership({
       uid: "owner-3",

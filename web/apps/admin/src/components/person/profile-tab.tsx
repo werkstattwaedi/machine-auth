@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
+import { isValidEmailAddress } from "@oww/shared"
 import { useAsyncMutation } from "@modules/hooks/use-async-mutation"
 import { useFirestoreMutation } from "@modules/hooks/use-firestore-mutation"
 import { userRef } from "@modules/lib/firestore-helpers"
@@ -168,10 +169,9 @@ export function PersonProfileTab({
                         "Die Anmelde-E-Mail kann geändert, aber nicht entfernt werden."
                       )
                     }
-                    // Same sanity check the callable applies — catch it here
-                    // with a German message instead of "invalid email".
+                    // The callable's own check, caught here with a field hint.
                     return (
-                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ||
+                      isValidEmailAddress(value) ||
                       "Bitte gib eine gültige E-Mail-Adresse ein."
                     )
                   },

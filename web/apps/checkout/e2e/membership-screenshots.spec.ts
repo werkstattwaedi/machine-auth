@@ -52,6 +52,20 @@ test.describe("Membership page screenshots", () => {
     await expect(page.getByText("Aktiv", { exact: true })).toBeVisible()
     await expect(page.getByText("12.05.2027")).toBeVisible()
     await expect(page).toHaveScreenshot("membership-active-single.png")
+
+    // Ending auto-renew goes through the in-app confirm dialog (not a
+    // browser confirm, which a kiosk or a test driver can't answer).
+    await page.getByRole("button", { name: "Mitgliedschaft kündigen" }).click()
+    const dialog = page.getByRole("alertdialog")
+    await expect(dialog.getByText("Mitgliedschaft kündigen?")).toBeVisible()
+    await dialog.getByRole("button", { name: "Kündigen" }).click()
+    // Auto-renew ended: the dialog is gone and so is the action, while the
+    // membership itself stays active (MEM-26).
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByRole("button", { name: "Mitgliedschaft kündigen" }),
+    ).toHaveCount(0, { timeout: 10_000 })
+    await expect(page.getByText("Aktiv", { exact: true })).toBeVisible()
   })
 
   test("active family — owner with roster + pending invite", async ({ page }) => {
@@ -82,6 +96,15 @@ test.describe("Membership page screenshots", () => {
       page.getByRole("button", { name: "Familienmitglied hinzufügen" }),
     ).toBeVisible()
     await expect(page).toHaveScreenshot("membership-active-family-owner.png")
+
+    // An address the mail provider would refuse is caught at input, before
+    // any invite is created.
+    await page.getByRole("button", { name: "Familienmitglied hinzufügen" }).click()
+    const inviteEmail = page.getByLabel("E-Mail-Adresse")
+    await inviteEmail.fill("two..dots@beispiel.ch")
+    await page.getByRole("button", { name: "Einladen" }).click()
+    await expect(inviteEmail).toHaveAttribute("aria-invalid", "true")
+    await expect(page.getByText("Ausstehend", { exact: true })).toHaveCount(1)
   })
 
   test("active family — non-owner sees roster and can leave", async ({ page }) => {

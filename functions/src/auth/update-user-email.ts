@@ -141,7 +141,7 @@ export const updateUserEmailHandler = async (
   }
   const email = normalizeEmail(rawEmail);
   if (!isPlausibleEmail(email)) {
-    throw new HttpsError("invalid-argument", "invalid email");
+    throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
   }
 
   return changeUserEmail(defaultIdentityDeps(), {

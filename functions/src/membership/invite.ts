@@ -35,7 +35,11 @@ import {
   INVITE_TTL_MS,
   membershipRef,
 } from "./shared";
-import { isAllowedOrigin, isEmulator } from "../auth/login-code/helpers";
+import {
+  isAllowedOrigin,
+  isEmulator,
+  isPlausibleEmail,
+} from "../auth/login-code/helpers";
 import { sendTemplate } from "../util/resend_template";
 import { formatFullName } from "../util/username-utils";
 
@@ -73,6 +77,11 @@ export async function handleInviteFamilyMember(
     throw new HttpsError("invalid-argument", "email is required");
   }
   const normalizedEmail = email.trim().toLowerCase();
+  // Refused up front: an address the mail provider won't take would still
+  // create the invite and leave the owner believing it was sent.
+  if (!isPlausibleEmail(normalizedEmail)) {
+    throw new HttpsError("invalid-argument", "Ungültige E-Mail-Adresse.");
+  }
 
   const origin = isAllowedOrigin(caller.requestOrigin)
     ? caller.requestOrigin!
@@ -152,31 +161,15 @@ export async function handleInviteFamilyMember(
       `[invite] EMULATOR link for ${normalizedEmail}: ${acceptLink}`,
     );
   } else {
-    try {
-      await sendTemplate({
-        to: normalizedEmail,
-        mail: "invite",
-        dims: {},
-        variables: {
-          INVITER_NAME: inviterName,
-          MEMBERSHIP_NAME: membershipName,
-          ACCEPT_LINK: acceptLink,
-        },
-      });
-    } catch (err) {
-      // The invite doc has already been written; don't roll it back AND
-      // don't surface the failure to the inviter. Returning an error here
-      // would trip the "Einladung fehlgeschlagen" toast in the UI, falsely
-      // implying nothing was created — but the invite *is* in the
-      // sub-collection and the owner can revoke or (future) "Erneut senden"
-      // it. The send-failure log line is the canary for ops.
-      logger.error("Failed to send invite email — invite was created", {
-        err,
-        membershipId,
-        inviteId: inviteRef.id,
-        email: normalizedEmail,
-      });
-    }
+    await sendInviteMail({
+      to: normalizedEmail,
+      variables: {
+        INVITER_NAME: inviterName,
+        MEMBERSHIP_NAME: membershipName,
+        ACCEPT_LINK: acceptLink,
+      },
+      context: { membershipId, inviteId: inviteRef.id },
+    });
   }
 
   logger.info("Created family invite", {
@@ -198,6 +191,51 @@ export const inviteFamilyMemberHandler = async (request: CallableRequest<InviteF
       (request.rawRequest.headers.origin as string | undefined) ?? null,
   });
 };
+
+/**
+ * Sends the invite mail; never throws. The invite doc is already written, so
+ * a failure is neither rolled back nor surfaced to the inviter — an error
+ * would trip the "Einladung fehlgeschlagen" toast although the invite exists
+ * and can be revoked. A send failure logs ERROR as the ops canary, except a
+ * refused recipient: sendTemplate has already warned about it, and the owner
+ * typed the address, so it must not page.
+ */
+export async function sendInviteMail(
+  params: {
+    to: string;
+    variables: {
+      INVITER_NAME: string;
+      MEMBERSHIP_NAME: string;
+      ACCEPT_LINK: string;
+    };
+    context: { membershipId: string; inviteId: string };
+  },
+  deps: {
+    send: typeof sendTemplate;
+    logError: typeof logger.error;
+  } = { send: sendTemplate, logError: logger.error },
+): Promise<void> {
+  try {
+    await deps.send({
+      to: params.to,
+      mail: "invite",
+      dims: {},
+      variables: params.variables,
+    });
+  } catch (err) {
+    if (isRecipientRefusal(err)) return;
+    deps.logError("Failed to send invite email — invite was created", {
+      err,
+      ...params.context,
+      email: params.to,
+    });
+  }
+}
+
+/** sendTemplate's signal for a recipient Resend refused. */
+function isRecipientRefusal(err: unknown): boolean {
+  return err instanceof HttpsError && err.code === "invalid-argument";
+}
 
 /**
  * Best-effort inviter display info from a single read. Name priority:
