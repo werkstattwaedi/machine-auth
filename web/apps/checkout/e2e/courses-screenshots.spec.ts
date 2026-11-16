@@ -25,8 +25,10 @@ const iso = (ms: number) => new Date(ms).toISOString()
 async function seed(): Promise<{ leaderUid: string; annaUid: string }> {
   const db = getAdminFirestore()
   const auth = await getAdminAuth()
-  const ensure = async (email: string, first: string, last: string, extra: Record<string, unknown> = {}) => {
-    const user = await auth.getUserByEmail(email).catch(() => auth.createUser({ email }))
+  // A fixed uid: the header avatar's colour is derived from it, so a random
+  // Auth uid would repaint the screenshots on every run.
+  const ensure = async (uid: string, email: string, first: string, last: string, extra: Record<string, unknown> = {}) => {
+    const user = await auth.getUserByEmail(email).catch(() => auth.createUser({ uid, email }))
     await db.doc(`users/${user.uid}`).set({
       email,
       firstName: first,
@@ -41,8 +43,8 @@ async function seed(): Promise<{ leaderUid: string; annaUid: string }> {
     })
     return user.uid
   }
-  const leaderUid = await ensure(LEADER_EMAIL, "Petra", "Keller", { edooboxLeaderId: ADMIN_ID })
-  const annaUid = await ensure(ANNA_EMAIL, "Anna", "Brunner")
+  const leaderUid = await ensure("e2e-kursleitung", LEADER_EMAIL, "Petra", "Keller", { edooboxLeaderId: ADMIN_ID })
+  const annaUid = await ensure("e2e-anna-kurs", ANNA_EMAIL, "Anna", "Brunner")
   const now = Date.now()
   const day = (offsetDays: number, hour: number) => {
     const d = new Date(now + offsetDays * DAY)
@@ -118,6 +120,16 @@ async function signIn(page: Page) {
 /** Dates move with the clock: mask every text that shows one. */
 const dateMasks = (page: Page) => [page.getByTestId("course-dates"), page.locator("thead tr:nth-child(2) th")]
 
+/**
+ * A mask hides a date but not its length: a longer date string wraps the line
+ * and grows the card. Screenshot-only: keep the masked lines on one line.
+ */
+const DATE_LINE_CSS = '[data-testid="course-dates"] { white-space: nowrap; overflow: hidden; text-overflow: clip; }'
+const datedScreenshot = async (page: Page, name: string) => {
+  await page.addStyleTag({ content: DATE_LINE_CSS })
+  await expect(page).toHaveScreenshot(name, { mask: dateMasks(page) })
+}
+
 test.describe.configure({ mode: "serial" })
 
 test.describe("Kursleitung (#842)", () => {
@@ -131,18 +143,18 @@ test.describe("Kursleitung (#842)", () => {
     await expect(page.getByText("Einführung Lasercutter")).toBeVisible({ timeout: 15_000 })
     // The sidebar entry (CRS-1); on mobile it sits in the menu sheet.
     if (!isMobile) await expect(page.getByRole("link", { name: "Kursleitung" })).toBeVisible()
-    await expect(page).toHaveScreenshot("courses-list.png", { mask: dateMasks(page) })
+    await datedScreenshot(page, "courses-list.png")
   })
 
   test("course page, and setting a Präsenzstatus", async ({ page }) => {
     await signIn(page)
     await page.goto(`/account/courses/${RUNNING}`)
     await expect(page.getByRole("heading", { name: "Teilnehmende" })).toBeVisible({ timeout: 15_000 })
-    await expect(page).toHaveScreenshot("course-running.png", { mask: dateMasks(page) })
+    await datedScreenshot(page, "course-running.png")
 
     await page.getByRole("button", { name: /^Luca Meier am .*: kein Status$/ }).click()
     await expect(page.getByRole("menuitemradio", { name: "Anwesend" })).toBeVisible()
-    await expect(page).toHaveScreenshot("course-status-menu.png", { mask: dateMasks(page) })
+    await datedScreenshot(page, "course-status-menu.png")
     await page.getByRole("menuitemradio", { name: "Anwesend" }).click()
     await expect(page.getByText("In edoobox gespeichert")).toBeVisible()
     await expect
