@@ -24,7 +24,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `BIL` | [billing.md](billing.md) | payment methods, documents, numbering, monthly run, corrections, payment booking |
 | `ACC` | [account.md](account.md) | ways to sign in and where each works, first sign-in, the restricted session at the kiosk, the Nutzungsverlauf |
 | `CHK` | [checkout.md](checkout.md) | check-in, when a visit begins, the persons on it, usage types, usage fee, Check Out, Bezahlen, the Anleitung — on any device |
-| `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset, the kiosk computer's browser |
+| `KIO` | [kiosk.md](kiosk.md) | what differs at the terminal: Besuch starten, second badge, RaiseNow overlay, the Wallee terminal, idle reset |
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 | `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |

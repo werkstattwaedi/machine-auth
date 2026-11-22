@@ -18,7 +18,6 @@ import { spawn } from "node:child_process"
 import {
   decideKioskOverlay,
   isAllowedKioskOverlayNavigation,
-  KIOSK_PROTOCOL,
   PAYMENT_TERMINAL_FEATURE,
   RAISENOW_PAYLINK_ORIGIN,
   type TerminalPaymentRequest,
@@ -562,24 +561,6 @@ const isPrimaryInstance = claimSingleInstance({
   showWindow,
 })
 
-// Register `oww-kiosk://` with Windows (per user, HKCU). The web checkout,
-// opened in the terminal PC's browser, links there to hand the visitor over
-// to the kiosk (web/apps/checkout, kiosk-pc-gate). Launching the URL starts
-// the kiosk, or is refused by the instance lock above and surfaces the running
-// window through `second-instance`; the URL itself carries nothing we read.
-//
-// Re-registered on every start so the entry follows the install location.
-// Unpackaged dev runs skip it: they would point the protocol at electron.exe
-// and take it away from an installed kiosk on the same machine.
-function registerKioskProtocol(): void {
-  if (!app.isPackaged) return
-  if (app.setAsDefaultProtocolClient(KIOSK_PROTOCOL)) {
-    console.log(`Registered ${KIOSK_PROTOCOL}:// protocol handler`)
-  } else {
-    console.warn(`Could not register ${KIOSK_PROTOCOL}:// protocol handler`)
-  }
-}
-
 // Nothing below may run in a refused second instance: clearSession() would wipe
 // the partition out from under the running kiosk's visitor.
 if (isPrimaryInstance) {
@@ -587,9 +568,6 @@ if (isPrimaryInstance) {
     // Always start from a clean session — any leftover IndexedDB / cookies /
     // Firebase Auth state from a previous run is wiped before the renderer
     // attaches its webview.
-    // Before the await: registering doesn't depend on the session, and a
-    // failed wipe must not leave the browser's hand-over button dead.
-    registerKioskProtocol()
     await clearSession()
     createTray()
     createWindow()
