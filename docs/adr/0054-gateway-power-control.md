@@ -103,8 +103,9 @@ from `Enable`/`Disable`. The terminal uses it instead of the relay whenever
 `actuator` is set. Failure behaviour, chosen because a wrong "off" costs the
 homing while a wrong "on" costs access control and billing:
 
-- **Switch-on fails** → the session doesn't start; the terminal says it has no
-  connection to the machine (like MAC-9) and the machine stays off.
+- **Switch-on fails** (after one retry) → the session ends at once, before
+  anything is billed. An on-screen notice like MAC-9's is a follow-up: the
+  session has already started when the switch is tried.
 - **Switch-off fails** → the session ends anyway (billing stops); the terminal
   retries `SetPower(off)` and the gateway's backstop below catches the rest.
 - **Device unreachable during a session** → `UNREACHABLE` *pauses* the idle
@@ -112,7 +113,7 @@ homing while a wrong "on" costs access control and billing:
   switch it off anyway, and a Wi-Fi blip must not end a job.
 - **Terminal gone** (lease lapses while the actuator is on) → the gateway does
   not switch off at once (a gateway or terminal restart would cost the homing).
-  It logs an alert-matched event and applies the machine's own idle rule
+  It logs `sensing_orphaned_power_on` and applies the machine's own idle rule
   itself: once all signals have been off for `idleTimeoutSec`, it switches the
   actuator off. That bounds unauthorised and unbilled use to an idle machine.
 
@@ -131,6 +132,27 @@ Both firmware-side, per machine, and generic (not mill-specific):
 The rules these add or change go into `docs/spec/machine.md`; the branch that
 implements this starts with the as-is rules for idle auto-end and billing on
 active time, which the spec doesn't cover yet.
+
+- **Terminal reset** → the terminal can't read the switch at boot, so it
+  assumes "on": an involuntary reset (watchdog, panic) mid-session resumes the
+  session like a still-latched relay; every other boot switches it off.
+
+### Implementation notes
+
+- Prober key on the gateway: the actuator (`host`, `component`) — one prober
+  per physical switch, so an orphaned prober from an older spec can't switch
+  off a live session on the same switch; a new spec for it reconfigures the
+  prober in place. Meter-only specs key on the whole spec.
+- The backstop's idle time counts from the last moment any signal was on or a
+  signal's device was unreachable (unreachable errs towards leaving it on).
+  Its state lives in memory: a gateway restart while the terminal is also gone
+  leaves the switch unwatched until a terminal leases it again.
+- `sensing_orphaned_power_on` lands only in the Pi's journal today; the
+  liveness alerts match Cloud Logging events. Forwarding it with the
+  device-status heartbeat is a follow-up.
+- The firmware references the static `DeviceConfig` instead of copying the
+  (now larger) sensing config into the sensor and the toggle — the copies
+  pushed the P2 over its SRAM budget.
 
 ## Consequences
 
