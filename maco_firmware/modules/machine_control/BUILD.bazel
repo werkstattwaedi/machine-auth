@@ -24,6 +24,7 @@ cc_library(
     hdrs = ["public/maco_firmware/modules/machine_control/machine_sensor.h"],
     includes = ["public"],
     deps = [
+        "//maco_firmware/modules/app_state:session_controller",
         "@pigweed//pw_async2:dispatcher",
         "@pigweed//pw_function",
     ],
@@ -71,6 +72,30 @@ cc_library(
         "@pigweed//pw_rpc/nanopb:client_api",
         "@pigweed//pw_status",
         "@pigweed//pw_string",
+    ],
+)
+
+# Switches the machine through the gateway (SetPower) instead of the relay;
+# see ADR-0054.
+cc_library(
+    name = "gateway_machine_toggle",
+    srcs = ["gateway_machine_toggle.cc"],
+    hdrs = ["gateway_machine_toggle.h"],
+    deps = [
+        ":gateway_machine_sensor",
+        ":machine_toggle",
+        "//maco_firmware/modules/device_config:device_config",
+        "//maco_firmware/modules/gateway:gateway_client",
+        "//proto/gateway:gateway_service_nanopb",
+        "//proto/gateway:gateway_service_nanopb_rpc",
+        "@pigweed//pw_async2:coro",
+        "@pigweed//pw_async2:future_timeout",
+        "@pigweed//pw_async2:time_provider",
+        "@pigweed//pw_async2:value_future",
+        "@pigweed//pw_chrono:system_clock",
+        "@pigweed//pw_log",
+        "@pigweed//pw_rpc/nanopb:client_api",
+        "@pigweed//pw_status",
     ],
 )
 
@@ -134,12 +159,15 @@ pw_cc_test(
     srcs = ["gateway_machine_sensor_test.cc"],
     deps = [
         ":gateway_machine_sensor",
+        ":gateway_machine_toggle",
         "//maco_firmware/modules/app_state:session_fsm",
+        "//maco_firmware/modules/async_util:status_coro_task",
         "//maco_firmware/modules/device_config:device_config",
         "//maco_firmware/modules/gateway:gateway_client",
         "//proto/gateway:gateway_service_nanopb",
         "//proto/gateway:gateway_service_nanopb_rpc",
         "@pigweed//pw_allocator:testing",
+        "@pigweed//pw_async2:coro",
         "@pigweed//pw_async2:basic_dispatcher",
         "@pigweed//pw_async2:simulated_time_provider",
         "@pigweed//pw_rpc/nanopb:client_testing",

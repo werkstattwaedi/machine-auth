@@ -28,6 +28,71 @@ constexpr auto kIdlePollInterval = 500ms;
 constexpr uint32_t kLeaseTtlSec = 60;
 }  // namespace
 
+namespace {
+void CopyEndpoint(const config::ShellyEndpointConfig& in,
+                  maco_gateway_ShellyEndpoint& out) {
+  std::snprintf(out.host, sizeof(out.host), "%s", in.host.c_str());
+  std::snprintf(out.component, sizeof(out.component), "%s",
+                in.component.c_str());
+}
+
+maco_gateway_PowerSignalRole ToProtoRole(config::PowerSignalRole role) {
+  switch (role) {
+    case config::PowerSignalRole::kBillable:
+      return maco_gateway_PowerSignalRole_POWER_SIGNAL_ROLE_BILLABLE;
+    case config::PowerSignalRole::kActivity:
+      return maco_gateway_PowerSignalRole_POWER_SIGNAL_ROLE_ACTIVITY;
+    default:
+      return maco_gateway_PowerSignalRole_POWER_SIGNAL_ROLE_UNSPECIFIED;
+  }
+}
+}  // namespace
+
+void BuildSensingSpec(const config::GatewaySensingConfig& config,
+                      maco_gateway_SensingSpec& spec) {
+  spec = maco_gateway_SensingSpec_init_zero;
+  switch (config.kind) {
+    case config::SensingKind::kXToolLaser: {
+      spec.which_backend = maco_gateway_SensingSpec_xtool_laser_tag;
+      auto& x = spec.backend.xtool_laser;
+      std::snprintf(x.host, sizeof(x.host), "%s", config.host.c_str());
+      x.port = config.port;
+      x.poll_interval_sec = config.poll_interval_sec;
+      break;
+    }
+    case config::SensingKind::kMock:
+      spec.which_backend = maco_gateway_SensingSpec_mock_tag;
+      break;
+    case config::SensingKind::kShellyPower: {
+      spec.which_backend = maco_gateway_SensingSpec_shelly_power_tag;
+      auto& sp = spec.backend.shelly_power;
+      if (config.shelly.actuator.has_value()) {
+        sp.has_actuator = true;
+        CopyEndpoint(*config.shelly.actuator, sp.actuator);
+      }
+      constexpr size_t kMax = sizeof(sp.signals) / sizeof(sp.signals[0]);
+      sp.signals_count = 0;
+      for (const auto& sig : config.shelly.signals) {
+        if (sp.signals_count >= kMax) break;
+        auto& out = sp.signals[sp.signals_count++];
+        out.has_source = true;
+        CopyEndpoint(sig.source, out.source);
+        out.role = ToProtoRole(sig.role);
+        out.threshold_w = sig.threshold_w;
+        out.rise_sec = sig.rise_sec;
+        out.fall_sec = sig.fall_sec;
+      }
+      sp.poll_interval_sec = config.poll_interval_sec;
+      // The gateway's backstop applies the machine's own idle rule when no
+      // terminal holds a lease (ADR-0054).
+      sp.orphan_off_after_sec = config.idle_timeout_sec;
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 GatewayMachineSensor::GatewayMachineSensor(
     gateway::GatewayClient& gateway,
     const config::GatewaySensingConfig& config,
@@ -42,6 +107,7 @@ void GatewayMachineSensor::Start(pw::async2::Dispatcher& dispatcher) {
   // Contract: report the initial state before the loop. No session yet, so the
   // machine is not running.
   NotifyRunning(false);
+  NotifyActivity(app_state::MachineActivity::kIdle);
   if (config_.kind == config::SensingKind::kUnspecified) {
     PW_LOG_WARN("Gateway sensing has no resolved backend; sensor will stay idle");
   }
@@ -63,33 +129,36 @@ void GatewayMachineSensor::OnSessionEnded(
   session_active_.store(false, std::memory_order_relaxed);
 }
 
-void GatewayMachineSensor::BuildSpec(maco_gateway_SensingSpec& spec) const {
-  switch (config_.kind) {
-    case config::SensingKind::kXToolLaser: {
-      spec.which_backend = maco_gateway_SensingSpec_xtool_laser_tag;
-      auto& x = spec.backend.xtool_laser;
-      std::snprintf(x.host, sizeof(x.host), "%s", config_.host.c_str());
-      x.port = config_.port;
-      x.poll_interval_sec = config_.poll_interval_sec;
-      break;
-    }
-    case config::SensingKind::kMock:
-      spec.which_backend = maco_gateway_SensingSpec_mock_tag;
-      break;
-    default:
-      break;
-  }
+void GatewayMachineSensor::ReportUnknown() {
+  // Never bill what we can't see. For the idle timer it depends on who can cut
+  // the power: with the terminal's relay, unknown counts as idle (the session
+  // auto-ends and the relay drops it); when only the gateway can switch the
+  // machine, ending couldn't switch it off anyway, so the timer pauses.
+  NotifyRunning(false);
+  NotifyActivity(config_.SwitchesThroughGateway()
+                     ? app_state::MachineActivity::kUnknown
+                     : app_state::MachineActivity::kIdle);
 }
 
 void GatewayMachineSensor::ApplyState(bool valid,
-                                      maco_gateway_SensingState state) {
+                                      maco_gateway_SensingState state,
+                                      bool active) {
   if (!valid) {
-    // Lease expired/unknown — re-acquire; treat as not running for now.
+    // Lease expired/unknown — re-acquire; treat as unknown for now.
     have_lease_ = false;
-    NotifyRunning(false);
+    ReportUnknown();
     return;
   }
-  NotifyRunning(state == maco_gateway_SensingState_SENSING_STATE_RUNNING);
+  if (state == maco_gateway_SensingState_SENSING_STATE_UNREACHABLE ||
+      state == maco_gateway_SensingState_SENSING_STATE_UNSPECIFIED) {
+    ReportUnknown();
+    return;
+  }
+  const bool running = state == maco_gateway_SensingState_SENSING_STATE_RUNNING;
+  NotifyRunning(running);
+  // A gateway from before ADR-0054 never sets `active`; running implies it.
+  NotifyActivity(running || active ? app_state::MachineActivity::kActive
+                                   : app_state::MachineActivity::kIdle);
 }
 
 pw::async2::Coro<pw::Status> GatewayMachineSensor::Acquire(
@@ -103,7 +172,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Acquire(
       maco_gateway_AcquireSensingLeaseRequest_init_zero;
   request.lease_ttl_sec = kLeaseTtlSec;
   request.has_spec = true;
-  BuildSpec(request.spec);
+  BuildSensingSpec(config_, request.spec);
 
   // Register the future BEFORE the RPC (callback may fire synchronously).
   auto future = lease_provider_.Get();
@@ -128,7 +197,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Acquire(
   }
   lease_id_ = result->lease_id;
   have_lease_ = result->valid;
-  ApplyState(result->valid, result->state);
+  ApplyState(result->valid, result->state, result->active);
   co_return pw::OkStatus();
 }
 
@@ -159,7 +228,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Renew(
   if (!result.ok()) {
     co_return result.status();
   }
-  ApplyState(result->valid, result->state);
+  ApplyState(result->valid, result->state, result->active);
   co_return pw::OkStatus();
 }
 
@@ -180,12 +249,12 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Run(
       if (!have_lease_) {
         (void)co_await Acquire(cx);
         if (!have_lease_) {
-          NotifyRunning(false);
+          ReportUnknown();
         }
       } else {
         pw::Status st = co_await Renew(cx);
         if (!st.ok()) {
-          NotifyRunning(false);
+          ReportUnknown();
           have_lease_ = false;  // force re-acquire (lease may be dead)
         }
       }
@@ -195,6 +264,7 @@ pw::async2::Coro<pw::Status> GatewayMachineSensor::Run(
     // Session ended: stop reporting running and let the lease lapse — the
     // gateway drops the device connection after the TTL.
     NotifyRunning(false);
+    NotifyActivity(app_state::MachineActivity::kIdle);
   }
   co_return pw::OkStatus();
 }

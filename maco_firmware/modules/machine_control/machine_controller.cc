@@ -94,6 +94,13 @@ pw::async2::Coro<pw::Status> MachineController::Run(
       if (!status.ok()) {
         PW_LOG_ERROR("Toggle.Enable() failed: %d",
                      static_cast<int>(status.code()));
+        // Only act if no newer command (e.g. the session already ended)
+        // superseded this enable.
+        if (on_enable_failed_ &&
+            pending_command_.load(std::memory_order_relaxed) ==
+                Command::kNone) {
+          on_enable_failed_();
+        }
       }
     } else if (cmd == Command::kDisable) {
       auto status = co_await toggle_.Disable(cx);

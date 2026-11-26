@@ -20,6 +20,7 @@
 #include "maco_firmware/modules/machine_control/default_machine_sensor.h"
 #include "maco_firmware/modules/machine_control/machine_controller.h"
 #include "maco_firmware/modules/machine_control/gateway_machine_sensor.h"
+#include "maco_firmware/modules/machine_control/gateway_machine_toggle.h"
 #include "maco_firmware/modules/nfc_reader/nfc_reader.h"
 #include "maco_firmware/modules/stack_monitor/stack_monitor.h"
 #include "maco_firmware/modules/terminal_effects/terminal_effects.h"
@@ -204,7 +205,31 @@ void AppInit() {
 
   // Session state machine and observers
   static maco::app_state::SessionFsm session_fsm;
-  auto& machine_toggle = maco::system::GetMachineToggle();
+
+  // Select the running-sensor by control type. A gateway-sensed machine (the
+  // laser) leases a sensing session from the gateway, which runs the device
+  // protocol over the LAN; everything else mirrors the toggle. See ADR-0035.
+  const bool is_gateway_sensing =
+      config.machine_count() > 0 &&
+      config.machine(0).control() ==
+          maco::config::MachineControlType::kGatewaySensing;
+  // A machine powered through e.g. a Shelly is switched by the gateway, not
+  // by the terminal's relay (ADR-0054).
+  const bool switches_through_gateway =
+      is_gateway_sensing &&
+      config.machine(0).gateway_sensing().SwitchesThroughGateway();
+
+  maco::machine_control::MachineToggle* machine_toggle_ptr =
+      &maco::system::GetMachineToggle();
+  if (switches_through_gateway) {
+    static maco::machine_control::GatewayMachineToggle gateway_toggle(
+        maco::system::GetGatewayClient(),
+        config.machine(0).gateway_sensing(),
+        pw::async2::GetSystemTimeProvider());
+    machine_toggle_ptr = &gateway_toggle;
+    PW_LOG_INFO("Machine switched through the gateway");
+  }
+  auto& machine_toggle = *machine_toggle_ptr;
   // Do NOT PW_CHECK here: a deterministic Init() failure would hard-crash every
   // boot, before the rapid-reset safe state and before MachineController (which
   // drives the relay OFF) exists — leaving the latching relay in an undefined,
@@ -246,14 +271,6 @@ void AppInit() {
   // Report accumulated in-use time (cutting time for the laser) on checkout.
   session_fsm.SetBillableDurationSource(&machine_controller);
 
-  // Select the running-sensor by control type. A gateway-sensed machine (the
-  // laser) leases a sensing session from the gateway, which runs the device
-  // protocol over the LAN; everything else mirrors the toggle. See ADR-0035.
-  const bool is_gateway_sensing =
-      config.machine_count() > 0 &&
-      config.machine(0).control() ==
-          maco::config::MachineControlType::kGatewaySensing;
-
   static maco::machine_control::DefaultMachineSensor default_sensor(
       machine_toggle,
       pw::async2::GetSystemTimeProvider(),
@@ -278,6 +295,10 @@ void AppInit() {
   active_sensor->SetCallback([](bool running) {
     machine_controller.OnMachineRunning(running);
   });
+  active_sensor->SetActivityCallback(
+      [](maco::app_state::MachineActivity activity) {
+        machine_controller.OnMachineActivity(activity);
+      });
 
   session_fsm.AddObserver(&machine_controller);
   machine_controller.Start(pw::System().dispatcher());
@@ -358,6 +379,14 @@ void AppInit() {
       controller.SetIdleTimeout(&machine_controller,
                                 std::chrono::seconds(gs.idle_timeout_sec),
                                 std::chrono::seconds(gs.idle_warning_sec));
+      controller.SetIdleWarningBeep(
+          std::chrono::seconds(gs.idle_warning_repeat_sec),
+          [] { terminal_effects.IdleWarningBeep(); });
+      controller.SetEndHold(std::chrono::seconds(gs.end_hold_sec));
+    }
+    if (switches_through_gateway) {
+      machine_controller.SetOnEnableFailed(
+          [] { controller.RequestMachineUnavailableEnd(); });
     }
     controller.Start(pw::System().dispatcher());
     terminal_ui.SetController(&controller);

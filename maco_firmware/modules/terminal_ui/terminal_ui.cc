@@ -158,6 +158,12 @@ void TerminalUi::HandleAction(UiAction action) {
       }
       break;
 
+    case UiAction::kConfirmReleased:
+      if (controller_) {
+        controller_->PostUiAction(app_state::SessionAction::kConfirmReleased);
+      }
+      break;
+
     case UiAction::kStopSession:
       PW_LOG_INFO("Stop session requested");
       if (controller_) {

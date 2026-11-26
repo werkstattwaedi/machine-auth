@@ -4,6 +4,10 @@
 #include "maco_firmware/modules/machine_control/gateway_machine_sensor.h"
 
 #include <cstdio>
+#include <optional>
+
+#include "async_util/status_coro_task.h"
+#include "maco_firmware/modules/machine_control/gateway_machine_toggle.h"
 
 #include "device_config/device_config.h"
 #include "gateway/gateway_client.h"
@@ -55,11 +59,12 @@ class GatewayMachineSensorTest : public ::testing::Test {
   }
 
   void SendLeaseResponse(bool valid, maco_gateway_SensingState state,
-                         bool renew) {
+                         bool renew, bool active = false) {
     maco_gateway_SensingLeaseResponse resp =
         maco_gateway_SensingLeaseResponse_init_zero;
     resp.valid = valid;
     resp.state = state;
+    resp.active = active;
     std::snprintf(resp.lease_id, sizeof(resp.lease_id), "test-lease");
     if (renew) {
       rpc_ctx_.server().SendResponse<GatewayService::RenewSensingLease>(
@@ -79,7 +84,32 @@ class GatewayMachineSensorTest : public ::testing::Test {
   pw::async2::SimulatedTimeProvider<pw::chrono::SystemClock> time_provider_;
   pw::allocator::test::AllocatorForTest<kAllocatorSize> test_allocator_;
 
+  // A CNC-style config: gantry switched + metered, spindle metered.
+  void UseShellyConfig() {
+    config_ = {};
+    config_.kind = config::SensingKind::kShellyPower;
+    config_.idle_timeout_sec = 1800;
+    config::ShellyEndpointConfig gantry;
+    gantry.host = "gantry.test:8101";
+    gantry.component = "switch:0";
+    config_.shelly.actuator = gantry;
+    config::PowerSignalConfig spindle;
+    spindle.source.host = "spindle.test";
+    spindle.source.component = "pm1:0";
+    spindle.role = config::PowerSignalRole::kBillable;
+    spindle.threshold_w = 40;
+    spindle.rise_sec = 3;
+    spindle.fall_sec = 10;
+    config_.shelly.signals.push_back(spindle);
+    config::PowerSignalConfig motion;
+    motion.source = gantry;
+    motion.role = config::PowerSignalRole::kActivity;
+    motion.threshold_w = 85;
+    config_.shelly.signals.push_back(motion);
+  }
+
   // Latest running state pushed via the sensor callback.
+  app_state::MachineActivity last_activity_ = app_state::MachineActivity::kIdle;
   bool last_running_ = false;
   int callback_count_ = 0;
 };
@@ -194,6 +224,153 @@ TEST_F(GatewayMachineSensorTest, SessionEndStopsPolling) {
   AdvanceToNextTimer();
   dispatcher_.RunUntilStalled();
   EXPECT_EQ(rpc_ctx_.output().total_packets(), after_end);
+}
+
+// --- Shelly power (ADR-0054) ---
+
+TEST_F(GatewayMachineSensorTest, BuildsShellySpec) {
+  UseShellyConfig();
+  maco_gateway_SensingSpec spec;
+  BuildSensingSpec(config_, spec);
+  ASSERT_EQ(spec.which_backend, maco_gateway_SensingSpec_shelly_power_tag);
+  const auto& sp = spec.backend.shelly_power;
+  EXPECT_TRUE(sp.has_actuator);
+  EXPECT_STREQ(sp.actuator.host, "gantry.test:8101");
+  EXPECT_STREQ(sp.actuator.component, "switch:0");
+  ASSERT_EQ(sp.signals_count, 2u);
+  EXPECT_STREQ(sp.signals[0].source.host, "spindle.test");
+  EXPECT_EQ(sp.signals[0].role,
+            maco_gateway_PowerSignalRole_POWER_SIGNAL_ROLE_BILLABLE);
+  EXPECT_EQ(sp.signals[0].threshold_w, 40u);
+  EXPECT_EQ(sp.signals[1].role,
+            maco_gateway_PowerSignalRole_POWER_SIGNAL_ROLE_ACTIVITY);
+  // The gateway's backstop uses the machine's own idle time.
+  EXPECT_EQ(sp.orphan_off_after_sec, 1800u);
+}
+
+class ShellySensorTest : public GatewayMachineSensorTest {
+ protected:
+  void StartSession(GatewayMachineSensor& sensor) {
+    sensor.SetCallback([this](bool r) { last_running_ = r; });
+    sensor.SetActivityCallback(
+        [this](app_state::MachineActivity a) { last_activity_ = a; });
+    sensor.Start(dispatcher_);
+    dispatcher_.RunUntilStalled();
+    sensor.OnSessionStarted(app_state::SessionInfo{});
+    AdvanceToNextTimer();
+    dispatcher_.RunUntilStalled();
+  }
+};
+
+TEST_F(ShellySensorTest, ActivityWithoutBillableUse) {
+  UseShellyConfig();
+  auto gw = CreateGatewayClient();
+  GatewayMachineSensor sensor(gw, config_, time_provider_, test_allocator_);
+  StartSession(sensor);
+  SendLeaseResponse(true, maco_gateway_SensingState_SENSING_STATE_IDLE,
+                    /*renew=*/false, /*active=*/true);
+  dispatcher_.RunUntilStalled();
+  EXPECT_FALSE(last_running_);
+  EXPECT_EQ(last_activity_, app_state::MachineActivity::kActive);
+}
+
+TEST_F(ShellySensorTest, UnreachableIsUnknownWhenGatewaySwitches) {
+  UseShellyConfig();
+  auto gw = CreateGatewayClient();
+  GatewayMachineSensor sensor(gw, config_, time_provider_, test_allocator_);
+  StartSession(sensor);
+  SendLeaseResponse(true, maco_gateway_SensingState_SENSING_STATE_UNREACHABLE,
+                    false);
+  dispatcher_.RunUntilStalled();
+  EXPECT_FALSE(last_running_);
+  EXPECT_EQ(last_activity_, app_state::MachineActivity::kUnknown);
+}
+
+TEST_F(ShellySensorTest, UnreachableIsIdleWhenRelaySwitches) {
+  // The laser: the relay can cut power, so unknown keeps counting as idle.
+  auto gw = CreateGatewayClient();
+  GatewayMachineSensor sensor(gw, config_, time_provider_, test_allocator_);
+  StartSession(sensor);
+  SendLeaseResponse(true, maco_gateway_SensingState_SENSING_STATE_UNREACHABLE,
+                    false);
+  dispatcher_.RunUntilStalled();
+  EXPECT_EQ(last_activity_, app_state::MachineActivity::kIdle);
+}
+
+TEST_F(ShellySensorTest, RunningWithoutActiveFlagIsActive) {
+  // A gateway from before ADR-0054 never sets `active`.
+  auto gw = CreateGatewayClient();
+  GatewayMachineSensor sensor(gw, config_, time_provider_, test_allocator_);
+  StartSession(sensor);
+  SendLeaseResponse(true, maco_gateway_SensingState_SENSING_STATE_RUNNING,
+                    false, /*active=*/false);
+  dispatcher_.RunUntilStalled();
+  EXPECT_TRUE(last_running_);
+  EXPECT_EQ(last_activity_, app_state::MachineActivity::kActive);
+}
+
+// --- GatewayMachineToggle ---
+
+pw::async2::Coro<pw::Status> RunToggle(pw::async2::CoroContext cx,
+                                       GatewayMachineToggle& toggle, bool on,
+                                       std::optional<pw::Status>& out) {
+  out = on ? co_await toggle.Enable(cx) : co_await toggle.Disable(cx);
+  co_return pw::OkStatus();
+}
+
+class GatewayMachineToggleTest : public GatewayMachineSensorTest {
+ protected:
+  void SendSetPower(bool ok, bool reachable) {
+    maco_gateway_SetPowerResponse resp = maco_gateway_SetPowerResponse_init_zero;
+    resp.ok = ok;
+    resp.reachable = reachable;
+    rpc_ctx_.server().SendResponse<GatewayService::SetPower>(resp,
+                                                             pw::OkStatus());
+  }
+};
+
+TEST_F(GatewayMachineToggleTest, EnableConfirmedByDevice) {
+  UseShellyConfig();
+  auto gw = CreateGatewayClient();
+  GatewayMachineToggle toggle(gw, config_, time_provider_);
+  // Unknown at boot: assumed on, so an involuntary reset resumes the session.
+  EXPECT_TRUE(toggle.IsEnabled());
+
+  std::optional<pw::Status> result;
+  pw::async2::CoroContext cx(test_allocator_);
+  maco::async_util::StatusCoroTask task(RunToggle(cx, toggle, false, result),
+                                        [](pw::Status) {});
+  dispatcher_.Post(task);
+  dispatcher_.RunUntilStalled();
+  ASSERT_EQ(rpc_ctx_.output().total_packets(), 1u);
+  SendSetPower(/*ok=*/true, /*reachable=*/true);
+  dispatcher_.RunUntilStalled();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, pw::OkStatus());
+  EXPECT_FALSE(toggle.IsEnabled());
+}
+
+TEST_F(GatewayMachineToggleTest, EnableFailsWhenUnreachable) {
+  UseShellyConfig();
+  auto gw = CreateGatewayClient();
+  GatewayMachineToggle toggle(gw, config_, time_provider_);
+
+  std::optional<pw::Status> result;
+  pw::async2::CoroContext cx(test_allocator_);
+  maco::async_util::StatusCoroTask task(RunToggle(cx, toggle, true, result),
+                                        [](pw::Status) {});
+  dispatcher_.Post(task);
+  dispatcher_.RunUntilStalled();
+  SendSetPower(false, /*reachable=*/false);
+  dispatcher_.RunUntilStalled();
+  ASSERT_FALSE(result.has_value());  // waiting to retry
+  AdvanceToNextTimer();
+  dispatcher_.RunUntilStalled();
+  EXPECT_EQ(rpc_ctx_.output().total_packets(), 2u);  // the retry
+  SendSetPower(false, false);
+  dispatcher_.RunUntilStalled();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, pw::Status::Unavailable());
 }
 
 }  // namespace

@@ -27,6 +27,7 @@ void SessionController::Start(pw::async2::Dispatcher& dispatcher) {
   // without this the epoch-default would make the first tick treat it as
   // idle-for-uptime and auto-end it immediately.
   last_active_at_ = pw::chrono::SystemClock::now();
+  last_tick_ = last_active_at_;
 
   auto coro = Run(coro_cx_);
   task_.emplace(std::move(coro), [](pw::Status s) {
@@ -36,6 +37,16 @@ void SessionController::Start(pw::async2::Dispatcher& dispatcher) {
 }
 
 void SessionController::PostUiAction(SessionAction action) {
+  // The OK key's up/down state is kept apart from the one-slot action, so a
+  // quick press-and-release within one tick can't swallow the press (or leave
+  // a hold running after the key was let go).
+  if (action == SessionAction::kConfirmReleased) {
+    confirm_down_.store(false, std::memory_order_relaxed);
+    return;
+  }
+  if (action == SessionAction::kConfirm) {
+    confirm_down_.store(true, std::memory_order_relaxed);
+  }
   ui_action_.store(action, std::memory_order_relaxed);
 }
 
@@ -48,6 +59,13 @@ pw::async2::Coro<pw::Status> SessionController::Run(
     pw::async2::CoroContext ) {
   while (true) {
     auto now = pw::chrono::SystemClock::now();
+    const auto since_last_tick = now - last_tick_;
+    last_tick_ = now;
+
+    if (machine_unavailable_.exchange(false, std::memory_order_relaxed)) {
+      fsm_.receive(session_event::MachineUnavailable{});
+      fsm_.SyncSnapshot();
+    }
 
     // Poll UI action atomic and convert to FSM event
     auto action =
@@ -62,7 +80,17 @@ pw::async2::Coro<pw::Status> SessionController::Run(
       fsm_.receive(session_event::UiCancel{});
       fsm_.SyncSnapshot();
     } else if (action == SessionAction::kStop) {
-      fsm_.receive(session_event::StopSession{});
+      // A machine whose stop needs a hold refuses it while in billable use
+      // (e.g. the spindle running): ending would cut its power mid-job.
+      const bool refuse =
+          fsm_.end_hold > pw::chrono::SystemClock::duration::zero() &&
+          machine_ != nullptr && machine_->IsMachineRunning();
+      fsm_.receive(session_event::StopSession(refuse));
+      fsm_.SyncSnapshot();
+    }
+    if (fsm_.stop_hold_active &&
+        !confirm_down_.load(std::memory_order_relaxed)) {
+      fsm_.receive(session_event::UiConfirmReleased{});
       fsm_.SyncSnapshot();
     }
 
@@ -74,11 +102,23 @@ pw::async2::Coro<pw::Status> SessionController::Run(
     if (idle_enabled) {
       bool in_running = state_id == SessionStateId::kRunning;
       bool in_warning = state_id == SessionStateId::kIdleWarning;
+      const MachineActivity activity = machine_->Activity();
       // Keep the idle reference fresh while there's no active session, and
       // reset it on any machine activity — so idle always counts from the
       // last time the machine was actually in use.
-      if ((!in_running && !in_warning) || machine_->IsMachineRunning()) {
+      if ((!in_running && !in_warning) ||
+          activity == MachineActivity::kActive) {
         last_active_at_ = now;
+      } else if (activity == MachineActivity::kUnknown) {
+        // Pause: the terminal couldn't switch the machine off anyway, and a
+        // Wi-Fi blip must not end a job. Shift the reference by the time we
+        // couldn't see, so counting resumes where it stopped.
+        last_active_at_ += since_last_tick;
+        if (in_warning) {
+          fsm_.pending_deadline += since_last_tick;
+          fsm_.pending_since += since_last_tick;
+          fsm_.SyncSnapshot();
+        }
       }
       if (in_running && (now - last_active_at_) >= idle_timeout_ - idle_warning_) {
         // Enter the warning; deadline is the actual auto-end instant.
@@ -87,12 +127,24 @@ pw::async2::Coro<pw::Status> SessionController::Run(
         fsm_.receive(session_event::IdleWarn{});
         fsm_.SyncSnapshot();
         state_id = fsm_.get_state_id();
-      } else if (in_warning && machine_->IsMachineRunning()) {
+      } else if (in_warning && activity == MachineActivity::kActive) {
         // Machine resumed during the warning → snooze back to running.
         fsm_.receive(session_event::UiConfirm{});
         fsm_.SyncSnapshot();
         state_id = fsm_.get_state_id();
       }
+    }
+
+    // Idle-warning beep: on entry, then every repeat interval while open.
+    if (state_id == SessionStateId::kIdleWarning &&
+        idle_warning_repeat_ > pw::chrono::SystemClock::duration::zero() &&
+        idle_warning_beep_) {
+      if (!next_beep_at_.has_value() || now >= *next_beep_at_) {
+        idle_warning_beep_();
+        next_beep_at_ = now + idle_warning_repeat_;
+      }
+    } else {
+      next_beep_at_.reset();
     }
 
     bool is_pending =

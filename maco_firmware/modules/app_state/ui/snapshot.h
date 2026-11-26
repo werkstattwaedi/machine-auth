@@ -36,6 +36,13 @@ enum class SessionStateUi : uint8_t {
   kEndingSoon = 5,  // Idle auto-end warning countdown
 };
 
+/// How the stop prompt (kStopPending) ends the session (ADR-0054).
+enum class StopMode : uint8_t {
+  kAutoConfirm = 0,  // "Ja" fills and fires when the countdown runs out
+  kHold = 1,         // OK must be held for the machine's hold time
+  kRefused = 2,      // the machine is in billable use; ending is refused
+};
+
 // Session snapshot for UI - confirmation progress and user labels
 struct SessionSnapshotUi {
   SessionStateUi state = SessionStateUi::kNoSession;
@@ -46,6 +53,9 @@ struct SessionSnapshotUi {
   pw::chrono::SystemClock::time_point tag_present_since;
   pw::chrono::SystemClock::time_point session_started_at;
   bool tag_present = false;
+  StopMode stop_mode = StopMode::kAutoConfirm;
+  // kHold only: OK is being held and the ring fills towards the end.
+  bool stop_hold_active = false;
 };
 
 // Machine-readable cause of a cloud rejection (kUnauthorized only). Lets the

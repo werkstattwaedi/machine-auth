@@ -15,6 +15,7 @@
 #include "pw_async2/dispatcher.h"
 #include "pw_async2/time_provider.h"
 #include "pw_chrono/system_clock.h"
+#include "pw_function/function.h"
 
 namespace maco::app_state {
 
@@ -24,6 +25,16 @@ enum class SessionAction : uint8_t {
   kConfirm = 1,
   kCancel = 2,
   kStop = 3,
+  kConfirmReleased = 4,
+};
+
+/// Whether the machine counts as in use for the idle timer (ADR-0054).
+enum class MachineActivity : uint8_t {
+  kIdle = 0,
+  kActive = 1,
+  // Can't tell (device or gateway not answering) on a machine whose power the
+  // terminal can't cut without the gateway: the idle timer pauses.
+  kUnknown = 2,
 };
 
 /// Supplies the machine's live running state to the idle-timeout logic.
@@ -32,7 +43,13 @@ enum class SessionAction : uint8_t {
 class MachineRunningSource {
  public:
   virtual ~MachineRunningSource() = default;
+  /// Billable use (e.g. laser cutting, spindle running).
   virtual bool IsMachineRunning() const = 0;
+  /// In use for the idle timer. Defaults to billable use.
+  virtual MachineActivity Activity() const {
+    return IsMachineRunning() ? MachineActivity::kActive
+                              : MachineActivity::kIdle;
+  }
 };
 
 /// Single coordinator between TagVerifier, SessionFsm, and the UI.
@@ -69,6 +86,26 @@ class SessionController {
                                                 : idle_timeout / 2;
   }
 
+  /// Sound the buzzer when the idle warning opens and then every `repeat`
+  /// while it stays open (ADR-0054). Zero keeps the warning silent.
+  void SetIdleWarningBeep(pw::chrono::SystemClock::duration repeat,
+                          pw::Function<void()> beep) {
+    idle_warning_repeat_ = repeat;
+    idle_warning_beep_ = std::move(beep);
+  }
+
+  /// Stopp needs OK held this long and is refused while the machine is in
+  /// billable use (ADR-0054). Zero keeps the auto-confirm. Call before Start().
+  void SetEndHold(pw::chrono::SystemClock::duration end_hold) {
+    fsm_.end_hold = end_hold;
+  }
+
+  /// Thread-safe: end the session because the machine couldn't be switched
+  /// on (the gateway-switched power didn't answer).
+  void RequestMachineUnavailableEnd() {
+    machine_unavailable_.store(true, std::memory_order_relaxed);
+  }
+
   /// Thread-safe: UI posts actions here.
   void PostUiAction(SessionAction action);
 
@@ -89,6 +126,14 @@ class SessionController {
   pw::chrono::SystemClock::duration idle_timeout_{};
   pw::chrono::SystemClock::duration idle_warning_{};
   pw::chrono::SystemClock::time_point last_active_at_{};
+  pw::chrono::SystemClock::time_point last_tick_{};
+
+  pw::chrono::SystemClock::duration idle_warning_repeat_{};
+  pw::Function<void()> idle_warning_beep_;
+  std::optional<pw::chrono::SystemClock::time_point> next_beep_at_;
+
+  std::atomic<bool> machine_unavailable_{false};
+  std::atomic<bool> confirm_down_{false};
 
   pw::async2::CoroContext coro_cx_;
   std::optional<maco::async_util::StatusCoroTask> task_;

@@ -18,6 +18,8 @@ enum class PendingType : uint8_t {
   kTakeover,
   kStop,
   kIdleWarning,  // Idle auto-end countdown: "Weiter" (snooze) / "Beenden"
+  kStopHold,     // Stop needs OK held (ADR-0054); "Halten" fills while held
+  kStopRefused,  // Stop refused while the machine is in billable use
 };
 
 /// Bottom-sheet overlay for pending confirmation UI.
@@ -61,6 +63,12 @@ class ConfirmationOverlay {
   /// Returns true if the overlay is currently visible.
   bool IsVisible() const;
 
+  /// The type of the current (or last) showing.
+  PendingType type() const { return pending_type_; }
+
+  /// kStopHold only: whether OK is held, i.e. which button fills.
+  void SetStopHoldActive(bool active) { stop_hold_active_ = active; }
+
   /// Update cached state for progress computation.
   void UpdateProgress(pw::chrono::SystemClock::time_point pending_since,
                       pw::chrono::SystemClock::time_point pending_deadline,
@@ -80,6 +88,7 @@ class ConfirmationOverlay {
   pw::chrono::SystemClock::time_point cached_pending_since_;
   pw::chrono::SystemClock::time_point cached_pending_deadline_;
   bool cached_tag_present_ = false;
+  bool stop_hold_active_ = false;
 
   // LVGL widgets (on screen layer)
   lv_obj_t* scrim_ = nullptr;

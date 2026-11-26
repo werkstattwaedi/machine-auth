@@ -85,6 +85,18 @@ void ConfirmationOverlay::Create(lv_obj_t* parent, lv_group_t* group) {
       },
       LV_EVENT_PRESSED,
       &action_callback_);
+  // Release matters only for the stop prompt's hold (ADR-0054); the session
+  // controller ignores it otherwise.
+  lv_obj_add_event_cb(
+      confirm_btn_,
+      [](lv_event_t* e) {
+        auto* cb = static_cast<ActionCallback*>(lv_event_get_user_data(e));
+        if (*cb) {
+          (*cb)(UiAction::kConfirmReleased);
+        }
+      },
+      LV_EVENT_RELEASED,
+      &action_callback_);
   if (group_) {
     lv_group_add_obj(group_, confirm_btn_);
     // Bubble events up to the screen root for ESC handling.
@@ -136,6 +148,10 @@ void ConfirmationOverlay::Show(PendingType type,
                           takeover_user_label.data());
   } else if (type == PendingType::kIdleWarning) {
     lv_label_set_text(question_label_, "Noch aktiv?");
+  } else if (type == PendingType::kStopHold) {
+    lv_label_set_text(question_label_, "Beenden? OK halten");
+  } else if (type == PendingType::kStopRefused) {
+    lv_label_set_text(question_label_, "Maschine läuft");
   } else {
     lv_label_set_text(question_label_, "Beenden?");
   }
@@ -226,6 +242,36 @@ ui::ButtonConfig ConfirmationOverlay::GetButtonConfig() const {
                    .bg_color = theme::kColorBtnRed,
                    .text_color = 0xFFFFFF,
                    .fill_progress = progress},
+    };
+  }
+
+  if (pending_type_ == PendingType::kStopHold) {
+    // Held: "Halten" fills towards the end. Not held: "Nein" fills towards
+    // the prompt closing by itself.
+    ui::ButtonSpec ok = {.label = "Halten",
+                         .led_effect = led_animator::SolidButton(
+                             led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+                         .bg_color = theme::kColorBtnGreen,
+                         .text_color = 0xFFFFFF};
+    ui::ButtonSpec cancel = {.label = "Nein",
+                             .led_effect = led_animator::SolidButton(
+                                 led::RgbwColor::FromRgb(theme::kColorBtnRed)),
+                             .bg_color = theme::kColorBtnRed,
+                             .text_color = 0xFFFFFF};
+    (stop_hold_active_ ? ok : cancel).fill_progress = progress;
+    return {.ok = ok, .cancel = cancel};
+  }
+
+  if (pending_type_ == PendingType::kStopRefused) {
+    // Nothing to decide: OK (or the countdown) just closes it.
+    return {
+        .ok = {.label = "OK",
+               .led_effect = led_animator::SolidButton(
+                   led::RgbwColor::FromRgb(theme::kColorBtnGreen)),
+               .bg_color = theme::kColorBtnGreen,
+               .text_color = 0xFFFFFF,
+               .fill_progress = progress},
+        .cancel = {},
     };
   }
 

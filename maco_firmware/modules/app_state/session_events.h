@@ -21,6 +21,8 @@ struct Id {
     kStopSession = 6,
     kSessionResume = 7,
     kIdleWarn = 8,
+    kUiConfirmReleased = 9,
+    kMachineUnavailable = 10,
   };
 };
 
@@ -61,8 +63,21 @@ class HoldConfirmed : public etl::message<Id::kHoldConfirmed> {};
 /// Pending confirmation timed out.
 class Timeout : public etl::message<Id::kTimeout> {};
 
-/// UI explicitly stopped the active session.
-class StopSession : public etl::message<Id::kStopSession> {};
+/// UI explicitly stopped the active session. `refuse` is set by the
+/// SessionController when the machine's stop needs a hold and the machine is
+/// in billable use, so the prompt refuses instead of offering to end.
+class StopSession : public etl::message<Id::kStopSession> {
+ public:
+  StopSession() = default;
+  explicit StopSession(bool refuse_in) : refuse(refuse_in) {}
+  bool refuse = false;
+};
+
+/// The OK key was released (ends a hold on the stop prompt).
+class UiConfirmReleased : public etl::message<Id::kUiConfirmReleased> {};
+
+/// The machine couldn't be switched on through the gateway; end the session.
+class MachineUnavailable : public etl::message<Id::kMachineUnavailable> {};
 
 /// Machine has been idle long enough to warn about an impending auto-end.
 /// Fired by SessionController; transitions Running → IdleWarning.

@@ -62,6 +62,11 @@ class TerminalEffects : public app_state::SessionObserver,
   /// The coroutine transitions to idle once SystemState reports kReady.
   void Start(pw::async2::Dispatcher& dispatcher);
 
+  /// Audible idle-end warning (ADR-0054): ending loses e.g. the CNC's homing,
+  /// so the person must hear it from across the room. Distinct from the tag
+  /// tones: one long high tone.
+  void IdleWarningBeep();
+
   // SessionObserver
   void OnSessionStarted(const app_state::SessionInfo& session) override;
   void OnSessionEnded(

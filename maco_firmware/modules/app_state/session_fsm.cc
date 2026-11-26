@@ -123,6 +123,30 @@ void SessionFsm::SyncSnapshot() {
   snapshot_.tag_present_since = tag_present_since_;
   snapshot_.session_started_at = active_session.started_at;
   snapshot_.tag_present = tag_present_;
+  snapshot_.stop_mode = stop_mode;
+  snapshot_.stop_hold_active = stop_hold_active;
+}
+
+etl::fsm_state_id_t SessionFsm::EnterStop(bool refuse) {
+  auto now = pw::chrono::SystemClock::now();
+  pending_since = now;
+  stop_hold_active = false;
+  checkout_reason = CheckoutReason::kUiCheckout;
+  if (end_hold <= pw::chrono::SystemClock::duration::zero()) {
+    stop_mode = StopMode::kAutoConfirm;
+    pending_deadline = now + kAutoConfirmDuration;
+    PW_LOG_INFO("Stop pending: countdown started");
+  } else if (refuse) {
+    // The deadline only closes the refusal again; it never ends the session.
+    stop_mode = StopMode::kRefused;
+    pending_deadline = now + kAutoConfirmDuration;
+    PW_LOG_INFO("Stop refused: machine in use");
+  } else {
+    stop_mode = StopMode::kHold;
+    pending_deadline = now + kStopHoldWindow;
+    PW_LOG_INFO("Stop pending: waiting for OK hold");
+  }
+  return SessionStateId::kStopPending;
 }
 
 void SessionFsm::GetSnapshot(SessionSnapshotUi& out) const {
@@ -203,14 +227,16 @@ void Active::on_exit_state() {
   PW_LOG_INFO("Active: relay OFF");
 }
 
-etl::fsm_state_id_t Active::on_event(const session_event::StopSession&) {
-  auto& ctx = get_fsm_context();
-  auto now = pw::chrono::SystemClock::now();
-  ctx.pending_since = now;
-  ctx.pending_deadline = now + kAutoConfirmDuration;
-  ctx.checkout_reason = CheckoutReason::kUiCheckout;
-  PW_LOG_INFO("Stop pending: countdown started");
-  return SessionStateId::kStopPending;
+etl::fsm_state_id_t Active::on_event(const session_event::StopSession& e) {
+  return get_fsm_context().EnterStop(e.refuse);
+}
+
+etl::fsm_state_id_t Active::on_event(
+    const session_event::MachineUnavailable&) {
+  // The terminal ended it, like the idle end — not the person.
+  get_fsm_context().checkout_reason = CheckoutReason::kTimeout;
+  PW_LOG_WARN("Machine could not be switched on: session ended");
+  return SessionStateId::kNoSession;
 }
 
 etl::fsm_state_id_t Active::on_event(
@@ -270,8 +296,12 @@ etl::fsm_state_id_t IdleWarning::on_event(const session_event::UiConfirm&) {
 }
 
 etl::fsm_state_id_t IdleWarning::on_event(const session_event::UiCancel&) {
-  // "Beenden" — end now, same reason as the auto-end.
   auto& ctx = get_fsm_context();
+  if (ctx.end_hold > pw::chrono::SystemClock::duration::zero()) {
+    // A machine whose stop needs a hold ends through the same hold here.
+    return ctx.EnterStop(/*refuse=*/false);
+  }
+  // "Beenden" — end now, same reason as the auto-end.
   ctx.checkout_reason = CheckoutReason::kTimeout;
   PW_LOG_INFO("Idle warning: ended by user");
   return SessionStateId::kNoSession;
@@ -421,9 +451,38 @@ etl::fsm_state_id_t TakeoverPending::ConfirmTakeover() {
 
 etl::fsm_state_id_t StopPending::on_event(const session_event::UiConfirm&) {
   auto& ctx = get_fsm_context();
+  switch (ctx.stop_mode) {
+    case StopMode::kRefused:
+      PW_LOG_INFO("Stop refusal dismissed");
+      return SessionStateId::kRunning;
+    case StopMode::kHold: {
+      // The ring fills from the press; the deadline is the end instant.
+      auto now = pw::chrono::SystemClock::now();
+      ctx.stop_hold_active = true;
+      ctx.pending_since = now;
+      ctx.pending_deadline = now + ctx.end_hold;
+      return No_State_Change;
+    }
+    case StopMode::kAutoConfirm:
+      break;
+  }
   ctx.checkout_reason = CheckoutReason::kUiCheckout;
   PW_LOG_INFO("Stop confirmed (UI confirm)");
   return SessionStateId::kNoSession;
+}
+
+etl::fsm_state_id_t StopPending::on_event(
+    const session_event::UiConfirmReleased&) {
+  auto& ctx = get_fsm_context();
+  if (ctx.stop_mode != StopMode::kHold || !ctx.stop_hold_active) {
+    return No_State_Change;
+  }
+  // Let go too early: back to waiting for a hold, with a fresh window.
+  auto now = pw::chrono::SystemClock::now();
+  ctx.stop_hold_active = false;
+  ctx.pending_since = now;
+  ctx.pending_deadline = now + kStopHoldWindow;
+  return No_State_Change;
 }
 
 etl::fsm_state_id_t StopPending::on_event(const session_event::UiCancel&) {
@@ -433,6 +492,11 @@ etl::fsm_state_id_t StopPending::on_event(const session_event::UiCancel&) {
 
 etl::fsm_state_id_t StopPending::on_event(const session_event::Timeout&) {
   auto& ctx = get_fsm_context();
+  if (ctx.stop_mode == StopMode::kRefused ||
+      (ctx.stop_mode == StopMode::kHold && !ctx.stop_hold_active)) {
+    PW_LOG_INFO("Stop prompt closed without ending");
+    return SessionStateId::kRunning;
+  }
   ctx.checkout_reason = CheckoutReason::kUiCheckout;
   PW_LOG_INFO("Stop confirmed (countdown)");
   return SessionStateId::kNoSession;

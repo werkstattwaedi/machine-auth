@@ -803,5 +803,106 @@ TEST(SessionFsmTest, IdleWarningSameTapStartsCheckout) {
   EXPECT_EQ(fsm.get_state_id(), SessionStateId::kCheckoutPending);
 }
 
+// --- Stop needs a hold (ADR-0054) ---
+
+class HoldStopTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    fsm_.end_hold = std::chrono::seconds(3);
+    fsm_.AddObserver(&observer_);
+    fsm_.receive(MakeAuthEvent(MakeTagUid(std::byte{0x01}), "Alice"));
+  }
+  SessionFsm fsm_;
+  MockObserver observer_;
+};
+
+TEST_F(HoldStopTest, StopWaitsForHold) {
+  fsm_.receive(session_event::StopSession(/*refuse=*/false));
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_EQ(fsm_.stop_mode, StopMode::kHold);
+  EXPECT_FALSE(fsm_.stop_hold_active);
+  EXPECT_EQ(fsm_.pending_deadline - fsm_.pending_since, kStopHoldWindow);
+}
+
+TEST_F(HoldStopTest, TimeoutWithoutHoldKeepsSession) {
+  fsm_.receive(session_event::StopSession(false));
+  fsm_.receive(session_event::Timeout{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(observer_.end_count, 0);
+}
+
+TEST_F(HoldStopTest, PressDoesNotEndAtOnce) {
+  fsm_.receive(session_event::StopSession(false));
+  fsm_.receive(session_event::UiConfirm{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_TRUE(fsm_.stop_hold_active);
+  EXPECT_EQ(fsm_.pending_deadline - fsm_.pending_since,
+            std::chrono::seconds(3));
+  EXPECT_EQ(observer_.end_count, 0);
+}
+
+TEST_F(HoldStopTest, HeldToTheEndEndsSession) {
+  fsm_.receive(session_event::StopSession(false));
+  fsm_.receive(session_event::UiConfirm{});
+  fsm_.receive(session_event::Timeout{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer_.end_count, 1);
+  EXPECT_EQ(observer_.last_checkout_reason, CheckoutReason::kUiCheckout);
+}
+
+TEST_F(HoldStopTest, ReleaseRestartsTheWait) {
+  fsm_.receive(session_event::StopSession(false));
+  fsm_.receive(session_event::UiConfirm{});
+  fsm_.receive(session_event::UiConfirmReleased{});
+  EXPECT_FALSE(fsm_.stop_hold_active);
+  EXPECT_EQ(fsm_.pending_deadline - fsm_.pending_since, kStopHoldWindow);
+  fsm_.receive(session_event::Timeout{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kRunning);
+}
+
+TEST_F(HoldStopTest, RefusedWhileInUse) {
+  fsm_.receive(session_event::StopSession(/*refuse=*/true));
+  EXPECT_EQ(fsm_.stop_mode, StopMode::kRefused);
+  fsm_.SyncSnapshot();
+  SessionSnapshotUi snapshot;
+  fsm_.GetSnapshot(snapshot);
+  EXPECT_EQ(snapshot.stop_mode, StopMode::kRefused);
+  // OK only dismisses; the countdown only closes it.
+  fsm_.receive(session_event::UiConfirm{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kRunning);
+  fsm_.receive(session_event::StopSession(true));
+  fsm_.receive(session_event::Timeout{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kRunning);
+  EXPECT_EQ(observer_.end_count, 0);
+}
+
+TEST_F(HoldStopTest, IdleWarningEndGoesThroughHold) {
+  fsm_.receive(session_event::IdleWarn{});
+  fsm_.receive(session_event::UiCancel{});
+  EXPECT_EQ(fsm_.get_state_id(), SessionStateId::kStopPending);
+  EXPECT_EQ(fsm_.stop_mode, StopMode::kHold);
+  EXPECT_EQ(observer_.end_count, 0);
+}
+
+TEST(SessionFsmTest, WithoutHoldStopStillAutoConfirms) {
+  SessionFsm fsm;
+  fsm.receive(MakeAuthEvent(MakeTagUid(std::byte{0x01})));
+  fsm.receive(session_event::StopSession(/*refuse=*/true));
+  // refuse only applies to machines whose stop needs a hold.
+  EXPECT_EQ(fsm.stop_mode, StopMode::kAutoConfirm);
+  fsm.receive(session_event::Timeout{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+}
+
+TEST(SessionFsmTest, MachineUnavailableEndsSession) {
+  SessionFsm fsm;
+  MockObserver observer;
+  fsm.AddObserver(&observer);
+  fsm.receive(MakeAuthEvent(MakeTagUid(std::byte{0x01})));
+  fsm.receive(session_event::MachineUnavailable{});
+  EXPECT_EQ(fsm.get_state_id(), SessionStateId::kNoSession);
+  EXPECT_EQ(observer.last_checkout_reason, CheckoutReason::kTimeout);
+}
+
 }  // namespace
 }  // namespace maco::app_state

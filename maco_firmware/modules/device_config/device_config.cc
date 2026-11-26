@@ -38,6 +38,25 @@ MachineControlType ConvertControl(const maco_proto_particle_MachineControl& c) {
   }
 }
 
+ShellyEndpointConfig ConvertEndpoint(
+    const maco_proto_particle_ShellyEndpoint& e) {
+  ShellyEndpointConfig out;
+  out.host = e.host;
+  out.component = e.component;
+  return out;
+}
+
+PowerSignalRole ConvertRole(maco_proto_particle_PowerSignalRole role) {
+  switch (role) {
+    case maco_proto_particle_PowerSignalRole_POWER_SIGNAL_ROLE_BILLABLE:
+      return PowerSignalRole::kBillable;
+    case maco_proto_particle_PowerSignalRole_POWER_SIGNAL_ROLE_ACTIVITY:
+      return PowerSignalRole::kActivity;
+    default:
+      return PowerSignalRole::kUnspecified;
+  }
+}
+
 // Resolve gateway-sensing parameters, mapping proto zero-values to defaults.
 GatewaySensingConfig ConvertGatewaySensing(
     const maco_proto_particle_GatewaySensingControl& g) {
@@ -48,6 +67,8 @@ GatewaySensingConfig ConvertGatewaySensing(
   if (g.idle_warning_sec != 0) {
     cfg.idle_warning_sec = g.idle_warning_sec;
   }
+  cfg.idle_warning_repeat_sec = g.idle_warning_repeat_sec;
+  cfg.end_hold_sec = g.end_hold_sec;
   if (g.has_spec) {
     switch (g.spec.which_backend) {
       case maco_proto_particle_SensingSpec_xtool_laser_tag: {
@@ -67,6 +88,30 @@ GatewaySensingConfig ConvertGatewaySensing(
       case maco_proto_particle_SensingSpec_mock_tag:
         cfg.kind = SensingKind::kMock;
         break;
+      case maco_proto_particle_SensingSpec_shelly_power_tag: {
+        cfg.kind = SensingKind::kShellyPower;
+        const auto& sp = g.spec.backend.shelly_power;
+        if (sp.has_actuator && sp.actuator.host[0] != '\0') {
+          cfg.shelly.actuator = ConvertEndpoint(sp.actuator);
+        }
+        for (size_t i = 0;
+             i < sp.signals_count && i < ShellyPowerConfig::kMaxSignals; ++i) {
+          const auto& sig = sp.signals[i];
+          PowerSignalConfig out;
+          if (sig.has_source) {
+            out.source = ConvertEndpoint(sig.source);
+          }
+          out.role = ConvertRole(sig.role);
+          out.threshold_w = sig.threshold_w;
+          out.rise_sec = sig.rise_sec;
+          out.fall_sec = sig.fall_sec;
+          cfg.shelly.signals.push_back(out);
+        }
+        if (sp.poll_interval_sec != 0) {
+          cfg.poll_interval_sec = sp.poll_interval_sec;
+        }
+        break;
+      }
       default:
         break;
     }

@@ -27,7 +27,37 @@ enum class MachineControlType { kUnspecified = 0, kRelay = 1, kGatewaySensing = 
 
 /// Which gateway sensing backend probes the device (mirrors the SensingSpec
 /// proto oneof arm).
-enum class SensingKind { kUnspecified = 0, kXToolLaser = 1, kMock = 2 };
+enum class SensingKind {
+  kUnspecified = 0,
+  kXToolLaser = 1,
+  kMock = 2,
+  kShellyPower = 3,
+};
+
+/// One Shelly component (ADR-0054). `host` may carry a port ("host:8101").
+struct ShellyEndpointConfig {
+  // nanopb sizes incl. the terminator: host char[64], component char[16].
+  pw::InlineString<63> host;
+  pw::InlineString<15> component;
+};
+
+enum class PowerSignalRole { kUnspecified = 0, kBillable = 1, kActivity = 2 };
+
+struct PowerSignalConfig {
+  ShellyEndpointConfig source;
+  PowerSignalRole role = PowerSignalRole::kUnspecified;
+  uint32_t threshold_w = 0;
+  uint32_t rise_sec = 0;
+  uint32_t fall_sec = 0;
+};
+
+/// Shelly power backend parameters, forwarded to the gateway.
+struct ShellyPowerConfig {
+  static constexpr size_t kMaxSignals = 4;
+  /// Unset => meter only; the relay switches the machine as usual.
+  std::optional<ShellyEndpointConfig> actuator;
+  pw::Vector<PowerSignalConfig, kMaxSignals> signals;
+};
 
 /// Gateway-sensing parameters, with proto zero-values resolved to their
 /// defaults (see ADR-0035). The idle timings are consumed firmware-side (they
@@ -42,6 +72,10 @@ struct GatewaySensingConfig {
   // Firmware-side (idle auto-end).
   uint32_t idle_timeout_sec = kDefaultIdleTimeoutSec;
   uint32_t idle_warning_sec = kDefaultIdleWarningSec;
+  // 0 => silent single warning; else beep on entry and every N s (ADR-0054).
+  uint32_t idle_warning_repeat_sec = 0;
+  // 0 => stop button auto-confirms; else OK must be held N s (ADR-0054).
+  uint32_t end_hold_sec = 0;
 
   // Sensing spec (forwarded to the gateway).
   SensingKind kind = SensingKind::kUnspecified;
@@ -49,6 +83,12 @@ struct GatewaySensingConfig {
   pw::InlineString<63> host;
   uint16_t port = kDefaultXToolPort;
   uint32_t poll_interval_sec = kDefaultPollIntervalSec;
+  ShellyPowerConfig shelly;
+
+  /// The gateway switches this machine (SetPower) instead of the relay.
+  bool SwitchesThroughGateway() const {
+    return kind == SensingKind::kShellyPower && shelly.actuator.has_value();
+  }
 };
 
 /// Read-only machine configuration parsed from proto.
