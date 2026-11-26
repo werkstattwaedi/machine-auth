@@ -41,6 +41,13 @@ message GatewaySensingControl {
   uint32 idle_warning_sec = 2;
   // What the gateway should sense; forwarded verbatim to the gateway.
   SensingSpec spec = 3;
+  // During the idle warning, sound the buzzer when it opens and again every
+  // this many seconds (0 => silent, single warning). Firmware-side (ADR-0054).
+  uint32 idle_warning_repeat_sec = 4;
+  // Ending from the terminal's stop button needs OK held this many seconds
+  // instead of the auto-confirm countdown, and is refused while the machine
+  // reports billable use (0 => today's auto-confirm). Firmware-side (ADR-0054).
+  uint32 end_hold_sec = 5;
 }
 
 // Describes what the gateway should sense. The backend is selected by which
@@ -49,6 +56,7 @@ message SensingSpec {
   oneof backend {
     XToolLaserControl xtool_laser = 1;
     MockSensingControl mock = 2;
+    ShellyPowerControl shelly_power = 3;
   }
 }
 
@@ -65,6 +73,48 @@ message XToolLaserControl {
 
 // Scriptable sensing backend for the host simulator and tests.
 message MockSensingControl {}
+
+// A machine powered and metered through Shelly devices (ADR-0054). When
+// `actuator` is set, the terminal switches the machine through the gateway
+// (SetPower) instead of its own relay.
+message ShellyPowerControl {
+  // The switch the session turns on and off. Unset => meter only.
+  ShellyEndpoint actuator = 1;
+  // Power readings that decide billing and activity.
+  repeated PowerSignal signals = 2;
+  // Interval between device polls, in seconds (0 => gateway default 2).
+  uint32 poll_interval_sec = 3;
+  // When no terminal holds a lease and the actuator is on, the gateway switches
+  // it off once every signal has been off this long (0 => never). The terminal
+  // fills it from its idle timeout.
+  uint32 orphan_off_after_sec = 4;
+}
+
+// One Shelly component, e.g. host "cnc-gantry.internal", component "switch:0".
+message ShellyEndpoint {
+  string host = 1;
+  // Gen2+ component key in Shelly.GetStatus ("switch:0", "pm1:0", "em1:0").
+  string component = 2;
+}
+
+// What a power signal decides.
+enum PowerSignalRole {
+  POWER_SIGNAL_ROLE_UNSPECIFIED = 0;
+  // On => the session is billed (and counts as active).
+  POWER_SIGNAL_ROLE_BILLABLE = 1;
+  // On => the session counts as active (resets the idle timer), not billed.
+  POWER_SIGNAL_ROLE_ACTIVITY = 2;
+}
+
+// A power reading compared against a threshold, with smoothing: on after
+// `rise_sec` above the threshold, off after `fall_sec` below it.
+message PowerSignal {
+  ShellyEndpoint source = 1;
+  PowerSignalRole role = 2;
+  uint32 threshold_w = 3;
+  uint32 rise_sec = 4;
+  uint32 fall_sec = 5;
+}
 
 // Machine definition with permissions
 message Machine {

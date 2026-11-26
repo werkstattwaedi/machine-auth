@@ -62,6 +62,26 @@ class MachineController : public app_state::SessionObserver,
   /// Called by MachineSensor when the running state changes.
   void OnMachineRunning(bool running);
 
+  /// Called by sensors that report activity apart from billable use.
+  void OnMachineActivity(app_state::MachineActivity activity) {
+    activity_.store(activity, std::memory_order_relaxed);
+    activity_reported_.store(true, std::memory_order_relaxed);
+  }
+
+  app_state::MachineActivity Activity() const override {
+    if (!activity_reported_.load(std::memory_order_relaxed)) {
+      return IsMachineRunning() ? app_state::MachineActivity::kActive
+                                : app_state::MachineActivity::kIdle;
+    }
+    return activity_.load(std::memory_order_relaxed);
+  }
+
+  /// Invoked (on the dispatcher) when switching the machine on fails, so the
+  /// session can end instead of running on a machine that has no power.
+  void SetOnEnableFailed(pw::Function<void()> callback) {
+    on_enable_failed_ = std::move(callback);
+  }
+
   void OnSessionStarted(const app_state::SessionInfo& session) override;
   void OnSessionEnded(const app_state::SessionInfo& session,
                       const app_state::MachineUsage& usage) override;
@@ -86,6 +106,10 @@ class MachineController : public app_state::SessionObserver,
   // this costs nothing on a clean boot.
   std::atomic<Command> pending_command_{Command::kDisable};
   std::atomic<bool> machine_running_{false};
+  std::atomic<app_state::MachineActivity> activity_{
+      app_state::MachineActivity::kIdle};
+  std::atomic<bool> activity_reported_{false};
+  pw::Function<void()> on_enable_failed_;
 
   // In-use accumulator. Written from the session-observer callbacks (main
   // dispatcher) and the machine-running callback (the xTool sensor's poll

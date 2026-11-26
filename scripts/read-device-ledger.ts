@@ -68,6 +68,19 @@ async function main() {
           `    kind=xtool_laser  host=${JSON.stringify(spec.xtoolLaser.host)}` +
             `  port=${spec.xtoolLaser.port}  pollIntervalSec=${spec.xtoolLaser.pollIntervalSec}`,
         );
+      } else if (spec?.$case === "shellyPower") {
+        const sp = spec.shellyPower;
+        console.log(
+          `    kind=shelly_power  actuator=${sp.actuator ? `${sp.actuator.host} ${sp.actuator.component}` : "(none)"}` +
+            `  pollIntervalSec=${sp.pollIntervalSec}`,
+        );
+        for (const sig of sp.signals) {
+          console.log(
+            `      signal ${sig.source?.host} ${sig.source?.component}  role=${sig.role}` +
+              `  thresholdW=${sig.thresholdW}  rise=${sig.riseSec}s fall=${sig.fallSec}s`,
+          );
+        }
+        console.log(`    idleWarningRepeatSec=${gs.idleWarningRepeatSec}  endHoldSec=${gs.endHoldSec}`);
       } else {
         console.log(`    spec=${JSON.stringify(spec)}`);
       }

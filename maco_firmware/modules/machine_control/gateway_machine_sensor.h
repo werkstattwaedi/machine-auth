@@ -25,6 +25,12 @@
 
 namespace maco::machine_control {
 
+/// Fill the gateway's SensingSpec from the terminal's config. Shared by the
+/// sensor (leases) and GatewayMachineToggle (SetPower), so both name the same
+/// prober on the gateway.
+void BuildSensingSpec(const config::GatewaySensingConfig& config,
+                      maco_gateway_SensingSpec& spec);
+
 /// Senses machine activity by leasing a sensing session from the gateway
 /// (ADR-0035). The gateway runs the device-specific protocol (e.g. the xTool
 /// laser's WebSocket) and reports running/idle; this sensor forwards its
@@ -56,11 +62,14 @@ class GatewayMachineSensor : public MachineSensor,
   pw::async2::Coro<pw::Status> Run(pw::async2::CoroContext cx);
   pw::async2::Coro<pw::Status> Acquire(pw::async2::CoroContext cx);
   pw::async2::Coro<pw::Status> Renew(pw::async2::CoroContext cx);
-  void ApplyState(bool valid, maco_gateway_SensingState state);
-  void BuildSpec(maco_gateway_SensingSpec& spec) const;
+  void ApplyState(bool valid, maco_gateway_SensingState state, bool active);
+  /// Nothing known about the machine (RPC failed, lease invalid, unreachable).
+  void ReportUnknown();
 
   gateway::GatewayClient& gateway_;
-  const config::GatewaySensingConfig config_;
+  // Referenced, not copied: it lives in the static DeviceConfig (a config
+  // change reboots), and a copy per user costs SRAM the P2 doesn't have.
+  const config::GatewaySensingConfig& config_;
   pw::async2::TimeProvider<pw::chrono::SystemClock>& time_provider_;
 
   std::atomic<bool> session_active_{false};

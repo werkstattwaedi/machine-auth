@@ -479,6 +479,10 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
           snapshot.session.pending_user_label.size());
     } else if (is_ending_soon) {
       type = PendingType::kIdleWarning;
+    } else if (snapshot.session.stop_mode == app_state::StopMode::kHold) {
+      type = PendingType::kStopHold;
+    } else if (snapshot.session.stop_mode == app_state::StopMode::kRefused) {
+      type = PendingType::kStopRefused;
     } else {
       type = PendingType::kStop;
     }
@@ -487,7 +491,9 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     // the background behind it.
     const theme::StateColors colors = ColorsFor(visual_state_);
 
-    if (!overlay_.IsVisible()) {
+    // A prompt can turn into another without closing (e.g. "Beenden" in the
+    // idle warning opening the hold prompt), so re-show on a type change.
+    if (!overlay_.IsVisible() || overlay_.type() != type) {
       // Hide menu button so only confirm_btn_ is focusable — prevents
       // AppShell from lighting up the navigation LEDs.
       lv_obj_add_flag(menu_btn_, LV_OBJ_FLAG_HIDDEN);
@@ -499,6 +505,7 @@ void MainScreen::OnUpdate(const app_state::AppStateSnapshot& snapshot) {
     // Re-applied every frame: the machine can start or stop while the sheet
     // is up, and the card must follow the state across that transition.
     overlay_.SetColors(colors);
+    overlay_.SetStopHoldActive(snapshot.session.stop_hold_active);
     overlay_.UpdateProgress(snapshot.session.pending_since,
                             snapshot.session.pending_deadline,
                             snapshot.session.tag_present);

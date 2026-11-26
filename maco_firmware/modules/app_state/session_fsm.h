@@ -115,6 +115,10 @@ inline constexpr auto kAutoConfirmDuration = std::chrono::seconds(3);
 /// action it advertises.
 inline constexpr auto kHoldDuration = std::chrono::seconds(1);
 
+/// On a machine whose stop needs a hold (ADR-0054): how long the stop prompt
+/// waits for OK to be held before it closes again by itself.
+inline constexpr auto kStopHoldWindow = std::chrono::seconds(10);
+
 /// True once the badge has rested on the reader long enough to confirm a
 /// checkout or takeover.
 ///
@@ -160,12 +164,14 @@ class NoSession
 class Active
     : public etl::fsm_state<SessionFsm, Active, SessionStateId::kActive,
                             session_event::UserAuthorized,
-                            session_event::StopSession> {
+                            session_event::StopSession,
+                            session_event::MachineUnavailable> {
  public:
   etl::fsm_state_id_t on_enter_state();
   void on_exit_state();
   etl::fsm_state_id_t on_event(const session_event::UserAuthorized& e);
   etl::fsm_state_id_t on_event(const session_event::StopSession&);
+  etl::fsm_state_id_t on_event(const session_event::MachineUnavailable&);
   etl::fsm_state_id_t on_event_unknown(const etl::imessage&) {
     return No_State_Change;
   }
@@ -252,15 +258,18 @@ class IdleWarning
   }
 };
 
-/// Child of Active: UI stop button pressed, awaiting auto-confirm countdown.
+/// Child of Active: UI stop button pressed. Ends the session per stop_mode:
+/// auto-confirm countdown, OK held for end_hold, or refused (closes again).
 class StopPending
     : public etl::fsm_state<SessionFsm, StopPending,
                             SessionStateId::kStopPending,
                             session_event::UiConfirm, session_event::UiCancel,
                             session_event::Timeout, session_event::StopSession,
-                            session_event::UserAuthorized> {
+                            session_event::UserAuthorized,
+                            session_event::UiConfirmReleased> {
  public:
   etl::fsm_state_id_t on_event(const session_event::UiConfirm&);
+  etl::fsm_state_id_t on_event(const session_event::UiConfirmReleased&);
   etl::fsm_state_id_t on_event(const session_event::UiCancel&);
   etl::fsm_state_id_t on_event(const session_event::Timeout&);
   etl::fsm_state_id_t on_event(const session_event::StopSession&);
@@ -296,6 +305,15 @@ class SessionFsm : public etl::hfsm, public TagVerifierObserver {
 
   // Flag for chained takeover transition (main thread only)
   bool has_pending_takeover = false;
+
+  // Stop prompt mode (ADR-0054). end_hold == 0 keeps the auto-confirm.
+  pw::chrono::SystemClock::duration end_hold{};
+  StopMode stop_mode = StopMode::kAutoConfirm;
+  bool stop_hold_active = false;
+
+  /// Enter the stop prompt; shared by Stopp and "Beenden" in the idle warning
+  /// so a machine whose stop needs a hold can't be ended past it.
+  etl::fsm_state_id_t EnterStop(bool refuse);
 
   // --- TagVerifierObserver overrides ---
   void OnTagDetected(pw::ConstByteSpan uid) override;

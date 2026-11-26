@@ -271,6 +271,14 @@ gcloud config set project <your-project-id>
 echo -n "$(openssl rand -hex 16)" | gcloud secrets create GATEWAY_ASCON_MASTER_KEY --data-file=-
 ```
 
+Only if a machine is powered through Shelly devices (ADR-0054): the Shellies'
+local-API password, set on every Shelly (Settings → Authentication, user
+`admin`). Without it the gateway talks to them unauthenticated.
+
+```bash
+echo -n "<shelly-password>" | gcloud secrets create SHELLY_PASSWORD --data-file=-
+```
+
 See [`config.md`](config.md#maco-gateway-configuration) for details.
 
 ## 2. Environment Config

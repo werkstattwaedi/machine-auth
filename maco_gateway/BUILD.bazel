@@ -35,6 +35,8 @@ py_library(
         "maco_gateway/sensing/__init__.py",
         "maco_gateway/sensing/backends.py",
         "maco_gateway/sensing/service.py",
+        # Shelly power metering + switching (ADR-0054): httpx, no extra dep.
+        "maco_gateway/sensing/shelly.py",
         "maco_gateway/sensing/wsv2.py",
     ],
     imports = ["."],  # Makes maco_gateway package importable
@@ -47,19 +49,45 @@ py_library(
     ],
 )
 
+# Stand-in Shelly device, shared by the tests and tools/shelly_sim.py; not
+# part of gateway_lib because the gateway itself never uses it.
+py_library(
+    name = "shelly_fake",
+    srcs = ["maco_gateway/sensing/shelly_fake.py"],
+    imports = ["."],
+)
+
 [
     py_test(
         name = name,
         srcs = ["maco_gateway/sensing/%s.py" % name],
         main = "maco_gateway/sensing/%s.py" % name,
-        deps = [":gateway_lib"],
+        deps = [
+            ":gateway_lib",
+            ":shelly_fake",
+        ],
     )
     for name in [
         "test_wsv2",
         "test_backends",
         "test_service",
+        "test_shelly",
     ]
 ]
+
+# main.py's RPC wiring for sensing + SetPower (ADR-0054).
+py_test(
+    name = "test_main_sensing",
+    srcs = [
+        "maco_gateway/main.py",
+        "maco_gateway/test_main_sensing.py",
+    ],
+    main = "maco_gateway/test_main_sensing.py",
+    deps = [
+        ":gateway_lib",
+        ":shelly_fake",
+    ],
+)
 
 py_test(
     name = "test_device_status",
@@ -75,6 +103,23 @@ py_binary(
     srcs = ["tools/probe_laser.py"],
     main = "tools/probe_laser.py",
     deps = [":gateway_lib"],
+)
+
+# On-site power probe: prints live watts of Shelly components, to set the
+# power-signal thresholds from real jobs (ADR-0054).
+py_binary(
+    name = "probe_power",
+    srcs = ["tools/probe_power.py"],
+    main = "tools/probe_power.py",
+    deps = [":gateway_lib"],
+)
+
+# Fake Shelly devices on localhost for end-to-end runs with the host simulator.
+py_binary(
+    name = "shelly_sim",
+    srcs = ["tools/shelly_sim.py"],
+    main = "tools/shelly_sim.py",
+    deps = [":shelly_fake"],
 )
 
 # Test fixtures for integration tests

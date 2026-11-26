@@ -1,7 +1,9 @@
 # Machine terminal
 
 Unlocking a machine at its machine terminal, what the terminal tells a person
-it doesn't let in, and the permissions a machine requires and a person holds.
+it doesn't let in, the permissions a machine requires and a person holds, and
+how a machine session ends and what of it is billed, and switching a
+machine's power through the gateway.
 Where the team grants them is in [admin.md](admin.md) (ADM-16), how a course
 grants them in [courses.md](courses.md) (CRS); what a permission does for the
 price of a badge is MEM-14. Terms: see the [glossary](README.md#glossary).
@@ -29,10 +31,47 @@ price of a badge is MEM-14. Terms: see the [glossary](README.md#glossary).
 - **MAC-8** A refusal (MAC-6) or the request to hold the badge longer (MAC-7) stays on the machine terminal's screen until the person presses OK, taps a badge again, or 20 s have passed with the badge off the reader and the QR code (MAC-6) closed. — #580
 - **MAC-9** When a machine terminal gets no answer from the server while it checks a badge, the machine stays locked and the terminal tells the person that it has no connection and to try again in a moment, without "Info" (MAC-6), the notice staying on the screen as a refusal does (MAC-8). — #865
 
+## Machine sessions
+
+- **MAC-16** When a badge the machine terminal lets in (MAC-1) is tapped during a machine session, the terminal asks the question in the table; holding the badge on for 1 s after the question appears, or "Ja", does what the table says, while taking it off and then 3 s passing, or "Nein", leaves the session running — #534:
+
+  | The badge is | The terminal asks | It then |
+  |---|---|---|
+  | the one that started the session | whether to end the session | ends the session |
+  | another person's | whether to sign that person in | ends the session and starts one for that person |
+
+- **MAC-15** During a machine session on a machine whose "Stopp" needs no hold (MAC-17), "Stopp" on the machine terminal asks whether to end it, with "Ja" filling up over 3 s; "Ja" or the 3 s running out ends the session, "Nein" leaves it running. — ADR-0054
+- **MAC-17** During a machine session on a sensed machine set to need a hold for "Stopp", "Stopp" on the machine terminal does what the table says, OK filling up while it is held — ADR-0054:
+
+  | When "Stopp" is pressed, the machine is | The terminal | It then |
+  |---|---|---|
+  | in billable use | tells the person that the machine is running | closes on OK or after 3 s, the session running on |
+  | not in billable use | asks the person to hold OK to end the session | ends the session once OK has been held for the machine's hold time; letting go sooner starts the 10 s wait over; "Nein", or 10 s without a hold, leaves the session running |
+
+- **MAC-21** When a machine terminal restarts by itself during a machine session — after a crash or its watchdog — it resumes the session with the machine on, unless it keeps restarting; any other start ends a session that was running and switches the machine off. — ADR-0040, ADR-0054
+
+## Sensed machines
+
+- **MAC-10** The billed time of a machine session (CHK-44) is, on a sensed machine, the time within it in which the machine was in billable use, and on any other machine the session's whole length. — ADR-0032, ADR-0035, ADR-0054
+- **MAC-11** During a machine session the machine terminal shows whether the machine is in billable use — a machine that isn't sensed counts as in billable use throughout — and, once it has been, the billed time so far (MAC-10). — ADR-0032, ADR-0054
+- **MAC-12** A machine session on a sensed machine ends by itself once the machine hasn't been in use for the machine's idle time — 15 min unless set otherwise for that machine — counted from the session's start, the machine's last use or the last "Weiter" (MAC-13), whichever is latest, and paused where MAC-14 says; a session on any other machine never ends for lack of use. — ADR-0032, ADR-0035, ADR-0054
+- **MAC-13** For the machine's warning time before a sensed machine's session ends by itself (MAC-12) — 1 min unless set otherwise for that machine — the machine terminal asks whether the person is still working, with "Beenden" filling up until the end; "Beenden" ends the session at once, or on a machine whose "Stopp" needs a hold asks to hold OK as "Stopp" does (MAC-17), while "Weiter" or the machine coming into use again leaves it running. — ADR-0032, ADR-0054
+- **MAC-18** On a sensed machine set to sound it, the machine terminal beeps when the warning before the session ends by itself (MAC-13) opens and again at the machine's set interval while it stays open; on any other machine that warning is silent. — ADR-0054
+- **MAC-14** While the machine terminal of a sensed machine can't learn whether the machine is in use — the machine, or the gateway it is reached through, doesn't answer — that time is not billed (MAC-10), and it counts toward the idle time (MAC-12), except on a gateway-switched machine, where the idle time and an open warning (MAC-13) pause until the terminal learns it again. — ADR-0035, ADR-0054
+
+## Gateway-switched machines
+
+- **MAC-19** When a machine terminal can't switch on a gateway-switched machine for a machine session — the gateway doesn't confirm it on a second try either — the session ends at once. — ADR-0054
+- **MAC-20** When a gateway-switched machine is still on a minute after its machine terminal last followed it through the gateway — the terminal stopped answering during a machine session, or couldn't switch the machine off at the session's end — the gateway switches it off once it has seen the machine out of use for the machine's idle time (MAC-12) without a break, and not before. — ADR-0054
+
 ## Open questions
 
 - [NEEDS CLARIFICATION] The Profil page of the account lists every permission and marks the ones the person holds; nothing records that decision. Rule?
 - [NEEDS CLARIFICATION] A tag the machine terminal can't authenticate as a badge of the workshop — another card, or a badge it can't read — gets a red light and a low tone but no message on the screen, unlike an unregistered badge (MAC-6). Rule?
+- [NEEDS CLARIFICATION] On a sensed machine, a question about ending the session (MAC-15, MAC-16, MAC-17) that leaves the session running starts the idle time (MAC-12) over, as "Weiter" does (MAC-13) — that includes "Beenden" in the warning on a machine whose "Stopp" needs a hold, when OK is then not held; nothing records that decision. Intended?
+- [NEEDS CLARIFICATION] On a machine whose "Stopp" needs a hold (MAC-17), the badge that started the session still ends it after 1 s (MAC-16), without the hold and while the machine is in billable use. Intended, or should MAC-17 hold for the badge too?
+- [NEEDS CLARIFICATION] A gateway-switched machine that is on while the gateway doesn't know it — the gateway restarted after its terminal stopped following it, or the machine was switched on at its switch outside a session — stays on until the terminal's next start (MAC-21); MAC-20 doesn't reach it. Intended?
+- [NEEDS CLARIFICATION] During a machine session, a badge the server refuses (MAC-6) or doesn't answer for (MAC-9) gets a red light and a low tone but no message on the screen; that includes the badge that started the session once MAC-3's 4 h have passed, which then can't end it (MAC-16) — only "Stopp" can (MAC-15, MAC-17). Rule, or should MAC-6 and MAC-9 hold during a session too?
 
 ## Retired
 

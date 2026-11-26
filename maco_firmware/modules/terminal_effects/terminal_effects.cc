@@ -215,6 +215,11 @@ void TerminalEffects::OnSessionUiStateChanged(
   session_ui_state_.store(state, std::memory_order_relaxed);
 }
 
+void TerminalEffects::IdleWarningBeep() {
+  // Higher and longer than any tag tone, so it isn't mistaken for a tap.
+  buzzer_.Beep(3000, 400ms);
+}
+
 // --- TagVerifierObserver ---
 
 void TerminalEffects::OnTagDetected(pw::ConstByteSpan) {

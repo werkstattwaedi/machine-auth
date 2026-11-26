@@ -7,7 +7,7 @@ import asyncio
 import unittest
 
 from maco_gateway.sensing.backends import MockBackend, SensingState
-from maco_gateway.sensing.service import SensingService
+from maco_gateway.sensing.service import BackendSpec, SensingService
 
 
 class _RecordingBackend(MockBackend):
@@ -29,7 +29,7 @@ class _Factory:
     def __init__(self):
         self.created = []
 
-    def __call__(self, kind, host, port, poll_interval_sec):
+    def __call__(self, spec):
         b = _RecordingBackend()
         self.created.append(b)
         return b
@@ -43,7 +43,7 @@ class _FailingStopBackend(MockBackend):
 
 
 class _FailingStopFactory:
-    def __call__(self, kind, host, port, poll_interval_sec):
+    def __call__(self, spec):
         return _FailingStopBackend()
 
 
@@ -51,7 +51,7 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_acquire_starts_prober_and_returns_state(self):
         factory = _Factory()
         svc = SensingService(factory=factory)
-        lease_id, valid, state = await svc.acquire(kind="mock")
+        lease_id, valid, state, _ = await svc.acquire(BackendSpec("mock"))
         self.assertTrue(valid)
         self.assertNotEqual(lease_id, "")
         self.assertEqual(len(factory.created), 1)
@@ -61,16 +61,16 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_renew_reflects_state_change(self):
         factory = _Factory()
         svc = SensingService(factory=factory)
-        lease_id, _, _ = await svc.acquire(kind="mock")
+        lease_id, *_ = await svc.acquire(BackendSpec("mock"))
         factory.created[0].set_state(SensingState.RUNNING)
-        rid, valid, state = svc.renew(lease_id)
+        rid, valid, state, _ = svc.renew(lease_id)
         self.assertTrue(valid)
         self.assertEqual(rid, lease_id)
         self.assertEqual(state, SensingState.RUNNING)
 
     async def test_unknown_lease_is_invalid(self):
         svc = SensingService(factory=_Factory())
-        rid, valid, state = svc.renew("does-not-exist")
+        rid, valid, state, _ = svc.renew("does-not-exist")
         self.assertFalse(valid)
         self.assertEqual(rid, "")
         self.assertEqual(state, SensingState.UNSPECIFIED)
@@ -78,15 +78,15 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_two_leases_share_one_prober(self):
         factory = _Factory()
         svc = SensingService(factory=factory)
-        await svc.acquire(kind="xtool_laser", host="laser.a")
-        await svc.acquire(kind="xtool_laser", host="laser.a")
+        await svc.acquire(BackendSpec("xtool_laser", "laser.a"))
+        await svc.acquire(BackendSpec("xtool_laser", "laser.a"))
         self.assertEqual(len(factory.created), 1, "same (kind,host) reuses the prober")
 
     async def test_expired_lease_reaps_and_stops_prober(self):
         factory = _Factory()
         svc = SensingService(factory=factory)
-        l1, _, _ = await svc.acquire(kind="xtool_laser", host="laser.a")
-        l2, _, _ = await svc.acquire(kind="xtool_laser", host="laser.a")
+        l1, *_ = await svc.acquire(BackendSpec("xtool_laser", "laser.a"))
+        l2, *_ = await svc.acquire(BackendSpec("xtool_laser", "laser.a"))
         backend = factory.created[0]
 
         # Expire only the first lease; prober stays up (still one live lease).
@@ -107,7 +107,7 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
         # runs under the reaper loop / top-level gather, so an unhandled error
         # would crash the whole gateway. The lease/prober are still reaped.
         svc = SensingService(factory=_FailingStopFactory())
-        lease_id, _, _ = await svc.acquire(kind="mock")
+        lease_id, *_ = await svc.acquire(BackendSpec("mock"))
         svc._leases[lease_id].expiry = asyncio.get_running_loop().time() - 1
         await svc._sweep()  # must not raise
         self.assertEqual(len(svc._probers), 0, "prober still removed")
@@ -116,8 +116,8 @@ class SensingServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_shutdown_stops_all(self):
         factory = _Factory()
         svc = SensingService(factory=factory)
-        await svc.acquire(kind="xtool_laser", host="laser.a")
-        await svc.acquire(kind="xtool_laser", host="laser.b")
+        await svc.acquire(BackendSpec("xtool_laser", "laser.a"))
+        await svc.acquire(BackendSpec("xtool_laser", "laser.b"))
         await svc.shutdown()
         self.assertTrue(all(b.stops == 1 for b in factory.created))
 

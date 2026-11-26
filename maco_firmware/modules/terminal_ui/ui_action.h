@@ -17,6 +17,7 @@ enum class UiAction : uint8_t {
   kConfirm,
   kCancel,
   kStopSession,
+  kConfirmReleased,  // OK let go (ends a hold on the stop prompt)
 };
 
 /// Callback type for screens to emit actions.

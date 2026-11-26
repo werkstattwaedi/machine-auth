@@ -32,6 +32,7 @@ import { DocumentReference } from "firebase-admin/firestore";
 import {
   DeviceConfig,
   HwRevision,
+  PowerSignalRole,
 } from "../functions/lib/src/proto/particle/device_config.js";
 
 // Load .env from scripts/ directory (works regardless of cwd).
@@ -55,18 +56,44 @@ interface MacoData {
 
 // Machine control config, mirrors the `MachineControl` proto oneof and the
 // `MachineEntity.control` Firestore shape (functions firestore_entities.ts).
+interface ShellyEndpointDoc {
+  host: string; // may carry a port, e.g. "cnc-gantry.internal:80"
+  component: string; // "switch:0", "pm1:0", "em1:0"
+}
+
+interface PowerSignalDoc extends ShellyEndpointDoc {
+  role: "billable" | "activity";
+  thresholdW: number;
+  riseSec?: number;
+  fallSec?: number;
+}
+
+// Settings every gateway-sensed machine shares; firmware-side.
+interface GatewaySensingCommon {
+  type: "gateway_sensing";
+  pollIntervalSec?: number;
+  idleTimeoutSec?: number;
+  idleWarningSec?: number;
+  // Beep during the idle warning, every N s (ADR-0054). Unset = silent.
+  idleWarningRepeatSec?: number;
+  // Stopp needs OK held N s, refused while billable (ADR-0054).
+  endHoldSec?: number;
+}
+
 type MachineControlDoc =
   | { type?: "relay" }
-  | {
-      type: "gateway_sensing";
+  | (GatewaySensingCommon & {
       // Which gateway backend probes the device (selects the SensingSpec arm).
       kind: "xtool_laser";
       host: string;
       port?: number;
-      pollIntervalSec?: number;
-      idleTimeoutSec?: number;
-      idleWarningSec?: number;
-    };
+    })
+  | (GatewaySensingCommon & {
+      kind: "shelly_power";
+      // Unset = meter only; the relay switches as usual.
+      actuator?: ShellyEndpointDoc;
+      signals: PowerSignalDoc[];
+    });
 
 interface MachineData {
   name: string;
@@ -145,6 +172,8 @@ function buildControl(control: MachineControlDoc | undefined) {
         gatewaySensing: {
           idleTimeoutSec: control.idleTimeoutSec ?? 0,
           idleWarningSec: control.idleWarningSec ?? 0,
+          idleWarningRepeatSec: control.idleWarningRepeatSec ?? 0,
+          endHoldSec: control.endHoldSec ?? 0,
           spec: buildSensingSpec(control),
         },
       },
@@ -154,7 +183,9 @@ function buildControl(control: MachineControlDoc | undefined) {
 }
 
 // Map the Firestore `kind` + params to the SensingSpec proto oneof arm.
-function buildSensingSpec(control: { kind: "xtool_laser"; host: string; port?: number; pollIntervalSec?: number }) {
+function buildSensingSpec(
+  control: Exclude<MachineControlDoc, { type?: "relay" }>,
+) {
   switch (control.kind) {
     case "xtool_laser":
       return {
@@ -167,8 +198,47 @@ function buildSensingSpec(control: { kind: "xtool_laser"; host: string; port?: n
           },
         },
       };
+    case "shelly_power": {
+      if (!Array.isArray(control.signals) || control.signals.length === 0) {
+        throw new Error("shelly_power needs at least one signal");
+      }
+      if (control.signals.length > 4) {
+        throw new Error("shelly_power takes at most 4 signals (nanopb max_count)");
+      }
+      return {
+        backend: {
+          $case: "shellyPower" as const,
+          shellyPower: {
+            actuator: control.actuator
+              ? { host: control.actuator.host, component: control.actuator.component }
+              : undefined,
+            signals: control.signals.map((s) => ({
+              source: { host: s.host, component: s.component },
+              role: powerSignalRole(s.role),
+              thresholdW: s.thresholdW,
+              riseSec: s.riseSec ?? 0,
+              fallSec: s.fallSec ?? 0,
+            })),
+            pollIntervalSec: control.pollIntervalSec ?? 0,
+            // The terminal fills this from its idle timeout at lease time.
+            orphanOffAfterSec: 0,
+          },
+        },
+      };
+    }
     default:
       throw new Error(`unknown sensing kind: ${(control as { kind: string }).kind}`);
+  }
+}
+
+function powerSignalRole(role: string): PowerSignalRole {
+  switch (role) {
+    case "billable":
+      return PowerSignalRole.POWER_SIGNAL_ROLE_BILLABLE;
+    case "activity":
+      return PowerSignalRole.POWER_SIGNAL_ROLE_ACTIVITY;
+    default:
+      throw new Error(`unknown power signal role: ${role}`);
   }
 }
 

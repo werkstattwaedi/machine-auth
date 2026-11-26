@@ -11,6 +11,7 @@
 #include <functional>
 #include <thread>
 
+#include <cstdlib>
 #include <cstring>
 
 #include "device_config/device_config.h"
@@ -169,6 +170,50 @@ pb::cloud::MockLedgerBackend& GetMockLedgerBackend() {
   return backend;
 }
 
+namespace {
+void SetEndpoint(maco_proto_particle_ShellyEndpoint& e, const char* host,
+                 const char* component) {
+  std::strncpy(e.host, host, sizeof(e.host) - 1);
+  std::strncpy(e.component, component, sizeof(e.component) - 1);
+}
+
+// The seed's CNC (scripts/seed-data/seed-public/machines.json).
+void AddSimCncMachine(maco_proto_particle_DeviceConfig& cfg) {
+  auto& m = cfg.machines[cfg.machines_count++];
+  std::strncpy(m.id.value, "RinNN3ulmVFrwNGSfzE3", sizeof(m.id.value) - 1);
+  m.has_id = true;
+  std::strncpy(m.label, "CNC", sizeof(m.label) - 1);
+  m.has_control = true;
+  m.control.which_control =
+      maco_proto_particle_MachineControl_gateway_sensing_tag;
+  auto& g = m.control.control.gateway_sensing;
+  g.idle_timeout_sec = 180;
+  g.idle_warning_sec = 60;
+  g.idle_warning_repeat_sec = 15;
+  g.end_hold_sec = 3;
+  g.has_spec = true;
+  g.spec.which_backend = maco_proto_particle_SensingSpec_shelly_power_tag;
+  auto& sp = g.spec.backend.shelly_power;
+  sp.has_actuator = true;
+  SetEndpoint(sp.actuator, "127.0.0.1:8101", "switch:0");
+  sp.signals_count = 2;
+  auto& spindle = sp.signals[0];
+  spindle.has_source = true;
+  SetEndpoint(spindle.source, "127.0.0.1:8102", "pm1:0");
+  spindle.role = maco_proto_particle_PowerSignalRole_POWER_SIGNAL_ROLE_BILLABLE;
+  spindle.threshold_w = 40;
+  spindle.rise_sec = 3;
+  spindle.fall_sec = 10;
+  auto& gantry = sp.signals[1];
+  gantry.has_source = true;
+  SetEndpoint(gantry.source, "127.0.0.1:8101", "switch:0");
+  gantry.role = maco_proto_particle_PowerSignalRole_POWER_SIGNAL_ROLE_ACTIVITY;
+  gantry.threshold_w = 85;
+  gantry.rise_sec = 2;
+  gantry.fall_sec = 10;
+}
+}  // namespace
+
 maco::config::DeviceConfig& GetDeviceConfig() {
   // Well-known test device ID (12 bytes)
   static constexpr auto kTestDeviceId = std::array<std::byte, 12>{
@@ -192,6 +237,15 @@ maco::config::DeviceConfig& GetDeviceConfig() {
     std::strncpy(test_config.gateway_host, "127.0.0.1",
                  sizeof(test_config.gateway_host) - 1);
     test_config.gateway_port = 5000;
+
+    // MACO_SIM_MACHINE=cnc: play the CNC terminal of ADR-0054 against
+    // `bazel run //maco_gateway:shelly_sim -- --device gantry:8101:switch:0
+    // --device spindle:8102:pm1:0`. Durations are short so a whole idle-end
+    // fits in a few minutes.
+    if (const char* sim = std::getenv("MACO_SIM_MACHINE");
+        sim != nullptr && std::strcmp(sim, "cnc") == 0) {
+      AddSimCncMachine(test_config);
+    }
 
     auto write_status =
         pb::cloud::WriteLedgerProtoB64<maco_proto_particle_DeviceConfig>(

@@ -44,6 +44,8 @@ from gateway.gateway_service_pb2 import (
     PingResponse,
     RenewSensingLeaseRequest,
     SensingLeaseResponse,
+    SetPowerRequest,
+    SetPowerResponse,
 )
 from pw_rpc import ids as rpc_ids
 
@@ -57,7 +59,17 @@ from maco_gateway.gateway_service import GatewayServiceImpl
 from maco_gateway.key_store import KeyStore
 from maco_gateway.print_worker import PrintWorker
 from maco_gateway.printer import parse_printer_endpoint
-from maco_gateway.sensing.service import SensingService
+from maco_gateway.sensing.service import (
+    BackendSpec,
+    SensingService,
+    make_backend_factory,
+)
+from maco_gateway.sensing.shelly import (
+    Endpoint,
+    PowerSignalSpec,
+    ShellyPowerSpec,
+    SignalRole,
+)
 from maco_gateway.device_status import (
     DeviceStatusReporter,
     default_gateway_id,
@@ -82,17 +94,53 @@ _METHOD_PERSIST_LOG = rpc_ids.calculate("PersistLog")
 _METHOD_PING = rpc_ids.calculate("Ping")
 _METHOD_ACQUIRE_SENSING_LEASE = rpc_ids.calculate("AcquireSensingLease")
 _METHOD_RENEW_SENSING_LEASE = rpc_ids.calculate("RenewSensingLease")
+_METHOD_SET_POWER = rpc_ids.calculate("SetPower")
 
 
-def _sensing_spec_fields(spec) -> tuple:
-    """(kind, host, port, poll_interval_sec) from a proto SensingSpec oneof."""
+def _endpoint(ep) -> Endpoint:
+    if not ep.host or not ep.component:
+        raise ValueError(f"Shelly endpoint needs host and component: {ep}")
+    return Endpoint(host=ep.host, component=ep.component)
+
+
+def _shelly_spec(sp) -> ShellyPowerSpec:
+    actuator = _endpoint(sp.actuator) if sp.HasField("actuator") else None
+    signals = []
+    for sig in sp.signals:
+        role = SignalRole(sig.role)
+        if role == SignalRole.UNSPECIFIED:
+            # Never bill on a signal whose job the config didn't state.
+            logger.warning("sensing: power signal %s without role; counted as activity",
+                           sig.source.host)
+            role = SignalRole.ACTIVITY
+        signals.append(PowerSignalSpec(
+            source=_endpoint(sig.source), role=role, threshold_w=sig.threshold_w,
+            rise_sec=sig.rise_sec, fall_sec=sig.fall_sec))
+    if actuator is None and not signals:
+        raise ValueError("ShellyPowerControl needs an actuator or signals")
+    return ShellyPowerSpec(
+        actuator=actuator, signals=tuple(signals),
+        poll_interval_sec=sp.poll_interval_sec,
+        orphan_off_after_sec=sp.orphan_off_after_sec)
+
+
+def _backend_spec(spec) -> BackendSpec:
+    """BackendSpec from a proto SensingSpec oneof."""
     which = spec.WhichOneof("backend")
     if which == "xtool_laser":
         x = spec.xtool_laser
-        return "xtool_laser", x.host, x.port, x.poll_interval_sec
+        return BackendSpec("xtool_laser", x.host, x.port, x.poll_interval_sec)
     if which == "mock":
-        return "mock", "", 0, 0
+        return BackendSpec("mock")
+    if which == "shelly_power":
+        return BackendSpec("shelly_power", shelly=_shelly_spec(spec.shelly_power))
     raise ValueError(f"empty or unknown SensingSpec backend: {which!r}")
+
+
+def _lease_response(status) -> SensingLeaseResponse:
+    return SensingLeaseResponse(
+        lease_id=status.lease_id, valid=status.valid,
+        state=int(status.state), active=status.active)
 
 
 class ClientConnection:
@@ -260,6 +308,8 @@ class ClientConnection:
                 return await self._handle_acquire_sensing_lease(rpc, packet.payload)
             elif packet.method_id == _METHOD_RENEW_SENSING_LEASE:
                 return self._handle_renew_sensing_lease(rpc, packet.payload)
+            elif packet.method_id == _METHOD_SET_POWER:
+                return await self._handle_set_power(rpc, packet.payload)
             else:
                 logger.warning("Unknown method: %d", packet.method_id)
                 return packets.encode_server_error(rpc, Status.UNIMPLEMENTED)
@@ -336,21 +386,24 @@ class ClientConnection:
         """Handle AcquireSensingLease: start/reuse a prober, mint a lease."""
         req = AcquireSensingLeaseRequest()
         req.MergeFromString(payload)
-        kind, host, port, poll = _sensing_spec_fields(req.spec)
-        lease_id, valid, state = await self._sensing.acquire(
-            kind=kind, host=host, port=port, poll_interval_sec=poll,
-            ttl_sec=req.lease_ttl_sec,
-        )
-        resp = SensingLeaseResponse(lease_id=lease_id, valid=valid, state=int(state))
-        return packets.encode_response(rpc, resp)
+        status = await self._sensing.acquire(
+            _backend_spec(req.spec), ttl_sec=req.lease_ttl_sec)
+        return packets.encode_response(rpc, _lease_response(status))
 
     def _handle_renew_sensing_lease(self, rpc: RpcIds, payload: bytes) -> bytes:
         """Handle RenewSensingLease: extend the lease and read current state."""
         req = RenewSensingLeaseRequest()
         req.MergeFromString(payload)
-        lease_id, valid, state = self._sensing.renew(req.lease_id)
-        resp = SensingLeaseResponse(lease_id=lease_id, valid=valid, state=int(state))
-        return packets.encode_response(rpc, resp)
+        status = self._sensing.renew(req.lease_id)
+        return packets.encode_response(rpc, _lease_response(status))
+
+    async def _handle_set_power(self, rpc: RpcIds, payload: bytes) -> bytes:
+        """Handle SetPower: switch the machine's actuator (ADR-0054)."""
+        req = SetPowerRequest()
+        req.MergeFromString(payload)
+        ok, reachable = await self._sensing.set_power(_backend_spec(req.spec), req.on)
+        return packets.encode_response(
+            rpc, SetPowerResponse(ok=ok, reachable=reachable))
 
     async def _send_response(self, response_data: bytes) -> None:
         """Send an encrypted response to the client.
@@ -519,6 +572,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--shelly-password",
+        default=os.environ.get("SHELLY_PASSWORD", ""),
+        help=(
+            "Password of the Shelly devices' local auth (ADR-0054; user "
+            "'admin'). Empty → requests without auth."
+        ),
+    )
+    parser.add_argument(
         "--gcp-project",
         default=os.environ.get("GOOGLE_CLOUD_PROJECT")
         or os.environ.get("GCP_PROJECT"),
@@ -591,7 +652,8 @@ def main() -> int:
     # Machine-activity sensing (ADR-0035): the terminal leases a sensing
     # session and polls it; the gateway runs the device protocol in the
     # background. Always available (probers are created lazily on first lease).
-    sensing = SensingService()
+    sensing = SensingService(
+        factory=make_backend_factory(shelly_password=args.shelly_password))
 
     # Heartbeat + terminal status to the cloud (ADR-0045, phase 2c); also
     # keeps the api function warm (replaced the ADR-0037 warm pinger).

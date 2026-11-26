@@ -52,6 +52,11 @@ service GatewayService {
   // Renew a sensing lease and read the machine's current state. This is the
   // poll: it both extends the lease TTL and returns the latest state.
   rpc RenewSensingLease(RenewSensingLeaseRequest) returns (SensingLeaseResponse);
+
+  // Switch the machine described by `spec` on or off (ADR-0054). Idempotent.
+  // Only backends with an actuator support it (others: FAILED_PRECONDITION
+  // in the response's `ok == false`).
+  rpc SetPower(SetPowerRequest) returns (SetPowerResponse);
 }
 
 // Request to forward to Firebase.
@@ -156,6 +161,7 @@ message SensingSpec {
   oneof backend {
     XToolLaserControl xtool_laser = 1;
     MockSensingControl mock = 2;
+    ShellyPowerControl shelly_power = 3;
   }
 }
 
@@ -171,6 +177,33 @@ message XToolLaserControl {
 
 // Scriptable sensing backend for the host simulator and tests.
 message MockSensingControl {}
+
+// Mirrors device_config ShellyPowerControl (ADR-0054).
+message ShellyPowerControl {
+  ShellyEndpoint actuator = 1;
+  repeated PowerSignal signals = 2;
+  uint32 poll_interval_sec = 3;
+  uint32 orphan_off_after_sec = 4;
+}
+
+message ShellyEndpoint {
+  string host = 1;
+  string component = 2;
+}
+
+enum PowerSignalRole {
+  POWER_SIGNAL_ROLE_UNSPECIFIED = 0;
+  POWER_SIGNAL_ROLE_BILLABLE = 1;
+  POWER_SIGNAL_ROLE_ACTIVITY = 2;
+}
+
+message PowerSignal {
+  ShellyEndpoint source = 1;
+  PowerSignalRole role = 2;
+  uint32 threshold_w = 3;
+  uint32 rise_sec = 4;
+  uint32 fall_sec = 5;
+}
 
 // Machine activity state as observed by the gateway's prober.
 enum SensingState {
@@ -203,6 +236,22 @@ message SensingLeaseResponse {
   string lease_id = 1;
   // False if the lease is unknown/expired — the caller must re-acquire.
   bool valid = 2;
-  // Current machine activity state.
+  // Current machine activity state. RUNNING means billable use.
   SensingState state = 3;
+  // The machine counts as in use (resets the idle timer). Implied by RUNNING;
+  // for a power backend also any activity signal (ADR-0054).
+  bool active = 4;
+}
+
+// Switch a machine on or off.
+message SetPowerRequest {
+  SensingSpec spec = 1;
+  bool on = 2;
+}
+
+message SetPowerResponse {
+  // True when the device confirmed the requested output.
+  bool ok = 1;
+  // False when the device could not be reached.
+  bool reachable = 2;
 }

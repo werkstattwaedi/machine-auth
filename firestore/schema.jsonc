@@ -93,7 +93,12 @@
         "port": "number | undefined", // default per backend (xtool_laser: 28900)
         "pollIntervalSec": "number | undefined", // default 3
         "idleTimeoutSec": "number | undefined", // default 900 (15 min)
-        "idleWarningSec": "number | undefined" // default 60 (1 min)
+        "idleWarningSec": "number | undefined", // default 60 (1 min)
+        "idleWarningRepeatSec": "number | undefined", // beep every N s during the warning (ADR-0054); unset = silent
+        "endHoldSec": "number | undefined", // Stopp needs OK held N s, refused while billable (ADR-0054)
+        // kind "shelly_power" only (ADR-0054) — instead of host/port:
+        "actuator": "{ host: string, component: string } | undefined", // switched through the gateway; unset = relay
+        "signals": "Array<{ host: string, component: string, role: 'billable' | 'activity', thresholdW: number, riseSec?: number, fallSec?: number }>" // max 4
       },
       // Admin block. Absent/null = frei. Set/cleared on the admin machine
       // page ("Sperren" with a reason); terminals deny sessions while set.
