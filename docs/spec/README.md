@@ -28,7 +28,7 @@ that touch the spec hand that thinking to it instead of doing it inline. See
 | `ADM` | [admin.md](admin.md) | what the team sees and does in the admin app |
 | `CAT` | [catalog.md](catalog.md) | the catalog and what is printed from it: price lists |
 | `APP` | [apps.md](apps.md) | both web apps alike: the hint at a new version, the minimum version |
-| `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, what it tells a person it refuses, permissions, ending a machine session, idle end and billed time on a sensed machine |
+| `MAC` | [machine.md](machine.md) | the machine terminal: unlocking a machine, what it tells a person it refuses, permissions, ending a machine session, idle end and billed time on a sensed machine, switching a machine through the gateway |
 | `CRS` | [courses.md](courses.md) | edoobox courses: course leaders, participants, attendance, temporary and granted permissions |
 
 A prefix is the domain; a file is a reading unit. Within a file, rules sit
@@ -185,7 +185,14 @@ still passes a different wrong promise.
   for one person, from the badge tap that unlocks it to its end.
 - **Sensed machine** — a machine whose machine terminal learns from the
   machine whether it is in use, such as the laser cutter whether it is
-  cutting.
+  cutting, or the CNC mill whether its spindle or its gantry draws power.
+- **Billable use** — the part of a sensed machine's use that is billed, such
+  as the CNC mill's spindle running; on a machine that tells no part apart,
+  such as the laser cutter, all of its use.
+- **Gateway** — the computer in the workshop through which machine
+  terminals reach the server and the devices of some machines.
+- **Gateway-switched machine** — a machine whose power its machine terminal
+  switches through the gateway instead of with the terminal's own relay.
 - **Visit** (*Besuch*) — one stay in the workshop, from check-in to checkout;
   it belongs to the day it was opened, even when it is closed on a later day.
 - **Checkout** — what a visit, purchase or membership costs, and how it was
