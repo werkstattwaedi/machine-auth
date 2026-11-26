@@ -18,6 +18,16 @@ export enum HwRevision {
   UNRECOGNIZED = -1,
 }
 
+/** What a power signal decides. */
+export enum PowerSignalRole {
+  POWER_SIGNAL_ROLE_UNSPECIFIED = 0,
+  /** POWER_SIGNAL_ROLE_BILLABLE - On => the session is billed (and counts as active). */
+  POWER_SIGNAL_ROLE_BILLABLE = 1,
+  /** POWER_SIGNAL_ROLE_ACTIVITY - On => the session counts as active (resets the idle timer), not billed. */
+  POWER_SIGNAL_ROLE_ACTIVITY = 2,
+  UNRECOGNIZED = -1,
+}
+
 /** Machine control mechanism */
 export interface MachineControl {
   control:
@@ -50,7 +60,20 @@ export interface GatewaySensingControl {
    */
   idleWarningSec: number;
   /** What the gateway should sense; forwarded verbatim to the gateway. */
-  spec: SensingSpec | undefined;
+  spec:
+    | SensingSpec
+    | undefined;
+  /**
+   * During the idle warning, sound the buzzer when it opens and again every
+   * this many seconds (0 => silent, single warning). Firmware-side (ADR-0054).
+   */
+  idleWarningRepeatSec: number;
+  /**
+   * Ending from the terminal's stop button needs OK held this many seconds
+   * instead of the auto-confirm countdown, and is refused while the machine
+   * reports billable use (0 => today's auto-confirm). Firmware-side (ADR-0054).
+   */
+  endHoldSec: number;
 }
 
 /**
@@ -58,10 +81,10 @@ export interface GatewaySensingControl {
  * oneof arm is set — no stringly-typed "kind".
  */
 export interface SensingSpec {
-  backend:
-    | { $case: "xtoolLaser"; xtoolLaser: XToolLaserControl }
-    | { $case: "mock"; mock: MockSensingControl }
-    | undefined;
+  backend: { $case: "xtoolLaser"; xtoolLaser: XToolLaserControl } | { $case: "mock"; mock: MockSensingControl } | {
+    $case: "shellyPower";
+    shellyPower: ShellyPowerControl;
+  } | undefined;
 }
 
 /**
@@ -79,6 +102,47 @@ export interface XToolLaserControl {
 
 /** Scriptable sensing backend for the host simulator and tests. */
 export interface MockSensingControl {
+}
+
+/**
+ * A machine powered and metered through Shelly devices (ADR-0054). When
+ * `actuator` is set, the terminal switches the machine through the gateway
+ * (SetPower) instead of its own relay.
+ */
+export interface ShellyPowerControl {
+  /** The switch the session turns on and off. Unset => meter only. */
+  actuator:
+    | ShellyEndpoint
+    | undefined;
+  /** Power readings that decide billing and activity. */
+  signals: PowerSignal[];
+  /** Interval between device polls, in seconds (0 => gateway default 2). */
+  pollIntervalSec: number;
+  /**
+   * When no terminal holds a lease and the actuator is on, the gateway switches
+   * it off once every signal has been off this long (0 => never). The terminal
+   * fills it from its idle timeout.
+   */
+  orphanOffAfterSec: number;
+}
+
+/** One Shelly component, e.g. host "cnc-gantry.internal", component "switch:0". */
+export interface ShellyEndpoint {
+  host: string;
+  /** Gen2+ component key in Shelly.GetStatus ("switch:0", "pm1:0", "em1:0"). */
+  component: string;
+}
+
+/**
+ * A power reading compared against a threshold, with smoothing: on after
+ * `rise_sec` above the threshold, off after `fall_sec` below it.
+ */
+export interface PowerSignal {
+  source: ShellyEndpoint | undefined;
+  role: PowerSignalRole;
+  thresholdW: number;
+  riseSec: number;
+  fallSec: number;
 }
 
 /** Machine definition with permissions */
@@ -220,7 +284,7 @@ export const RelayControl: MessageFns<RelayControl> = {
 };
 
 function createBaseGatewaySensingControl(): GatewaySensingControl {
-  return { idleTimeoutSec: 0, idleWarningSec: 0, spec: undefined };
+  return { idleTimeoutSec: 0, idleWarningSec: 0, spec: undefined, idleWarningRepeatSec: 0, endHoldSec: 0 };
 }
 
 export const GatewaySensingControl: MessageFns<GatewaySensingControl> = {
@@ -233,6 +297,12 @@ export const GatewaySensingControl: MessageFns<GatewaySensingControl> = {
     }
     if (message.spec !== undefined) {
       SensingSpec.encode(message.spec, writer.uint32(26).fork()).join();
+    }
+    if (message.idleWarningRepeatSec !== 0) {
+      writer.uint32(32).uint32(message.idleWarningRepeatSec);
+    }
+    if (message.endHoldSec !== 0) {
+      writer.uint32(40).uint32(message.endHoldSec);
     }
     return writer;
   },
@@ -268,6 +338,22 @@ export const GatewaySensingControl: MessageFns<GatewaySensingControl> = {
           message.spec = SensingSpec.decode(reader, reader.uint32());
           continue;
         }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.idleWarningRepeatSec = reader.uint32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.endHoldSec = reader.uint32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -287,6 +373,8 @@ export const GatewaySensingControl: MessageFns<GatewaySensingControl> = {
     message.spec = (object.spec !== undefined && object.spec !== null)
       ? SensingSpec.fromPartial(object.spec)
       : undefined;
+    message.idleWarningRepeatSec = object.idleWarningRepeatSec ?? 0;
+    message.endHoldSec = object.endHoldSec ?? 0;
     return message;
   },
 };
@@ -303,6 +391,9 @@ export const SensingSpec: MessageFns<SensingSpec> = {
         break;
       case "mock":
         MockSensingControl.encode(message.backend.mock, writer.uint32(18).fork()).join();
+        break;
+      case "shellyPower":
+        ShellyPowerControl.encode(message.backend.shellyPower, writer.uint32(26).fork()).join();
         break;
     }
     return writer;
@@ -329,6 +420,14 @@ export const SensingSpec: MessageFns<SensingSpec> = {
           }
 
           message.backend = { $case: "mock", mock: MockSensingControl.decode(reader, reader.uint32()) };
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.backend = { $case: "shellyPower", shellyPower: ShellyPowerControl.decode(reader, reader.uint32()) };
           continue;
         }
       }
@@ -358,6 +457,15 @@ export const SensingSpec: MessageFns<SensingSpec> = {
       case "mock": {
         if (object.backend?.mock !== undefined && object.backend?.mock !== null) {
           message.backend = { $case: "mock", mock: MockSensingControl.fromPartial(object.backend.mock) };
+        }
+        break;
+      }
+      case "shellyPower": {
+        if (object.backend?.shellyPower !== undefined && object.backend?.shellyPower !== null) {
+          message.backend = {
+            $case: "shellyPower",
+            shellyPower: ShellyPowerControl.fromPartial(object.backend.shellyPower),
+          };
         }
         break;
       }
@@ -466,6 +574,244 @@ export const MockSensingControl: MessageFns<MockSensingControl> = {
   },
   fromPartial(_: DeepPartial<MockSensingControl>): MockSensingControl {
     const message = createBaseMockSensingControl();
+    return message;
+  },
+};
+
+function createBaseShellyPowerControl(): ShellyPowerControl {
+  return { actuator: undefined, signals: [], pollIntervalSec: 0, orphanOffAfterSec: 0 };
+}
+
+export const ShellyPowerControl: MessageFns<ShellyPowerControl> = {
+  encode(message: ShellyPowerControl, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.actuator !== undefined) {
+      ShellyEndpoint.encode(message.actuator, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.signals) {
+      PowerSignal.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.pollIntervalSec !== 0) {
+      writer.uint32(24).uint32(message.pollIntervalSec);
+    }
+    if (message.orphanOffAfterSec !== 0) {
+      writer.uint32(32).uint32(message.orphanOffAfterSec);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ShellyPowerControl {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseShellyPowerControl();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.actuator = ShellyEndpoint.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.signals.push(PowerSignal.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.pollIntervalSec = reader.uint32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.orphanOffAfterSec = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<ShellyPowerControl>): ShellyPowerControl {
+    return ShellyPowerControl.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ShellyPowerControl>): ShellyPowerControl {
+    const message = createBaseShellyPowerControl();
+    message.actuator = (object.actuator !== undefined && object.actuator !== null)
+      ? ShellyEndpoint.fromPartial(object.actuator)
+      : undefined;
+    message.signals = object.signals?.map((e) => PowerSignal.fromPartial(e)) || [];
+    message.pollIntervalSec = object.pollIntervalSec ?? 0;
+    message.orphanOffAfterSec = object.orphanOffAfterSec ?? 0;
+    return message;
+  },
+};
+
+function createBaseShellyEndpoint(): ShellyEndpoint {
+  return { host: "", component: "" };
+}
+
+export const ShellyEndpoint: MessageFns<ShellyEndpoint> = {
+  encode(message: ShellyEndpoint, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.host !== "") {
+      writer.uint32(10).string(message.host);
+    }
+    if (message.component !== "") {
+      writer.uint32(18).string(message.component);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ShellyEndpoint {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseShellyEndpoint();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.host = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.component = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<ShellyEndpoint>): ShellyEndpoint {
+    return ShellyEndpoint.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ShellyEndpoint>): ShellyEndpoint {
+    const message = createBaseShellyEndpoint();
+    message.host = object.host ?? "";
+    message.component = object.component ?? "";
+    return message;
+  },
+};
+
+function createBasePowerSignal(): PowerSignal {
+  return { source: undefined, role: 0, thresholdW: 0, riseSec: 0, fallSec: 0 };
+}
+
+export const PowerSignal: MessageFns<PowerSignal> = {
+  encode(message: PowerSignal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.source !== undefined) {
+      ShellyEndpoint.encode(message.source, writer.uint32(10).fork()).join();
+    }
+    if (message.role !== 0) {
+      writer.uint32(16).int32(message.role);
+    }
+    if (message.thresholdW !== 0) {
+      writer.uint32(24).uint32(message.thresholdW);
+    }
+    if (message.riseSec !== 0) {
+      writer.uint32(32).uint32(message.riseSec);
+    }
+    if (message.fallSec !== 0) {
+      writer.uint32(40).uint32(message.fallSec);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): PowerSignal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBasePowerSignal();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.source = ShellyEndpoint.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.role = reader.int32() as any;
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.thresholdW = reader.uint32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.riseSec = reader.uint32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.fallSec = reader.uint32();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  create(base?: DeepPartial<PowerSignal>): PowerSignal {
+    return PowerSignal.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<PowerSignal>): PowerSignal {
+    const message = createBasePowerSignal();
+    message.source = (object.source !== undefined && object.source !== null)
+      ? ShellyEndpoint.fromPartial(object.source)
+      : undefined;
+    message.role = object.role ?? 0;
+    message.thresholdW = object.thresholdW ?? 0;
+    message.riseSec = object.riseSec ?? 0;
+    message.fallSec = object.fallSec ?? 0;
     return message;
   },
 };

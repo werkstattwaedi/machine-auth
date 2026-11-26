@@ -84,19 +84,45 @@ export interface PermissionEntity {
  *   (e.g. the xTool laser's WebSocket) and reports running/idle. Only active
  *   ("running") time is billed (usage `activeSeconds`) and the session auto-ends
  *   after `idleTimeoutSec` ready-but-idle. `kind` picks the gateway backend.
- *   See ADR-0035.
+ *   See ADR-0035; `shelly_power` (power-metered, gateway-switched) ADR-0054.
  */
 export type MachineControl =
   | { type: "relay" }
-  | {
-      type: "gateway_sensing";
+  | (GatewaySensingCommon & {
       kind: "xtool_laser";
       host: string;
       port?: number;
-      pollIntervalSec?: number;
-      idleTimeoutSec?: number;
-      idleWarningSec?: number;
-    };
+    })
+  | (GatewaySensingCommon & {
+      // Shelly-powered machine (ADR-0054): `actuator` is switched through the
+      // gateway instead of the relay; billable signals decide activeSeconds.
+      kind: "shelly_power";
+      actuator?: ShellyEndpoint;
+      signals: PowerSignal[];
+    });
+
+interface GatewaySensingCommon {
+  type: "gateway_sensing";
+  pollIntervalSec?: number;
+  idleTimeoutSec?: number;
+  idleWarningSec?: number;
+  /** Beep during the idle warning, every N s (ADR-0054). */
+  idleWarningRepeatSec?: number;
+  /** Stopp needs OK held N s and is refused while billable (ADR-0054). */
+  endHoldSec?: number;
+}
+
+export interface ShellyEndpoint {
+  host: string;
+  component: string;
+}
+
+export interface PowerSignal extends ShellyEndpoint {
+  role: "billable" | "activity";
+  thresholdW: number;
+  riseSec?: number;
+  fallSec?: number;
+}
 
 export interface MachineEntity {
   name: string;
