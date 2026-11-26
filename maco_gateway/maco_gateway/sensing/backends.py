@@ -15,7 +15,7 @@ import asyncio
 import enum
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from .wsv2 import WSV2Connection
 
@@ -43,12 +43,37 @@ class SensingBackend(abc.ABC):
     @abc.abstractmethod
     def state(self) -> SensingState: ...
 
+    def active(self) -> bool:
+        """The machine counts as in use (resets the terminal's idle timer).
+
+        Only a backend with more signals than "working" (ADR-0054) differs.
+        """
+        return self.state() == SensingState.RUNNING
+
+    # Power control (ADR-0054). Sensing-only backends have no actuator.
+
+    def has_actuator(self) -> bool:
+        return False
+
+    def power_on(self) -> bool:
+        """Last known actuator output."""
+        return False
+
+    def idle_seconds(self) -> float:
+        """How long the machine has shown no activity (0 while unknown)."""
+        return 0.0
+
+    async def set_power(self, on: bool) -> Tuple[bool, bool]:
+        """Switch the actuator. Returns (ok, reachable)."""
+        return False, False
+
 
 class MockBackend(SensingBackend):
     """Scriptable backend for the host simulator and tests."""
 
     def __init__(self, initial: SensingState = SensingState.IDLE) -> None:
         self._state = initial
+        self._active: Optional[bool] = None
         self._started = False
 
     async def start(self) -> None:
@@ -63,6 +88,13 @@ class MockBackend(SensingBackend):
     def set_state(self, state: SensingState) -> None:
         """Test/sim hook to drive the reported state."""
         self._state = state
+
+    def active(self) -> bool:
+        return super().active() if self._active is None else self._active
+
+    def set_active(self, active: Optional[bool]) -> None:
+        """Test/sim hook; None follows the state again."""
+        self._active = active
 
 
 class XToolLaserBackend(SensingBackend):

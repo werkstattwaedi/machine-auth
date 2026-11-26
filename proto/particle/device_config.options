@@ -6,6 +6,9 @@ maco.proto.particle.Machine.required_permissions    max_count:5
 
 # Gateway sensing control
 maco.proto.particle.XToolLaserControl.host          max_size:64
+maco.proto.particle.ShellyEndpoint.host             max_size:64
+maco.proto.particle.ShellyEndpoint.component        max_size:16
+maco.proto.particle.ShellyPowerControl.signals      max_count:4
 
 # DeviceConfig
 maco.proto.particle.DeviceConfig.machines           max_count:4

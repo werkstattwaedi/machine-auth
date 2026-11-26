@@ -163,6 +163,18 @@ function fetchSecret(secretName: string, projectId: string): string {
   }
 }
 
+/** Like fetchSecret, but a missing secret is null instead of fatal. */
+function fetchOptionalSecret(secretName: string, projectId: string): string | null {
+  try {
+    return execSync(
+      `gcloud secrets versions access latest --secret=${secretName} --project=${projectId}`,
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
+    ).trim();
+  } catch {
+    return null;
+  }
+}
+
 // --- Build payload ---
 
 // Pinned pip deps for the Pi venv. Mostly pure-Python; `protobuf` and
@@ -376,6 +388,19 @@ function generateEnv(envName: string | null): {
     // the Pi's host name.
     `GATEWAY_ID=${resolveValue(config, "gateway.id")}`,
   ];
+
+  // Shelly local auth (ADR-0054): one password for every Shelly the gateway
+  // switches or meters. Optional so gateways without Shellies deploy
+  // unchanged; a Shelly with auth on then refuses every request (SetPower
+  // fails, sensing reads UNREACHABLE).
+  const shellyPassword = fetchOptionalSecret("SHELLY_PASSWORD", secretsProjectId);
+  if (shellyPassword) {
+    lines.push("", "# Shelly devices (power control)", `SHELLY_PASSWORD=${shellyPassword}`);
+  } else {
+    console.log(
+      `  No SHELLY_PASSWORD secret in ${secretsProjectId} — Shelly requests go without auth.`,
+    );
+  }
 
   const outDir = resolve(projectRoot, "out");
   mkdirSync(outDir, { recursive: true });

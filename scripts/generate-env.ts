@@ -748,6 +748,8 @@ function emitGatewayEnv(opts: {
     );
     return;
   }
+  // Optional (ADR-0054): absent → Shelly requests go without auth.
+  const shellyPassword = fetchSecret("SHELLY_PASSWORD", baseProjectId);
   // GATEWAY_HOST/GATEWAY_PORT are deliberately omitted: main.py defaults
   // them (0.0.0.0:5000), and an empty GATEWAY_PORT= would crash int().
   const content = [
@@ -760,6 +762,7 @@ function emitGatewayEnv(opts: {
     `MASTER_KEY=${masterKey}`,
     `GATEWAY_API_KEY=${gatewayApiKey}`,
     `GATEWAY_ID=${resolveValue(envConfig, "gateway.id")}`,
+    ...(shellyPassword ? [`SHELLY_PASSWORD=${shellyPassword}`] : []),
     "",
   ].join("\n");
   writeFileSync(resolve(projectRoot, relPath), content);
